@@ -1,6 +1,9 @@
+import { useId } from 'react';
 import { Alert, Form, Input, Select } from 'antd';
 import { EXCEPTION_TYPE_LABELS, EXCEPTION_TYPES, FOLLOW_UP_KIND_LABELS, FOLLOW_UP_KINDS, type BatchFulfillment, type ExceptionType, type FollowUpKind, type ReceiptEvidenceInput, type ShipmentEvidenceInput } from '@sw/domain';
 import { businessToday, dateChangeErrors, exceptionErrors, followUpErrors, receiptDefaults, receiptErrors, shipmentDefaults, shipmentErrors, RecordForm, type RecordDraft } from '../../features/follow-up/index.js';
+import { businessTimeZone } from '../../shared/business-time-zone.js';
+import { followUpInstant, localFollowUpTime } from './follow-up-time.js';
 import type { BoardItem } from '../../features/today/index.js';
 
 export type NoteRef = {
@@ -18,12 +21,14 @@ export type Target = {
   readonly hadDate: boolean;
   readonly confirmedDate: string | null;
   readonly fulfillment?: BatchFulfillment;
+  readonly canScheduleFollowUp?: boolean;
+  readonly nextFollowUpAt?: string;
 };
 export type OpenForm =
   | { readonly kind: 'receipt'; readonly qty: number; readonly receivedOn: string; readonly fulfillment?: ReceiptEvidenceInput }
   | { readonly kind: 'ship'; readonly qty: number; readonly shippedOn: string; readonly fulfillment?: ShipmentEvidenceInput }
   | { readonly kind: 'date'; readonly date: string; readonly reason: string }
-  | { readonly kind: 'note'; readonly text: string; readonly followKind: FollowUpKind }
+  | { readonly kind: 'note'; readonly text: string; readonly followKind: FollowUpKind; readonly nextFollowUpLocal?: string }
   | { readonly kind: 'exception'; readonly note: string; readonly type: ExceptionType };
 export type Undo =
   | { readonly kind: 'receipt'; readonly id: string; readonly label: string; readonly row: BoardItem }
@@ -85,8 +90,15 @@ function draftFor({ kind, target, today }: { readonly kind: OpenForm['kind']; re
     return { kind, qty: facts.unshippedQty ?? 0, shippedOn: defaults.shippedOn, fulfillment: { kind: 'verified', unit: facts.unit, evidence: '' } };
   }
   if (kind === 'date') return { kind, date: target.confirmedDate ?? today, reason: '' };
-  if (kind === 'note') return { kind, text: '', followKind: 'call' };
+  if (kind === 'note') return noteDraft(target);
   return { kind, note: '', type: 'delay' };
+}
+
+function noteDraft(target: Target): OpenForm {
+  return {
+    kind: 'note', text: '', followKind: 'call',
+    ...(target.canScheduleFollowUp === true ? { nextFollowUpLocal: localFollowUpTime(target.nextFollowUpAt) } : {}),
+  };
 }
 
 export function confirmedDateBody(input: { readonly hadDate: boolean; readonly date: string; readonly reason: string }): { readonly dateBuyerConfirmed: string; readonly reason?: string } {
@@ -98,7 +110,11 @@ export function formErrors({ draft, hadDate, today }: { readonly draft: OpenForm
   if (draft.kind === 'receipt') return evidenceErrors(draft.fulfillment, receiptErrors({ qty: draft.qty, receivedOn: draft.receivedOn, today }));
   if (draft.kind === 'ship') return evidenceErrors(draft.fulfillment, shipmentErrors({ qty: draft.qty, shippedOn: draft.shippedOn, today }));
   if (draft.kind === 'date') return draft.date === '' ? ['请填写确认日'] : dateChangeErrors({ isFirst: !hadDate, reason: draft.reason });
-  if (draft.kind === 'note') return followUpErrors({ text: draft.text });
+  if (draft.kind === 'note') {
+    const errors = followUpErrors({ text: draft.text });
+    const local = draft.nextFollowUpLocal;
+    return local === undefined || local === '' || followUpInstant(local) !== null ? errors : [...errors, '请选择有效的业务日期和时间'];
+  }
   return exceptionErrors({ note: draft.note });
 }
 
@@ -138,6 +154,8 @@ function DateFields(props: { readonly draft: Extract<OpenForm, { readonly kind: 
 }
 
 function NoteFields(props: { readonly draft: Extract<OpenForm, { readonly kind: 'note' }>; readonly onChange: (draft: OpenForm) => void }) {
+  const reminderId = useId();
+  const hintId = useId();
   return (
     <>
       <Form.Item label="类型">
@@ -151,6 +169,11 @@ function NoteFields(props: { readonly draft: Extract<OpenForm, { readonly kind: 
       <Form.Item label="内容">
         <Input aria-label="内容" value={props.draft.text} onChange={(event) => props.onChange({ ...props.draft, text: event.target.value })} />
       </Form.Item>
+      {props.draft.nextFollowUpLocal === undefined ? null : <Form.Item label="下次跟进时间（选填）" htmlFor={reminderId}
+        extra={<span id={hintId}>工作台时区 {businessTimeZone()}。清空时间可取消本批次提醒。</span>}>
+        <Input id={reminderId} name="nextFollowUpAt" aria-describedby={hintId} type="datetime-local" value={props.draft.nextFollowUpLocal}
+          onChange={(event) => props.onChange({ ...props.draft, nextFollowUpLocal: event.target.value })} />
+      </Form.Item>}
     </>
   );
 }

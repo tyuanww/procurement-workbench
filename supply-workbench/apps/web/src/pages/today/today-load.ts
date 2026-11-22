@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
 import type { TodayPageResponse, TodayResponse, TodoItemView } from '@sw/contracts';
+import { isOpenBatch } from '@sw/domain';
 import { fetchTodayPage } from '../../shared/api/catalog.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
 import type { BoardItem } from '../../features/today/index.js';
@@ -33,6 +34,16 @@ export function useTodayData(query: ActionQuery) {
     if (!isLoadedForQuery) void run(true).catch(() => undefined);
   });
   useEffect(() => { loadIfNeeded(); }, [path, focusId]);
+  const refreshScheduled = useEffectEvent(() => {
+    if (focusId === null && document.visibilityState === 'visible' && (loaded?.value.paging.followUpCounts?.scheduled ?? 0) > 0) {
+      void run(false).catch(() => undefined);
+    }
+  });
+  useEffect(() => {
+    const onVisibility = () => refreshScheduled();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
   return {
     data: loaded?.value ?? null,
     isLoading: state.path !== path || state.phase === 'loading' || (state.phase === 'ready' && !isLoadedForQuery),
@@ -136,6 +147,8 @@ function targetOf(item: TodoItemView): Target | undefined {
     lane: item.line.lane,
     hadDate: item.batch.firstConfirmedDate !== null,
     confirmedDate: item.batch.dateBuyerConfirmed,
+    canScheduleFollowUp: item.subject === 'batch' && item.ownerUserId !== null && isOpenBatch(item.batch.status),
+    ...(item.batch.nextFollowUpAt === undefined ? {} : { nextFollowUpAt: item.batch.nextFollowUpAt }),
     ...(item.batch.fulfillment === undefined ? {} : { fulfillment: item.batch.fulfillment }),
   };
 }
