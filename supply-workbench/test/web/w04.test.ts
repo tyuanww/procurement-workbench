@@ -12,7 +12,7 @@ describe('跟进台筛选和视图', () => {
 
   it('预设视图进查询串，自定义视图按用户存在本地', () => {
     expect(presetViews().map((view) => view.id)).toEqual(['mine-overdue', 'no-batch', 'yinong']);
-    expect(presetViews().map((view) => view.query)).toEqual(['buyer=me&overdue=1', 'stage=no_batch', 'q=宜侬']);
+    expect(presetViews().map((view) => view.query)).toEqual(['buyer=me&overdue=1', 'stage=no_batch', 'inTransitFactory=yinong']);
     const storage = memoryStorage();
     saveView({ storage, userId: 'buyer-1', view: { id: 'custom', label: '我的', query: 'q=面膜' } });
     expect(loadViews(storage, 'buyer-1')).toEqual([{ id: 'custom', label: '我的', query: 'q=面膜' }]);

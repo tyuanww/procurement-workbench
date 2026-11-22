@@ -22,6 +22,7 @@ export function linesQueryOf(query: unknown, actorId: string): LinesQuery {
     store: text(raw.store),
     q: text(raw.q),
     supplierPartyId: text(raw.supplierPartyId),
+    inTransitFactory: text(raw.inTransitFactory),
     receiverPartyId: text(raw.receiverPartyId),
     buyer: text(raw.buyer),
     stages: list(raw.stages),

@@ -35,13 +35,21 @@ const MATERIAL_COLUMNS = [
 ];
 
 describe('跟进台地址和单元格', () => {
-  it('表头是中文，缺线别时仍是成品列', () => {
+  it('表头是中文，缺线别时选中并请求成品线', () => {
     expect(readDesk('').columns).toEqual([...FINISHED_COLUMNS]);
     expect(readDesk('lane=finished').columns).toEqual([...FINISHED_COLUMNS]);
     expect(readDesk('lane=material').columns).toEqual([...MATERIAL_COLUMNS]);
     expect(readDesk('').lane).toBe('finished');
-    expect(queryOf('').has('lane')).toBe(false);
+    expect(queryOf('').get('lane')).toBe('finished');
     expect(queryOf('lane=finished').get('lane')).toBe('finished');
+  });
+
+  it('显式全部线在改搜索后仍查询全部线别', () => {
+    const searched = addressOf('lane=all&q=纸盒&page=2', { kind: 'text', value: '面膜' });
+    expect(readDesk(searched.toString()).lane).toBe('all');
+    expect(queryOf(searched.toString()).has('lane')).toBe(false);
+    expect(queryOf(searched.toString()).get('q')).toBe('面膜');
+    expect(queryOf(searched.toString()).get('page')).toBe('1');
   });
 
   it('改阶段或逾期保留采购员，并回到第一页', () => {
@@ -158,7 +166,7 @@ describe('跟进台地址和单元格', () => {
     expect(queryOf(written.toString()).get('page')).toBe('1');
     expect(queryOf(written.toString()).get('lane')).toBe('material');
     expect(readDesk('lane=bogus').lane).toBe('finished');
-    expect(queryOf('lane=bogus').has('lane')).toBe(false);
+    expect(queryOf('lane=bogus').get('lane')).toBe('finished');
     const once = writeDesk({
       search: 'buyer=me&q=宜侬&overdueOnly=true&foo=1&page=4',
       change: { kind: 'stage', value: 'no_batch' },

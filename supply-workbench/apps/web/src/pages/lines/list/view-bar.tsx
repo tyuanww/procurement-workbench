@@ -1,16 +1,12 @@
 import { Button, Checkbox, Popover, Radio, Segmented, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
-import { exportAddress, lineTableLayout, renderedLineColumns } from '../../../features/follow-up/index.js';
+import { deskAddress, exportAddress, lineTableLayout, renderedLineColumns, type LineDeskView } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { bg, radiusCard, space } from '../../../theme/tokens.js';
 import { saveCurrent } from './actions.js';
 
-export type SavedView = {
-  readonly id: string;
-  readonly label: string;
-  readonly query: string;
-};
+export type SavedView = LineDeskView;
 
 export type ColumnView = {
   readonly key: string;
@@ -75,8 +71,9 @@ export function toggleColumn(input: { readonly search: string; readonly hiddenKe
 }
 
 export function filterSignature(search: string): string {
-  const params = new URLSearchParams(search);
+  const params = deskAddress(search);
   for (const key of NON_FILTER_PARAMS) params.delete(key);
+  if (params.get('lane') === 'finished') params.delete('lane');
   const pairs: string[] = [];
   for (const [key, value] of params) pairs.push(`${key}=${value}`);
   return pairs.sort().join('&');
@@ -90,12 +87,14 @@ export function selectedViewOf(input: { readonly search: string; readonly views:
 
 export function isViewModified(input: { readonly search: string; readonly view: SavedView | undefined }): boolean {
   if (input.view === undefined) return false;
-  return filterSignature(input.search) !== filterSignature(input.view.query);
+  return filterSignature(input.search) !== filterSignature(viewAddress({ search: input.search, view: input.view }).toString());
 }
 
 export function viewAddress(input: { readonly search: string; readonly view: SavedView }): URLSearchParams {
   const next = new URLSearchParams(input.view.query);
   const current = new URLSearchParams(input.search);
+  if (input.view.preserveLane === true) copyParam({ from: current, to: next, key: 'lane' });
+  else if (!next.has('lane')) next.set('lane', 'all');
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   next.set(VIEW_PARAM, input.view.id);
@@ -105,14 +104,16 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
 export function clearFiltersAddress(search: string): URLSearchParams {
   const next = new URLSearchParams();
   const current = new URLSearchParams(search);
+  copyParam({ from: current, to: next, key: 'lane' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   return next;
 }
 
 export function saveAddress(query: string): string {
-  const params = new URLSearchParams(query);
+  const params = deskAddress(query);
   for (const key of NON_FILTER_PARAMS) params.delete(key);
+  if (!params.has('lane')) params.set('lane', 'finished');
   return params.toString();
 }
 
@@ -132,6 +133,11 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
   const viewport = useShellViewport();
   const shown = shownColumns(props, viewport);
   const isPhone = viewport.band === 'phone';
+  const actions = <>
+    {selected === undefined || !isModified ? null : <ModifiedActions search={props.search} view={selected} setParams={props.setParams} />}
+    {selected === undefined ? null : <Button onClick={() => props.setParams(clearFiltersAddress(props.search))}>退出视图</Button>}
+    <SaveViewButton search={props.search} userId={props.userId} setMessage={props.setMessage} setParams={props.setParams} />
+  </>;
   if (isPhone) {
     return (
       <div style={phoneViewRowStyle()}>
@@ -140,8 +146,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
         </div>
         <div style={phoneActionsStyle()}>
           <div style={viewClusterStyle()}>
-            {selected === undefined || !isModified ? null : <ModifiedActions search={props.search} view={selected} setParams={props.setParams} />}
-            <SaveViewButton search={props.search} userId={props.userId} setMessage={props.setMessage} setParams={props.setParams} />
+            {actions}
           </div>
           <DisplayControl columns={props.columns} hiddenKeys={props.hiddenKeys} shown={shown} density={props.density} query={props.query} search={props.search} setParams={props.setParams} />
         </div>
@@ -152,8 +157,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
     <div style={viewRowStyle()}>
       <div style={viewClusterStyle()}>
         <ViewPicker search={props.search} views={props.views} setParams={props.setParams} />
-        {selected === undefined || !isModified ? null : <ModifiedActions search={props.search} view={selected} setParams={props.setParams} />}
-        <SaveViewButton search={props.search} userId={props.userId} setMessage={props.setMessage} setParams={props.setParams} />
+        {actions}
       </div>
       <div style={viewRightStyle()}>
         <ColumnControl columns={props.columns} hiddenKeys={props.hiddenKeys} search={props.search} setParams={props.setParams} />

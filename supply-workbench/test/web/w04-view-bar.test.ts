@@ -86,6 +86,42 @@ describe('密度切换', () => {
 });
 
 describe('已修改状态', () => {
+  it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {
+    const view = presetViews().find((item) => item.id === 'yinong');
+    if (view === undefined) throw new Error('缺少宜侬在途');
+    const address = viewAddress({ search: 'lane=material&page=3&density=middle', view });
+    const desk = readDesk(address.toString());
+    expect(desk.lane).toBe('material');
+    expect(desk.q).toBe('');
+    expect(new URLSearchParams(desk.requestQuery)).toEqual(new URLSearchParams('lane=material&inTransitFactory=yinong&page=1&pageSize=50'));
+    expect(isViewModified({ search: address.toString(), view })).toBe(false);
+    expect(isViewModified({ search: `${address}&q=纸盒`, view })).toBe(true);
+    expect(saveAddress(`${address}&q=纸盒`)).toBe('inTransitFactory=yinong&lane=material&q=%E7%BA%B8%E7%9B%92');
+    const exported = new URL(exportAddress({ query: desk.requestQuery, columns: COLUMNS }), 'http://localhost');
+    expect(exported.searchParams.get('inTransitFactory')).toBe('yinong');
+    expect(exported.searchParams.get('lane')).toBe('material');
+    expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=material&density=middle');
+  });
+
+  it('旧宜侬预设链接升级，普通宜侬搜索和已存的线别仍按原意使用', () => {
+    const view = presetViews().find((item) => item.id === 'yinong');
+    if (view === undefined) throw new Error('缺少宜侬在途');
+    const legacy = 'lane=material&view=yinong&q=%E5%AE%9C%E4%BE%AC';
+    expect(readDesk(legacy).q).toBe('');
+    expect(new URLSearchParams(readDesk(legacy).requestQuery).get('inTransitFactory')).toBe('yinong');
+    expect(isViewModified({ search: legacy, view })).toBe(false);
+    expect(saveAddress(legacy)).toBe('lane=material&inTransitFactory=yinong');
+    const custom = { id: 'custom', label: '品名搜索', query: 'lane=finished&q=%E5%AE%9C%E4%BE%AC' };
+    const opened = readDesk(viewAddress({ search: 'lane=material', view: custom }).toString());
+    expect(opened.lane).toBe('finished');
+    expect(opened.q).toBe('宜侬');
+    expect(new URLSearchParams(opened.requestQuery).has('inTransitFactory')).toBe(false);
+    const legacySaved = { ...custom, query: 'q=%E5%AE%9C%E4%BE%AC' };
+    const reopened = readDesk(viewAddress({ search: 'lane=material', view: legacySaved }).toString());
+    expect(reopened.lane).toBe('all');
+    expect(reopened.q).toBe('宜侬');
+  });
+
   it('筛选偏离选中视图时是已修改，页码和显示设置不算', () => {
     const view = presetViews()[1];
     if (view === undefined) throw new Error('缺少预设视图');
@@ -94,7 +130,7 @@ describe('已修改状态', () => {
     expect(isViewModified({ search: `stage=no_batch&q=面膜&view=${view.id}`, view })).toBe(true);
     expect(isViewModified({ search: 'stage=no_batch', view: undefined })).toBe(false);
     expect(filterSignature('page=2&pageSize=50&density=middle&hide=po&view=x&q=面膜')).toBe('q=面膜');
-    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C');
+    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C&lane=finished');
     expect(clearFiltersAddress('stage=no_batch&view=x&density=middle&hide=received&page=2').toString()).toBe('density=middle&hide=received');
   });
 
@@ -106,6 +142,7 @@ describe('已修改状态', () => {
     expect(modified.replace(/\s+/g, '')).toContain('清除');
     const clean = render(LineViewBar, viewBarProps({ search: `stage=no_batch&view=${view.id}` }));
     expect(clean).not.toContain('已修改');
+    expect(clean).toContain('退出视图');
     const address = viewAddress({ search: `stage=no_batch&q=面膜&density=middle&hide=received&view=${view.id}`, view });
     expect(address.toString()).toBe('stage=no_batch&density=middle&hide=received&view=no-batch');
   });

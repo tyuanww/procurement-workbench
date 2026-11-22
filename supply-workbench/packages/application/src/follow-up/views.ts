@@ -13,7 +13,6 @@ import type {
   OrderLineId,
   NoteStatus,
   PoFormat,
-  ProcurementStore,
   Provenanced,
   ReceiptCategory,
   ReceiptSource,
@@ -22,10 +21,11 @@ import type {
 import type { BatchFulfillment, ReceiptEvidence, ReceiptEvidenceInput, ShipmentEvidence, ShipmentEvidenceInput } from '@sw/domain';
 import type { StoreProgressLine } from './store-progress.js';
 import type { ProcurementLineDetail } from '../ports/procurement-repository.js';
-import type { PageQuery } from '../shared/page.js';
 import type { PartyRef, UserRef } from '../shared/refs.js';
 import type { ExceptionView, FollowUpView } from './record-views.js';
 import type { FactoryReportOf, ItemCodeView } from '../master-data/index.js';
+
+export type { BuyerFilter, LineSummary, LinesQuery } from './line-query.js';
 
 export type OrderLineRow = {
   readonly id: string;
@@ -189,36 +189,6 @@ export type TimelineEvent = {
 export type LineTimeline = {
   readonly events: readonly TimelineEvent[];
   readonly nextCursor: string | null;
-};
-
-export type BuyerFilter =
-  | { readonly kind: 'me' }
-  | { readonly kind: 'unassigned' }
-  | { readonly kind: 'user'; readonly userId: string };
-
-export type LinesQuery = PageQuery & {
-  readonly store?: ProcurementStore;
-  readonly lane?: Lane;
-  readonly q?: string;
-  readonly supplierPartyId?: string;
-  readonly receiverPartyId?: string;
-  readonly buyer?: BuyerFilter;
-  readonly stages?: readonly LineStage[];
-  readonly statusReported?: readonly string[];
-  readonly overdueOnly?: boolean;
-  readonly hasOpenException?: boolean;
-  readonly missingInLatestImport?: boolean;
-  readonly confirmedFrom?: LocalDate;
-  readonly confirmedTo?: LocalDate;
-  readonly importBatchId?: string;
-};
-
-export type LineSummary = {
-  readonly total: number;
-  readonly overdue: number;
-  readonly dueToday: number;
-  readonly missingDate: number;
-  readonly stages: readonly { readonly stage: LineStage; readonly count: number }[];
 };
 
 export type CreateLineInput = {
