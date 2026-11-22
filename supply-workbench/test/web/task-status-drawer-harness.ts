@@ -58,7 +58,7 @@ function exchangeOnly(item: Exchange): Exchange {
   return { url: item.url, method: item.method, body: item.body };
 }
 
-export function detail(input: { readonly id: string; readonly title: string; readonly status: string }): unknown {
+export function detail(input: { readonly id: string; readonly title: string; readonly status: string; readonly dependenciesIn?: readonly unknown[] }): unknown {
   return {
     item: {
       id: input.id, subjectType: 'standalone', subjectId: null, kind: 'task', title: input.title,
@@ -69,7 +69,7 @@ export function detail(input: { readonly id: string; readonly title: string; rea
     },
     events: [],
     dependenciesOut: [],
-    dependenciesIn: [],
+    dependenciesIn: input.dependenciesIn ?? [],
   };
 }
 

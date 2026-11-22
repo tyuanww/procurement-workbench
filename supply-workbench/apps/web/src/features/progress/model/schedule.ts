@@ -1,3 +1,4 @@
+import type { WorkItemPredecessor } from '@sw/contracts';
 import { addDays, diffDays, parseLocalDate, weekStart, type LocalDate } from '@sw/domain';
 import type { ScheduleFilters, ScheduleScale } from './schedule-query.js';
 import {
@@ -55,6 +56,7 @@ export type TimelineRow = {
   readonly meta: string;
   readonly when: string;
   readonly bar: TimelineBar;
+  readonly dependencyConflicts?: readonly WorkItemPredecessor[];
 };
 
 export type TimelineGroup = {
@@ -155,13 +157,17 @@ export function timelineOf(input: {
   readonly window: ScheduleWindow;
   readonly today: LocalDate;
   readonly scale: ScheduleScale;
+  readonly dependencyConflicts?: Readonly<Record<string, readonly WorkItemPredecessor[]>>;
 }): Timeline {
+  const conflicts = new Map(Object.entries(input.dependencyConflicts ?? {}));
   const groups = groupsOf(input.items).map((group) => ({
     key: group.key,
     name: group.name,
     counts: groupCounts(group.items),
     isUnassigned: group.key === UNASSIGNED,
-    rows: group.items.map((item) => timelineRow({ item, window: input.window, today: input.today })),
+    rows: group.items.map((item) => timelineRow({
+      item, window: input.window, today: input.today, dependencyConflicts: conflicts.get(item.id),
+    })),
   }));
   return {
     days: scheduleDays({ window: input.window, today: input.today, scale: input.scale }),
@@ -171,7 +177,12 @@ export function timelineOf(input: {
   };
 }
 
-export function timelineRow(input: { readonly item: WorkItem; readonly window: ScheduleWindow; readonly today: LocalDate }): TimelineRow {
+export function timelineRow(input: {
+  readonly item: WorkItem;
+  readonly window: ScheduleWindow;
+  readonly today: LocalDate;
+  readonly dependencyConflicts?: readonly WorkItemPredecessor[] | undefined;
+}): TimelineRow {
   return {
     id: taskParam(input.item.id),
     workItemId: input.item.id,
@@ -179,6 +190,7 @@ export function timelineRow(input: { readonly item: WorkItem; readonly window: S
     meta: `${supplierText(input.item)} · ${factoryText(input.item)} · ${ownerText(input.item)}`,
     when: `${plannedRangeText(input.item, input.today)} · ${workItemStatusLabel(input.item.status)}`,
     bar: scheduleBarOf(input.item, input.window),
+    ...(input.dependencyConflicts === undefined ? {} : { dependencyConflicts: input.dependencyConflicts }),
   };
 }
 

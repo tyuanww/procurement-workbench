@@ -3,17 +3,17 @@ import { NotFoundError } from '@sw/application/errors';
 import { attributeWorkItemEvents, eventInstant, eventUserIds, type AttributableWorkItemEvent } from '../../../../application/src/shared/work-item-event-attribution.js';
 import { storeFilter } from '../store-progress/scope.js';
 import type { PlanQueries } from '../../../../application/src/ports/plan.js';
-import type { SchedulePlanQuery, WorkItemDependencyView, WorkItemDetailView, WorkItemEventView, WorkItemListQuery, WorkItemListResult, WorkItemView } from '../../../../application/src/ports/plan-views.js';
-import { DEPENDENCY_KINDS, WORK_ITEM_EVENT_KINDS } from '../../../../domain/src/entities/work-items.js';
+import type { SchedulePlanQuery, WorkItemDetailView, WorkItemEventView, WorkItemListQuery, WorkItemListResult, WorkItemView } from '../../../../application/src/ports/plan-views.js';
+import { WORK_ITEM_EVENT_KINDS } from '../../../../domain/src/entities/work-items.js';
 import type { LocalDate } from '../../../../domain/src/values/local-date.js';
 import type { AppDatabase } from '../../client.js';
-import { instant } from '../../mappers/time.js';
 import { oneOf } from '../follow-up/guards.js';
 import { users } from '../../schema/platform.js';
 import { orderLines } from '../../schema/orders.js';
 import { workItemDependencies, workItemEvents, workItems } from '../../schema/work-items.js';
 import { dailyWhere, listWhere, projectWhere, scheduleWhere, selectWorkItems } from './query.js';
 import { toWorkItemView } from './view.js';
+import { incomingDependencies, readDependencies, toIncomingDependency } from './dependency-views.js';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 50;
@@ -23,6 +23,7 @@ export function planQueries(db: AppDatabase): PlanQueries {
   return {
     dailyItems: (query) => dailyItems(db, query.date),
     scheduleItems: (query) => scheduleItems(db, query),
+    incomingDependencies: (workItemIds) => incomingDependencies(db, workItemIds),
     projectItems: (query) => projectItems(db, query),
     listItems: (query) => listItems(db, query),
     getItem: (query) => getItem(db, query),
@@ -57,14 +58,13 @@ async function getItem(db: AppDatabase, query: { readonly workItemId: string; re
   if (row === undefined) throw new NotFoundError('排期项', query.workItemId);
   const [events, dependencies] = await Promise.all([
     attributedEvents(db, query),
-    db.select().from(workItemDependencies).where(or(eq(workItemDependencies.fromItemId, query.workItemId), eq(workItemDependencies.toItemId, query.workItemId))),
+    readDependencies(db, or(eq(workItemDependencies.fromItemId, query.workItemId), eq(workItemDependencies.toItemId, query.workItemId))),
   ]);
-  const views = dependencies.map(toDependencyView);
   return {
     item: toWorkItemView(row),
     events,
-    dependenciesOut: views.filter((view) => view.fromItemId === query.workItemId),
-    dependenciesIn: views.filter((view) => view.toItemId === query.workItemId),
+    dependenciesOut: dependencies.filter((row) => row.edge.fromItemId === query.workItemId).map((row) => row.edge),
+    dependenciesIn: dependencies.filter((row) => row.edge.toItemId === query.workItemId).map(toIncomingDependency),
   };
 }
 
@@ -135,14 +135,4 @@ function toAttributableEvent(row: {
 
 function presentJson(isAbsent: boolean, value: unknown): unknown {
   return isAbsent ? undefined : value;
-}
-
-function toDependencyView(row: typeof workItemDependencies.$inferSelect): WorkItemDependencyView {
-  return {
-    id: row.id,
-    fromItemId: row.fromItemId,
-    toItemId: row.toItemId,
-    kind: oneOf(DEPENDENCY_KINDS, row.kind),
-    createdAt: instant(row.createdAt),
-  };
 }

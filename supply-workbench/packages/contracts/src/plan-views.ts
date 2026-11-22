@@ -7,6 +7,7 @@ import type {
   GenerateWorkItemsInput,
   SchedulePlanQuery,
   ScheduleView,
+  WorkItemPredecessor,
   UpdateWorkItemInput,
   WorkItemDependencyView,
   WorkItemDetailView,
@@ -98,7 +99,7 @@ export const WorkItemEventViewSchema: z.ZodType<WorkItemEventView> = strictObjec
   createdAt: z.string(),
 });
 
-export const WorkItemDependencyViewSchema: z.ZodType<WorkItemDependencyView> = strictObject({
+const workItemDependency = strictObject({
   id: z.string(),
   fromItemId: z.string(),
   toItemId: z.string(),
@@ -106,11 +107,19 @@ export const WorkItemDependencyViewSchema: z.ZodType<WorkItemDependencyView> = s
   createdAt: z.string(),
 });
 
+export const WorkItemDependencyViewSchema: z.ZodType<WorkItemDependencyView> = workItemDependency;
+
+const predecessor: z.ZodType<WorkItemPredecessor> = strictObject({
+  id: z.string(), title: z.string(), plannedEnd: LocalDateSchema, status: WorkItemStatusSchema,
+});
+
+const incomingDependency = workItemDependency.extend({ predecessor: nullable(predecessor) });
+
 export const WorkItemDetailSchema: z.ZodType<WorkItemDetailView> = strictObject({
   item: WorkItemViewSchema,
   events: z.array(WorkItemEventViewSchema),
   dependenciesOut: z.array(WorkItemDependencyViewSchema),
-  dependenciesIn: z.array(WorkItemDependencyViewSchema),
+  dependenciesIn: z.array(incomingDependency),
 });
 
 export const PlanGroupViewSchema = strictObject({ key: z.string(), label: nullable(z.string()), items: z.array(WorkItemViewSchema) });
@@ -131,6 +140,7 @@ export const ScheduleViewSchema: z.ZodType<ScheduleView> = strictObject({
   to: LocalDateSchema,
   total: z.number(),
   items: z.array(WorkItemViewSchema),
+  dependencyConflicts: z.record(z.string(), z.array(predecessor)),
 });
 
 export const WorkItemListResponseSchema = listResponseSchema(WorkItemViewSchema);
@@ -261,3 +271,5 @@ export const ProjectProgressSchema: z.ZodType<ProjectProgressView> = strictObjec
   byFactory: z.array(ProjectProgressGroupSchema),
   details: optional(strictObject({ asOf: LocalDateSchema, tasks: z.array(strictObject({ item: WorkItemViewSchema, overdue: z.boolean() })) })),
 });
+
+export type { WorkItemPredecessor };
