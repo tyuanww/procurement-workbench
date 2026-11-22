@@ -136,12 +136,33 @@ export function Sparkline(input: { readonly values: readonly (number | null)[]; 
 }
 
 function BarLine({ row, total, scaleMax }: BarLineProps): ReactNode {
+  const [segment] = row.segments;
+  if (row.onSelect !== undefined && segment !== undefined && row.segments.length === 1) {
+    return <SingleBarButton segment={segment} scaleMax={scaleMax} onSelect={row.onSelect} />;
+  }
   return (
     <div style={barLineStyle()}>
       <Typography.Text style={{ fontSize: fontSize.table, color: text.secondary }}>{row.label}</Typography.Text>
       {total <= 0 ? <div style={emptyTrackStyle()} /> : <BarTrack row={row} scaleMax={scaleMax} />}
       <Typography.Text style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: fontSize.table }}>{total}</Typography.Text>
     </div>
+  );
+}
+
+function SingleBarButton({ segment, scaleMax, onSelect }: { readonly segment: BarSegment; readonly scaleMax: number; readonly onSelect: NonNullable<BarRow['onSelect']> }): ReactNode {
+  const count = formatQuantity(segment.value);
+  const isActive = segment.isActive === true;
+  return (
+    <Button block type="text" title={`${segment.label} ${count}`} aria-pressed={isActive} onClick={() => onSelect(segment.key)}
+      style={{ display: 'block', minHeight: 44, height: 'auto', paddingInline: space[1], textAlign: 'start', whiteSpace: 'normal', borderColor: isActive ? brand[600] : 'transparent', background: isActive ? brand[100] : undefined }}>
+      <span style={barLineStyle()}>
+        <span style={{ color: text.secondary }}>{segment.label}</span>
+        <span aria-hidden="true" style={trackStyle()}>
+          <span style={{ width: `${scaleMax <= 0 ? 0 : (segment.value / scaleMax) * 100}%`, background: segmentColor(segment) }} />
+        </span>
+        <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+      </span>
+    </Button>
   );
 }
 

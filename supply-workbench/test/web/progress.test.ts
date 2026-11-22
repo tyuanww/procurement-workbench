@@ -81,13 +81,13 @@ describe('采购进度行', () => {
     const rows = progressRows({ lines, nudges });
     expect(rows.map((row) => row.lineId)).toEqual(['stuck', 'open']);
     expect(rows[0]).toMatchObject({ title: '海葡萄', po: 'PO2', stageLabel: '待收货', daysInStage: 9, nextLabel: '逾期未到 送货单未回' });
-    expect(rows[1]?.nextLabel).toBe('今天没有要推的事');
+    expect(rows[1]?.nextLabel).toBeNull();
     expect(rows[0]?.arrival).toEqual({ kind: 'missing', dateText: '—' });
     expect(rows[0]?.supplierLabel).toBe('海葡萄厂');
     expect(rows[1]).toMatchObject({ supplierLabel: '宜侬', arrival: { kind: 'missing', dateText: '—' } });
   });
 
-  it('有确认日且逾期天数大于 0 才是逾期，下一步仍是安静句', () => {
+  it('有确认日且逾期天数大于 0 才是逾期，下一步只取已读到的动作', () => {
     const row = shown({
       line: {
         ...base,
@@ -101,7 +101,7 @@ describe('采购进度行', () => {
       dayText: '2',
       stay: '0-3',
       supplierLabel: '宜侬',
-      nextLabel: '今天没有要推的事',
+      nextLabel: null,
       arrival: { kind: 'overdue', dateText: '2026-10-01' },
     });
     expect(row.supplierLabel.includes('待审核')).toBe(false);

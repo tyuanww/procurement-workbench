@@ -1,5 +1,6 @@
 import { lineStageText, STUCK_BUCKET_MAX_DAYS, todoReasonText } from '@sw/domain';
 import { formatTableDate } from '../../../shared/ui/format.js';
+import type { ProgressMaterialRisk } from './material-risks.js';
 
 export type ProgressSupplier = {
   readonly displayName: string | null;
@@ -19,6 +20,7 @@ export type ProgressLine = {
   readonly daysInStage: number;
   readonly supplier: ProgressSupplier;
   readonly nextDue: ProgressDue | null;
+  readonly materialRisks?: readonly ProgressMaterialRisk[];
 };
 
 export type ProgressNudge = {
@@ -64,7 +66,8 @@ export type ProgressRow = {
   readonly daysInStage: number;
   readonly dayText: string;
   readonly stay: ProgressStay;
-  readonly nextLabel: string;
+  readonly nextLabel: string | null;
+  readonly materialRisks: readonly ProgressMaterialRisk[];
   readonly supplierLabel: string;
   readonly arrival: ProgressArrival;
 };
@@ -74,7 +77,6 @@ export function arrivalTableDate(input: { readonly arrival: ProgressArrival; rea
   return formatTableDate({ iso: input.arrival.dateText, now: input.now });
 }
 
-const QUIET = '今天没有要推的事';
 const HIDDEN = new Set(['done', 'cancelled']);
 
 export function progressRows({ lines, nudges }: { readonly lines: readonly ProgressLine[]; readonly nudges: readonly ProgressNudge[] }): ProgressRow[] {
@@ -101,14 +103,21 @@ function toRow({ line, nudges }: { readonly line: ProgressLine; readonly nudges:
     title: line.nameRaw ?? '未命名',
     po: line.poRaw ?? BLANK,
     stage: line.stage,
-    stageLabel: lineStageText(line.stage),
+    stageLabel: progressStageLabel(line.stage),
     daysInStage: line.daysInStage,
     dayText: dayText({ days: line.daysInStage }),
     stay: stayBucket({ days: line.daysInStage }),
     nextLabel: nextOf(nudges),
+    materialRisks: line.materialRisks ?? [],
     supplierLabel: supplierLabel({ supplier: line.supplier }),
     arrival: arrivalOf({ nextDue: line.nextDue }),
   };
+}
+
+export function progressStageLabel(stage: string): string {
+  if (stage === 'no_batch') return '待建批次';
+  if (stage === 'awaiting_date') return '已有批次待确认';
+  return lineStageText(stage);
 }
 
 function textOrNull({ value }: { readonly value: string | null }): string | null {
@@ -148,9 +157,9 @@ function dayText({ days }: { readonly days: number }): string {
   return String(days);
 }
 
-function nextOf(nudges: readonly ProgressNudge[]): string {
+function nextOf(nudges: readonly ProgressNudge[]): string | null {
   const top = [...nudges].sort((left, right) => right.severity - left.severity)[0];
-  if (top === undefined || top.reasons.length === 0) return QUIET;
+  if (top === undefined || top.reasons.length === 0) return null;
   return top.reasons.map((code) => todoReasonText(code)).join(' ');
 }
 

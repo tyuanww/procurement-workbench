@@ -2,28 +2,77 @@ import { Alert, Button, Empty, Result, Skeleton, Table, type TableColumnsType } 
 import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from 'react';
 import { useSearchParams } from 'react-router';
 import { type OrderLineRow, type ProcurementStore } from '@sw/contracts';
-import { arrivalPaint, progressInsights, rememberLocalNote, type LocalNote, type ProgressArrival, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
+import { arrivalPaint, matchesProgressDrill, progressDrillKey, progressDrillLabel, progressInsights, readProgressDrill, rememberLocalNote, withProgressDrill, type LocalNote, type ProgressArrival, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { tablePagination } from '../../shared/ui/pagination.js';
 import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { ArrivalMemos } from '../../features/today/index.js';
-import { fontSize, space, statusColor, text } from '../../theme/tokens.js';
+import { fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import { ProgressNote } from './progress-note.js';
 import { progressArrivalDate, progressMobileColumns, progressMobileDetails, type ProgressMobileInput } from './progress-mobile.js';
 import { loadProgress, type ProgressData } from './progress-load.js';
 export { noteBatches, pagesFor } from './progress-load.js';
 import { ProgressOverview } from './progress-overview.js';
+import { ProgressNextAction } from './progress-material-risk.js';
 import { matchingOa, ProgressOaFilter, progressOrderRef, scopedLineLink, StoreGapSummary, StoreOrderDetails } from './store-order.js';
 
-export function ProgressCurrent({ store, isMine }: { readonly store: ProcurementStore; readonly isMine: boolean }) {
+type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
+
+export function ProgressCurrent(scope: ProgressScope) {
+  const { data, error, isLoaded, retry, ...notes } = useCurrentData(scope);
+  const { oa, drill, setOa, setDrill, tableRef, ...table } = useCurrentFilter();
+  const scopedRows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
+  const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
+  const emptyMessage = drill.kind !== 'all' ? '当前指标没有匹配的订单行。' : oa === null ? null : '这个 OA 没有进行中的成品订单行。';
+  return (
+    <>
+      {isLoaded && data.rows.length > 0 ? <ProgressOaFilter lines={data.rows.map((row) => data.lines.get(row.lineId))} value={oa} onChange={setOa} /> : null}
+      {isLoaded ? <ProgressSummary rows={scopedRows} lines={data.lines} drill={drill} onDrill={setDrill} /> : null}
+      <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
+        <SectionGroup title="当前进度" {...(isLoaded ? { meta: `${rows.length} 条` } : {})}>
+          {drill.kind === 'all' ? null : <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginBottom: space[2] }}>
+            <span>当前筛选 {progressDrillLabel(drill)}</span>
+            <Button onClick={() => setDrill({ kind: 'all' })}>清除下钻</Button>
+          </div>}
+          <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
+          <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
+            <ProgressTable {...notes} {...table} rows={rows} lines={data.lines} emptyMessage={emptyMessage} />
+          </ProgressBody>
+        </SectionGroup>
+      </div>
+      {isLoaded ? <ArrivalMemos memos={memosForOa(data, oa)} /> : null}
+    </>
+  );
+}
+
+function ProgressActionNotice(props: { readonly message: string; readonly hasRows: boolean; readonly isLoaded: boolean; readonly onRetry: () => void }) {
+  if (!props.isLoaded || !props.hasRows || props.message === '') return null;
+  return <Alert type="warning" showIcon title={props.message} action={<Button onClick={props.onRetry}>重试</Button>} />;
+}
+
+function useCurrentFilter() {
   const [params, setParams] = useSearchParams();
   const oa = params.get('oa');
-  const [data, setData] = useState<ProgressData>({ rows: [], lines: new Map(), arrivalMemos: [] });
-  const rows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
-  const [error, setError] = useState('');
+  const drill = readProgressDrill(params.get('drill'));
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const tableRef = useRef<HTMLDivElement>(null);
+  return {
+    oa, drill, tableRef, page, pageSize, setPage, setPageSize, search: params.toString(),
+    setOa: (value: string | null) => { setPage(1); setParams(oaParams(params, value)); },
+    setDrill: (value: ProgressDrill) => {
+      const next: ProgressDrill = progressDrillKey(value) === progressDrillKey(drill) ? { kind: 'all' } : value;
+      setPage(1);
+      setParams(withProgressDrill(params, next), { preventScrollReset: true });
+      tableRef.current?.focus();
+    },
+  };
+}
+
+function useCurrentData({ store, isMine }: ProgressScope) {
+  const [data, setData] = useState<ProgressData>({ rows: [], lines: new Map(), arrivalMemos: [], actionNotice: '' });
+  const [error, setError] = useState('');
   const [now] = useState(() => new Date());
   const [isLoaded, setLoaded] = useState(false);
   const [reload, setReload] = useState(0);
@@ -38,23 +87,7 @@ export function ProgressCurrent({ store, isMine }: { readonly store: Procurement
       .finally(() => { if (current === generation.current) setLoaded(true); });
     return () => { generation.current++; };
   }, [reload, store, isMine]);
-  return (
-    <>
-      {isLoaded && data.rows.length > 0 ? (
-        <ProgressOaFilter lines={data.rows.map((row) => data.lines.get(row.lineId))} value={oa} onChange={(value) => {
-          setPage(1);
-          setParams(oaParams(params, value));
-        }} />
-      ) : null}
-      {isLoaded ? <ProgressSummary rows={rows} lines={data.lines} /> : null}
-      <SectionGroup title="当前进度" {...(isLoaded ? { meta: `${rows.length} 条` } : {})}>
-        <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={() => setReload((value) => value + 1)}>
-          <ProgressTable rows={rows} lines={data.lines} search={params.toString()} filtered={oa !== null} notes={notes} drafts={drafts} setDrafts={setDrafts} localNotes={localNotes} generation={generation} setNotes={setNotes} setError={setError} now={now} page={page} pageSize={pageSize} setPage={setPage} setPageSize={setPageSize} />
-        </ProgressBody>
-      </SectionGroup>
-      {isLoaded ? <ArrivalMemos memos={memosForOa(data, oa)} /> : null}
-    </>
-  );
+  return { data, error, isLoaded, notes, drafts, setDrafts, localNotes, generation, setNotes, setError, now, retry: () => setReload((value) => value + 1) };
 }
 
 function memosForOa({ lines, arrivalMemos }: ProgressData, oa: string | null) {
@@ -67,10 +100,10 @@ function memosForOa({ lines, arrivalMemos }: ProgressData, oa: string | null) {
   return arrivalMemos.filter((memo) => visibleIds.has(memo.line.id));
 }
 
-function ProgressSummary({ rows, lines }: { readonly rows: readonly ProgressRow[]; readonly lines: ProgressData['lines'] }) {
+function ProgressSummary({ rows, lines, drill, onDrill }: { readonly rows: readonly ProgressRow[]; readonly lines: ProgressData['lines']; readonly drill: ProgressDrill; readonly onDrill: (value: ProgressDrill) => void }) {
   return <>
     <StoreGapSummary lines={rows.map((row) => lines.get(row.lineId))} />
-    {rows.length === 0 ? null : <ProgressOverview insight={progressInsights(rows)} />}
+    {rows.length === 0 ? null : <ProgressOverview insight={progressInsights(rows)} drill={drill} onDrill={onDrill} />}
   </>;
 }
 
@@ -98,7 +131,7 @@ function ProgressBody(props: { readonly rows: readonly ProgressRow[]; readonly e
   }
   return (
     <>
-      {props.error === '' ? null : <Alert style={{ marginBottom: 12 }} type="error" showIcon title={props.error} />}
+      {props.error === '' ? null : <Alert style={{ marginBottom: 12 }} type="error" showIcon title={props.error} action={<Button onClick={props.onRetry}>重试</Button>} />}
       {props.children}
     </>
   );
@@ -108,7 +141,7 @@ type ProgressTableProps = {
   readonly rows: readonly ProgressRow[];
   readonly lines: ReadonlyMap<string, OrderLineRow>;
   readonly search: string;
-  readonly filtered: boolean;
+  readonly emptyMessage: string | null;
   readonly notes: Readonly<Record<string, string>>;
   readonly drafts: Readonly<Record<string, string>>;
   readonly setDrafts: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
@@ -139,12 +172,12 @@ function ProgressTable(props: ProgressTableProps) {
       rowKey="lineId"
       size="small"
       dataSource={[...props.rows]}
-      locale={{ emptyText: props.filtered ? <Empty description="这个 OA 没有进行中的成品订单行。" /> : <Empty description="所选范围没有进行中的成品订单行。"><Button href="/imports">去导入</Button></Empty> }}
+      locale={{ emptyText: props.emptyMessage === null ? <Empty description="所选范围没有进行中的成品订单行。"><Button href="/imports">去导入</Button></Empty> : <Empty description={props.emptyMessage} /> }}
       expandable={{ expandedRowRender: expand }}
       {...(isPhone ? {} : { scroll: { x: 'max-content' as const } })}
       columns={isPhone ? progressMobileColumns(mobileInput) : progressColumns({ lines: props.lines, search: props.search, notes, drafts, setDrafts, localNotes, generation, setNotes, setError, now: props.now })}
       pagination={tablePagination({
-        page: props.page,
+        page: Math.min(props.page, Math.max(1, Math.ceil(props.rows.length / props.pageSize))),
         pageSize: props.pageSize,
         total: props.rows.length,
         onChange: props.setPage,
@@ -201,7 +234,7 @@ function progressColumns(input: {
     { title: '停留天数', align: 'right', render: (_value: unknown, row: ProgressRow) => <StayDays row={row} /> },
     { title: '确认到货日', render: (_value: unknown, row: ProgressRow) => progressArrivalDate({ arrival: row.arrival, now: input.now }) },
     { title: '状态', render: (_value: unknown, row: ProgressRow) => <ArrivalTag arrival={row.arrival} /> },
-    { title: '下一步', dataIndex: 'nextLabel' },
+    { title: '下一步', render: (_value: unknown, row: ProgressRow) => <ProgressNextAction row={row} /> },
     noteColumn({ notes, drafts, setDrafts, localNotes, generation, setNotes, setError }),
   ];
 }
