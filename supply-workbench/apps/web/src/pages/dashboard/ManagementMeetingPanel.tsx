@@ -84,7 +84,7 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
   const { meeting } = load;
   return <>
     <Flex gap={space[2]} wrap align="center" justify="space-between">
-      <Typography.Text>{meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
+      <Typography.Text>{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
       {canWrite ? <GenerateReport meeting={meeting} /> : null}
     </Flex>
     <MeetingSections meeting={meeting} {...(canWrite ? {
@@ -115,6 +115,6 @@ function GenerateReport({ meeting }: { readonly meeting: ManagementMeeting }) {
   }
   return <Flex gap={space[1]} wrap align="center">
     {error === undefined ? null : <Alert type="error" showIcon title={error} />}
-    <Button type="primary" loading={isPending} onClick={() => void generate()}>生成周报</Button>
+    <Button type="primary" loading={isPending} onClick={() => void generate()}>生成全店周报</Button>
   </Flex>;
 }
