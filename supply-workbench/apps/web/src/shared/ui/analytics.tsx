@@ -13,6 +13,7 @@ export type MetricItem = {
   readonly unit?: string;
   readonly hint?: string;
   readonly tone?: MetricTone;
+  readonly action?: { readonly isActive?: boolean; readonly select: () => void };
 };
 
 export type BarSegment = {
@@ -46,12 +47,30 @@ export function MetricStrip(input: { readonly items: readonly MetricItem[]; read
 }
 
 function MetricCard(input: { readonly item: MetricItem }): ReactNode {
+  if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} />;
   return (
     <Card size="small" styles={{ body: { padding: space[2] } }} style={{ borderTop: `2px solid ${toneColor(input.item.tone)}` }}>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
       <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
       {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
     </Card>
+  );
+}
+
+function MetricButton({ item, action }: { readonly item: MetricItem; readonly action: NonNullable<MetricItem['action']> }): ReactNode {
+  return (
+    <Button block aria-pressed={action.isActive} onClick={action.select} style={{
+      display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: space[2],
+      borderTop: `2px solid ${toneColor(item.tone)}`,
+      background: action.isActive ? brand[100] : bg.surface,
+      borderInlineColor: action.isActive ? brand[600] : border, borderBottomColor: action.isActive ? brand[600] : border,
+    }}>
+      <span style={{ display: 'grid', minWidth: 0 }}>
+        <span style={{ color: text.secondary, fontSize: fontSize.meta }}>{item.label}{action.isActive ? <> <CheckOutlined aria-hidden="true" /></> : null}</span>
+        <strong style={metricValueStyle()}>{typeof item.value === 'number' ? formatQuantity(item.value) : item.value}{item.unit}</strong>
+        {item.hint === undefined ? null : <span style={{ color: text.secondary, fontSize: fontSize.meta }}>{item.hint}</span>}
+      </span>
+    </Button>
   );
 }
 

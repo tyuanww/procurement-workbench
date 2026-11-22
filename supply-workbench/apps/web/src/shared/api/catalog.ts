@@ -101,7 +101,7 @@ export function fetchPlanSchedule(input: { readonly from: string; readonly to: s
 }
 
 export function fetchPlanProgress(input: { readonly from: string; readonly to: string; readonly signal: AbortSignal }): Promise<ProjectProgress> {
-  const path = `/api/v1/plan/progress?from=${encodeURIComponent(input.from)}&to=${encodeURIComponent(input.to)}`;
+  const path = `/api/v1/plan/progress?from=${encodeURIComponent(input.from)}&to=${encodeURIComponent(input.to)}&includeItems=true`;
   return fetchOwned({ path, schema: ProjectProgressSchema, signal: input.signal });
 }
 

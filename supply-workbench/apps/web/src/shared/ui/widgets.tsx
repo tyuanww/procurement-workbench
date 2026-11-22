@@ -72,13 +72,13 @@ function statusGlyph({ icon }: { readonly icon: StatusIconName }): typeof ClockC
   return Glyph;
 }
 
-export function StatusTag({ status }: { readonly status: StatusKey }) {
+export function StatusTag({ status, label }: { readonly status: StatusKey; readonly label?: string }) {
   const spec = STATUS_SPEC[status];
   const color = statusColor[spec.tone];
   const Glyph = statusGlyph({ icon: spec.icon });
   return (
     <Tag style={{ color: color.text, background: spec.fill === 'solid' ? color.bg : 'transparent', borderColor: spec.fill === 'solid' ? color.border : color.text, textDecoration: spec.strike ? 'line-through' : undefined }}>
-      <Glyph aria-hidden /> {spec.label}
+      <Glyph aria-hidden /> {label ?? spec.label}
     </Tag>
   );
 }

@@ -2,12 +2,10 @@ import {
   BuyerLoadDashboardSchema,
   SupplierDashboardSchema,
   type BuyerLoadRow,
-  type ProjectProgress,
   type SupplierKpiRow,
 } from '@sw/contracts';
 import type { LocalDate } from '@sw/domain';
 import { apiGet } from '../../shared/api/client.js';
-import { read } from '../../shared/api/reads.js';
 import type { BuyerInput } from './model/buyers.js';
 import type { DashboardLane } from './model/query.js';
 import type { SupplierInput, WeekInput } from './model/suppliers.js';
@@ -23,18 +21,16 @@ export type DashboardLoad = {
   readonly supplierUnassigned?: ReturnType<typeof SupplierDashboardSchema.parse>['unassigned'];
   readonly buyers: readonly BuyerInput[];
   readonly buyerLane: DashboardLane;
-  readonly project: ProjectProgress;
   readonly unassignedExceptions: number | null;
 };
 
 export async function loadDashboard(input: LoadDashboardInput): Promise<DashboardLoad> {
   const query = apiQuery(input);
-  const [suppliers, buyers, project] = await Promise.all([
+  const [suppliers, buyers] = await Promise.all([
     apiGet(`/api/v1/dashboard/suppliers?${query}`, SupplierDashboardSchema),
     apiGet(`/api/v1/dashboard/buyers?${query}`, BuyerLoadDashboardSchema),
-    read({ name: 'planProgress', from: input.from, to: input.to }),
   ]);
-  return toLoad({ suppliers: suppliers.rows, supplierUnassigned: suppliers.unassigned, buyers: buyers.rows, buyerLane: input.lane, project, unassignedExceptions: buyers.unassignedExceptions });
+  return toLoad({ suppliers: suppliers.rows, supplierUnassigned: suppliers.unassigned, buyers: buyers.rows, buyerLane: input.lane, unassignedExceptions: buyers.unassignedExceptions });
 }
 
 function apiQuery(input: LoadDashboardInput): string {
@@ -48,7 +44,6 @@ function toLoad(input: {
   readonly supplierUnassigned?: ReturnType<typeof SupplierDashboardSchema.parse>['unassigned'];
   readonly buyers: readonly BuyerLoadRow[];
   readonly buyerLane: DashboardLane;
-  readonly project: ProjectProgress;
   readonly unassignedExceptions: number | null;
 }): DashboardLoad {
   return {
@@ -56,7 +51,6 @@ function toLoad(input: {
     supplierUnassigned: input.supplierUnassigned,
     buyers: input.buyers.map(buyerInput),
     buyerLane: input.buyerLane,
-    project: input.project,
     unassignedExceptions: input.unassignedExceptions,
   };
 }

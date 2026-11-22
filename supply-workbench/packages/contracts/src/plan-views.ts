@@ -14,7 +14,7 @@ import type {
   WorkItemListQuery,
   WorkItemView,
 } from '../../application/src/plan/views.js';
-import type { ProjectProgressGroup, ProjectProgressView } from '../../application/src/plan/progress.js';
+import type { ProjectProgressGroup, ProjectProgressQuery, ProjectProgressView } from '../../application/src/plan/progress.js';
 import {
   COUNTERPARTY_ROLES,
   DEPENDENCY_KINDS,
@@ -194,7 +194,7 @@ export const DailyPlanQuerySchema: z.ZodType<DailyPlanQuery> = strictObject({
   factoryPartyId: optional(z.string()),
 });
 
-export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = strictObject({
+const schedulePlanQuery = strictObject({
   store: optional(ProcurementStoreSchema),
   from: LocalDateSchema,
   to: LocalDateSchema,
@@ -202,6 +202,9 @@ export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = strictObjec
   supplierPartyId: optional(z.string()),
   factoryPartyId: optional(z.string()),
 });
+
+export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = schedulePlanQuery;
+export const ProjectProgressQuerySchema: z.ZodType<ProjectProgressQuery> = schedulePlanQuery.extend({ includeItems: optional(BooleanQuerySchema) });
 
 export const WorkItemListQuerySchema: z.ZodType<WorkItemListQuery> = strictObject({
   status: optional(z.array(WorkItemStatusSchema)),
@@ -239,6 +242,7 @@ const ProjectProgressGroupSchema: z.ZodType<ProjectProgressGroup> = strictObject
   overdue: z.number().int().nonnegative(),
   blocked: z.number().int().nonnegative(),
   completionRate: z.union([z.number().min(0).max(1), z.null()]),
+  itemIds: optional(z.array(z.string())),
 });
 
 export type ProjectProgressGroupView = ProjectProgressGroup;
@@ -255,4 +259,5 @@ export const ProjectProgressSchema: z.ZodType<ProjectProgressView> = strictObjec
   byOwner: z.array(ProjectProgressGroupSchema),
   bySupplier: z.array(ProjectProgressGroupSchema),
   byFactory: z.array(ProjectProgressGroupSchema),
+  details: optional(strictObject({ asOf: LocalDateSchema, tasks: z.array(strictObject({ item: WorkItemViewSchema, overdue: z.boolean() })) })),
 });
