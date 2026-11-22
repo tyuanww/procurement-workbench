@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Collapse, Input, Result, Select, Skeleton, Space, Typography } from 'antd';
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
@@ -100,7 +100,7 @@ function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly d
       <Typography.Title level={2}>批次</Typography.Title>
       {canRecord && canAddBatch(detail.line) ? <Button onClick={() => openRecord({ search: params.toString(), setParams, drawer: 'create', batchId: '' })}>新增批次</Button> : null}
       <ul>{detail.batches.map((batch) => (
-        <BatchDetail key={batch.id} batch={batch} canRecord={canRecord} hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
+        <BatchDetail key={batch.id} batch={batch} focused={params.get('focusBatch') === batch.id} canRecord={canRecord} hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
           search: params.toString(), setParams, drawer, batchId: batch.id, ...(reportId === undefined ? {} : { reportId }),
         })} lineId={lineId} setMessage={setMessage} onReload={onReload} />
       ))}</ul>
@@ -127,16 +127,23 @@ function ProcurementScheduleEvidence({ detail, params }: { readonly detail: Orde
   </section>;
 }
 
-function BatchDetail({ batch, canRecord, hasProcurementSchedule, onOpen, lineId, setMessage, onReload }: Reload & {
+function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen, lineId, setMessage, onReload }: Reload & {
   readonly batch: OrderLineDetail['batches'][number];
+  readonly focused: boolean;
   readonly canRecord: boolean;
   readonly hasProcurementSchedule: boolean;
   readonly onOpen: (drawer: 'ship' | 'receipt', reportId?: string) => void;
 }) {
   const canEdit = canRecord && showsRecordEdits(batch.status);
   const confirmedKey = [batch.id, batch.dateBuyerConfirmed, batch.firstConfirmedDate].join(':');
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (!focused || row.current === null) return;
+    row.current.focus({ preventScroll: true });
+    row.current.scrollIntoView({ block: 'center' });
+  }, [focused]);
   return (
-    <li>
+    <li ref={row} tabIndex={-1}>
       {batchLineText(batch)}
       {batch.fulfillment === undefined ? null : <FulfillmentSummary facts={batch.fulfillment} />}
       {canEdit && batch.fulfillment?.unit === null ? <BatchUnitCorrection batchId={batch.id} onReload={onReload} /> : null}
