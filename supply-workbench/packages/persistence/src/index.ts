@@ -32,6 +32,7 @@ export { fileStore } from './files/local-disk.js';
 export { rememberStoredFile } from './repositories/stored-files.js';
 export { auditQueries, freshnessQueries } from './queries/platform/index.js';
 export { importQueries } from './queries/imports/index.js';
+export { readUnassignedBuyerExceptions } from './queries/performance/buyer-exceptions.js';
 export { performanceQueries } from './queries/performance/index.js';
 export { followUpQueries, latestNoteQueries, timelineQueries } from './queries/follow-up/index.js';
 export { confirmedArrivalExportRows } from './queries/follow-up/confirmed-arrival-export.js';

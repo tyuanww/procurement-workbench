@@ -182,12 +182,12 @@ function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly lane: D
 }
 
 function BuyerBoard(props: { readonly loaded: DashboardLoad; readonly onSearch: (patch: DashboardPatch) => void }) {
-  const rows = buyerView({ rows: props.loaded.buyers });
-  if (rows.length === 0) return <Empty description="这段时间没有采购负荷数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
+  const rows = buyerView({ rows: props.loaded.buyers, lane: props.loaded.buyerLane });
+  if (rows.length === 0 && (props.loaded.unassignedExceptions ?? 0) === 0) return <Empty description="这段时间没有采购负荷数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <BuyerLoadSummary inputs={props.loaded.buyers} unassignedExceptions={props.loaded.unassignedExceptions} />
-      <BuyerPanel rows={rows} unassignedExceptions={props.loaded.unassignedExceptions} />
+      <BuyerLoadSummary inputs={props.loaded.buyers} />
+      <BuyerPanel rows={rows} unassignedExceptions={props.loaded.unassignedExceptions} lane={props.loaded.buyerLane} />
     </div>
   );
 }

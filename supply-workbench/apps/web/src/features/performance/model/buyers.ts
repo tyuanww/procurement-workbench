@@ -1,4 +1,5 @@
 import { EM_DASH, type EmDash } from './figures.js';
+import type { DashboardLane } from './query.js';
 
 export type BuyerInput = {
   readonly buyerId: string;
@@ -12,95 +13,26 @@ export type BuyerInput = {
   readonly followUpsInPeriod: number | null;
 };
 
-export type BuyerSegment =
-  | {
-      readonly id: 'overdue';
-      readonly label: '逾期';
-      readonly count: number;
-      readonly tone: 'danger';
-      readonly fill: 'solid';
-    }
-  | {
-      readonly id: 'dueToday';
-      readonly label: '今日应到';
-      readonly count: number;
-      readonly tone: 'warning';
-      readonly fill: 'solid';
-    }
-  | {
-      readonly id: 'missingDate';
-      readonly label: '缺确认日期';
-      readonly count: number;
-      readonly tone: 'warning';
-      readonly fill: 'outline';
-    }
-  | {
-      readonly id: 'other';
-      readonly label: '其他';
-      readonly count: number;
-      readonly tone: 'neutral';
-      readonly fill: 'solid';
-    };
-
-export type BuyerBarRow = {
-  readonly buyerId: string;
+export type BuyerBarRow = Omit<BuyerInput, 'name' | 'openLines' | 'openExceptions' | 'followUpsInPeriod'> & {
   readonly name: string;
-  readonly href: `/lines?buyer=${string}`;
+  readonly href: `/lines?${string}`;
   readonly openLines: number | EmDash;
-  readonly openBatches: number;
   readonly openExceptions: number | EmDash;
   readonly followUpsInPeriod: number | EmDash;
-  readonly segments: readonly [
-    Extract<BuyerSegment, { readonly id: 'overdue' }>,
-    Extract<BuyerSegment, { readonly id: 'dueToday' }>,
-    Extract<BuyerSegment, { readonly id: 'missingDate' }>,
-    Extract<BuyerSegment, { readonly id: 'other' }>,
-  ];
 };
 
-export function buyerView(input: { readonly rows: readonly BuyerInput[] }): readonly BuyerBarRow[] {
-  return input.rows.map(toBuyerRow);
-}
-
-function toBuyerRow(row: BuyerInput): BuyerBarRow {
-  return {
-    buyerId: row.buyerId,
+export function buyerView(input: { readonly rows: readonly BuyerInput[]; readonly lane: DashboardLane }): readonly BuyerBarRow[] {
+  return input.rows.map((row) => ({
+    ...row,
     name: row.name ?? EM_DASH,
-    href: buyerHref(row.buyerId),
-    openLines: countOrDash(row.openLines),
-    openBatches: row.openBatches,
-    openExceptions: countOrDash(row.openExceptions),
-    followUpsInPeriod: countOrDash(row.followUpsInPeriod),
-    segments: segmentsOf(row),
-  };
+    href: buyerHref({ buyerId: row.buyerId, lane: input.lane }),
+    openLines: row.openLines ?? EM_DASH,
+    openExceptions: row.openExceptions ?? EM_DASH,
+    followUpsInPeriod: row.followUpsInPeriod ?? EM_DASH,
+  }));
 }
 
-function buyerHref(buyerId: string): `/lines?buyer=${string}` {
-  return `/lines?buyer=${encodeURIComponent(buyerId)}`;
-}
-
-function countOrDash(value: number | null): number | EmDash {
-  if (value === null) return EM_DASH;
-  return value;
-}
-
-function segmentsOf(row: BuyerInput): BuyerBarRow['segments'] {
-  return [
-    { id: 'overdue', label: '逾期', count: row.overdue, tone: 'danger', fill: 'solid' },
-    { id: 'dueToday', label: '今日应到', count: row.dueToday, tone: 'warning', fill: 'solid' },
-    {
-      id: 'missingDate',
-      label: '缺确认日期',
-      count: row.missingDate,
-      tone: 'warning',
-      fill: 'outline',
-    },
-    { id: 'other', label: '其他', count: otherCount(row), tone: 'neutral', fill: 'solid' },
-  ];
-}
-
-function otherCount(row: BuyerInput): number {
-  const rest = row.openBatches - row.overdue - row.dueToday - row.missingDate;
-  if (rest > 0) return rest;
-  return 0;
+function buyerHref({ buyerId, lane }: { readonly buyerId: string; readonly lane: DashboardLane }): `/lines?${string}` {
+  const line = lane === 'all' ? '' : `&lane=${lane}`;
+  return `/lines?buyer=${encodeURIComponent(buyerId)}${line}`;
 }

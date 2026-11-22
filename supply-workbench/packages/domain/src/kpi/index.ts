@@ -137,7 +137,7 @@ function loadOf({ buyerUserId, input, followUps }: { readonly buyerUserId: Entit
     buyerUserId,
     openLines: input.lines.filter((line) => line.buyerUserId === buyerUserId && isInFollowStage(line.stage)).length,
     openBatches: open.length,
-    overdue: open.filter((batch) => isBefore(batch.dateBuyerConfirmed, input.today)).length,
+    overdue: own.filter((batch) => isCurrentlyOverdue(batch, input.today)).length,
     dueToday: open.filter((batch) => batch.dateBuyerConfirmed === input.today).length,
     missingDate: open.filter((batch) => batch.status === 'awaiting_date').length,
     openExceptions: input.exceptions.filter((item) => item.status === 'open' && item.buyerUserId === buyerUserId).length,

@@ -23,7 +23,7 @@ export function SupplierRateChart(input: { readonly inputs: DashboardLoad['suppl
   );
 }
 
-export function BuyerLoadSummary(input: { readonly inputs: DashboardLoad['buyers']; readonly unassignedExceptions: number | null }): ReactNode {
+export function BuyerLoadSummary(input: { readonly inputs: DashboardLoad['buyers'] }): ReactNode {
   const open = input.inputs.reduce((sum, row) => sum + row.openBatches, 0);
   const overdue = input.inputs.reduce((sum, row) => sum + row.overdue, 0);
   const missing = input.inputs.reduce((sum, row) => sum + row.missingDate, 0);
@@ -34,7 +34,6 @@ export function BuyerLoadSummary(input: { readonly inputs: DashboardLoad['buyers
         { key: 'open', label: '开放批次', value: open, tone: 'neutral' },
         { key: 'overdue', label: '逾期', value: overdue, tone: 'danger' },
         { key: 'missing', label: '缺确认日期', value: missing, tone: 'warning' },
-        { key: 'unassigned', label: '未归属异常', value: input.unassignedExceptions ?? '—', tone: 'attention' },
       ]}
     />
   );

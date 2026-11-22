@@ -1,4 +1,5 @@
 import {
+  BuyerDrillSchema,
   DailyPlanSchema,
   LineOwnerOptionsSchema,
   LineSummarySchema,
@@ -53,6 +54,10 @@ export function fetchTodayChase(query: string, signal: AbortSignal) {
 
 export function fetchSupplierWeek(query: URLSearchParams, signal: AbortSignal) {
   return fetchOwned({ path: `/api/v1/dashboard/suppliers?${query}`, schema: SupplierDashboardSchema, signal });
+}
+
+export function fetchBuyerDrill(query: URLSearchParams, signal: AbortSignal) {
+  return fetchOwned({ path: `/api/v1/dashboard/buyers/drill?${query}`, schema: BuyerDrillSchema, signal });
 }
 
 export function fetchLines(query: string, signal: AbortSignal): Promise<LinesPage> {
