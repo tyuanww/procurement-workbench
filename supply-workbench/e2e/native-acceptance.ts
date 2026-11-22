@@ -3,7 +3,7 @@ import { execFileSync, fork, spawnSync, type ExecFileSyncOptions } from 'node:ch
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { release, tmpdir } from 'node:os';
@@ -82,6 +82,7 @@ try {
   const database = 'sw_accept_' + randomBytes(4).toString('hex');
   const origin = `http://127.0.0.1:${appPort}`;
   run(pgTool('initdb'), ['-D', pgData, '-U', 'sw_accept', '--auth=trust', '--no-locale', '--encoding=UTF8']);
+  await appendFile(join(pgData, 'postgresql.conf'), "\nunix_socket_directories = ''\n");
   run(pgTool('pg_ctl'), ['-D', pgData, '-l', pgLog, '-o', `-h 127.0.0.1 -p ${pgPort}`, '-w', 'start']);
   pgStarted = true;
   run(pgTool('createdb'), ['-h', '127.0.0.1', '-p', String(pgPort), '-U', 'sw_accept', '--no-password', database]);
