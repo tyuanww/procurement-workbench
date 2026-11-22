@@ -67,7 +67,7 @@ function ProcurementScheduleDetail(props: Selection & { readonly line: OrderLine
       <Link to={scopedLineLink(line.id, { search: props.search, store })}>成品订单行详情</Link>
       <Typography.Text>采购负责人 {line.buyer?.name ?? '未分派'}</Typography.Text>
       {schedule === undefined ? <Alert type="info" title="该订单没有可用的采购排期来源" /> : <>
-        <ProcurementDateEvidence schedule={schedule} />
+        <ProcurementDateEvidence schedule={schedule} batches={batches} />
         {schedule.items.length > 0 ? <ProcurementStageList schedule={schedule} onChanged={changed} /> : canWrite && line.origin === 'import_po_master'
           ? <BuildProcurementForm schedule={schedule} orderLineId={line.id} store={store} onBuilt={(date) => { changed(); props.onAnchor(date); }} />
           : <Typography.Text type="secondary">尚未建立排期</Typography.Text>}
