@@ -1,8 +1,8 @@
-# 本地运行手册
+# 在本机运行工作台
 
-## 启动示例
+## 启动工作台
 
-进入 `supply-workbench/`。安装 Docker 和 Docker Compose 后构建应用并启动数据库。
+安装 Docker 和 Docker Compose。进入仓库的 `supply-workbench/`，构建应用并启动数据库。
 
 ```sh
 docker compose -f docker/compose.yml build app
@@ -12,12 +12,12 @@ docker compose -f docker/compose.yml run --rm --no-deps -T --entrypoint node app
 docker compose -f docker/compose.yml up -d app
 ```
 
-打开 `http://127.0.0.1:8080`。示例访问码是 `dev-code`。在登录页选择管理员或采购员，再从导入页上传[合成采购表](fixtures/synthetic/po-master-procurement.xlsx)。数据库和上传记录保存在本机 Docker 卷。
+## 导入示例采购表
 
-本地验证结束后，可用 `docker compose -f docker/compose.yml down` 停止服务。
+打开 `http://127.0.0.1:8080`。在登录页选择管理员或采购员，输入示例访问码 `dev-code`。打开导入页并上传合成采购表。[合成采购表](fixtures/synthetic/po-master-procurement.xlsx)
 
-## 验证
+数据库和上传记录保存在本机 Docker 卷。
 
-> 数据库写入验收使用单独的测试库。
+## 停止工作台
 
-在 `supply-workbench/` 运行 `pnpm verify` 检查类型、代码约定、测试和构建。浏览器验收和 GitHub Actions 见 [CI 说明](docs/ci-verification.md)。
+在 `supply-workbench/` 运行 `docker compose -f docker/compose.yml down`。数据卷供下次启动继续使用。
