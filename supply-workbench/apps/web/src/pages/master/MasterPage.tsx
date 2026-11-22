@@ -299,8 +299,8 @@ function partyTitle(detail: PartyDetail | null): string {
 }
 
 function PartyPanel(props: { readonly tab: (typeof PARTY_TABS)[number]; readonly detail: PartyDetail | null; readonly partyId: string }) {
-  if (props.tab === 'orders') return <a href={`/lines?supplierPartyId=${props.partyId}`}>订单</a>;
-  if (props.tab === 'factory') return <a href={`/lines?q=${encodeURIComponent(partyTitle(props.detail))}`}>代工厂相关订单</a>;
+  if (props.tab === 'orders') return <a href={`/lines?lane=all&supplierPartyId=${encodeURIComponent(props.partyId)}`}>订单</a>;
+  if (props.tab === 'factory') return <a href={`/lines?lane=all&q=${encodeURIComponent(partyTitle(props.detail))}`}>代工厂相关订单</a>;
   if (props.tab === 'kpis') return <PartyKpis detail={props.detail} />;
   return <PartyAliases detail={props.detail} />;
 }

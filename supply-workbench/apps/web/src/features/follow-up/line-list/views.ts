@@ -1,10 +1,17 @@
 import { z } from 'zod';
 
-export function presetViews(): readonly { readonly id: string; readonly label: string; readonly query: string }[] {
+export type LineDeskView = {
+  readonly id: string;
+  readonly label: string;
+  readonly query: string;
+  readonly preserveLane?: true;
+};
+
+export function presetViews(): readonly LineDeskView[] {
   return [
-    { id: 'mine-overdue', label: '我的逾期', query: 'buyer=me&overdue=1' },
-    { id: 'no-batch', label: '未建要货', query: 'stage=no_batch' },
-    { id: 'yinong', label: '宜侬在途', query: 'q=宜侬' },
+    { id: 'mine-overdue', label: '我的逾期', query: 'buyer=me&overdue=1', preserveLane: true },
+    { id: 'no-batch', label: '未建要货', query: 'stage=no_batch', preserveLane: true },
+    { id: 'yinong', label: '宜侬在途', query: 'inTransitFactory=yinong', preserveLane: true },
   ];
 }
 

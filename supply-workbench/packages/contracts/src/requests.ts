@@ -35,6 +35,7 @@ export const LinesQuerySchema = strictObject({
   lane: optional(LaneSchema),
   q: optional(z.string()),
   supplierPartyId: optional(z.string()),
+  inTransitFactory: optional(z.literal('yinong')),
   receiverPartyId: optional(z.string()),
   buyer: optional(z.string()),
   stages: optional(z.array(LineStageSchema)),

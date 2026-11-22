@@ -7,6 +7,7 @@ import type { AppDatabase } from '../../client.js';
 import { orderLines, purchaseOrders } from '../../schema/orders.js';
 import { storeFilter } from '../store-progress/scope.js';
 import { storeProgressOf } from '../store-progress/rows.js';
+import { inTransitFactoryWhere } from './line-in-transit.js';
 import { loadRelations, toRow } from './line-row.js';
 
 const PAGE_MAX = 200;
@@ -20,7 +21,7 @@ type Line = typeof orderLines.$inferSelect;
 
 export async function listLines(read: Read, query: LinesQuery): Promise<ListResult<OrderLineRow>> {
   const sorts = sortsOf(query.sort);
-  const where = whereOf({ query, today: read.clock.today(), actorId: actorUserId(query) });
+  const where = await whereForRead({ db: read.db, query, today: read.clock.today() });
   if (query.pageSize === undefined) return unpaged({ read, where, sorts, store: query.store });
   const page = query.page ?? 1;
   assertPage(page, query.pageSize);
@@ -31,7 +32,7 @@ export async function listLines(read: Read, query: LinesQuery): Promise<ListResu
 
 export async function summarizeLines(read: Read, query: LinesQuery): Promise<LineSummary> {
   const today = read.clock.today();
-  const where = whereOf({ query, today, actorId: actorUserId(query) });
+  const where = await whereForRead({ db: read.db, query, today });
   const [total, stages, counts] = await Promise.all([countLines(read.db, where), stageCounts(read.db, where), summaryCounts({ db: read.db, where, today })]);
   return { total, ...counts, stages };
 }
@@ -95,6 +96,11 @@ function countOf(value: unknown): number {
     if (Number.isInteger(parsed)) return parsed;
   }
   throw new Error('订单行汇总计数失败');
+}
+
+async function whereForRead({ db, query, today }: { readonly db: AppDatabase; readonly query: LinesQuery; readonly today: LocalDate }): Promise<SQL | undefined> {
+  const where = whereOf({ query, today, actorId: actorUserId(query) });
+  return query.inTransitFactory === undefined ? where : inTransitFactoryWhere({ db, factory: query.inTransitFactory, where });
 }
 
 function whereOf({ query, today, actorId }: { readonly query: LinesQuery; readonly today: LocalDate; readonly actorId: string | undefined }): SQL | undefined {
