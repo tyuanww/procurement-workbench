@@ -24,7 +24,8 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
 
     const first = await readPage(1);
     const all = [...first.items];
-    expect(first.paging).toMatchObject({ total: 501, page: 1, pageSize: 50, units: ['件', '箱'], reasonCounts: { unshipped: 501 } });
+    expect(first.paging).toMatchObject({ total: 501, page: 1, pageSize: 50, units: ['件', '箱'], reasonCounts: { unshipped: 501 }, chaseCounts: { all: 501, filtered: 501 } });
+    expect(first.paging.chaseItemIds).toEqual(first.items.map((item) => item.id));
     expect(first.items[0]?.id).toBe('batch:hz09-batch-1');
     expect(first.paging.factories.map((factory) => factory.id).sort()).toEqual(['hz09-factory-a', 'hz09-factory-b']);
     expect(first.pendingBatch?.map((row) => row.orderLineId)).toContain('hz09-line-503');
@@ -57,16 +58,23 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
     expect(a.some((item) => item.id === 'batch:hz09-batch-501')).toBe(true);
     const b = await chase('reasons=unshipped&factoryId=hz09-factory-b');
     expect(b.map((item) => item.id)).toEqual(['batch:hz09-batch-250']);
+    const exactBatch = 'itemId=batch%3Ahz09-batch-501';
+    expect(await chase('itemId=batch%3Ahz09-batch-502&scope=all')).toEqual([]);
+    expect(await chase('itemId=batch%3Ahz09-batch-50x')).toEqual([]);
+    expect(await chase('itemId=batch%3Ahz09-batch-504')).toEqual([]);
 
     const firstShipment = await ship(10000);
     expect(firstShipment.statusCode).toBe(200);
     const bulkQuery = new URLSearchParams({ reasons: 'overdue', sort: 'bulk', unit: '件' }).toString();
     const bulk = await readPage(10, `${bulkQuery}&focusId=batch%3Ahz09-batch-501`);
     expect(bulk.paging.page).toBe(1);
-    expect(bulk.paging).toMatchObject({ total: 499, units: ['件', '箱'] });
+    expect(bulk.paging).toMatchObject({ total: 499, units: ['件', '箱'], chaseCounts: { all: 501, filtered: 499 } });
     expect(bulk.items.slice(0, 2).map((item) => [item.id, item.batch?.fulfillment?.unshippedQty])).toEqual([
       ['batch:hz09-batch-501', 30000], ['batch:hz09-batch-1', 10000],
     ]);
+    expect(bulk.paging.chaseItemIds?.slice(0, 2)).toEqual(['batch:hz09-batch-501', 'batch:hz09-batch-1']);
+    expect(await chase(exactBatch)).toMatchObject([{ id: 'batch:hz09-batch-501', unshippedQty: 30_000, unit: '件' }]);
+    expect(await chase('')).toHaveLength(501);
     const bulkCopy = await chase(bulkQuery);
     expect(bulkCopy.map((item) => item.id).slice(0, 2)).toEqual(['batch:hz09-batch-501', 'batch:hz09-batch-1']);
     expect(bulkCopy).toHaveLength(499);
@@ -82,6 +90,7 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
     expect(clamped.items).toHaveLength(50);
     expect(clamped.arrivalMemos).toContainEqual(expect.objectContaining({ batchId: 'hz09-batch-501', inTransitQty: 40000 }));
     expect((await chase('reasons=unshipped')).some((item) => item.id === 'batch:hz09-batch-501')).toBe(false);
+    expect(await chase(exactBatch)).toEqual([]);
 
     function ship(qty: number) {
       return app.inject({

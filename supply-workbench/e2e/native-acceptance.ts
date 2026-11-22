@@ -129,7 +129,7 @@ try {
   assert.equal(health.ok, true);
 
   const result = spawnSync(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
-    env, stdio: 'inherit', timeout: 360_000, windowsHide: true,
+    env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, windowsHide: true,
   });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
   assert.equal(result.status, 0, 'Procurement browser acceptance failed');

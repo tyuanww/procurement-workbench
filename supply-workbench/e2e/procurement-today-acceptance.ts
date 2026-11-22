@@ -1,5 +1,96 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+
+const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
+const batch = 'hz09-batch-501';
+
+export function seedChaseSample(): void {
+  const { DATABASE_URL: database, PGBIN: pgBin, E2E_ALLOW_MUTATION: allowed } = process.env;
+  assert.equal(allowed, '1');
+  assert.ok(database && /^postgresql:\/\/sw_accept@127\.0\.0\.1:\d+\/sw_accept_[0-9a-f]+$/.test(database), '仅在原生验收的临时库建立催货样本');
+  const executable = process.platform === 'win32' ? 'psql.exe' : 'psql';
+  execFileSync(pgBin === undefined ? executable : join(pgBin, executable), [
+    database, '-X', '-v', 'ON_ERROR_STOP=1', '-f', fileURLToPath(sample),
+  ]);
+}
+
+export async function checkChaseToday({ page, origin, out }: {
+  readonly page: Page;
+  readonly origin: URL;
+  readonly out: string;
+}) {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: origin.origin });
+  await page.goto(new URL('/today?reasons=unshipped', origin).href);
+  const sampleRows = page.locator('.today-row').filter({ hasText: /HZ09-\d{4}/ });
+  const order = (po: string) => sampleRows.filter({ hasText: po });
+  await order('HZ09-0001').waitFor();
+  assert.equal(await sampleRows.count(), 50);
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*条.*第\s*1\s*页/ }).waitFor();
+  await page.getByTitle('下一页', { exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get('page') === '2');
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*条.*第\s*2\s*页/ }).waitFor();
+  await page.goto(new URL('/today?reasons=unshipped&page=11', origin).href);
+  await order('HZ09-0501').waitFor();
+  assert.equal(await sampleRows.count(), 1);
+  await page.screenshot({ path: join(out, 'procurement-last-page.png'), animations: 'disabled' });
+
+  await page.getByRole('button', { name: /^复制全部催单/ }).click();
+  await page.getByRole('status').filter({ hasText: '已复制 501 条催单' }).waitFor();
+  const allText = await clipboardText(page);
+  assert.deepEqual(purchaseOrders(allText), sampleOrders(501));
+  assert.ok(allText.includes('合成催货甲厂') && allText.includes('合成催货乙厂'));
+  await page.getByRole('button', { name: '复制合成催货甲厂催单（筛选结果）' }).click();
+  await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
+  const factoryText = await clipboardText(page);
+  assert.deepEqual(purchaseOrders(factoryText), sampleOrders(501).filter((po) => po !== 'HZ09-0250'));
+  assert.ok(factoryText.includes('合成催货甲厂'));
+  assert.ok(!factoryText.includes('合成催货乙厂'));
+
+  await page.goto(new URL('/today?drawer=batch%3Ahz09-batch-250', origin).href);
+  const restored = page.getByRole('dialog').filter({ hasText: 'HZ09-0250' });
+  await restored.waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('drawer'), 'batch:hz09-batch-250');
+
+  const bulk = new URL('/today?reasons=unshipped&sort=bulk&unit=%E4%BB%B6', origin).href;
+  await page.goto(bulk);
+  await order('HZ09-0501').waitFor();
+  await order('HZ09-0001').waitFor();
+  const sorted = await sampleRows.allTextContents();
+  assert.match(sorted[0] ?? '', /HZ09-0501/);
+  assert.match(sorted[1] ?? '', /HZ09-0001/);
+  assert.equal(await order('HZ09-0002').count(), 0);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
+  await page.getByRole('navigation', { name: '今日快捷入口' }).getByRole('link', { name: /要催货/ }).click();
+  assert.ok(await page.getByRole('region', { name: '行动板待办' }).evaluate((list) => list === document.activeElement));
+  assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
+  await order('HZ09-0501').getByRole('button', { name: '复制本批催单' }).click();
+  await page.getByRole('status').filter({ hasText: '已复制 1 条催单' }).waitFor();
+  assert.deepEqual(purchaseOrders(await clipboardText(page)), ['HZ09-0501']);
+  await page.screenshot({ path: join(out, 'procurement-bulk-mobile.png'), animations: 'disabled' });
+  await recordShipment(page, origin, 25_000);
+  await page.reload();
+  await order('HZ09-0501').getByText(/未发\s+5,000\s+件/).waitFor();
+  assert.match((await sampleRows.first().innerText()), /HZ09-0001/);
+  const memos = page.locator('section').filter({ has: page.getByRole('heading', { name: '到仓备忘录', exact: true }) }).last();
+  await memos.getByText(/待收 25,000 件/).waitFor();
+  await recordShipment(page, origin, 5_000);
+  await page.reload();
+  await memos.getByText(/待收 30,000 件/).waitFor();
+  assert.equal(await order('HZ09-0501').count(), 0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: /^复制筛选催单/ }).click();
+  await page.getByRole('status').filter({ hasText: '已复制 499 条催单' }).waitFor();
+  const after = purchaseOrders(await clipboardText(page));
+  assert.deepEqual(after, sampleOrders(501).filter((po) => po !== 'HZ09-0501' && po !== 'HZ09-0002'));
+  await page.getByRole('button', { name: /^复制全部催单/ }).click();
+  await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
+  assert.deepEqual(purchaseOrders(await clipboardText(page)), sampleOrders(501).filter((po) => po !== 'HZ09-0501'));
+  return { total: 501, lastPage: 11, allCopied: 501, factoryCopied: 500, oldDrawerLinkRestored: true, bulkFirst: 'HZ09-0501', batchCopied: 1, remainingAfterPartial: 5_000, inTransitAtEnd: 30_000 };
+}
 
 export async function checkFirstBatch({ page, origin, buyer, warehouse }: {
   readonly page: Page;
@@ -26,4 +117,23 @@ export async function checkFirstBatch({ page, origin, buyer, warehouse }: {
   assert.equal(batches.length, 1);
   assert.equal(batches[0].plannedQty, 120);
   return { pendingBefore: 1, pendingAfter: 0, created: batches.length };
+}
+
+function sampleOrders(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => 'HZ09-' + String(index + 1).padStart(4, '0'));
+}
+
+function purchaseOrders(text: string): string[] {
+  return (text.match(/\bHZ09-\d{4}\b/g) ?? []).sort();
+}
+
+async function clipboardText(page: Page): Promise<string> {
+  return page.evaluate(() => globalThis.navigator.clipboard.readText());
+}
+
+async function recordShipment(page: Page, origin: URL, qty: number): Promise<void> {
+  const response = await page.request.post(new URL('/api/v1/batches/' + batch + '/shipments', origin).href, {
+    data: { qty, shippedOn: '2025-02-01', fulfillment: { kind: 'verified', unit: '件', evidence: '原生验收合成发货凭据' } },
+  });
+  assert.ok(response.ok(), '合成发货 HTTP ' + response.status());
 }
