@@ -4,12 +4,32 @@ import { CreateReceiptRequestSchema, CreateShipmentRequestSchema, type TodoItemV
 import { postReceipt, postShipment } from '../../apps/web/src/features/follow-up/record-forms/commands.js';
 import { loadToday } from '../../apps/web/src/pages/today/today-load.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
+import { businessTimeZone, setBusinessTimeZone } from '../../apps/web/src/shared/business-time-zone.js';
+import { followUpInstant, localFollowUpTime, reminderChangeOf } from '../../apps/web/src/pages/today/follow-up-time.js';
 import { openQuick } from '../../apps/web/src/pages/today/today-open.js';
 import { confirmedDateBody, formErrors, type OpenForm } from '../../apps/web/src/pages/today/TodayForms.js';
 
 import { pagedToday } from './today-page-fixture.js';
 
 const BUYER = '0199f0a0-0000-7000-8000-000000000002';
+
+it('下次跟进按工作台时区来回转换，拒绝夏令时缺口及重叠的本地时间', () => {
+  const previous = businessTimeZone();
+  try {
+    setBusinessTimeZone('Asia/Shanghai');
+    const instant = '2026-11-23T02:00:00.000Z';
+    expect(localFollowUpTime(instant)).toBe('2026-11-23T10:00');
+    expect(reminderChangeOf('2026-11-24T10:00', instant)).toEqual({ nextFollowUpAt: '2026-11-24T02:00:00.000Z' });
+    expect(reminderChangeOf('2026-11-23T10:00', instant)).toEqual({});
+    expect(reminderChangeOf('', instant)).toEqual({ nextFollowUpAt: null });
+    setBusinessTimeZone('America/Los_Angeles');
+    expect(followUpInstant('2026-03-08T02:30')).toBeNull();
+    expect(followUpInstant('2026-11-01T01:30')).toBeNull();
+    expect(followUpInstant('2026-11-01T02:30')).toBe('2026-11-01T10:30:00.000Z');
+  } finally {
+    setBusinessTimeZone(previous);
+  }
+});
 
 it.each(['shipments', 'receipts'] as const)('今日抽屉的 %s 把清空的单位提交为待核', async (kind) => {
   const previous = globalThis.fetch;
@@ -187,6 +207,8 @@ function todayBody(row: TodoItemView) {
       shipped_not_received: 0,
       unshipped: 0,
       fulfillment_review: 0,
+      follow_up_due: 0,
+      follow_up_scheduled: 0,
       note_missing: 0,
       upcoming: 0,
       exception_open: 1,

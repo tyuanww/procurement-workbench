@@ -34,6 +34,8 @@ export const STATUS_SPEC = {
   upcoming: { label: todoReasonLabel('upcoming'), tone: 'neutral', fill: 'outline', icon: 'calendar', strike: false },
   unshipped: { label: todoReasonLabel('unshipped'), tone: 'neutral', fill: 'outline', icon: 'truck', strike: false },
   fulfillment_review: { label: todoReasonLabel('fulfillment_review'), tone: 'warning', fill: 'outline', icon: 'question', strike: false },
+  follow_up_due: { label: todoReasonLabel('follow_up_due'), tone: 'warning', fill: 'solid', icon: 'clock-alert', strike: false },
+  follow_up_scheduled: { label: todoReasonLabel('follow_up_scheduled'), tone: 'neutral', fill: 'outline', icon: 'calendar', strike: false },
   exception_open: { label: todoReasonLabel('exception_open'), tone: 'attention', fill: 'solid', icon: 'triangle-alert', strike: false },
   review_pending: { label: todoReasonLabel('review_pending'), tone: 'warning', fill: 'outline', icon: 'question', strike: false },
   import_pending: { label: todoReasonLabel('import_pending'), tone: 'neutral', fill: 'outline', icon: 'file', strike: false },

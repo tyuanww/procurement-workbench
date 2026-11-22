@@ -9,7 +9,7 @@ const day = localDate('2026-11-19');
 const due = localDate('2026-11-15');
 const counts: TodayResponse['counts'] = {
   overdue: 501, demand_before_confirmed: 0, due_today: 0, missing_date: 0, shipped_not_received: 0, note_missing: 0,
-  upcoming: 0, unshipped: 501, fulfillment_review: 0, exception_open: 0, review_pending: 0, import_pending: 0, unassigned: 0,
+  upcoming: 0, unshipped: 501, fulfillment_review: 0, follow_up_due: 0, follow_up_scheduled: 0, exception_open: 0, review_pending: 0, import_pending: 0, unassigned: 0,
 };
 const material: StoreProgressMaterial = {
   id: 'shared-material', nameRaw: '共用瓶盖', codeRaw: 'CAP-11', poRaw: 'PO-M', completed: false,

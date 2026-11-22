@@ -8,7 +8,8 @@ import {
   type BoardItem, type TodayBoard,
 } from '../../features/today/index.js';
 import { confirmedDateBody, formErrors, type NoteRef, type OpenForm, type Target, type Undo } from './TodayForms.js';
-import { actionFactoryParams, actionPageParams, actionQuery, actionReasonParams, actionSortParams } from './action-query.js';
+import { actionFactoryParams, actionFollowUpParams, actionPageParams, actionQuery, actionReasonParams, actionSortParams } from './action-query.js';
+import { reminderChangeOf } from './follow-up-time.js';
 import { useChaseCopy } from './today-copy.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, handleKey, rowsSettled } from './today-keys.js';
@@ -19,8 +20,7 @@ import { sessionRows, useTodayPlan } from './use-today-plan.js';
 import { useUndoMessage } from './use-undo-message.js';
 
 export function TodayPage() {
-  const screen = useTodayScreen();
-  return <TodayScreen {...screen} />;
+  return <TodayScreen {...useTodayScreen()} />;
 }
 
 function useTodayScreen(): TodayScreenProps {
@@ -55,6 +55,7 @@ function useTodayScreen(): TodayScreenProps {
       factoryId: params.get('chaseFactory'),
       isFiltered: query.reasons.length > 0 || query.sort.kind === 'bulk',
       onFactory: (id) => setParams(actionFactoryParams(search, id)),
+      onFollowUp: (reason) => setParams(actionFollowUpParams(search, reason)),
       onPage: (page) => setParams(actionPageParams(search, page)),
       onSort: (sort) => setParams(actionSortParams(search, sort)),
       onRetry: state.retry,
@@ -284,7 +285,8 @@ async function saveNote(input: SaveInput): Promise<Undo> {
   if (input.draft.kind !== 'note') throw new Error('缺少批次');
   const ids = input.target ?? input.note;
   if (ids === undefined) throw new Error('缺少批次');
-  const saved = await apiSend({ path: '/api/v1/follow-ups', method: 'POST', body: { orderLineId: ids.lineId, batchId: ids.batchId, kind: input.draft.followKind, text: input.draft.text.trim() }, schema: FollowUpViewSchema });
+  const reminder = reminderChangeOf(input.draft.nextFollowUpLocal, input.target?.nextFollowUpAt);
+  const saved = await apiSend({ path: '/api/v1/follow-ups', method: 'POST', body: { orderLineId: ids.lineId, batchId: ids.batchId, kind: input.draft.followKind, text: input.draft.text.trim(), ...reminder }, schema: FollowUpViewSchema });
   return { kind: 'note', id: saved.id, label: '已记跟进' };
 }
 

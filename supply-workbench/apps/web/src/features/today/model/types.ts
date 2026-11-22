@@ -6,8 +6,10 @@ export type BoardItem = TodoRow & {
   readonly productName: string | null;
   readonly qty: number | null;
   readonly batchStatus: BatchStatus | null;
+  readonly inTransit?: { readonly qty: number; readonly unit: string };
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
+  readonly nextFollowUpAt?: string;
 };
 
 export type GroupMode = 'waiting' | 'reason' | 'date' | 'schedule' | 'owner' | 'supplier';
@@ -25,9 +27,11 @@ export type RowFace = {
   readonly productName: string;
   readonly date: string;
   readonly remaining?: string;
+  readonly inTransit?: string;
   readonly factory?: string;
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
+  readonly nextFollowUpAt?: string;
 };
 
 export type BoardRow = {

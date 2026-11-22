@@ -85,6 +85,7 @@ export type FollowUp = EntityMeta & {
   readonly batchId: DeliveryBatchId | null;
   readonly kind: FollowUpKind;
   readonly text: string;
+  readonly nextFollowUpAt?: IsoInstant | null;
   readonly partyId: EntityId | null;
   readonly createdBy: EntityId;
 };

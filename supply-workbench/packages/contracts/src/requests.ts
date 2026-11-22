@@ -156,6 +156,7 @@ export const CreateFollowUpRequestSchema = strictObject({
   batchId: optional(DeliveryBatchIdSchema),
   kind: FollowUpKindSchema,
   text: z.string(),
+  nextFollowUpAt: optional(nullable(z.iso.datetime())),
   partyId: optional(EntityIdSchema),
 });
 export type CreateFollowUpRequest = z.output<typeof CreateFollowUpRequestSchema>;

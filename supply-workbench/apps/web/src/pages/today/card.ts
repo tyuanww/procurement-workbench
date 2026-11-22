@@ -19,20 +19,24 @@ export function toBoardItem(item: TodoItemView): BoardItem {
   };
 }
 
-function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining'> {
+function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining' | 'inTransit'> {
   const fulfillment = item.batch?.fulfillment;
+  if (fulfillment === undefined) return { qty: item.batch?.plannedQty ?? null };
+  const { unshippedQty, inTransitQty, unit } = fulfillment;
   return {
-    qty: fulfillment === undefined ? (item.batch?.plannedQty ?? null) : fulfillment.unshippedQty,
-    ...(fulfillment !== undefined && item.reasons.includes('unshipped') ? { remaining: fulfillment } : {}),
+    qty: unshippedQty,
+    ...(item.reasons.includes('unshipped') ? { remaining: fulfillment } : {}),
+    ...(unshippedQty === 0 && inTransitQty !== null && inTransitQty > 0 && unit !== null ? { inTransit: { qty: inTransitQty, unit } } : {}),
   };
 }
 
-function replyOf(batch: TodoItemView['batch']): Pick<BoardItem, 'latestFollowUp' | 'latestPromise'> {
+function replyOf(batch: TodoItemView['batch']): Pick<BoardItem, 'latestFollowUp' | 'latestPromise' | 'nextFollowUpAt'> {
   const latest = batch?.latestFollowUp;
   const promise = batch?.latestPromise;
   return {
     ...(latest === undefined ? {} : { latestFollowUp: latest.text }),
     ...(promise === undefined ? {} : { latestPromise: promise.text }),
+    ...(batch?.nextFollowUpAt === undefined ? {} : { nextFollowUpAt: batch.nextFollowUpAt }),
   };
 }
 

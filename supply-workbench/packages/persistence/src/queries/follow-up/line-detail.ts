@@ -149,5 +149,9 @@ function latest(rows: readonly (typeof followUps.$inferSelect)[]): FollowUpView[
 }
 
 function followView(row: typeof followUps.$inferSelect): FollowUpView {
-  return { id: row.id, orderLineId: row.orderLineId, batchId: row.batchId, kind: oneOf(FOLLOW_UP_KINDS, row.kind), text: row.text, partyId: row.partyId, createdBy: row.createdBy };
+  return {
+    id: row.id, orderLineId: row.orderLineId, batchId: row.batchId,
+    kind: oneOf(FOLLOW_UP_KINDS, row.kind), text: row.text, partyId: row.partyId, createdBy: row.createdBy,
+    ...(row.reminder === null ? {} : { nextFollowUpAt: row.reminder.nextAt }),
+  };
 }
