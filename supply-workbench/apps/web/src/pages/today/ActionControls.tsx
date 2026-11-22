@@ -2,6 +2,7 @@ import { Button, Flex, Pagination, Select, Typography } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import type { TodayPaging, TodaySort } from '@sw/contracts';
 import type { ChaseScope } from './action-query.js';
+import type { FollowUpFilter } from './action-query.js';
 
 export type ActionPageControls = {
   readonly paging: TodayPaging;
@@ -16,6 +17,7 @@ export type ActionPageControls = {
   readonly onPage: (page: number) => void;
   readonly onSort: (sort: TodaySort) => void;
   readonly onFactory: (id: string) => void;
+  readonly onFollowUp: (reason: FollowUpFilter) => void;
   readonly onCopyChase: (scope: ChaseScope) => void;
   readonly onRetry: () => void;
 };

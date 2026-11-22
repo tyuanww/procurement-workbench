@@ -8,7 +8,8 @@ import {
   type BoardItem, type TodayBoard,
 } from '../../features/today/index.js';
 import { confirmedDateBody, formErrors, type NoteRef, type OpenForm, type Target, type Undo } from './TodayForms.js';
-import { actionFactoryParams, actionPageParams, actionQuery, actionReasonParams, actionSortParams } from './action-query.js';
+import { actionFactoryParams, actionFollowUpParams, actionPageParams, actionQuery, actionReasonParams, actionSortParams } from './action-query.js';
+import { reminderChangeOf } from './follow-up-time.js';
 import { useChaseCopy } from './today-copy.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, handleKey, rowsSettled } from './today-keys.js';
@@ -19,8 +20,7 @@ import { sessionRows, useTodayPlan } from './use-today-plan.js';
 import { useUndoMessage } from './use-undo-message.js';
 
 export function TodayPage() {
-  const screen = useTodayScreen();
-  return <TodayScreen {...screen} />;
+  return <TodayScreen {...useTodayScreen()} />;
 }
 
 function useTodayScreen(): TodayScreenProps {
@@ -44,17 +44,18 @@ function useTodayScreen(): TodayScreenProps {
     isSettled: rowsSettled({ isReady: isSettled, isSchedule: isPlanMode, plan: plan.load.kind }),
   });
   if (nextFocusId !== state.focus) state.setFocus(nextFocusId);
-  useTodaySession({ state, rows: visible, isReady: isSettled });
-  useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode });
+  const closeSession = useTodaySession({ state, rows: visible, isReady: isSettled });
+  useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode, closeSession });
   useUndoMessage({ undo: state.undo, onRestore: () => { void restore(state); } });
   const copy = useChaseCopy({ query, buyerName: state.buyerName });
   return {
-    ...screenProps({ state, board, actionBoard, plan, search, setParams }),
+    ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }),
     actionPage: state.paging === undefined ? undefined : {
       paging: state.paging, sort: query.sort, isLoading: today.isLoading, isSettled, loadError: today.loadError,
       factoryId: params.get('chaseFactory'),
       isFiltered: query.reasons.length > 0 || query.sort.kind === 'bulk',
       onFactory: (id) => setParams(actionFactoryParams(search, id)),
+      onFollowUp: (reason) => setParams(actionFollowUpParams(search, reason)),
       onPage: (page) => setParams(actionPageParams(search, page)),
       onSort: (sort) => setParams(actionSortParams(search, sort)),
       onRetry: state.retry,
@@ -109,8 +110,9 @@ function useTodayKeys(input: {
   readonly state: ReturnType<typeof useTodayState>;
   readonly visible: readonly { readonly id: string }[];
   readonly isPlanMode: boolean;
+  readonly closeSession: ReturnType<typeof useTodaySession>;
 }): void {
-  const { state, visible, isPlanMode } = input;
+  const { state, visible, isPlanMode, closeSession } = input;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => handleKey({
       event,
@@ -121,8 +123,8 @@ function useTodayKeys(input: {
       actions: {
         setFocus: state.setFocus,
         toggleHelp: () => state.setHelp((value) => !value),
-        closeDraft: () => state.setDraft(null),
-        closeDrawer: () => state.setDrawerId(null),
+        closeDraft: () => closeSession(state.drawerId),
+        closeDrawer: () => { if (state.drawerId !== null) closeSession(null); },
         openDrawer: () => {
           if (state.focus === null) return;
           state.setDrawerId(state.focus);
@@ -136,7 +138,7 @@ function useTodayKeys(input: {
     });
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state, visible]);
+  }, [state, visible, isPlanMode, closeSession]);
 }
 
 type ScreenInput = {
@@ -146,10 +148,11 @@ type ScreenInput = {
   readonly plan: ReturnType<typeof useTodayPlan>;
   readonly search: string;
   readonly setParams: ReturnType<typeof useSearchParams>[1];
+  readonly closeSession: ReturnType<typeof useTodaySession>;
 };
 
 function screenProps(input: ScreenInput): TodayScreenProps {
-  const { state, board, actionBoard, search, setParams, plan } = input;
+  const { state, board, actionBoard, search, setParams, plan, closeSession } = input;
   return {
     board,
     arrivalMemos: state.arrivalMemos,
@@ -177,7 +180,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     onOpen: (id) => { state.setDrawerId(id); state.setFocus(id); state.setDraft(null); state.setSaveError(''); },
     onQuick: ({ id, kind }) => openQuick({ id, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError }),
     onCopy: (text) => { void copyNudge(text, state.setNotice); },
-    onCloseDrawer: () => { state.setDrawerId(null); state.setDraft(null); state.setSaveError(''); },
+    onCloseDrawer: () => closeSession(null),
     onDraft: state.setDraft,
     onSubmit: () => { void submitForm(state); },
     onRetry: state.retry,
@@ -282,7 +285,8 @@ async function saveNote(input: SaveInput): Promise<Undo> {
   if (input.draft.kind !== 'note') throw new Error('缺少批次');
   const ids = input.target ?? input.note;
   if (ids === undefined) throw new Error('缺少批次');
-  const saved = await apiSend({ path: '/api/v1/follow-ups', method: 'POST', body: { orderLineId: ids.lineId, batchId: ids.batchId, kind: input.draft.followKind, text: input.draft.text.trim() }, schema: FollowUpViewSchema });
+  const reminder = reminderChangeOf(input.draft.nextFollowUpLocal, input.target?.nextFollowUpAt);
+  const saved = await apiSend({ path: '/api/v1/follow-ups', method: 'POST', body: { orderLineId: ids.lineId, batchId: ids.batchId, kind: input.draft.followKind, text: input.draft.text.trim(), ...reminder }, schema: FollowUpViewSchema });
   return { kind: 'note', id: saved.id, label: '已记跟进' };
 }
 

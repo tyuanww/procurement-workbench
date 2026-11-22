@@ -53,7 +53,9 @@ async function findFollowUp(db: AppDatabase, id: string): Promise<FollowUp | und
 }
 
 async function saveFollowUp(db: AppDatabase, entity: FollowUp): Promise<void> {
-  await db.insert(followUps).values(entity).onConflictDoUpdate({ target: followUps.id, set: entity });
+  const { nextFollowUpAt, ...fields } = entity;
+  const row = { ...fields, reminder: nextFollowUpAt === undefined ? null : { nextAt: nextFollowUpAt } };
+  await db.insert(followUps).values(row).onConflictDoUpdate({ target: followUps.id, set: row });
 }
 
 async function removeException(db: AppDatabase, id: string): Promise<void> {
@@ -83,7 +85,13 @@ function toException(row: typeof exceptions.$inferSelect): ExceptionRecord {
 }
 
 function toFollowUp(row: typeof followUps.$inferSelect): FollowUp {
-  return { ...row, id: entityId(row.id), orderLineId: orderLineId(row.orderLineId), batchId: deliveryBatchIdOrNull(row.batchId), partyId: entityIdOrNull(row.partyId), createdBy: entityId(row.createdBy), kind: oneOf(FOLLOW_UP_KINDS, row.kind), createdAt: instant(row.createdAt), updatedAt: instant(row.updatedAt) };
+  const { reminder, ...fields } = row;
+  return {
+    ...fields, id: entityId(row.id), orderLineId: orderLineId(row.orderLineId), batchId: deliveryBatchIdOrNull(row.batchId),
+    partyId: entityIdOrNull(row.partyId), createdBy: entityId(row.createdBy), kind: oneOf(FOLLOW_UP_KINDS, row.kind),
+    createdAt: instant(row.createdAt), updatedAt: instant(row.updatedAt),
+    ...(reminder === null ? {} : { nextFollowUpAt: reminder.nextAt }),
+  };
 }
 
 function oneOf<T extends string>(values: readonly T[], value: string): T {

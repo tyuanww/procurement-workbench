@@ -182,7 +182,7 @@ export type TimelineEvent = {
   | { readonly kind: 'receipt'; readonly qty: number; readonly receivedOn: LocalDate; readonly fulfillment?: ReceiptEvidence | null }
   | { readonly kind: 'delivery_note'; readonly status: Exclude<NoteStatus, 'missing'> }
   | { readonly kind: 'status_change'; readonly status: BatchStatus }
-  | { readonly kind: 'follow_up'; readonly followUpKind: FollowUpKind; readonly text: string; readonly batchId: string | null }
+  | { readonly kind: 'follow_up'; readonly followUpKind: FollowUpKind; readonly text: string; readonly batchId: string | null; readonly nextFollowUpAt?: string | null }
   | { readonly kind: 'exception'; readonly exceptionType: ExceptionType; readonly note: string; readonly status: ExceptionStatus; readonly batchId: string | null }
 );
 
@@ -266,6 +266,7 @@ export type AddFollowUpInput = {
   readonly batchId?: DeliveryBatchId;
   readonly kind: FollowUpKind;
   readonly text: string;
+  readonly nextFollowUpAt?: string | null;
   readonly partyId?: EntityId;
 };
 export type AddFollowUpsInput = { readonly items: readonly AddFollowUpInput[] };

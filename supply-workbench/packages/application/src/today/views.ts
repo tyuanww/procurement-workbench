@@ -48,6 +48,7 @@ export type TodoBatchView = {
   readonly fulfillment?: BatchFulfillment;
   readonly latestFollowUp?: TodoFollowUp;
   readonly latestPromise?: TodoFollowUp;
+  readonly nextFollowUpAt?: string;
 };
 
 type TodoFollowUp = { readonly id: string; readonly text: string; readonly createdAt: string };
@@ -111,6 +112,7 @@ export type TodayPaging = {
   readonly reasonCounts: TodayResponse['counts'];
   readonly units: readonly string[];
   readonly factories: readonly TodayFactory[];
+  readonly followUpCounts?: { readonly due: number; readonly scheduled: number };
   readonly chaseCounts?: { readonly all: number; readonly filtered: number };
   readonly chaseItemIds?: readonly string[];
 };
@@ -148,6 +150,7 @@ export type TodoBatchSource = {
   readonly shipments: readonly { readonly qty: number; readonly shippedOn: LocalDate }[];
   readonly receipts: readonly { readonly qty: number; readonly receivedOn: LocalDate }[];
   readonly earliestHintDate: LocalDate | null;
+  readonly nextFollowUpAt?: string;
   readonly fulfillment: BatchFulfillment;
 };
 

@@ -120,6 +120,7 @@ function ActionPane(props: TodayScreenProps): ReactNode {
           <SectionJump id="today-chase" name={chaseCount === undefined ? '要催货' : `要催货 ${chaseCount} 批`} />
           <SectionJump id="today-pending-batches" name={`待建批次 ${pending.length} 行`} hasTarget={pending.length > 0} />
           <SectionJump id="today-arrival-memos" name={`到仓待收 ${arrivals.length} 批`} hasTarget={arrivals.length > 0} />
+          {props.actionPage === undefined ? null : <FollowUpLinks page={props.actionPage} />}
         </Flex>
       </nav>
       <ActionBoard
@@ -148,12 +149,31 @@ function ActionPane(props: TodayScreenProps): ReactNode {
 function SectionJump({ id, name, hasTarget = true }: { readonly id: string; readonly name: string; readonly hasTarget?: boolean }) {
   if (!hasTarget) return <Typography.Text type="secondary">{name}</Typography.Text>;
   return <Button size="small" href={`#${id}`} onClick={(event) => {
-    const target = document.getElementById(id);
-    if (target === null) return;
-    event.preventDefault();
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: 'start' });
+    if (focusSection(id)) event.preventDefault();
   }}>{name}</Button>;
+}
+
+function FollowUpLinks({ page }: { readonly page: ActionPageControls }) {
+  const counts = page.paging.followUpCounts;
+  if (counts === undefined) return null;
+  return <>
+    {counts.due > 0 ? <Button size="small" onClick={() => {
+      page.onFollowUp('follow_up_due');
+      focusSection('today-chase');
+    }}>到时跟进 {counts.due} 批</Button> : null}
+    {counts.scheduled > 0 ? <Button size="small" onClick={() => {
+      page.onFollowUp('follow_up_scheduled');
+      focusSection('today-chase');
+    }}>已约跟进 {counts.scheduled} 批</Button> : null}
+  </>;
+}
+
+function focusSection(id: string): boolean {
+  const target = document.getElementById(id);
+  if (target === null) return false;
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: 'start' });
+  return true;
 }
 
 function SchedulePane(props: TodayScreenProps): ReactNode {

@@ -4,7 +4,7 @@ import { firstBatchReadiness, isOpenForFirstBatch } from '../../shared/first-bat
 import type { GetToday, GetTodayDeps } from '../boundary.js';
 import { filterTodosForUser, projectTodos } from '../policies/index.js';
 import { arrivalMemos } from '../policies/arrival-memos.js';
-import type { PendingBatchRow, PendingBatchSource, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayQuery, TodayResponse, TodoBatchView, TodoItem, TodoItemView, TodoLineView } from '../views.js';
+import type { PendingBatchRow, PendingBatchSource, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayQuery, TodayResponse, TodoBatchView, TodoBatchSource, TodoItemView, TodoLineView } from '../views.js';
 
 const ITEM_LIMIT = 500;
 const HIGH_PRIORITY = 2;
@@ -29,6 +29,7 @@ export function makeGetToday(deps: GetTodayDeps): GetToday {
 }
 
 async function load({ deps, input, actor }: { readonly deps: GetTodayDeps; readonly input: TodayQuery; readonly actor: Actor }) {
+  const now = deps.clock.now();
   const asOf = deps.clock.today();
   const settings = await deps.settings.get();
   const pendingScope: TodayQuery['scope'] = input.scope === 'all' && can(actor, 'dashboard.read') ? 'all' : 'mine';
@@ -39,11 +40,21 @@ async function load({ deps, input, actor }: { readonly deps: GetTodayDeps; reado
     deps.today.loadUncommittedImports(actor.id),
     input.includePending === true ? deps.today.loadPendingBatch(pendingScope === 'mine' ? actor.id : null) : undefined,
   ]);
-  const projected = filterTodosForUser({ todos: projectTodos({ input: { batches: catalog.sources, exceptions, reviewCounts, uncommittedImports }, today: asOf, settings }), actor, scope: input.scope });
+  const sources = catalog.sources.map((batch) => visibleReminder({ batch, actor, scope: pendingScope }));
+  const projected = filterTodosForUser({
+    todos: projectTodos({ input: { batches: sources, exceptions, reviewCounts, uncommittedImports }, today: asOf, now, settings }),
+    actor, scope: input.scope,
+  });
   const lines = indexById(catalog.lines);
   const batches = indexById(catalog.batches);
   const names = new Map(catalog.parties.map((party) => [party.id, party.displayName]));
   return { asOf, catalog, exceptions, candidates, pendingScope, projected, lines, batches, names, actor, scope: input.scope, warehouseId: settings.ownWarehousePartyId };
+}
+
+function visibleReminder({ batch, actor, scope }: { readonly batch: TodoBatchSource; readonly actor: Actor; readonly scope: TodayQuery['scope'] }): TodoBatchSource {
+  const { nextFollowUpAt, ...fields } = batch;
+  if (nextFollowUpAt === undefined || scope === 'all' || batch.ownerUserId === actor.id) return batch;
+  return fields;
 }
 
 type TodayRead = Awaited<ReturnType<typeof load>>;
@@ -88,13 +99,15 @@ function pageOf({ read, input }: { readonly read: TodayRead; readonly input: Tod
   const start = (page - 1) * size;
   const shown = matched.slice(start, start + size);
   const chase = chaseSummary({ items: matched, read });
+  const counts = countsOf(read.projected);
   return {
     ...responseOf({ read, matched, shown }),
     truncated: false,
     paging: {
       page, pageSize: size, total,
       urgent: matched.filter((item) => item.severity >= HIGH_PRIORITY).length,
-      reasonCounts: countsOf(selectItems(read.projected, input.sort)),
+      reasonCounts: input.sort.kind === 'urgency' ? counts : countsOf(selectItems(read.projected, input.sort)),
+      followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled },
       units: comparisonUnits(candidates),
       factories: chase.factories,
       chaseCounts: {
@@ -176,13 +189,15 @@ function pendingBatch({ candidates, actor, scope, warehouseId }: {
 }
 
 function toView(input: {
-  readonly item: Omit<TodoItem, 'reasons'> & { readonly reasons: readonly string[] };
+  readonly item: Projected;
   readonly lines: ReadonlyMap<string, TodoLineView>;
   readonly batches: ReadonlyMap<string, TodoBatchView>;
   readonly names: ReadonlyMap<string, string>;
   readonly exceptions: readonly { readonly id: string; readonly type: string; readonly note: string }[];
 }): TodoItemView {
   const exception = input.exceptions.find((row) => row.id === input.item.refs.exceptionId);
+  const batch = lookup(input.item.refs.batchId, input.batches);
+  const { nextFollowUpAt } = input.item;
   return {
     id: input.item.id,
     subject: input.item.subject,
@@ -194,7 +209,7 @@ function toView(input: {
     overdueDays: input.item.overdueDays,
     refs: input.item.refs,
     line: lookup(input.item.refs.orderLineId, input.lines),
-    batch: lookup(input.item.refs.batchId, input.batches),
+    batch: batch === null || nextFollowUpAt === undefined ? batch : { ...batch, nextFollowUpAt },
     waitingOnParty: partyOf(input.item.waitingOn.partyId, input.names),
     exception: exception === undefined ? null : { id: exception.id, type: exception.type, note: exception.note },
   };
@@ -240,6 +255,8 @@ function emptyTodoCounts(): Record<TodoReason, number> {
     upcoming: 0,
     unshipped: 0,
     fulfillment_review: 0,
+    follow_up_due: 0,
+    follow_up_scheduled: 0,
     exception_open: 0,
     review_pending: 0,
     import_pending: 0,

@@ -113,6 +113,8 @@ function todayOf(overdue: number): unknown {
       shipped_not_received: 0,
       unshipped: 0,
       fulfillment_review: 0,
+      follow_up_due: 0,
+      follow_up_scheduled: 0,
       note_missing: 0,
       upcoming: 0,
       exception_open: 0,

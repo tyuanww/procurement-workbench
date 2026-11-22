@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { deriveBatchStatus, projectLine } from '@sw/domain';
-import { currentMigration, databaseHealth, deliveryBatchRepository, migrate, orderLineRepository } from '@sw/persistence';
+import { currentMigration, databaseHealth, deliveryBatchRepository, followUpRepository, migrate, orderLineRepository } from '@sw/persistence';
 import type { AppHandle } from '@sw/persistence';
 import { MIGRATIONS } from '../../../packages/persistence/src/migrate.js';
 import { arrivalTestDatabase } from './helpers/arrival-database.js';
@@ -19,7 +19,7 @@ it('升级按有效发收重算历史批次及订单行，保留原凭据、合�
     expect((await lines.get('projection-done')).stage).toBe('done');
     expect((await batches.get('projection-no-proof')).status).toBe('received');
 
-    await migrate(handle);
+    await migrate(handle, MIGRATIONS.filter(({ id }) => id <= migration));
     await verifyProjections(handle);
     const good = await batches.getWithRecords('projection-legacy');
     expect(good.batch).toMatchObject({ status: 'received', statusChangedAt: stamp, updatedAt: stamp });
@@ -30,11 +30,23 @@ it('升级按有效发收重算历史批次及订单行，保留原凭据、合�
     expect((await batches.get('projection-closed')).statusChangedAt).toBe(stamp);
     expect((await batches.get('projection-cancelled-batch')).statusChangedAt).toBe(stamp);
     expect(await currentMigration(handle.exec)).toBe(migration);
-    expect(await databaseHealth(handle.exec)).toEqual({ ok: true, db: 'up', migration });
+    await verifyFollowUpUpgrade(handle);
   } finally {
     await handle.close();
   }
 });
+
+async function verifyFollowUpUpgrade(handle: AppHandle): Promise<void> {
+  await handle.exec(`
+    INSERT INTO follow_ups (id, created_at, updated_at, order_line_id, batch_id, kind, text, created_by)
+    VALUES ('projection-note', '${stamp}', '${stamp}', 'projection-no-date', 'projection-no-date', 'note', '原跟进记录', 'projection-buyer')
+  `);
+  await migrate(handle);
+  expect(await databaseHealth(handle.exec)).toEqual({ ok: true, db: 'up', migration: '0024_follow_up_reminder' });
+  const kept = await followUpRepository(handle.db).get('projection-note');
+  expect(kept).toMatchObject({ batchId: 'projection-no-date', text: '原跟进记录' });
+  expect(kept.nextFollowUpAt).toBeUndefined();
+}
 
 async function verifyProjections(handle: AppHandle) {
   const lines = orderLineRepository(handle.db);

@@ -171,9 +171,13 @@ export const followUps = pgTable('follow_ups', {
   batchId: text('batch_id'),
   kind: text('kind').notNull(),
   text: text('text').notNull(),
+  reminder: jsonb('reminder').$type<{ readonly nextAt: string | null }>(),
   partyId: text('party_id'),
   createdBy: text('created_by').notNull(),
-});
+}, (table) => [
+  index('follow_ups_batch_reminder').on(table.batchId, table.createdAt.desc(), table.id.desc())
+    .where(sql`${table.reminder} IS NOT NULL AND ${table.batchId} IS NOT NULL`),
+]);
 
 export const ownerAssignments = pgTable(
   'owner_assignments',

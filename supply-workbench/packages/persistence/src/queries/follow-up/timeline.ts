@@ -62,7 +62,11 @@ async function lineNotes({ db, lineId, names }: { readonly db: AppDatabase; read
 }
 
 function followEvent(row: typeof followUps.$inferSelect, names: ReadonlyMap<string, string>): Event {
-  return { id: row.id, at: instant(row.createdAt), actor: actorOf(row.createdBy, names), voided: false, kind: 'follow_up', followUpKind: oneOf(FOLLOW_UP_KINDS, row.kind), text: row.text, batchId: row.batchId };
+  return {
+    id: row.id, at: instant(row.createdAt), actor: actorOf(row.createdBy, names), voided: false, kind: 'follow_up',
+    followUpKind: oneOf(FOLLOW_UP_KINDS, row.kind), text: row.text, batchId: row.batchId,
+    ...(row.reminder === null ? {} : { nextFollowUpAt: row.reminder.nextAt }),
+  };
 }
 
 function exceptionEvent(row: typeof exceptions.$inferSelect, names: ReadonlyMap<string, string>): Event {

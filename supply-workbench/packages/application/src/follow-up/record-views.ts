@@ -15,6 +15,7 @@ export type FollowUpView = {
   readonly batchId: string | null;
   readonly kind: FollowUpKind;
   readonly text: string;
+  readonly nextFollowUpAt?: string | null;
   readonly partyId: string | null;
   readonly createdBy: string;
 };
