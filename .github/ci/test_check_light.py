@@ -111,6 +111,23 @@ class GitTests(unittest.TestCase):
         self.write("README.md", "uncommitted fix\n")
         self.assertEqual(len(self.check(base, head)), 1)
 
+    def test_documentation_image_must_exist_in_head_even_if_readme_is_unchanged(self):
+        asset = "supply-workbench/docs/images/preview.png"
+        self.write("README.md", "base\n")
+        base = self.commit()
+        self.write("README.md", f"![Preview]({asset})\n")
+        missing = self.commit()
+        self.write(asset, "image fixture\n")
+        self.assertIn(asset, self.check(base, missing)[0])
+        tracked = self.commit()
+        self.assertEqual(self.check(base, tracked), [])
+
+        (self.root / asset).unlink()
+        deleted = self.commit()
+        result = subprocess.run([sys.executable, str(SCRIPT), tracked, deleted], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"README.md:1: missing local link target '{asset}'", result.stderr)
+
     def release(self, sha):
         return subprocess.run([sys.executable, str(SCRIPT), "--release", sha], capture_output=True, text=True)
 
