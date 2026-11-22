@@ -15,6 +15,7 @@ const componentPo = 'PO20261117009103';
 
 const requireWeb = createRequire(new URL('../packages/report-renderers/package.json', import.meta.url));
 const { chromium }: typeof import('../node_modules/.pnpm/node_modules/playwright/index.js') = requireWeb('playwright');
+const xlsx: typeof import('../node_modules/.pnpm/node_modules/xlsx/types/index.js') = requireWeb('xlsx');
 const origin = new URL(process.env.ACCEPT_API ?? 'http://127.0.0.1:8080');
 assert.ok(origin.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname));
 assert.equal(process.env.E2E_ALLOW_MUTATION, '1', '本用例创建合成订单行，只能使用隔离库');
@@ -79,6 +80,7 @@ async function procurementAcceptance(): Promise<void> {
   await checkImportRecovery(buyer);
   await checkProcurementImport(buyer);
   await checkMobileOrders(buyer);
+  await checkLineColumns(buyer);
   await checkNavigation(buyer);
   result.checks.firstBatch = await checkFirstBatch({ page: buyer, origin, buyer: users.buyer, warehouse });
 
@@ -251,6 +253,76 @@ async function checkMobileOrders(page: Page) {
   await preview.waitFor({ state: 'hidden' });
   assert.equal(new URL(page.url()).search, queryBeforePreview);
   result.checks.orderPreview = { amounts, filterPreserved: true };
+}
+
+async function checkLineColumns(page: Page) {
+  const address = new URL(page.url());
+  address.searchParams.set('hide', 'stage');
+  await page.goto(address.href);
+  const phaseHeader = page.getByRole('columnheader', { name: '阶段', exact: true }).first();
+  const dueHeader = page.getByRole('columnheader', { name: '到货', exact: true });
+  const display = page.getByRole('button', { name: /^显\s*示$/ });
+  const columns = page.getByRole('button', { name: '列', exact: true });
+  const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
+  const mobile = [];
+  for (const width of [320, 340, 341, 390, 767]) {
+    await page.setViewportSize({ width, height: 720 });
+    await phaseHeader.waitFor();
+    await dueHeader.waitFor({ state: width > 340 ? 'visible' : 'hidden' });
+    assert.equal(await columns.isVisible(), false);
+    await display.click();
+    const menu = page.locator('.ant-popover').filter({ has: exportLink });
+    await menu.getByText('舒适', { exact: true }).waitFor();
+    assert.equal(await menu.getByRole('checkbox').count(), 0, `${width} 像素手机显示菜单使用固定列`);
+    const headers = await downloadLineHeaders(page, exportLink);
+    assert.deepEqual(headers, width > 340
+      ? ['采购单号', '品名', '阶段', '下一到货', '卡了几天']
+      : ['采购单号', '品名', '阶段', '卡了几天']);
+    mobile.push({ width, headers });
+    await display.click();
+  }
+
+  await page.setViewportSize({ width: 768, height: 720 });
+  await columns.click();
+  const menu = page.locator('.ant-popover:not(.ant-popover-hidden)');
+  const phase = menu.getByRole('checkbox', { name: '阶段', exact: true });
+  const phaseLabel = menu.getByText('阶段', { exact: true });
+  await phase.waitFor();
+  assert.equal(await display.isVisible(), false);
+  assert.equal(await phase.isChecked(), false);
+  await phaseHeader.waitFor({ state: 'hidden' });
+  await phaseLabel.click();
+  await page.waitForURL((url) => !url.searchParams.has('hide'));
+  await phaseHeader.waitFor();
+  assert.equal(await phase.isChecked(), true);
+  const shown = await downloadLineHeaders(page, exportLink);
+  assert.ok(shown.includes('阶段'));
+  await phase.waitFor({ state: 'hidden' });
+  await columns.click();
+  await phaseLabel.click();
+  await page.waitForURL((url) => url.searchParams.get('hide') === 'stage');
+  await phaseHeader.waitFor({ state: 'hidden' });
+  assert.equal(await phase.isChecked(), false);
+  const hidden = await downloadLineHeaders(page, exportLink);
+  assert.deepEqual(hidden, shown.filter((header) => header !== '阶段'));
+  assert.ok(hidden.includes('采购单号'));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await phaseHeader.waitFor({ state: 'hidden' });
+  assert.deepEqual(await downloadLineHeaders(page, exportLink), hidden);
+  result.checks.lineColumns = { mobile, desktop: { widths: [768, 1440], hidden, shown } };
+}
+
+async function downloadLineHeaders(page: Page, link: Locator): Promise<string[]> {
+  const pending = page.waitForEvent('download');
+  await link.click();
+  const download = await pending;
+  const book = xlsx.read(await readFile(await download.path()));
+  const sheet = book.Sheets['订单行'];
+  assert.ok(sheet);
+  const [headers, firstRow] = xlsx.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+  assert.ok(headers && firstRow);
+  assert.equal(firstRow[0], new URL(page.url()).searchParams.get('q'));
+  return headers;
 }
 
 async function checkNavigation(page: Page) {
