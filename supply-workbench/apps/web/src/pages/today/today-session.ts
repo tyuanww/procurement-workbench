@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { startTransition, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { actionPageParams } from './action-query.js';
@@ -22,12 +22,6 @@ export type TodaySessionState = {
 };
 
 type SearchSetter = ReturnType<typeof useSearchParams>[1];
-
-type Synced = {
-  readonly search: string;
-  readonly drawerId: string | null;
-  readonly draftKind: OpenForm['kind'] | null;
-};
 
 const DRAFT_KINDS: readonly OpenForm['kind'][] = ['receipt', 'ship', 'date', 'note', 'exception'];
 
@@ -64,29 +58,37 @@ export function useTodaySession(input: {
   readonly state: TodaySessionState;
   readonly rows: readonly { readonly id: string }[];
   readonly isReady: boolean;
-}): void {
+}): (keepDrawerId: string | null) => void {
   const [params, setParams] = useSearchParams();
   const search = params.toString();
-  const last = useRef<Synced | null>(null);
+  const syncedSearch = useRef<string | null>(null);
   const draftKind = input.state.draft?.kind ?? null;
   const drawerId = input.state.drawerId;
   useEffect(() => {
     if (!input.isReady) return;
-    const previous = last.current;
     const wanted = writeTodaySession({ search, session: { drawerId, draftKind } });
     if (wanted === search) {
-      last.current = { search, drawerId, draftKind };
+      syncedSearch.current = search;
       return;
     }
-    if (previous !== null && previous.search === search) {
-      last.current = { search: wanted, drawerId, draftKind };
+    if (syncedSearch.current === search) {
+      syncedSearch.current = wanted;
       setParams(new URLSearchParams(wanted));
       return;
     }
     const session = validTodaySession({ session: readTodaySession(search), rows: input.rows });
-    last.current = { search: writeTodaySession({ search, session }), drawerId: session.drawerId, draftKind: session.draftKind };
+    syncedSearch.current = writeTodaySession({ search, session });
     restore({ session, search, state: input.state, setParams });
   }, [search, input.isReady, drawerId, draftKind]);
+
+  return (keepDrawerId) => {
+    const session: TodaySession = { drawerId: keepDrawerId, draftKind: null };
+    // 路由在过渡中更新。一起提交关闭状态，避免同步逻辑重复写入浏览器历史。
+    startTransition(() => {
+      applySession({ session, state: input.state });
+      setParams((current) => new URLSearchParams(writeTodaySession({ search: current.toString(), session })));
+    });
+  };
 }
 
 function restore(input: {
