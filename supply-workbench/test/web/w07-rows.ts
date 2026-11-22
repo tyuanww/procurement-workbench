@@ -1,7 +1,7 @@
 import {
-  type StuckItemInput,
   type SupplierInput,
 } from '../../apps/web/src/features/performance/index.js';
+import type { StuckItem } from '../../packages/contracts/src/index.js';
 
 type WeekSample = { readonly weekStart: string; readonly rate: number | null; readonly n: number };
 
@@ -31,7 +31,7 @@ export function supplierRow(input: {
 
 export function stuckItem(input: {
   readonly batchId: string;
-  readonly stage: StuckItemInput['stage'];
+  readonly stage: StuckItem['stage'];
   readonly daysInStage: number;
   readonly poRaw?: string | null;
   readonly nameRaw?: string | null;
@@ -40,7 +40,7 @@ export function stuckItem(input: {
   readonly exceptionOpen?: boolean;
   readonly supplierAliasPending?: boolean;
   readonly bomMissing?: boolean;
-}): StuckItemInput {
+}): StuckItem {
   return {
     batchId: input.batchId,
     stage: input.stage,

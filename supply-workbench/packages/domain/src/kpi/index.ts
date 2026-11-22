@@ -27,6 +27,12 @@ export type BuyerLoad = {
 
 export type KpiFollowUp = { readonly buyerUserId: EntityId; readonly on: LocalDate };
 
+export const STUCK_BUCKETS = ['0-3', '4-7', '8-14', '15+'] as const;
+export type StuckBucket = (typeof STUCK_BUCKETS)[number];
+
+export const STUCK_CAUSES = ['missing_owner', 'missing_factory', 'supplier_pending', 'missing_date', 'exception_open', 'aged_15', 'bom_missing', 'factory_demand_unlinked'] as const;
+export type StuckCause = (typeof STUCK_CAUSES)[number];
+
 const DAYS_PER_WEEK = 7;
 const SERIES_LENGTH = 8;
 
@@ -45,7 +51,11 @@ export function averageDelay(input: KpiInput): KpiMeasure {
 }
 
 export function currentlyOverdue(input: KpiInput): KpiMeasure {
-  return count(input.batches.filter((batch) => isOpenBatch(batch.status) && isBefore(batch.dateBuyerConfirmed, input.today)).length);
+  return count(input.batches.filter((batch) => isCurrentlyOverdue(batch, input.today)).length);
+}
+
+export function isCurrentlyOverdue(batch: KpiBatch, today: LocalDate): boolean {
+  return isOpenBatch(batch.status) && isBefore(batch.dateBuyerConfirmed, today);
 }
 
 export function dateChangeCount(input: KpiInput): KpiMeasure {
@@ -161,7 +171,7 @@ function noteDelay(batch: KpiBatch, input: KpiInput): number[] {
   return [diffDays(batch.noteReturnedOn, first)];
 }
 
-function stuckBucket(days: number): string {
+export function stuckBucket(days: number): StuckBucket {
   const [short, medium, long] = STUCK_BUCKET_MAX_DAYS;
   if (days <= short) return '0-3';
   if (days <= medium) return '4-7';

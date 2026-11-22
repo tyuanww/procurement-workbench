@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import {currentlyOverdue, dueBatches, localDate, onTimeRate, stuckDistribution, type KpiBatch, type KpiInput, type OrderLineLoad, entityId} from '../../packages/domain/src/index.js';
 import { makeGetBuyerLoad, makeGetStuckBatches, makeGetSupplierPerformance } from '../../packages/application/src/performance/index.js';
 import type { PerformanceFacts, PerformanceReadModel } from '../../packages/application/src/ports/performance-read-model.js';
-import type { PeriodQuery } from '../../packages/application/src/performance/views.js';
+import type { StuckQuery } from '../../packages/application/src/performance/views.js';
 import { aUser } from '../../packages/testkit/src/index.js';
 import { createDb } from '../../packages/persistence/src/client.js';
 import { migrate } from '../../packages/persistence/src/migrate.js';
@@ -94,7 +94,7 @@ function refusing(): never {
   throw new Error('用例不应调用已经算好的看板');
 }
 
-function query(patch: Partial<PeriodQuery> = {}): PeriodQuery {
+function query(patch: Partial<StuckQuery> = {}): StuckQuery {
   return { from, to, ...patch };
 }
 
@@ -197,11 +197,42 @@ it('卡点按订单行映射工厂关联、工厂未关联、未关闭异常、�
   expect(stuck.items.find((item) => item.batchId === 'changed')).toMatchObject({ factoryLinked: false, factoryUnlinked: false, exceptionOpen: false, supplierAliasPending: false, bomMissing: false });
 });
 
-it('卡点超过 200 条时保留 200，不截成 0', async () => {
-  const batches = Array.from({ length: 201 }, (_item, index) => batch({ id: entityId(`b${index}`), status: 'confirmed', dateBuyerConfirmed: day('2026-10-20') }));
-  const stuck = await makeGetStuckBatches({ performance: readModel(facts(kpi(batches))) })(query(), actor);
-  expect(stuck.items).toHaveLength(200);
-  expect(stuck.kpis.openBatches).toBe(201);
+it('原因筛选和徽标使用同一批次判定，且其他原因保留可选数量', async () => {
+  const pending = batch({ id: entityId('pending'), status: 'awaiting_date', buyerUserId: null });
+  const data = facts(kpi([...sample.batches, pending]), {
+    pendingSupplierAliasOrderLineIds: new Set(['line-1']),
+    bomMissingOrderLineIds: new Set(['line-1']),
+    unlinkedFactoryOrderLineIds: new Set(['line-1']),
+    openExceptionOrderLineIds: new Set(['line-1']),
+  });
+  const getStuck = makeGetStuckBatches({ performance: readModel(data) });
+  const cases = [
+    ['missing_owner', ['pending']],
+    ['missing_factory', ['changed', 'overdue', 'due-today', 'first-set', 'future', 'pending', 'voided']],
+    ['supplier_pending', ['overdue']],
+    ['missing_date', ['pending']],
+    ['exception_open', ['overdue']],
+    ['aged_15', ['changed']],
+    ['bom_missing', ['overdue']],
+    ['factory_demand_unlinked', ['overdue']],
+  ] as const;
+  for (const [cause, ids] of cases) {
+    const result = await getStuck(query({ cause }), actor);
+    expect(result.items.map((item) => item.batchId).sort()).toEqual([...ids].sort());
+    expect(result.causeCounts[cause]).toBe(result.total);
+    expect(result.causeCounts.missing_owner).toBe(1);
+  }
+});
+
+it('卡点停留天数按同一分桶筛选清单和分布', async () => {
+  const dates = ['2026-10-09', '2026-10-08', '2026-10-05', '2026-10-04', '2026-09-28', '2026-09-27'];
+  const batches = dates.map((date) => batch({ id: entityId(date), status: 'confirmed', statusChangedAt: `${date}T00:00:00Z` }));
+  const getStuck = makeGetStuckBatches({ performance: readModel(facts(kpi(batches))) });
+  for (const [bucket, days] of [['0-3', [3]], ['4-7', [7, 4]], ['8-14', [14, 8]], ['15+', [15]]] as const) {
+    const result = await getStuck(query({ bucket, stage: 'confirmed' }), actor);
+    expect(result.items.map((item) => item.daysInStage)).toEqual(days);
+    expect(result.distribution[0]?.buckets[bucket]).toBe(result.total);
+  }
 });
 
 it('读模型从待审别名和 BOM 缺行算出订单行集合', async () => {
