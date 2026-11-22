@@ -80,6 +80,14 @@ export function actionSortParams(search: string, sort: TodaySort): URLSearchPara
   return params;
 }
 
+export type FollowUpFilter = Extract<TodoReason, 'follow_up_due' | 'follow_up_scheduled'>;
+
+export function actionFollowUpParams(search: string, reason: FollowUpFilter): URLSearchParams {
+  const params = actionSortParams(search, { kind: 'urgency' });
+  params.set('reasons', reason);
+  return params;
+}
+
 export function actionFactoryParams(search: string, id: string): URLSearchParams {
   const params = new URLSearchParams(search);
   params.set('chaseFactory', id);

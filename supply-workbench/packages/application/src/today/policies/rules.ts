@@ -3,6 +3,7 @@ import type { TodoBatchSource } from '../views.js';
 
 export type TodoContext = {
   readonly today: LocalDate;
+  readonly now: number;
   readonly settings: Settings;
 };
 
@@ -62,6 +63,18 @@ export const TODO_RULES: readonly TodoRule[] = [
     severity: () => 1,
     waitingOn: supplier,
   },
+  {
+    reason: 'follow_up_due',
+    applies: (batch, ctx) => followUpTime(batch) <= ctx.now,
+    severity: () => MID_SEVERITY,
+    waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
+  },
+  {
+    reason: 'follow_up_scheduled',
+    applies: (batch, ctx) => followUpTime(batch) > ctx.now,
+    severity: () => 1,
+    waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
+  },
   { reason: 'unshipped', applies: hasUnshipped, severity: () => 1, waitingOn: supplier },
   {
     reason: 'fulfillment_review',
@@ -70,6 +83,11 @@ export const TODO_RULES: readonly TodoRule[] = [
     waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
   },
 ];
+
+function followUpTime(batch: TodoBatchSource): number {
+  if (batch.isLineCancelled || !isOpenBatch(batch.status) || batch.nextFollowUpAt === undefined) return NaN;
+  return Date.parse(batch.nextFollowUpAt);
+}
 
 function hasUnshipped(batch: TodoBatchSource): boolean {
   const qty = batch.fulfillment.unshippedQty;

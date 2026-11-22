@@ -6,10 +6,17 @@ import { TODO_RULES, MID_SEVERITY, type TodoContext, type TodoRule } from './rul
 type Projected = Omit<TodoItem, 'reasons'> & {
   readonly reasons: readonly string[];
   readonly remaining?: BatchFulfillment;
+  readonly nextFollowUpAt?: string;
 };
 
-export function projectTodos({ input, today, settings, rules = TODO_RULES }: { readonly input: TodoInput; readonly today: LocalDate; readonly settings: Settings; readonly rules?: readonly TodoRule[] | undefined }): Projected[] {
-  const ctx = { today, settings };
+export function projectTodos({ input, today, now, settings, rules = TODO_RULES }: {
+  readonly input: TodoInput;
+  readonly today: LocalDate;
+  readonly now: string;
+  readonly settings: Settings;
+  readonly rules?: readonly TodoRule[];
+}): Projected[] {
+  const ctx = { today, now: Date.parse(now), settings };
   const batches = input.batches.flatMap((batch) => projectBatch({ batch, ctx, rules }));
   const exceptions = input.exceptions.map(projectException);
   const review = projectReview(input.reviewCounts);
@@ -35,10 +42,15 @@ function projectBatch({ batch, ctx, rules }: { readonly batch: TodoInput['batche
     ownerUserId: batch.ownerUserId,
     waitingOn: lead.waitingOn(batch),
     ...(reasons.includes('unshipped') ? { remaining: batch.fulfillment } : {}),
+    ...(batch.nextFollowUpAt !== undefined && reasons.some(isFollowUpReason) ? { nextFollowUpAt: batch.nextFollowUpAt } : {}),
     dueDate: batch.dateBuyerConfirmed,
     overdueDays: batch.overdueDays,
     refs: { orderLineId: batch.orderLineId, batchId: batch.id },
   }];
+}
+
+function isFollowUpReason(code: string): boolean {
+  return code === 'follow_up_due' || code === 'follow_up_scheduled';
 }
 
 function projectException(exception: TodoInput['exceptions'][number]): Projected {

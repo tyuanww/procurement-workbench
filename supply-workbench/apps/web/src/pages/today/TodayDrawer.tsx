@@ -3,6 +3,7 @@ import { Alert, Button, Drawer, Flex } from 'antd';
 import { CalendarOutlined, FormOutlined, InboxOutlined, SendOutlined } from '@ant-design/icons';
 import { businessToday } from '../../features/follow-up/index.js';
 import { useCanWrite } from '../../shared/actor.js';
+import { formatDateTime } from '../../shared/ui/format.js';
 import { drawerWidth } from '../../theme/tokens.js';
 import type { BoardRow, QuickAction, RowFace } from '../../features/today/index.js';
 import { ActionForm, formErrors, type OpenForm } from './TodayForms.js';
@@ -58,10 +59,12 @@ export function FaceBlock(props: { readonly face: RowFace }) {
   return (
     <div style={faceStackStyle()}>
       <div style={reasonStyle()}>{props.face.reason}</div>
-      <span style={overdueStyle(props.face.overdueTone)}>{props.face.overdue}</span>
+      {props.face.overdueTone === 'quiet' ? null : <span style={overdueStyle(props.face.overdueTone)}>{props.face.overdue}</span>}
       <div style={metaStyle()}>{props.face.orderNo} · {props.face.productName} · {props.face.date}</div>
       {props.face.factory === undefined ? null : <div style={metaStyle()}>工厂 · {props.face.factory}</div>}
       {props.face.remaining === undefined ? null : <div>{props.face.remaining}</div>}
+      {props.face.inTransit === undefined ? null : <div>{props.face.inTransit}</div>}
+      {props.face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>下次跟进 · {formatDateTime(props.face.nextFollowUpAt)}</div>}
       {props.face.latestFollowUp === undefined ? null : <div style={metaStyle()}>最近跟进 · {props.face.latestFollowUp}</div>}
       {props.face.latestPromise === undefined ? null : <div style={metaStyle()}>最近承诺 · {props.face.latestPromise}</div>}
     </div>

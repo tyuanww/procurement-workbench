@@ -65,6 +65,8 @@ it('批次状态和待办原因与文档表格一致', () => {
     'upcoming',
     'unshipped',
     'fulfillment_review',
+    'follow_up_due',
+    'follow_up_scheduled',
     'exception_open',
     'review_pending',
     'import_pending',

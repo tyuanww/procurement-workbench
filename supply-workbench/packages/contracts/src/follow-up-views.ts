@@ -193,6 +193,7 @@ export const FollowUpViewSchema: z.ZodType<FollowUpView> = strictObject({
   batchId: nullable(z.string()),
   kind: FollowUpKindSchema,
   text: z.string(),
+  nextFollowUpAt: optional(nullable(z.iso.datetime())),
   partyId: nullable(z.string()),
   createdBy: z.string(),
 });
@@ -273,6 +274,7 @@ export const TimelineEventSchema: z.ZodType<TimelineEvent> = z.discriminatedUnio
     actor: nullable(userRef),
     voided: z.boolean(),
     kind: z.literal('follow_up'),
+    nextFollowUpAt: optional(nullable(z.iso.datetime())),
     followUpKind: FollowUpKindSchema,
     text: z.string(),
     batchId: nullable(z.string()),

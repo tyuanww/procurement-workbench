@@ -21,7 +21,7 @@ export function todayQueries({ db, timeZone }: { readonly db: AppDatabase; reado
 }
 
 async function loadCatalog(db: AppDatabase, today: LocalDate): Promise<TodayCatalog> {
-  const [heads, lines, orders, shipped, received, notes, names, followUpRows, promiseRows] = await Promise.all([
+  const [heads, lines, orders, shipped, received, notes, names, followUpRows, promiseRows, reminders] = await Promise.all([
     db.select().from(deliveryBatches),
     db.select().from(orderLines),
     db.select().from(purchaseOrders),
@@ -31,6 +31,7 @@ async function loadCatalog(db: AppDatabase, today: LocalDate): Promise<TodayCata
     db.select({ id: parties.id, displayName: parties.displayName }).from(parties),
     latestFollowUps(db, false),
     latestFollowUps(db, true),
+    latestReminders(db),
   ]);
   const lineOf = new Map(lines.map((row) => [row.id, row]));
   const orderOf = new Map(orders.map((row) => [row.id, row]));
@@ -46,7 +47,7 @@ async function loadCatalog(db: AppDatabase, today: LocalDate): Promise<TodayCata
     latestPromise: promiseRows.get(head.id),
   }));
   return {
-    sources: viewRows.flatMap((batch) => batchSource({ ...batch, lineOf, orderOf, child, today })),
+    sources: viewRows.flatMap((batch) => batchSource({ ...batch, lineOf, orderOf, child, today, nextFollowUpAt: reminders.get(batch.head.id) })),
     lines: lines.flatMap((line) => lineView({ line, order: orderOf.get(line.purchaseOrderId) })),
     batches: viewRows.flatMap((batch) => batchView({ ...batch, child })),
     parties: names,
@@ -88,6 +89,14 @@ async function latestFollowUps(db: AppDatabase, promisesOnly: boolean): Promise<
     .where(and(isNotNull(followUps.batchId), promisesOnly ? eq(followUps.kind, 'promise') : ne(followUps.kind, 'promise')))
     .orderBy(followUps.batchId, desc(followUps.createdAt), desc(followUps.id));
   return new Map(rows.flatMap(({ batchId, createdAt, ...row }) => batchId === null ? [] : [[batchId, { ...row, createdAt: instant(createdAt) }]]));
+}
+
+async function latestReminders(db: AppDatabase): Promise<ReadonlyMap<string, string>> {
+  const rows = await db.selectDistinctOn([followUps.batchId], { batchId: followUps.batchId, reminder: followUps.reminder })
+    .from(followUps)
+    .where(and(isNotNull(followUps.batchId), isNotNull(followUps.reminder)))
+    .orderBy(followUps.batchId, desc(followUps.createdAt), desc(followUps.id));
+  return new Map(rows.flatMap(({ batchId, reminder }) => batchId === null || reminder?.nextAt == null ? [] : [[batchId, reminder.nextAt]]));
 }
 
 function rowsByBatch<T extends { readonly batchId: string }>(rows: readonly T[]): ReadonlyMap<string, readonly T[]> {
@@ -187,6 +196,7 @@ function batchSource(input: {
   readonly child: ChildRows;
   readonly today: LocalDate;
   readonly fulfillment: TodoBatchSource['fulfillment'];
+  readonly nextFollowUpAt: string | undefined;
 }): TodoBatchSource[] {
   const line = input.lineOf.get(input.head.orderLineId);
   if (line === undefined) return [];
@@ -212,6 +222,7 @@ function batchSource(input: {
     shipments: activeShipments(rowsOf(input.child.shipped, input.head.id)),
     receipts: activeReceipts(rowsOf(input.child.received, input.head.id)),
     earliestHintDate: earliest(factory, promised),
+    ...(input.nextFollowUpAt === undefined ? {} : { nextFollowUpAt: input.nextFollowUpAt }),
     fulfillment: input.fulfillment,
   }];
 }

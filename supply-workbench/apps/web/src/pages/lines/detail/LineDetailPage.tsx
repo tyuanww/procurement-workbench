@@ -6,6 +6,7 @@ import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
 import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits, timelineLineText } from '../../../features/follow-up/index.js';
 import { useCanWrite } from '../../../shared/actor.js';
+import { formatDateTime } from '../../../shared/ui/format.js';
 import { PageHeader, surfaceStyle } from '../../../shared/ui/page.js';
 import { space } from '../../../theme/tokens.js';
 import { MissingValue, presentRaw } from '../../../shared/ui/widgets.js';
@@ -198,7 +199,11 @@ function DetailTimeline({ events, lineId, showFollowUp, onReload }: { readonly e
       <ul>{events.map((event) => (
         <li key={event.id}>
           {timelineLineText(event)}
-          {event.kind === 'follow_up' && !event.voided ? <div style={{ whiteSpace: 'pre-wrap' }}>{event.text}</div> : null}
+          {event.kind === 'follow_up' && !event.voided ? <div style={{ whiteSpace: 'pre-wrap' }}>
+            {event.text}
+            {event.nextFollowUpAt === undefined ? null : <div>{event.nextFollowUpAt === null
+              ? '已取消下次跟进提醒' : `下次跟进 · ${formatDateTime(event.nextFollowUpAt)}`}</div>}
+          </div> : null}
         </li>
       ))}</ul>
     </>
