@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { cellIssue, isNotProvided, issueLabel, normalizeText } from '../../packages/domain/src/index.js';
 
 it('比较用文本先做 NFKC，再把连续空白压成一个空格，不改大小写', () => {
-  expect(normalizeText('  店铺甲\n\n海葡萄  ')).toBe('店铺甲 海葡萄');
+  expect(normalizeText('  达肤妍\n\n海葡萄  ')).toBe('达肤妍 海葡萄');
   expect(normalizeText('Ａｂ  ｃ')).toBe('Ab c');
   expect(normalizeText('po  1')).toBe('po 1');
   expect(normalizeText('A　　B')).toBe('A B');

@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import {currentlyOverdue, dueBatches, localDate, onTimeRate, stuckDistribution, type KpiBatch, type KpiInput, type OrderLineLoad, entityId} from '../../packages/domain/src/index.js';
 import { makeGetBuyerLoad, makeGetStuckBatches, makeGetSupplierPerformance } from '../../packages/application/src/performance/index.js';
 import type { PerformanceFacts, PerformanceReadModel } from '../../packages/application/src/ports/performance-read-model.js';
-import type { StuckQuery } from '../../packages/application/src/performance/views.js';
+import type { PeriodQuery } from '../../packages/application/src/performance/views.js';
 import { aUser } from '../../packages/testkit/src/index.js';
 import { createDb } from '../../packages/persistence/src/client.js';
 import { migrate } from '../../packages/persistence/src/migrate.js';
@@ -59,17 +59,17 @@ const changes = kpi(sample.batches, {
   lines: [orderLine('line-1', { stage: 'awaiting_shipment', lane: 'finished' })],
   dateChanges: [
     { field: 'dateBuyerConfirmed', changedAt: '2026-09-01T00:00:00.000Z', isFirstSet: true },
-    { field: 'dateBuyerConfirmed', changedAt: '2026-10-09T00:00:00.000Z', isFirstSet: false, supplierPartyId: entityId('supplier'), lane: 'finished' },
+    { field: 'dateBuyerConfirmed', changedAt: '2026-10-09T00:00:00.000Z', isFirstSet: false },
     { field: 'dateBuyerConfirmed', changedAt: '2026-10-08T00:00:00.000Z', isFirstSet: true },
   ],
-  exceptions: [{ status: 'open', openedAt: '2026-10-01T00:00:00.000Z', closedAt: null, buyerUserId: entityId('buyer-1'), supplierPartyId: entityId('supplier'), lane: 'finished' }, { status: 'closed', openedAt: '2026-09-01T00:00:00.000Z', closedAt: '2026-10-02T00:00:00.000Z', buyerUserId: entityId('buyer-1') }],
+  exceptions: [{ status: 'open', openedAt: '2026-10-01T00:00:00.000Z', closedAt: null, buyerUserId: entityId('buyer-1') }, { status: 'closed', openedAt: '2026-09-01T00:00:00.000Z', closedAt: '2026-10-02T00:00:00.000Z', buyerUserId: entityId('buyer-1') }],
 });
 
 function facts(input: KpiInput, extra: Partial<PerformanceFacts> = {}): PerformanceFacts {
   return {
     kpi: input,
     followUps: [{ buyerUserId: entityId('buyer-1'), on: day('2026-10-10') }],
-    partyNames: { supplier: '甲代工厂', warehouse: '上海仓' },
+    partyNames: { supplier: '宜侬', warehouse: '上海仓' },
     buyerNames: {},
     batchLabels: { overdue: { poRaw: 'PO1', nameRaw: '面膜', orderLineId: 'line-1' } },
     linkedFactoryOrderLineIds: new Set<string>(),
@@ -94,7 +94,7 @@ function refusing(): never {
   throw new Error('用例不应调用已经算好的看板');
 }
 
-function query(patch: Partial<StuckQuery> = {}): StuckQuery {
+function query(patch: Partial<PeriodQuery> = {}): PeriodQuery {
   return { from, to, ...patch };
 }
 
@@ -123,7 +123,7 @@ async function expectSuppliers(performance: PerformanceReadModel): Promise<void>
   const row = suppliers.rows[0];
   expect(suppliers.rows).toHaveLength(1);
   expect(row).toMatchObject({
-    displayName: '甲代工厂',
+    displayName: '宜侬',
     dueBatches: { numerator: dueBatches(changes).numerator },
     onTime: { numerator: onTimeRate(changes).numerator, denominator: onTimeRate(changes).denominator },
     dateChanges: { numerator: 1 },
@@ -173,35 +173,15 @@ it('线和期间会改供应商与采购的口径，卡点只吃线', async () =
   expect(buyers.rows[0]?.openBatches).toBe(6);
   expect(buyers.rows[0]?.followUpsInPeriod).toBeNull();
   expect(buyers.rows[0]?.openExceptions).toBeNull();
-  expect(finished.rows[0]?.dateChanges.numerator).toBe(0);
+  expect(finished.rows[0]?.dateChanges.numerator).toBeNull();
 });
 
-it('供应商指标保留关联准确的事件，独立列出无法归属的事件', async () => {
-  const unresolved = batch({ id: entityId('unknown'), status: 'confirmed', supplierPartyId: null });
-  const loaded = facts(kpi([...changes.batches, unresolved], {
-    dateChanges: [...changes.dateChanges, { field: 'dateBuyerConfirmed', changedAt: '2026-10-09T00:00:00Z', isFirstSet: false, supplierPartyId: null }],
-    exceptions: [...changes.exceptions, { status: 'open', openedAt: '2026-10-02T00:00:00Z', closedAt: null }],
-  }));
-  const dashboard = await makeGetSupplierPerformance({ performance: readModel(loaded) })(query(), actor);
-  expect(dashboard.rows).toHaveLength(1);
-  expect(dashboard.rows[0]).toMatchObject({ dateChanges: { numerator: 1 }, openExceptions: { numerator: 1 } });
-  expect(dashboard.unassigned).toEqual({ dateChanges: 1, openExceptions: 1 });
-});
-
-it('无批次的供应商仍显示本线开放异常', async () => {
-  const openedAt = '2026-10-02T00:00:00Z';
-  const loaded = facts(kpi([], { exceptions: [
-    { status: 'open', openedAt, closedAt: null, supplierPartyId: entityId('finished-only'), lane: 'finished' },
-    { status: 'open', openedAt, closedAt: null, supplierPartyId: entityId('material-only'), lane: 'material' },
-    { status: 'closed', openedAt, closedAt: openedAt, supplierPartyId: entityId('closed-only'), lane: 'finished' },
-    { status: 'open', openedAt, closedAt: null, supplierPartyId: null, lane: 'finished' },
-  ] }));
-  const getSuppliers = makeGetSupplierPerformance({ performance: readModel(loaded) });
-  const finished = await getSuppliers(query({ lane: 'finished' }), actor);
-  expect(finished.rows).toMatchObject([{ partyId: 'finished-only', dueBatches: { numerator: 0 }, openExceptions: { numerator: 1 } }]);
-  expect(finished.unassigned).toEqual({ dateChanges: 0, openExceptions: 1 });
-  const all = await getSuppliers(query(), actor);
-  expect(all.rows.map((row) => row.partyId)).toEqual(['finished-only', 'material-only']);
+it('两个供应商时，对不上的改期不是 0，也不各计一遍', async () => {
+  const other = batch({ id: entityId('other'), status: 'confirmed', supplierPartyId: entityId('other'), firstConfirmedDate: day('2026-10-04'), dateBuyerConfirmed: day('2026-10-04') });
+  const loaded = facts(kpi([...changes.batches, other], { dateChanges: changes.dateChanges, exceptions: changes.exceptions }));
+  const rows = await makeGetSupplierPerformance({ performance: readModel(loaded) })(query(), actor);
+  expect(rows.rows).toHaveLength(2);
+  expect(rows.rows.every((row) => row.dateChanges.numerator === null && row.openExceptions.numerator === null)).toBe(true);
 });
 
 it('卡点按订单行映射工厂关联、工厂未关联、未关闭异常、供应商待审和产品缺 BOM', async () => {
@@ -217,42 +197,11 @@ it('卡点按订单行映射工厂关联、工厂未关联、未关闭异常、�
   expect(stuck.items.find((item) => item.batchId === 'changed')).toMatchObject({ factoryLinked: false, factoryUnlinked: false, exceptionOpen: false, supplierAliasPending: false, bomMissing: false });
 });
 
-it('原因筛选和徽标使用同一批次判定，且其他原因保留可选数量', async () => {
-  const pending = batch({ id: entityId('pending'), status: 'awaiting_date', buyerUserId: null });
-  const data = facts(kpi([...sample.batches, pending]), {
-    pendingSupplierAliasOrderLineIds: new Set(['line-1']),
-    bomMissingOrderLineIds: new Set(['line-1']),
-    unlinkedFactoryOrderLineIds: new Set(['line-1']),
-    openExceptionOrderLineIds: new Set(['line-1']),
-  });
-  const getStuck = makeGetStuckBatches({ performance: readModel(data) });
-  const cases = [
-    ['missing_owner', ['pending']],
-    ['missing_factory', ['changed', 'overdue', 'due-today', 'first-set', 'future', 'pending', 'voided']],
-    ['supplier_pending', ['overdue']],
-    ['missing_date', ['pending']],
-    ['exception_open', ['overdue']],
-    ['aged_15', ['changed']],
-    ['bom_missing', ['overdue']],
-    ['factory_demand_unlinked', ['overdue']],
-  ] as const;
-  for (const [cause, ids] of cases) {
-    const result = await getStuck(query({ cause }), actor);
-    expect(result.items.map((item) => item.batchId).sort()).toEqual([...ids].sort());
-    expect(result.causeCounts[cause]).toBe(result.total);
-    expect(result.causeCounts.missing_owner).toBe(1);
-  }
-});
-
-it('卡点停留天数按同一分桶筛选清单和分布', async () => {
-  const dates = ['2026-10-09', '2026-10-08', '2026-10-05', '2026-10-04', '2026-09-28', '2026-09-27'];
-  const batches = dates.map((date) => batch({ id: entityId(date), status: 'confirmed', statusChangedAt: `${date}T00:00:00Z` }));
-  const getStuck = makeGetStuckBatches({ performance: readModel(facts(kpi(batches))) });
-  for (const [bucket, days] of [['0-3', [3]], ['4-7', [7, 4]], ['8-14', [14, 8]], ['15+', [15]]] as const) {
-    const result = await getStuck(query({ bucket, stage: 'confirmed' }), actor);
-    expect(result.items.map((item) => item.daysInStage)).toEqual(days);
-    expect(result.distribution[0]?.buckets[bucket]).toBe(result.total);
-  }
+it('卡点超过 200 条时保留 200，不截成 0', async () => {
+  const batches = Array.from({ length: 201 }, (_item, index) => batch({ id: entityId(`b${index}`), status: 'confirmed', dateBuyerConfirmed: day('2026-10-20') }));
+  const stuck = await makeGetStuckBatches({ performance: readModel(facts(kpi(batches))) })(query(), actor);
+  expect(stuck.items).toHaveLength(200);
+  expect(stuck.kpis.openBatches).toBe(201);
 });
 
 it('读模型从待审别名和 BOM 缺行算出订单行集合', async () => {
@@ -261,12 +210,12 @@ it('读模型从待审别名和 BOM 缺行算出订单行集合', async () => {
     await migrate(handle.exec);
     const at = '2026-10-12T00:00:00.000Z';
     await handle.exec(`insert into users (id, created_at, updated_at, name, roles, active) values ('buyer-1', '${at}', '${at}', '样例采购员', '{manager}', true)`);
-    await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values ('po-alias', '${at}', '${at}', 'PO-A', 'PO-A', 'OTHER', '{}', null, ' 甲代工厂 ', 'finished', null)`);
+    await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values ('po-alias', '${at}', '${at}', 'PO-A', 'PO-A', 'OTHER', '{}', null, ' 宜侬 ', 'finished', null)`);
     await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values ('po-clean', '${at}', '${at}', 'PO-B', 'PO-B', 'OTHER', '{}', null, '别的供应商', 'finished', null)`);
     await insertLine(handle, { id: 'line-alias', purchaseOrderId: 'po-alias', barcode: '111', at });
     await insertLine(handle, { id: 'line-bom', purchaseOrderId: 'po-clean', barcode: '222', at });
     await insertLine(handle, { id: 'line-clean', purchaseOrderId: 'po-clean', barcode: '333', at });
-    await handle.exec(`insert into party_aliases (id, created_at, updated_at, raw_name, norm_name, party_id, status, first_seen_import_batch_id, seen_count, seen_batch_count, reviewed_by, reviewed_at) values ('alias-1', '${at}', '${at}', ' 甲代工厂 ', '甲代工厂', null, 'pending', null, 1, 1, null, null)`);
+    await handle.exec(`insert into party_aliases (id, created_at, updated_at, raw_name, norm_name, party_id, status, first_seen_import_batch_id, seen_count, seen_batch_count, reviewed_by, reviewed_at) values ('alias-1', '${at}', '${at}', ' 宜侬 ', '宜侬', null, 'pending', null, 1, 1, null, null)`);
     await insertProduct(handle, { id: 'product-bom', barcode: '222', at });
     await insertProduct(handle, { id: 'product-clean', barcode: '333', at });
     await handle.exec(`insert into bom_lines (product_barcode_raw, product_name, reorder_count, cumulative_qty, part_code_raw, part_name, import_batch_id, row_no, merged_fill) values ('333', '有 BOM 的产品', null, null, 'PART-1', '物料', 'batch-1', 2, false)`);

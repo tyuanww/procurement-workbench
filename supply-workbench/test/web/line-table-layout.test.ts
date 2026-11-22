@@ -157,7 +157,7 @@ function sampleRow(): OrderLineRow {
     nameRaw: '棉片',
     itemCodeRaw: null,
     barcodeRaw: null,
-    supplier: { id: null, displayName: '甲代工厂', rawName: null },
+    supplier: { id: null, displayName: '宜侬', rawName: null },
     receiver: null,
     qtyOrdered: 0,
     receivedQty: null,

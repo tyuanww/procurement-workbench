@@ -66,3 +66,4 @@ it('更新用例把条件写入失败转换成可识别的状态冲突', async (
   });
   await expect(updateSettings({ patch: { upcomingDays: 9 } }, anActor('admin'))).rejects.toBeInstanceOf(StateConflictError);
 });
+

@@ -13,8 +13,8 @@ function alias(patch: Partial<PartyAlias> = {}): PartyAlias {
     id: entityId('alias-1'),
     createdAt: at,
     updatedAt: at,
-    rawName: '甲包装厂',
-    normName: normalizeText('甲包装厂'),
+    rawName: '怡龙',
+    normName: normalizeText('怡龙'),
     partyId: null,
     status: 'pending',
     firstSeenImportBatchId: null,
@@ -56,10 +56,10 @@ function deps() {
   return { memory, clock: new FixedClock(at), ids: new SequentialIds(), uow: memory.unitOfWork };
 }
 
-it('甲包装厂并到甲代工厂，不确认就拒绝，确认后回填供应商', async () => {
+it('怡龙并到宜侬，不确认就拒绝，确认后回填供应商', async () => {
   const { memory, clock, ids, uow } = deps();
-  const party = aParty({ id: entityId('party-yn'), displayName: '甲代工厂' });
-  const order = aPurchaseOrder({ id: entityId('po-1'), supplierRaw: '甲包装厂', supplierPartyId: null });
+  const party = aParty({ id: entityId('party-yn'), displayName: '宜侬' });
+  const order = aPurchaseOrder({ id: entityId('po-1'), supplierRaw: '怡龙', supplierPartyId: null });
   await memory.stores.parties.save(party);
   await memory.stores.aliases.save(alias());
   await memory.stores.purchaseOrders.save(order);
@@ -80,7 +80,7 @@ it('采购员不能审核', async () => {
 it('批准 69 码和品号的对照后，未关联上报行变成 linked', async () => {
   const { memory, clock, ids, uow } = deps();
   const order = aPurchaseOrder({ id: entityId('po-1'), poNorm: 'PO202610120001', poRaw: 'PO202610120001' });
-  const line = anOrderLine({ id: orderLineId('line-1'), purchaseOrderId: order.id, itemCodeRaw: '70007021', barcodeRaw: null });
+  const line = anOrderLine({ id: orderLineId('line-1'), purchaseOrderId: order.id, itemCodeRaw: '70007019', barcodeRaw: null });
   const row = aFactoryStockRow({
     id: entityId('row-1'),
     kind: 'in_transit',
@@ -90,7 +90,7 @@ it('批准 69 码和品号的对照后，未关联上报行变成 linked', async
   await memory.stores.purchaseOrders.save(order);
   await memory.stores.orderLines.save(line);
   await memory.stores.itemCodes.save(code({ id: entityId('barcode'), codeRaw: '2000000003047', codeType: 'barcode_69' }));
-  await memory.stores.itemCodes.save(code({ id: entityId('item-code'), codeRaw: '70007021', codeType: 'erp_70' }));
+  await memory.stores.itemCodes.save(code({ id: entityId('item-code'), codeRaw: '70007019', codeType: 'erp_70' }));
   await memory.stores.codeLinks.save(link());
   await memory.stores.factoryReports.save(row);
   await makeApproveCodeLink({ uow, clock, ids })({ linkId: 'link-1' }, anActor('reviewer'));
@@ -100,7 +100,7 @@ it('批准 69 码和品号的对照后，未关联上报行变成 linked', async
 it('批准对照后，带采购单号的需求行也会变成 linked', async () => {
   const { memory, clock, ids, uow } = deps();
   const order = aPurchaseOrder({ id: entityId('po-1'), poNorm: 'PO202610120001', poRaw: 'PO202610120001' });
-  const line = anOrderLine({ id: orderLineId('line-1'), purchaseOrderId: order.id, itemCodeRaw: '70007021', barcodeRaw: null });
+  const line = anOrderLine({ id: orderLineId('line-1'), purchaseOrderId: order.id, itemCodeRaw: '70007019', barcodeRaw: null });
   const row = aFactoryStockRow({
     id: entityId('demand-1'),
     kind: 'demand',
@@ -111,7 +111,7 @@ it('批准对照后，带采购单号的需求行也会变成 linked', async () 
   await memory.stores.purchaseOrders.save(order);
   await memory.stores.orderLines.save(line);
   await memory.stores.itemCodes.save(code({ id: entityId('barcode'), codeRaw: '2000000003047', codeType: 'barcode_69' }));
-  await memory.stores.itemCodes.save(code({ id: entityId('item-code'), codeRaw: '70007021', codeType: 'erp_70' }));
+  await memory.stores.itemCodes.save(code({ id: entityId('item-code'), codeRaw: '70007019', codeType: 'erp_70' }));
   await memory.stores.codeLinks.save(link());
   await memory.stores.factoryReports.save(row);
   await makeApproveCodeLink({ uow, clock, ids })({ linkId: 'link-1' }, anActor('reviewer'));
@@ -133,7 +133,7 @@ function page<T>(): { readonly items: readonly T[]; readonly page: { readonly pa
 function partyQuery(kpi: KpiInput): MasterDataQueries {
   const empty = { numerator: 99, denominator: 99, n: 99 };
   const kpis: KpiFigures = { dueBatches: empty, onTime: empty, averageDelayDays: empty, overdueNow: empty, dateChanges: empty, noteReturnDays: empty, openExceptions: empty };
-  const detail: PartyDetail = { party: { id: 'party-yn', displayName: '甲代工厂', isSupplier: true, isFactory: false, isOwnWarehouse: false, note: null }, aliases: [], kpis, kpiWindow: { from: localDate('2020-01-01'), to: localDate('2020-01-02') } };
+  const detail: PartyDetail = { party: { id: 'party-yn', displayName: '宜侬', isSupplier: true, isFactory: false, isOwnWarehouse: false, note: null }, aliases: [], kpis, kpiWindow: { from: localDate('2020-01-01'), to: localDate('2020-01-02') } };
   return {
     reviewCounts: async () => ({ aliases: 0, codes: 0, links: 0, multiName: 0 }),
     listAliases: async () => page(),

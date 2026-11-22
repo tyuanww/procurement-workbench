@@ -1,6 +1,6 @@
-import { makeGetBuyerDrill, makeGetBuyerLoad, makeGetStuckBatches, makeGetSupplierPerformance } from '@sw/application';
+import { makeGetBuyerLoad, makeGetStuckBatches, makeGetSupplierPerformance } from '@sw/application';
 import type { LocalDate } from '@sw/domain';
-import { bottleneckSummary, performanceQueries, readUnassignedBuyerExceptions, type AppDatabase } from '@sw/persistence';
+import { bottleneckSummary, performanceQueries, type AppDatabase } from '@sw/persistence';
 import { systemClock } from '../system/clock.js';
 import type { PerformanceApi } from '../http/performance/routes.js';
 
@@ -17,9 +17,6 @@ export function composePerformance(input: { readonly db: AppDatabase; readonly t
     getStuck: makeGetStuckBatches({ performance }),
     getSuppliers: makeGetSupplierPerformance({ performance }),
     getBuyers: makeGetBuyerLoad({ performance }),
-    getBuyerDrill: makeGetBuyerDrill({
-      performance, clock, readUnassignedExceptions: () => readUnassignedBuyerExceptions(input.db),
-    }),
     getBottlenecks: async () => bottleneckSummary(input.db, clock.today()),
   };
 }

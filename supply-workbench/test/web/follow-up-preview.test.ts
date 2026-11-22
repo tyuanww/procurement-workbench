@@ -13,7 +13,7 @@ const requireWeb = createRequire(new URL('../../apps/web/package.json', import.m
 const detail: OrderLineDetail = {
   line: {
     id: 'line-1', lane: 'finished', po: { id: 'po-1', poRaw: 'PO-001', poFormat: 'OTHER' }, nameRaw: '海葡萄', itemCodeRaw: null, barcodeRaw: null,
-    supplier: { id: 'supplier-1', displayName: '甲代工厂供应链', rawName: null }, receiver: null, qtyOrdered: 100, receivedQty: 20,
+    supplier: { id: 'supplier-1', displayName: '宜侬供应链', rawName: null }, receiver: null, qtyOrdered: 100, receivedQty: 20,
     factoryDeliveredQty: { value: 30, provenance: { kind: 'manual', by: 'test', at: '2026-11-07T02:00:00Z' } }, stage: 'awaiting_receipt', nextDue: { batchId: 'batch-1', dateBuyerConfirmed: localDate('2026-11-10'), overdueDays: 0, dateFactoryRequired: null },
     daysInStage: 2, buyer: { id: 'buyer-1', name: '采购甲' }, statusReported: null, missingInLatestImport: false, openExceptionCount: 0, origin: 'import_po_master', unit: '件', purchaseOrderId: 'po-1', itemId: null, cancelledAt: null, cancelReason: null,
   },

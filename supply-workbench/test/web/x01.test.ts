@@ -12,8 +12,8 @@ describe('催办文本', () => {
       { ...base, status: 'due_today' },
       { ...base, status: 'shipped' },
     ];
-    const text = nudgeText({ waitingName: '甲代工厂', buyerName: '样例采购员', lines });
-    expect(text.startsWith('【采购工作台】')).toBe(true);
+    const text = nudgeText({ waitingName: '宜侬', buyerName: '样例采购员', lines });
+    expect(text.startsWith('【SHINEMAGE 采购】')).toBe(true);
     expect(text).toContain('尚未确认到货日');
     expect(text).toContain('已确认未到');
     expect(text).toContain('已逾期 4 天');
@@ -24,7 +24,7 @@ describe('催办文本', () => {
   });
 
   it('采购员名字为空时不写破折号和空署名', () => {
-    const text = nudgeText({ waitingName: '甲代工厂', buyerName: '', lines: [baseLine('confirmed')] });
+    const text = nudgeText({ waitingName: '宜侬', buyerName: '', lines: [baseLine('confirmed')] });
     expect(text.endsWith('谢谢！')).toBe(true);
     expect(text).not.toContain('谢谢！—');
   });

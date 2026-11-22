@@ -1,13 +1,39 @@
 import {
   batchStatusLabel,
   waitingOnLabel,
+  STUCK_BUCKET_MAX_DAYS,
   type BatchStatus,
-  type StuckBucket,
+  type WaitingOnKind,
 } from '@sw/domain';
 import { EM_DASH } from './figures.js';
-import type { StuckDashboard, StuckItem } from '@sw/contracts';
+import { type StuckBucket } from './query.js';
 
-export type StuckDistributionInput = StuckDashboard['distribution'][number];
+export type StuckItemInput = {
+  readonly batchId: string;
+  readonly stage: BatchStatus;
+  readonly daysInStage: number;
+  readonly poRaw: string | null;
+  readonly nameRaw: string | null;
+  readonly waitingOn: {
+    readonly kind: WaitingOnKind;
+    readonly partyId: string | null;
+    readonly displayName: string | null;
+  };
+  readonly buyer: { readonly id: string; readonly name: string | null } | null;
+  readonly dateBuyerConfirmed: string | null;
+  readonly factoryLinked: boolean;
+  readonly factoryUnlinked: boolean;
+  readonly exceptionOpen: boolean;
+  readonly supplierAliasPending: boolean;
+  readonly bomMissing: boolean;
+};
+
+export type BottleneckCause = 'missing_owner' | 'missing_factory' | 'supplier_pending' | 'missing_date' | 'exception_open' | 'aged_15' | 'bom_missing' | 'factory_demand_unlinked';
+
+export type StuckDistributionInput = {
+  readonly stage: BatchStatus;
+  readonly buckets: { readonly [Key in StuckBucket]: number };
+};
 
 export type StuckTableRow = {
   readonly batchId: string;
@@ -45,21 +71,56 @@ export type StuckView = {
   readonly dwell: readonly DwellRow[];
 };
 
+// The server count can be larger than the 200-row list, so the blocks are not recounted from items.
 export function stuckView(input: {
-  readonly items: readonly StuckItem[];
+  readonly items: readonly StuckItemInput[];
   readonly distribution: readonly StuckDistributionInput[];
   readonly stage: BatchStatus | null;
   readonly bucket: StuckBucket | null;
+  readonly cause: BottleneckCause | null;
 }): StuckView {
   return {
-    rows: input.items.map(toRow),
+    rows: input.items
+      .filter((item) => matches({ item, stage: input.stage, bucket: input.bucket, cause: input.cause }))
+      .map(toRow),
     dwell: input.distribution.map((row) =>
       toDwell({ row, stage: input.stage, bucket: input.bucket }),
     ),
   };
 }
 
-function toRow(item: StuckItem): StuckTableRow {
+function matches(input: {
+  readonly item: StuckItemInput;
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
+  readonly cause: BottleneckCause | null;
+}): boolean {
+  if (input.stage !== null && input.item.stage !== input.stage) return false;
+  if (input.bucket !== null && bucketOf(input.item.daysInStage) !== input.bucket) return false;
+  return matchesCause({ item: input.item, cause: input.cause });
+}
+
+function matchesCause(input: { readonly item: StuckItemInput; readonly cause: BottleneckCause | null }): boolean {
+  if (input.cause === 'missing_owner') return input.item.buyer === null;
+  if (input.cause === 'missing_factory') return !input.item.factoryLinked;
+  if (input.cause === 'supplier_pending') return input.item.supplierAliasPending;
+  if (input.cause === 'bom_missing') return input.item.bomMissing;
+  if (input.cause === 'factory_demand_unlinked') return input.item.factoryUnlinked;
+  if (input.cause === 'missing_date') return input.item.dateBuyerConfirmed === null;
+  if (input.cause === 'exception_open') return input.item.exceptionOpen;
+  if (input.cause === 'aged_15') return input.item.daysInStage >= 15;
+  return true;
+}
+
+function bucketOf(days: number): StuckBucket {
+  const [shortStay, mediumStay, longStay] = STUCK_BUCKET_MAX_DAYS;
+  if (days <= shortStay) return '0-3';
+  if (days <= mediumStay) return '4-7';
+  if (days <= longStay) return '8-14';
+  return '15+';
+}
+
+function toRow(item: StuckItemInput): StuckTableRow {
   return {
     batchId: item.batchId,
     stageLabel: batchStatusLabel(item.stage),
@@ -78,12 +139,12 @@ function textOrDash(value: string | null): string {
   return value ?? EM_DASH;
 }
 
-function waitingText(item: StuckItem): string {
+function waitingText(item: StuckItemInput): string {
   if (item.waitingOn.displayName !== null) return item.waitingOn.displayName;
   return waitingOnLabel(item.waitingOn.kind);
 }
 
-function ownerText(item: StuckItem): string {
+function ownerText(item: StuckItemInput): string {
   if (item.buyer === null || item.buyer.name === null) return EM_DASH;
   return item.buyer.name;
 }

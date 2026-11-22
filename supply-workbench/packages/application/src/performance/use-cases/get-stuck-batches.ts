@@ -2,64 +2,36 @@ import {
   BATCH_STATUSES,
   currentlyOverdue,
   diffDays,
-  isCurrentlyOverdue,
   isOpenBatch,
   localDate,
-  stuckBucket,
   stuckDistribution,
   type BatchStatus,
   type KpiBatch,
   type KpiInput,
   type LocalDate,
-  type StuckCause,
   type WaitingOnKind,
 } from '@sw/domain';
 import type { GetStuckBatches, GetStuckBatchesDeps } from '../boundary.js';
 import type { PerformanceFacts } from '../../ports/performance-read-model.js';
-import type { NamedPerson, StuckBuckets, StuckDashboard, StuckItem, StuckQuery } from '../views.js';
+import type { NamedPerson, StuckBuckets, StuckDashboard, StuckItem } from '../views.js';
 import { loadScoped } from './scope.js';
 import { authorize } from '../../shared/authorize.js';
 
-const PAGE_SIZE = 50;
-
-const matchesCause = {
-  missing_owner: (item) => item.buyer === null,
-  missing_factory: (item) => !item.factoryLinked,
-  supplier_pending: (item) => item.supplierAliasPending,
-  missing_date: (item) => item.dateBuyerConfirmed === null,
-  exception_open: (item) => item.exceptionOpen,
-  aged_15: (item) => stuckBucket(item.daysInStage) === '15+',
-  bom_missing: (item) => item.bomMissing,
-  factory_demand_unlinked: (item) => item.factoryUnlinked,
-} satisfies Record<StuckCause, (item: StuckItem) => boolean>;
+const STUCK_ITEM_LIMIT = 200;
 
 export const makeGetStuckBatches =
   (deps: GetStuckBatchesDeps): GetStuckBatches =>
   async (input, actor) => {
     authorize(actor, 'dashboard.read');
     // K4、K9 看今天仍开放的批次，不按期间裁。期间进供应商和采购负荷。线会裁。
-    return dashboardOf(await loadScoped(deps.performance, input), input);
+    return dashboardOf(await loadScoped(deps.performance, input));
   };
 
-function dashboardOf(facts: PerformanceFacts, query: StuckQuery): StuckDashboard {
-  const asOf = facts.kpi.today;
-  const scoped = facts.kpi.batches
-    .filter((batch) => isListed(batch, query.stage) && (query.card !== 'overdue' || isCurrentlyOverdue(batch, asOf)))
-    .flatMap((batch) => itemOf(batch, facts))
-    .filter((item) => query.bucket === undefined || stuckBucket(item.daysInStage) === query.bucket);
-  const matched = query.cause === undefined ? scoped : scoped.filter(matchesCause[query.cause]);
-  const total = matched.length;
-  const page = Math.min(query.page ?? 1, Math.max(1, Math.ceil(total / PAGE_SIZE)));
-  const offset = (page - 1) * PAGE_SIZE;
+function dashboardOf(facts: PerformanceFacts): StuckDashboard {
   return {
-    asOf,
     kpis: kpisOf(facts.kpi),
-    distribution: distributionOf(facts.kpi.batches, asOf),
-    causeCounts: causeCountsOf(scoped),
-    total,
-    page,
-    pageSize: PAGE_SIZE,
-    items: matched.sort(byDays).slice(offset, offset + PAGE_SIZE),
+    distribution: distributionOf(facts.kpi.batches, facts.kpi.today),
+    items: itemsOf(facts),
   };
 }
 
@@ -103,18 +75,12 @@ function bucketCount(row: Record<string, number>, key: string): number {
   return value === undefined ? 0 : value;
 }
 
-function causeCountsOf(items: readonly StuckItem[]): StuckDashboard['causeCounts'] {
-  const count = (cause: StuckCause): number => items.filter(matchesCause[cause]).length;
-  return {
-    missing_owner: count('missing_owner'),
-    missing_factory: count('missing_factory'),
-    supplier_pending: count('supplier_pending'),
-    missing_date: count('missing_date'),
-    exception_open: count('exception_open'),
-    aged_15: count('aged_15'),
-    bom_missing: count('bom_missing'),
-    factory_demand_unlinked: count('factory_demand_unlinked'),
-  };
+function itemsOf(facts: PerformanceFacts): StuckItem[] {
+  return facts.kpi.batches
+    .filter((batch) => isOpenBatch(batch.status))
+    .flatMap((batch) => itemOf(batch, facts))
+    .sort(byDays)
+    .slice(0, STUCK_ITEM_LIMIT);
 }
 
 function itemOf(batch: KpiBatch, facts: PerformanceFacts): StuckItem[] {

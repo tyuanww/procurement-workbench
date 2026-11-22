@@ -113,7 +113,7 @@ it('读路径先读 line_factory_links，没有记录时回退到工厂进度行
     const getLink = makeGetLineFactoryLink({ links: queriesOf(fixture).links });
     const fallback = await getLink({ orderLineId: 'line-1' }, { id: entityId('buyer-1'), name: '采购', roles: ['buyer'] });
     expect(fallback).toMatchObject({ orderLineId: 'line-1', status: 'linked', source: 'factory_progress' });
-    expect(fallback?.factory).toMatchObject({ id: 'factory-1', displayName: '甲代工厂' });
+    expect(fallback?.factory).toMatchObject({ id: 'factory-1', displayName: '宜侬' });
 
     await makeSetLineFactoryLink(depsOf(fixture))({ orderLineId: 'line-2', factoryPartyId: 'factory-1' }, admin());
     await makeRelinkFactoryRows({ ...depsOf(fixture), links: queriesOf(fixture).links })({}, admin());
@@ -129,9 +129,9 @@ it('已审批供应商别名回填采购单 supplier_party_id，且幂等', asyn
   const fixture = await createPgFixture();
   try {
     await fixture.uow.run(async (tx) => {
-      await tx.parties.save(aParty({ id: entityId('supplier-1'), displayName: '甲代工厂', isSupplier: true, isFactory: false }));
-      await tx.purchaseOrders.save(aPurchaseOrder({ id: entityId('po-1'), poRaw: 'PO1', poNorm: 'PO1', poFormat: 'OTHER', supplierRaw: ' 甲代工厂 ', supplierPartyId: null }));
-      await tx.aliases.save({ id: entityId('alias-1'), createdAt: at, updatedAt: at, rawName: '甲代工厂', normName: '甲代工厂', partyId: entityId('supplier-1'), status: 'approved', firstSeenImportBatchId: null, seenCount: 1, seenBatchCount: 1, reviewedBy: entityId('admin-1'), reviewedAt: at });
+      await tx.parties.save(aParty({ id: entityId('supplier-1'), displayName: '宜侬', isSupplier: true, isFactory: false }));
+      await tx.purchaseOrders.save(aPurchaseOrder({ id: entityId('po-1'), poRaw: 'PO1', poNorm: 'PO1', poFormat: 'OTHER', supplierRaw: ' 宜侬 ', supplierPartyId: null }));
+      await tx.aliases.save({ id: entityId('alias-1'), createdAt: at, updatedAt: at, rawName: '宜侬', normName: '宜侬', partyId: entityId('supplier-1'), status: 'approved', firstSeenImportBatchId: null, seenCount: 1, seenBatchCount: 1, reviewedBy: entityId('admin-1'), reviewedAt: at });
     });
     const backfill = makeBackfillSupplierParties({ ...depsOf(fixture), links: queriesOf(fixture).links });
     expect(await backfill({}, admin())).toEqual({ updated: 1 });
@@ -144,7 +144,7 @@ it('已审批供应商别名回填采购单 supplier_party_id，且幂等', asyn
 
 async function seedBase(fixture: PgFixture): Promise<void> {
   await fixture.uow.run(async (tx) => {
-    await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '甲代工厂', isSupplier: true, isFactory: true }));
+    await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '宜侬', isSupplier: true, isFactory: true }));
     await tx.users.save(aUser({ id: entityId('admin-1'), name: '管理员', roles: ['admin'] }));
   });
 }

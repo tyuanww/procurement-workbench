@@ -234,7 +234,7 @@ function HeaderStart(input: { readonly devLogin: boolean; readonly menuButton: M
   return (
     <div style={headerClusterStyle({ edge: 'start' })}>
       {input.devLogin ? <Tag>开发登录</Tag> : null}
-      <Typography.Text style={headerTitleStyle()}>采购工作台</Typography.Text>
+      <Typography.Text style={headerTitleStyle()}>SHINEMAGE 供应链工作台</Typography.Text>
     </div>
   );
 }

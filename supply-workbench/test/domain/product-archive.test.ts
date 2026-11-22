@@ -40,7 +40,7 @@ function linesOf(): PurchaseLine[] {
   return lines;
 }
 
-it('渠道匹配分别统计本条码和全部关联渠道', () => {
+it('渠道匹配的本条码和全部渠道计数等于 12.2 的表', () => {
   const lines = linesOf();
   for (const row of TABLE) {
     const product = productOf(row.barcode);
@@ -55,8 +55,7 @@ it('渠道匹配分别统计本条码和全部关联渠道', () => {
 
 it('-2、-3 不和基础码合并成一个产品', () => {
   expect(barcodeBase(`${FAMILY}-2`)).toBe(FAMILY);
-  const fullwidthFamily = FAMILY.replace(/\d/g, (digit) => String.fromCharCode(0xff10 + Number(digit)));
-  expect(barcodeBase(`${fullwidthFamily}－2`)).toBe(FAMILY);
+  expect(barcodeBase('２００００００００３０２３－2')).toBe(FAMILY);
   expect(`${FAMILY}-2`).not.toBe(FAMILY);
   expect(matchChannel({ lineBarcode: FAMILY, product: productOf(`${FAMILY}-2`), scope: 'exact' })).toBeNull();
   expect(matchChannel({ lineBarcode: FAMILY, product: productOf(`${FAMILY}-2`), scope: 'all_channels' })).toBe('sibling_channel');
@@ -79,32 +78,32 @@ it('no_batch 的已完成订单行不算未完结，进行中的算', () => {
 it('没有备案名称的产品单独成组，不从品名猜系列', () => {
   expect(spuKey(null)).toBeNull();
   expect(spuKey('  ')).toBeNull();
-  expect(spuKey('店铺甲海葡萄水光冰冰贴')).toBe('店铺甲海葡萄水光冰冰贴');
+  expect(spuKey('示例商品37')).toBe('示例商品37');
   expect(UNFILED_FILING_NAME).toBe('未填备案名称');
 });
 
 it('没有已批准对照时库存给出审核入口，对照上了但库存表没有记录就不给这个入口', () => {
-  expect(resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [], stockRows: [{ codeNorm: '70007022', qty: 3, importBatchId: 'b1' }] }).kind).toBe('missing');
-  const none = resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [{ leftNorm: FAMILY, rightNorm: '70007022' }], stockRows: [] });
+  expect(resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [], stockRows: [{ codeNorm: '70007020', qty: 3, importBatchId: 'b1' }] }).kind).toBe('missing');
+  const none = resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [{ leftNorm: FAMILY, rightNorm: '70007020' }], stockRows: [] });
   expect(none).toEqual({ kind: 'missing', missing: { value: null, reason: 'no_matching_record' }, nextStep: null });
-  const linked = resolveFactoryStock({ barcodeRaw: '2000000003047', approvedLinks: [{ leftNorm: '2000000003047', rightNorm: '70007021' }], stockRows: [
-    { codeNorm: '70007021', qty: 2, importBatchId: 'stock' },
-    { codeNorm: '70007021', qty: 5, importBatchId: 'stock' },
+  const linked = resolveFactoryStock({ barcodeRaw: '2000000003047', approvedLinks: [{ leftNorm: '2000000003047', rightNorm: '70007019' }], stockRows: [
+    { codeNorm: '70007019', qty: 2, importBatchId: 'stock' },
+    { codeNorm: '70007019', qty: 5, importBatchId: 'stock' },
   ] });
   expect(linked).toEqual({ kind: 'linked', rows: [
-    { codeNorm: '70007021', qty: 2, importBatchId: 'stock' },
-    { codeNorm: '70007021', qty: 5, importBatchId: 'stock' },
+    { codeNorm: '70007019', qty: 2, importBatchId: 'stock' },
+    { codeNorm: '70007019', qty: 5, importBatchId: 'stock' },
   ], total: 7 });
 });
 
 it('库存行不是同一导入批次时不合计，也不把缺失数量写成 0', () => {
-  const mixed = resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [{ leftNorm: FAMILY, rightNorm: '70007022' }], stockRows: [
-    { codeNorm: '70007022', qty: 1, importBatchId: 'a' },
-    { codeNorm: '70007022', qty: 2, importBatchId: 'b' },
+  const mixed = resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [{ leftNorm: FAMILY, rightNorm: '70007020' }], stockRows: [
+    { codeNorm: '70007020', qty: 1, importBatchId: 'a' },
+    { codeNorm: '70007020', qty: 2, importBatchId: 'b' },
   ] });
   expect(mixed.kind === 'linked' && mixed.total).toBeNull();
-  const gap = resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [{ leftNorm: FAMILY, rightNorm: '70007022' }], stockRows: [
-    { codeNorm: '70007022', qty: null, importBatchId: 'a' },
+  const gap = resolveFactoryStock({ barcodeRaw: FAMILY, approvedLinks: [{ leftNorm: FAMILY, rightNorm: '70007020' }], stockRows: [
+    { codeNorm: '70007020', qty: null, importBatchId: 'a' },
   ] });
   expect(gap.kind === 'linked' && gap.total).toBeNull();
 });
@@ -210,8 +209,8 @@ function sampleProduct(patch: Partial<Product> = {}): Product {
     updatedAt: '2026-10-12T00:00:00.000Z',
     barcodeRaw: FAMILY,
     barcodeBase: FAMILY,
-    filingName: '店铺甲海葡萄水光冰冰贴',
-    spuKey: '店铺甲海葡萄水光冰冰贴',
+    filingName: '示例商品37',
+    spuKey: '示例商品37',
     filingNo: null,
     skuName: '工作台品名',
     netContent: null,

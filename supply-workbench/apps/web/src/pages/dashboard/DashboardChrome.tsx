@@ -35,7 +35,7 @@ export function DashboardChrome(props: {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2], alignItems: 'center' }}>
       <PeriodChips query={props.query} onSearch={props.onSearch} />
-      {props.query.view === 'project' ? null : <LaneChips lane={props.query.lane} onSearch={props.onSearch} />}
+      <LaneChips lane={props.query.lane} onSearch={props.onSearch} />
       <PeriodPicker query={props.query} onSearch={props.onSearch} />
       <span
         style={{

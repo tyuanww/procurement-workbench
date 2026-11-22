@@ -9,15 +9,15 @@ const requireWeb = createRequire(new URL('../../apps/web/package.json', import.m
 
 const alias: PartyAliasView = {
   id: 'alias-1',
-  rawName: '甲代工厂',
-  normName: '甲代工厂',
+  rawName: '宜侬',
+  normName: '宜侬',
   partyId: null,
   status: 'pending',
   firstSeenImportBatchId: 'batch-1',
   seenCount: 241,
   reviewedBy: null,
   reviewedAt: null,
-  similar: [{ partyId: 'party-1', displayName: '甲代工厂供应链' }],
+  similar: [{ partyId: 'party-1', displayName: '宜侬供应链' }],
 };
 
 describe('主体别名 720 抽屉', () => {
@@ -52,14 +52,14 @@ describe('主体别名 720 抽屉', () => {
       onSubmit: () => undefined,
       onClose: () => undefined,
     });
-    expect(html).toContain('甲代工厂');
+    expect(html).toContain('宜侬');
     expect(html).toContain('关联到已有主体');
     expect(html).toContain('新建');
     expect(html).toContain('供应商');
     expect(html).toContain('代工厂');
 
     const existing = markup(AliasReviewFields, { alias, open: true, partyId: 'party-1', roles: { isSupplier: true, isFactory: false }, confirmed: false, isSubmitting: false, error: '', onParty: () => undefined, onRoles: () => undefined, onConfirm: () => undefined, onSubmit: () => undefined, onClose: () => undefined });
-    expect(existing).toContain('甲代工厂供应链');
+    expect(existing).toContain('宜侬供应链');
   });
 });
 

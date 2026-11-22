@@ -21,3 +21,4 @@ export async function retireFactorySnapshot(input: { readonly tx: UnitOfWorkStor
     await saveImportRevision({ repo: input.tx.imports, next, expectedRevision: revisionOf(previous.revision) });
   }
 }
+

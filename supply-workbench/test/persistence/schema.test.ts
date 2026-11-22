@@ -50,8 +50,8 @@ it('送货单读到未回传时拒绝，不当成已回传', async () => {
 it('别名、编码和产品条码不能重复', async () => {
   await insertAlias('same-name');
   await expect(insertAlias('same-name')).rejects.toThrow();
-  await insertCode('erp_70', '70007019');
-  await expect(insertCode('erp_70', '70007019')).rejects.toThrow();
+  await insertCode('erp_70', '70007017');
+  await expect(insertCode('erp_70', '70007017')).rejects.toThrow();
   await insertProduct('2000000003023');
   await expect(insertProduct('2000000003023')).rejects.toThrow();
 });

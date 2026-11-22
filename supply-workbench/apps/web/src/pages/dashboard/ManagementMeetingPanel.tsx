@@ -37,7 +37,7 @@ export function ManagementMeetingPanel({ now }: { readonly now: Date }) {
 }
 
 function queryOf(params: URLSearchParams, thisWeek: LocalDate): MeetingQuery {
-  const store = MANAGEMENT_MEETING_STORES.find((item) => item === params.get('store')) ?? 'store_a';
+  const store = MANAGEMENT_MEETING_STORES.find((item) => item === params.get('store')) ?? 'dafuyan';
   const date = parseLocalDate(params.get('weekStart') ?? '');
   const selectedWeek = date.ok ? weekStart(date.value) : thisWeek;
   return { store, weekStart: selectedWeek <= thisWeek ? selectedWeek : thisWeek };
@@ -84,7 +84,7 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
   const { meeting } = load;
   return <>
     <Flex gap={space[2]} wrap align="center" justify="space-between">
-      <Typography.Text>{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
+      <Typography.Text>{meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
       {canWrite ? <GenerateReport meeting={meeting} /> : null}
     </Flex>
     <MeetingSections meeting={meeting} {...(canWrite ? {
@@ -115,6 +115,6 @@ function GenerateReport({ meeting }: { readonly meeting: ManagementMeeting }) {
   }
   return <Flex gap={space[1]} wrap align="center">
     {error === undefined ? null : <Alert type="error" showIcon title={error} />}
-    <Button type="primary" loading={isPending} onClick={() => void generate()}>生成全店周报</Button>
+    <Button type="primary" loading={isPending} onClick={() => void generate()}>生成周报</Button>
   </Flex>;
 }

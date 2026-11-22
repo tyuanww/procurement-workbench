@@ -1,4 +1,4 @@
-import { Button, Empty, Flex, Result, Skeleton, Typography } from 'antd';
+import { Button, Empty, Result, Skeleton, Typography } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { useState } from 'react';
 import type { GroupMode, PlanBoardGroup, PlanLoad, PlanRow } from '../../features/today/index.js';
@@ -22,14 +22,9 @@ export type ScheduleViewProps = {
 };
 
 export function ScheduleView(props: ScheduleViewProps): ReactNode {
-  const date = props.load.kind === 'ready' ? props.load.view.date : null;
   return (
     <>
-      <Flex className="today-touch" gap="small" align="center" wrap>
-        {date === null ? null : <Typography.Text type="secondary">截至今日 <time dateTime={date}>{date}</time></Typography.Text>}
-        <Button size="small" href="/progress?view=schedule">查看总排期</Button>
-      </Flex>
-      <div className="today-touch"><GroupChips modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} /></div>
+      <GroupChips modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} />
       <ScheduleBody load={props.load} focus={props.focus} onOpen={props.onOpen} onRetry={props.onRetry} />
     </>
   );

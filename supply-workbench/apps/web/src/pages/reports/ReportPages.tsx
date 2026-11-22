@@ -71,7 +71,7 @@ function ReportListBody(props: {
     <WorkbenchPage title="周报">
       {canGenerate ? <ReportForm setItems={props.setItems} setMessage={props.setMessage} /> : null}
       <SectionGroup title="已生成周报" {...(items.length === 0 ? {} : { meta: `${items.length} 份` })}>
-        {items.length === 0 ? <Empty description={canGenerate ? '还没有周报。下一步：填写周一后生成。' : '还没有周报。'}>{canGenerate ? <Button onClick={() => document.getElementById(REPORT_WEEK_INPUT_ID)?.focus()}>去填周一</Button> : null}</Empty> : <div>{items.map((item) => <SectionRow key={item.id} action={<Flex gap={space[1]}><Button href={`/reports/${item.id}`}>打开</Button><Button href={`/reports/${item.id}/print`}>打印</Button></Flex>}><Typography.Text>全店 · {item.weekStart} 到 {item.weekEnd}</Typography.Text><br /><Typography.Text type="secondary">{new Date(item.generatedAt).toLocaleString('zh-CN')} · {item.supersededBy === null ? '当前版本' : '历史版本'}</Typography.Text></SectionRow>)}</div>}
+        {items.length === 0 ? <Empty description={canGenerate ? '还没有周报。下一步：填写周一后生成。' : '还没有周报。'}>{canGenerate ? <Button onClick={() => document.getElementById(REPORT_WEEK_INPUT_ID)?.focus()}>去填周一</Button> : null}</Empty> : <div>{items.map((item) => <SectionRow key={item.id} action={<Flex gap={space[1]}><Button href={`/reports/${item.id}`}>打开</Button><Button href={`/reports/${item.id}/print`}>打印</Button></Flex>}><Typography.Text>{item.weekStart} 到 {item.weekEnd}</Typography.Text><br /><Typography.Text type="secondary">{new Date(item.generatedAt).toLocaleString('zh-CN')} · {item.supersededBy === null ? '当前版本' : '历史版本'}</Typography.Text></SectionRow>)}</div>}
       </SectionGroup>
       {message === null ? null : <Alert type={message.kind} showIcon title={message.text} />}
     </WorkbenchPage>
@@ -103,7 +103,7 @@ function ReportForm({ setItems, setMessage }: {
         <Input id={REPORT_WEEK_INPUT_ID} type="date" style={{ width: 160, maxWidth: '100%' }} />
       </Form.Item>
       <Form.Item label=" " colon={false}>
-        <Button type="primary" htmlType="submit" loading={isCreating} disabled={isCreating}>生成全店周报</Button>
+        <Button type="primary" htmlType="submit" loading={isCreating} disabled={isCreating}>生成</Button>
       </Form.Item>
     </Form>
   </SectionGroup>;
@@ -156,7 +156,7 @@ function ReportDetailContent(input: {
   if (input.report === null) return <Result status="error" title="周报没有读出来" subTitle={input.message?.text || '检查登录或网络后重试。'} extra={<Button type="primary" onClick={input.load}>重试</Button>} />;
   return (
     <>
-      <SectionGroup title={`${input.report.weekStart} 到 ${input.report.weekEnd}`} meta={`全店 · 逾期 ${input.report.data.overview.overdue.value}`}>
+      <SectionGroup title={`${input.report.weekStart} 到 ${input.report.weekEnd}`} meta={`逾期 ${input.report.data.overview.overdue.value}`}>
         <Flex gap={space[1]} wrap>
           {canExport ? <Button loading={input.exporting === 'xlsx'} disabled={input.exporting !== null} onClick={() => { input.setExporting('xlsx'); void download({ id: input.id, format: 'xlsx', setMessage: input.setMessage }).finally(() => input.setExporting(null)); }}>导出 Excel</Button> : null}
           {canExport ? <Button loading={input.exporting === 'pdf'} disabled={input.exporting !== null} onClick={() => { input.setExporting('pdf'); void download({ id: input.id, format: 'pdf', setMessage: input.setMessage }).finally(() => input.setExporting(null)); }}>导出 PDF</Button> : null}
@@ -211,7 +211,7 @@ export function ReportPrintPage() {
       <PageHeader title="周报" browserTitle={report === null ? '周报打印' : `周报打印 ${report.weekStart}`} />
       {!isLoaded ? <Skeleton active paragraph={{ rows: 8 }} /> : null}
       {isLoaded && report === null ? <Result status="error" title="周报没有读出来" subTitle={error || '检查登录或网络后重试。'} extra={<Button type="primary" onClick={load}>重试</Button>} /> : null}
-      {isLoaded && report !== null ? <><p>全店 · {report.weekStart} 到 {report.weekEnd}</p><ReportSections data={report.data} print /></> : null}
+      {isLoaded && report !== null ? <><p>{report.weekStart} 到 {report.weekEnd}</p><ReportSections data={report.data} print /></> : null}
     </main>
   );
 }

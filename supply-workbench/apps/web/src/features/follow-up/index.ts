@@ -1,12 +1,11 @@
 export { hintSkipText, loadViews, presetViews, saveView } from './line-list/views.js';
-export type { LineDeskView } from './line-list/views.js';
 export { ownerOptions, userDirectoryPath } from './line-list/directory.js';
 export type { DeskUser } from './line-list/directory.js';
 export { lineCell } from './line-list/columns.js';
 export type { LineCell, LineColumnKey, LineColumnView } from './line-list/columns.js';
 export { NARROW_PHONE_MAX_WIDTH, exportAddress, lineTableLayout, renderedLineColumns } from './line-list/rendered-columns.js';
 export type { LineTableLayout } from './line-list/rendered-columns.js';
-export { deskAddress, readDesk, writeDesk } from './line-list/desk.js';
+export { readDesk, writeDesk } from './line-list/desk.js';
 export { canAddBatch, openBatchActions, showsRecordEdits, voidableShipments } from './line-detail/actions.js';
 export type { OpenBatchAction } from './line-detail/actions.js';
 export { adoptShipmentPrefill, batchLineText, buyerUndo, dateChangeNeedsReason, missingDeliveredText, timelineLineText } from './line-detail/rules.js';

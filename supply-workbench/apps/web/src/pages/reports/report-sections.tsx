@@ -1,6 +1,6 @@
-import { Descriptions, Table, Typography } from 'antd';
+import { Descriptions, Table } from 'antd';
 import type { WeeklyReport } from '@sw/contracts';
-import { LOW_SAMPLE_THRESHOLD, batchStatusLabel, type BatchStatus } from '@sw/domain';
+import { batchStatusLabel, type BatchStatus } from '@sw/domain';
 import { MeetingSections, meetingStoreLabels } from '../../features/reporting/index.js';
 import { SectionGroup as WorkbenchSectionGroup } from '../../shared/ui/section.js';
 
@@ -56,15 +56,11 @@ function StuckSection({ data }: { readonly data: WeeklyReport['data'] }) {
 }
 
 function SuppliersSection({ data }: { readonly data: WeeklyReport['data'] }) {
-  const unassigned = data.supplierUnassigned;
-  return <WorkbenchSectionGroup title="供应商表现" meta={`${data.suppliers.length} 家`}>
-    {unassigned === undefined ? null : <Typography.Text type="secondary">未归属改期 {unassigned.dateChanges} 条 · 未归属开放异常 {unassigned.openExceptions} 条</Typography.Text>}
-    <Table size="small" pagination={false} rowKey="partyId" dataSource={data.suppliers} columns={[
+  return <WorkbenchSectionGroup title="供应商表现" meta={`${data.suppliers.length} 家`}><Table size="small" pagination={false} rowKey="partyId" dataSource={data.suppliers} columns={[
     { title: '供应商', dataIndex: 'displayName', render: (value: string | null, row: (typeof data.suppliers)[number]) => value ?? row.partyId },
     { title: '应到批次', dataIndex: ['dueBatches', 'numerator'], render: valueOrDash },
     { title: '准时到货率', render: (_value: unknown, row: (typeof data.suppliers)[number]) => supplierRate(row.onTime) },
     { title: '当前逾期', dataIndex: ['overdueNow', 'numerator'], render: valueOrDash },
-    { title: '改期', dataIndex: ['dateChanges', 'numerator'], render: valueOrDash },
     { title: '开放异常', dataIndex: ['openExceptions', 'numerator'], render: valueOrDash },
   ]} /></WorkbenchSectionGroup>;
 }
@@ -99,6 +95,5 @@ function valueOrDash(value: number | null): string | number {
 
 function supplierRate(value: { readonly numerator: number | null; readonly denominator: number | null }): string {
   if (value.numerator === null || value.denominator === null || value.denominator === 0) return '—';
-  if (value.denominator < LOW_SAMPLE_THRESHOLD) return `样本少（n=${value.denominator}）`;
-  return `${Math.round((value.numerator / value.denominator) * 100)}%（${value.numerator}/${value.denominator}）`;
+  return `${Math.round((value.numerator / value.denominator) * 100)}%`;
 }

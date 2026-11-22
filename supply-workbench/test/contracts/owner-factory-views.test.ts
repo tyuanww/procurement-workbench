@@ -32,13 +32,13 @@ it('负责人指派和待审核契约', () => {
 });
 
 it('工厂关联视图契约区分 linked/unlinked/manual 与匹配依据', () => {
-  const linked = { orderLineId: 'line-1', factory: { id: 'factory-1', displayName: '甲代工厂' }, status: 'linked', source: 'relink', confidence: 'po', reason: null, linkedAt: '2026-11-09T00:00:00.000Z' };
+  const linked = { orderLineId: 'line-1', factory: { id: 'factory-1', displayName: '宜侬' }, status: 'linked', source: 'relink', confidence: 'po', reason: null, linkedAt: '2026-11-09T00:00:00.000Z' };
   expect(LineFactoryLinkViewSchema.parse(linked)).toEqual(linked);
   const unlinked = { ...linked, factory: null, status: 'unlinked', source: 'relink', confidence: 'none', reason: 'NO_FACTORY_ROW_MATCH' };
   expect(LineFactoryLinkViewSchema.parse(unlinked)).toEqual(unlinked);
   expect(LineFactoryLinkViewSchema.safeParse({ ...linked, confidence: 'guess' }).success).toBe(false);
   expect(FactoryLinkCountsSchema.parse({ linked: 7000, manual: 2, unlinked: 337 })).toEqual({ linked: 7000, manual: 2, unlinked: 337 });
-  expect(SetLineFactoryLinkRequestSchema.parse({ factoryPartyId: null, reason: '供应商从甲代工厂切到别家' })).toEqual({ factoryPartyId: null, reason: '供应商从甲代工厂切到别家' });
+  expect(SetLineFactoryLinkRequestSchema.parse({ factoryPartyId: null, reason: '供应商从宜侬切到别家' })).toEqual({ factoryPartyId: null, reason: '供应商从宜侬切到别家' });
   expect(SetLineFactoryLinkRequestSchema.safeParse({ reason: '缺主体字段' }).success).toBe(false);
 });
 

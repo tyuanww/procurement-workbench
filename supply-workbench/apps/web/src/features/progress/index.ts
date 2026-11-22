@@ -1,7 +1,5 @@
 export { arrivalPaint, arrivalTableDate, mergeLoadedNotes, progressNote, progressRows, rememberLocalNote, NOTE_READ_ERROR } from './model/rows.js';
 export { progressInsights } from './model/insights.js';
-export { progressMaterialRisks, risksForLine, type ProgressMaterialRisk } from './model/material-risks.js';
-export { matchesProgressDrill, progressDrillKey, progressDrillLabel, readProgressDrill, withProgressDrill, type ProgressDrill } from './model/drill.js';
 export type { LocalNote } from './model/rows.js';
 export type { ProgressArrival, ProgressDue, ProgressLine, ProgressNudge, ProgressRow, ProgressStay, ProgressSupplier } from './model/rows.js';
 export type { ProgressInsight, ProgressStageCount, ProgressStayCount } from './model/insights.js';

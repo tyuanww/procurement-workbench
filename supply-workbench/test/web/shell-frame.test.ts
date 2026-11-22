@@ -105,7 +105,7 @@ describe('壳标记', () => {
     expect(html).toContain('aria-label="打开菜单"');
     expect(html).toContain('44px');
     expect(html).toContain('grid-template-columns:auto minmax(0, 1fr) auto');
-    expect(html).not.toContain('采购工作台');
+    expect(html).not.toContain('SHINEMAGE 供应链工作台');
     expect(html).not.toContain('ant-layout-sider');
   });
 });
@@ -147,7 +147,7 @@ describe('页标题', () => {
     expect(html).toContain('aria-label="打开菜单"');
     expect(html).not.toContain('采购订单总表');
     expect(html).not.toContain('开发登录');
-    expect(html).not.toContain('采购工作台');
+    expect(html).not.toContain('SHINEMAGE 供应链工作台');
     expect(html).toContain('grid-template-columns:auto minmax(0, 1fr) auto');
   });
 

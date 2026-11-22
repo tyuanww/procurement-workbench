@@ -7,7 +7,7 @@ import { must, openProcurementImport, procurementImportClient } from './helpers/
 const original = readFileSync(new URL('../../../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url));
 const XLSX = createRequire(new URL('../../../packages/importers/package.json', import.meta.url))('xlsx');
 const master = '采购订单总表';
-const project = '店铺甲项目进度表';
+const project = '达肤妍项目进度表';
 const updatedDate = '2026-11-18';
 type Api = Awaited<ReturnType<typeof procurementImportClient>>;
 

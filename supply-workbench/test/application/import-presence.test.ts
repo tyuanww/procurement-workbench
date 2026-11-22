@@ -24,7 +24,7 @@ function poRow(id: string, batchId: string): ImportRow {
   return {
     id: entityId(id), importBatchId: entityId(batchId), sheetName: '总表', rowNo: 2, raw: {},
     parsed: {
-      oaDemandRef: cell(null), supplierRaw: cell('甲代工厂'), nameRaw: cell('海葡萄'), barcodeRaw: cell('2000000003023'), qtyOrdered: cell(10),
+      oaDemandRef: cell(null), supplierRaw: cell('宜侬'), nameRaw: cell('海葡萄'), barcodeRaw: cell('2000000003023'), qtyOrdered: cell(10),
       oaSubmittedOn: cell(null), oaRequiredOn: cell(null), plannedDurationDays: cell(null),
       po: cell({ poRaw: 'PO1', poNorm: 'PO1', poFormat: 'OTHER', relatedPoRaws: [] }), actualStartOn: cell(null), firstDeliveryOn: cell(null), actualEndOn: cell(null),
       actualDurationDays: cell(null), factoryStockReported: cell(null), shippedQtyReported: cell(null), qtyDiffReported: cell(null), statusReported: cell('进行中'),

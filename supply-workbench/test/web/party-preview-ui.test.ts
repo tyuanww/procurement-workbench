@@ -43,9 +43,9 @@ describe('跟进台主体预览交互', () => {
     expect(textOf('#search')).toContain('lane=finished');
     expect(textOf('#search')).toContain('page=2');
     expect(textOf('#picked')).toBe('line-1');
-    fulfill({ urlPart: 'party-supplier', status: 200, body: partyBody('party-supplier', '甲代工厂供应链') });
-    await waitFor(() => document.body.textContent?.includes('甲代工厂供应链') === true);
-    expect(document.body.textContent).toContain('甲代工厂原料');
+    fulfill({ urlPart: 'party-supplier', status: 200, body: partyBody('party-supplier', '宜侬供应链') });
+    await waitFor(() => document.body.textContent?.includes('宜侬供应链') === true);
+    expect(document.body.textContent).toContain('宜侬原料');
     expect(document.body.textContent).toContain('应到 4');
     expect(document.querySelector('a[href="/parties/party-supplier"]')?.textContent).toBe('打开主体详情');
     expect(document.body.textContent).not.toContain('保存');
@@ -59,7 +59,7 @@ describe('跟进台主体预览交互', () => {
     expect(closed.get('drawer')).toBeNull();
     expect(textOf('#picked')).toBe('line-1');
     expect(scroller.scrollTop).toBe(180);
-    expect(document.body.textContent).not.toContain('甲代工厂供应链');
+    expect(document.body.textContent).not.toContain('宜侬供应链');
     click(button('工厂预览'));
     fulfill({ urlPart: 'party-factory', status: 200, body: partyBody('party-factory', '代工甲') });
     await waitFor(() => document.body.textContent?.includes('代工甲') === true);
@@ -115,8 +115,8 @@ describe('跟进台主体预览交互', () => {
     const opener = button('供应商预览');
     opener.focus();
     click(opener);
-    fulfill({ urlPart: 'party-supplier', status: 200, body: partyBody('party-supplier', '甲代工厂供应链') });
-    await waitFor(() => document.body.textContent?.includes('甲代工厂供应链') === true);
+    fulfill({ urlPart: 'party-supplier', status: 200, body: partyBody('party-supplier', '宜侬供应链') });
+    await waitFor(() => document.body.textContent?.includes('宜侬供应链') === true);
     await waitFor(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement) === true);
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     await waitFor(() => document.querySelector('[role="dialog"]') === null && document.activeElement === opener);
@@ -126,7 +126,7 @@ describe('跟进台主体预览交互', () => {
 
   it('直接渲染的单元格把主体 id 交给打开函数', () => {
     const opened: OpenParty[] = [];
-    const linked = sampleRow({ supplier: { id: 'party-supplier', displayName: '甲代工厂', rawName: null } });
+    const linked = sampleRow({ supplier: { id: 'party-supplier', displayName: '宜侬', rawName: null } });
     const html = mount(renderLineCell({
       column: 'supplier',
       row: linked,
@@ -156,7 +156,7 @@ function DeskScreen() {
   const party = readPartyPreview(search);
   const row = sampleRow({
     lane: 'finished',
-    supplier: { id: 'party-supplier', displayName: '甲代工厂', rawName: null },
+    supplier: { id: 'party-supplier', displayName: '宜侬', rawName: null },
     factory: { id: 'party-factory', displayName: '代工甲' },
     receiver: null,
   });

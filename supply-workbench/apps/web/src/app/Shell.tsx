@@ -141,7 +141,7 @@ function SearchLayer({ open, onClose }: { readonly open: boolean; readonly onClo
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
-            navigate(`/lines?lane=all&q=${encodeURIComponent(query.trim())}`);
+            navigate(`/lines?q=${encodeURIComponent(query.trim())}`);
             onClose();
           }
         }}

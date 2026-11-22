@@ -7,7 +7,7 @@ import { ManagementMeetingSnapshotSchema } from './management-meeting.js';
 import { nullable, optional, strictObject } from './shape.js';
 import { UserRef } from './refs.js';
 import { EntityIdSchema, LocalDateSchema } from './values.js';
-import { BuyerLoadRowSchema, StuckDistributionSchema, SupplierEventsSchema, SupplierKpiRowSchema } from './dashboard-views.js';
+import { BuyerLoadRowSchema, StuckDistributionSchema, SupplierKpiRowSchema } from './dashboard-views.js';
 
 const weekDelta = <T extends z.ZodType>(value: T) => strictObject({
   value,
@@ -31,7 +31,6 @@ export const WeeklyReportDataSchema: z.ZodType<WeeklyReportData> = strictObject(
   })),
   stuck: StuckDistributionSchema,
   suppliers: z.array(SupplierKpiRowSchema),
-  supplierUnassigned: optional(SupplierEventsSchema),
   buyers: z.array(BuyerLoadRowSchema),
   exceptions: strictObject({ opened: z.number(), closed: z.number() }),
   dueNextWeek: z.array(strictObject({

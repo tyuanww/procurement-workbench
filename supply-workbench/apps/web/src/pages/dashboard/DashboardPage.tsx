@@ -1,16 +1,15 @@
-import { Alert, Button, Empty, Result, Skeleton, Tabs, Typography } from 'antd';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Alert, Button, Empty, Result, Skeleton, Tabs } from 'antd';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
+import { failureText, readFailureOf } from '../../shared/api/reads.js';
 import {
   DASHBOARD_VIEWS,
   buyerView,
   dashboardQuery,
   dashboardSearch,
   loadDashboard,
-  loadStuck,
+  stuckView,
   supplierView,
-  type DashboardLane,
   type DashboardLoad,
   type DashboardPatch,
   type DashboardQuery,
@@ -25,7 +24,6 @@ import { ManagementMeetingPanel } from './ManagementMeetingPanel.js';
 import { DashboardChrome } from './DashboardChrome.js';
 import { StuckPanel } from './StuckPanel.js';
 import { SupplierPanel } from './SupplierPanel.js';
-import { SupplierTrend } from './SupplierTrend.js';
 
 const VIEW_LABEL: Record<DashboardView, string> = {
   stuck: '卡点',
@@ -35,14 +33,14 @@ const VIEW_LABEL: Record<DashboardView, string> = {
   meeting: '管理周会',
 };
 
-type BoardState<T> = {
-  readonly loaded: T | null;
+type BoardState = {
+  readonly loaded: DashboardLoad | null;
   readonly error: string | undefined;
   readonly isUpdating: boolean;
 };
 
-type BoardLoad<T> = {
-  readonly state: BoardState<T>;
+type BoardLoad = {
+  readonly state: BoardState;
   readonly reload: () => void;
 };
 
@@ -50,14 +48,7 @@ export function DashboardPage() {
   const [params, setParams] = useSearchParams();
   const [now] = useState(() => new Date());
   const query = dashboardQuery(params.toString(), now);
-  const { from, to, lane, stage, bucket, cause, card, page, view } = query;
-  const performance = useCallback(() => loadDashboard({ from, to, lane }), [from, to, lane]);
-  const stuck = useCallback(
-    () => loadStuck({ from, to, lane, stage, bucket, cause, card, page }),
-    [from, to, lane, stage, bucket, cause, card, page],
-  );
-  const performanceBoard = useBoardLoad(performance, view === 'suppliers' || view === 'buyers');
-  const stuckBoard = useBoardLoad(stuck, view === 'stuck');
+  const board = useDashboardLoad(query, query.view !== 'meeting');
   const onSearch = (patch: DashboardPatch): void => {
     setParams(dashboardSearch({ current: params.toString(), now, patch }));
   };
@@ -66,49 +57,41 @@ export function DashboardPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         {query.view === 'meeting' ? null : <DashboardChrome query={query} onSearch={onSearch} />}
         <ViewTabs view={query.view} onSearch={onSearch}>
-          {view === 'meeting' ? <ManagementMeetingPanel now={now} /> : view === 'stuck' ? (
-            <BoardBody board={stuckBoard.state} onRetry={stuckBoard.reload}>
-              {(data, isUpdating) => <StuckPanel data={data} query={query} now={now} onSearch={onSearch} isUpdating={isUpdating} />}
-            </BoardBody>
-          ) : view === 'project' ? <ProjectBoard key={`${from}:${to}`} from={from} to={to} /> : (
-            <BoardBody board={performanceBoard.state} onRetry={performanceBoard.reload} keepOnError>
-              {(loaded) => <ActiveView view={view} loaded={loaded} lane={lane} onSearch={onSearch} />}
-            </BoardBody>
-          )}
+          {query.view === 'meeting' ? <ManagementMeetingPanel now={now} /> : <>
+            <BoardNotice board={board.state} />
+            <BoardBody query={query} board={board.state} onSearch={onSearch} onRetry={board.reload} now={now} />
+          </>}
         </ViewTabs>
       </div>
     </WorkbenchPage>
   );
 }
 
-function useBoardLoad<T>(load: () => Promise<T>, isEnabled: boolean): BoardLoad<T> {
-  const [result, setResult] = useState<{
-    readonly load: () => Promise<T>;
-    readonly revision: number;
-    readonly loaded: T | null;
-    readonly error: string | undefined;
-  } | null>(null);
-  const [revision, setRevision] = useState(0);
+function useDashboardLoad(query: Pick<DashboardQuery, 'from' | 'to' | 'lane'>, isEnabled: boolean): BoardLoad {
+  const [board, setBoard] = useState<BoardState>({
+    loaded: null,
+    error: undefined,
+    isUpdating: true,
+  });
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     if (!isEnabled) return;
     let isCurrent = true;
-    load().then(
+    // A period refetch keeps the board on screen. The first load has nothing to keep.
+    setBoard((current) => ({ loaded: current.loaded, error: undefined, isUpdating: true }));
+    loadDashboard({ from: query.from, to: query.to, lane: query.lane }).then(
       (loaded) => {
-        if (isCurrent) setResult({ load, revision, loaded, error: undefined });
+        if (isCurrent) setBoard({ loaded, error: undefined, isUpdating: false });
       },
       (error: unknown) => {
-        if (isCurrent) setResult((previous) => ({ load, revision, loaded: previous?.loaded ?? null, error: boardFailure(error) }));
+        if (isCurrent) setBoard((current) => failBoard(current, error));
       },
     );
     return () => {
       isCurrent = false;
     };
-  }, [load, revision, isEnabled]);
-  const isUpdating = result?.load !== load || result.revision !== revision;
-  return {
-    state: { loaded: result?.loaded ?? null, error: isUpdating ? undefined : result.error, isUpdating },
-    reload: () => setRevision((value) => value + 1),
-  };
+  }, [query.from, query.to, query.lane, reload, isEnabled]);
+  return { state: board, reload: () => setReload((value) => value + 1) };
 }
 
 function boardFailure(error: unknown): string {
@@ -116,7 +99,15 @@ function boardFailure(error: unknown): string {
   return failure === null ? '看板没有载入' : failureText(failure);
 }
 
-function BoardNotice(props: { readonly board: BoardState<unknown> }) {
+function failBoard(current: BoardState, error: unknown): BoardState {
+  return {
+    loaded: current.loaded,
+    error: boardFailure(error),
+    isUpdating: false,
+  };
+}
+
+function BoardNotice(props: { readonly board: BoardState }) {
   if (props.board.loaded !== null && props.board.isUpdating) {
     return (
       <p role="status" style={{ margin: 0, color: text.secondary, fontSize: fontSize.body }}>
@@ -129,19 +120,20 @@ function BoardNotice(props: { readonly board: BoardState<unknown> }) {
   return null;
 }
 
-function BoardBody<T>(props: {
-  readonly board: BoardState<T>;
+function BoardBody(props: {
+  readonly query: DashboardQuery;
+  readonly board: BoardState;
+  readonly onSearch: (patch: DashboardPatch) => void;
   readonly onRetry: () => void;
-  readonly children: (loaded: T, isUpdating: boolean) => ReactNode;
-  readonly keepOnError?: boolean;
+  readonly now: Date;
 }) {
-  const { loaded, error, isUpdating } = props.board;
-  if (error !== undefined && (loaded === null || !props.keepOnError)) {
+  if (props.board.loaded === null) {
+    if (props.board.error === undefined) return <Skeleton active paragraph={{ rows: 8 }} />;
     return (
       <Result
         status="error"
         title="看板没有读出来"
-        subTitle={error}
+        subTitle={props.board.error}
         extra={[
           <Button key="retry" type="primary" onClick={props.onRetry}>重试</Button>,
           <Button key="back" onClick={() => window.history.back()}>返回</Button>,
@@ -149,54 +141,57 @@ function BoardBody<T>(props: {
       />
     );
   }
-  if (loaded === null) return <Skeleton active paragraph={{ rows: 8 }} />;
-  return <>
-    <BoardNotice board={props.board} />
-    {props.children(loaded, isUpdating)}
-  </>;
+  return <ActiveView query={props.query} loaded={props.board.loaded} onSearch={props.onSearch} now={props.now} />;
 }
 
 function ActiveView(props: {
-  readonly view: 'suppliers' | 'buyers';
-  readonly lane: DashboardLane;
+  readonly query: DashboardQuery;
   readonly loaded: DashboardLoad;
   readonly onSearch: (patch: DashboardPatch) => void;
+  readonly now: Date;
 }) {
-  if (props.view === 'suppliers') return <SupplierBoard loaded={props.loaded} lane={props.lane} onSearch={props.onSearch} />;
-  return <BuyerBoard loaded={props.loaded} onSearch={props.onSearch} />;
+  if (props.query.view === 'suppliers') return <SupplierBoard loaded={props.loaded} onSearch={props.onSearch} />;
+  if (props.query.view === 'buyers') return <BuyerBoard loaded={props.loaded} onSearch={props.onSearch} />;
+  if (props.query.view === 'project') return <ProjectProgressPanel project={props.loaded.project} />;
+  return <StuckBoard query={props.query} loaded={props.loaded} onSearch={props.onSearch} now={props.now} />;
 }
 
-function ProjectBoard({ from, to }: Pick<DashboardQuery, 'from' | 'to'>) {
-  const load = useCallback(() => read({ name: 'planProgress', from, to }), [from, to]);
-  const board = useBoardLoad(load, true);
-  return <BoardBody board={board.state} onRetry={board.reload}>
-    {(project) => <ProjectProgressPanel project={project} onChanged={board.reload} />}
-  </BoardBody>;
-}
-
-function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly lane: DashboardLane; readonly onSearch: (patch: DashboardPatch) => void }) {
+function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly onSearch: (patch: DashboardPatch) => void }) {
   const rows = supplierView({ rows: props.loaded.suppliers });
-  const unassigned = props.loaded.supplierUnassigned;
-  const hasUnassigned = unassigned !== undefined && unassigned.dateChanges + unassigned.openExceptions > 0;
-  if (rows.length === 0 && !hasUnassigned) return <Empty description="这段时间没有供应商数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
+  if (rows.length === 0) return <Empty description="这段时间没有供应商数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
       <SupplierRateChart inputs={props.loaded.suppliers} />
-      <SupplierTrend suppliers={props.loaded.suppliers} lane={props.lane} />
-      {hasUnassigned ? <Typography.Text type="secondary">未归属改期 {unassigned.dateChanges} 条 · 未归属开放异常 {unassigned.openExceptions} 条</Typography.Text> : null}
       <SupplierPanel rows={rows} />
     </div>
   );
 }
 
 function BuyerBoard(props: { readonly loaded: DashboardLoad; readonly onSearch: (patch: DashboardPatch) => void }) {
-  const rows = buyerView({ rows: props.loaded.buyers, lane: props.loaded.buyerLane });
-  if (rows.length === 0 && (props.loaded.unassignedExceptions ?? 0) === 0) return <Empty description="这段时间没有采购负荷数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
+  const rows = buyerView({ rows: props.loaded.buyers });
+  if (rows.length === 0) return <Empty description="这段时间没有采购负荷数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <BuyerLoadSummary inputs={props.loaded.buyers} />
-      <BuyerPanel rows={rows} unassignedExceptions={props.loaded.unassignedExceptions} lane={props.loaded.buyerLane} />
+      <BuyerLoadSummary inputs={props.loaded.buyers} unassignedExceptions={props.loaded.unassignedExceptions} />
+      <BuyerPanel rows={rows} unassignedExceptions={props.loaded.unassignedExceptions} />
     </div>
+  );
+}
+
+function StuckBoard(props: { readonly query: DashboardQuery; readonly loaded: DashboardLoad; readonly onSearch: (patch: DashboardPatch) => void; readonly now: Date }) {
+  return (
+    <StuckPanel
+      cards={props.loaded.cards}
+      stuck={stuckView({ items: props.loaded.stuckItems, distribution: props.loaded.distribution, stage: props.query.stage, bucket: props.query.bucket, cause: props.query.cause })}
+      items={props.loaded.stuckItems}
+      from={props.query.from}
+      to={props.query.to}
+      stage={props.query.stage}
+      bucket={props.query.bucket}
+      cause={props.query.cause}
+      onSearch={props.onSearch}
+      now={props.now}
+    />
   );
 }
 

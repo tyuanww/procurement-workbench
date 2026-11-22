@@ -7,7 +7,7 @@ import type { WorkbookLike } from '../../packages/application/src/ports/workbook
 const context = { uploadedAt: '2026-11-09T00:00:00.000Z', factoryPartyId: null };
 
 const base: Readonly<Record<string, string>> = {
-  供应商: '甲代工厂',
+  供应商: '宜侬',
   产品名称: '海葡萄水光冰冰贴',
   产品条码: '2000000003023',
   订单数量: '10',
@@ -16,7 +16,7 @@ const base: Readonly<Record<string, string>> = {
 };
 
 it('可选列采购负责人和工厂被识别，不算多余列', () => {
-  const book = bookOf([...REQUIRED_COLUMNS, '采购负责人', '工厂'], { ...base, 采购负责人: '采购甲', 工厂: '甲代工厂' });
+  const book = bookOf([...REQUIRED_COLUMNS, '采购负责人', '工厂'], { ...base, 采购负责人: '采购甲', 工厂: '宜侬' });
   const detected = template.detect(book);
   expect(detected.score).toBe(100);
   expect(detected.reasons).toContain('识别可选列 采购负责人');
@@ -24,7 +24,7 @@ it('可选列采购负责人和工厂被识别，不算多余列', () => {
   expect(detected.reasons.some((reason) => reason.includes('忽略多余列'))).toBe(false);
   const row = template.parse(book, context).rows[0];
   expect(row?.payload.ownerRaw).toEqual({ raw: '采购甲', value: '采购甲' });
-  expect(row?.payload.factoryRaw).toEqual({ raw: '甲代工厂', value: '甲代工厂' });
+  expect(row?.payload.factoryRaw).toEqual({ raw: '宜侬', value: '宜侬' });
 });
 
 it('没有可选列时值为 null，不影响 17 列识别', () => {

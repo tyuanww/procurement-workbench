@@ -17,7 +17,7 @@ type WritableKeys<T> = {
 it('vocabulary、values、entities 的导出名和这份清单一致', () => {
   expect(Object.keys(vocabulary).sort()).toEqual(VOCABULARY_EXPORTS);
   expect(Object.keys(values).sort()).toEqual(VALUE_EXPORTS);
-  expect(Object.keys(entities).sort()).toEqual(['ENTITY_TYPE_NAMES', 'hasWorkItemDependencyConflict']);
+  expect(Object.keys(entities).sort()).toEqual(['ENTITY_TYPE_NAMES']);
   expect([...ENTITY_TYPE_NAMES].sort()).toEqual([...ENTITY_TYPE_NAMES_EXPECTED].sort());
 });
 

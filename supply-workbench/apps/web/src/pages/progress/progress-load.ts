@@ -1,14 +1,12 @@
 import { LatestNotesSchema, type OrderLineRow, type ProcurementStore, type TodayResponse, type TodoItemView } from '@sw/contracts';
 import { apiSend } from '../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import { mergeLoadedNotes, NOTE_READ_ERROR, progressMaterialRisks, progressRows, risksForLine, type LocalNote, type ProgressLine, type ProgressMaterialRisk, type ProgressNudge, type ProgressRow } from '../../features/progress/index.js';
-import { progressActionSource } from './progress-action-source.js';
+import { mergeLoadedNotes, NOTE_READ_ERROR, progressRows, type LocalNote, type ProgressLine, type ProgressNudge, type ProgressRow } from '../../features/progress/index.js';
 
 export type ProgressData = {
   readonly rows: readonly ProgressRow[];
   readonly lines: ReadonlyMap<string, OrderLineRow>;
   readonly arrivalMemos: TodayResponse['arrivalMemos'];
-  readonly actionNotice: string;
 };
 
 const PROGRESS_PAGE_SIZE = 200;
@@ -35,14 +33,11 @@ export async function loadProgress(
   input: { readonly store: ProcurementStore; readonly isMine: boolean; readonly current: number; readonly latest: () => number; readonly local: () => readonly LocalNote[]; readonly setData: (data: ProgressData) => void; readonly setNotes: (notes: Readonly<Record<string, string>>) => void; readonly setError: (message: string) => void },
 ) { const { current, latest, local, setData, setNotes, setError } = input;
   try {
-    const [lines, today] = await Promise.all([loadProgressLines(input), read({ name: 'today', scope: 'all' })]);
-    if (current !== latest()) return;
-    const actions = await progressActionSource(today);
+    const [lines, today] = await Promise.all([loadProgressLines(input), read({ name: 'today', scope: input.isMine ? 'mine' : 'all' })]);
     if (current !== latest()) return;
     const byId = new Map(lines.map((line) => [line.id, line]));
-    const risks = progressMaterialRisks(actions.items);
-    const rows = progressRows({ lines: [...byId.values()].map((line) => toLine(line, risksForLine(line, risks))), nudges: actions.items.flatMap(toNudge) });
-    setData({ rows, lines: byId, arrivalMemos: today.arrivalMemos, actionNotice: actions.notice });
+    const rows = progressRows({ lines: [...byId.values()].map(toLine), nudges: today.items.flatMap(toNudge) });
+    setData({ rows, lines: byId, arrivalMemos: today.arrivalMemos });
     const saved = await loadSavedNotes(rows);
     if (current !== latest()) return;
     setNotes(mergeLoadedNotes({ loaded: saved.notes, local: local(), generation: current }));
@@ -79,14 +74,13 @@ async function loadSavedNotes(rows: readonly ProgressRow[]): Promise<{ readonly 
   }
 }
 
-function toLine(row: OrderLineRow, materialRisks: readonly ProgressMaterialRisk[]): ProgressLine {
+function toLine(row: OrderLineRow): ProgressLine {
   return {
     id: row.id,
     nameRaw: row.nameRaw,
     poRaw: row.po.poRaw,
     stage: row.stage,
     daysInStage: row.daysInStage,
-    materialRisks,
     supplier: { displayName: row.supplier.displayName, rawName: row.supplier.rawName },
     nextDue: row.nextDue === null ? null : {
       dateBuyerConfirmed: row.nextDue.dateBuyerConfirmed,

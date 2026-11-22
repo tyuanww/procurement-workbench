@@ -122,8 +122,8 @@ function pendingAlias(): PartyAliasView {
 function approvedAlias(): PartyAliasView {
   return {
     id: 'alias-1',
-    rawName: '甲代工厂',
-    normName: '甲代工厂',
+    rawName: '宜侬',
+    normName: '宜侬',
     partyId: 'party-1',
     status: 'approved',
     firstSeenImportBatchId: null,

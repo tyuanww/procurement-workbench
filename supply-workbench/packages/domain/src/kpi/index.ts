@@ -27,12 +27,6 @@ export type BuyerLoad = {
 
 export type KpiFollowUp = { readonly buyerUserId: EntityId; readonly on: LocalDate };
 
-export const STUCK_BUCKETS = ['0-3', '4-7', '8-14', '15+'] as const;
-export type StuckBucket = (typeof STUCK_BUCKETS)[number];
-
-export const STUCK_CAUSES = ['missing_owner', 'missing_factory', 'supplier_pending', 'missing_date', 'exception_open', 'aged_15', 'bom_missing', 'factory_demand_unlinked'] as const;
-export type StuckCause = (typeof STUCK_CAUSES)[number];
-
 const DAYS_PER_WEEK = 7;
 const SERIES_LENGTH = 8;
 
@@ -41,16 +35,8 @@ export function dueBatches(input: KpiInput): KpiMeasure {
 }
 
 export function onTimeRate(input: KpiInput): KpiMeasure {
-  const concluded = concludedDueBatches(input);
+  const concluded = input.batches.filter((batch) => inDueSet(batch, input) && hasConclusion(batch, input.today));
   return rate(concluded.filter(isOnTime).length, concluded.length);
-}
-
-export function onTimeBatchResults(input: KpiInput) {
-  return concludedDueBatches(input).map((batch) => ({ batch, onTime: isOnTime(batch), lastReceivedOn: lastReceipt(batch) }));
-}
-
-function concludedDueBatches(input: KpiInput): KpiBatch[] {
-  return input.batches.filter((batch) => inDueSet(batch, input) && hasConclusion(batch, input.today));
 }
 
 export function averageDelay(input: KpiInput): KpiMeasure {
@@ -59,11 +45,7 @@ export function averageDelay(input: KpiInput): KpiMeasure {
 }
 
 export function currentlyOverdue(input: KpiInput): KpiMeasure {
-  return count(input.batches.filter((batch) => isCurrentlyOverdue(batch, input.today)).length);
-}
-
-export function isCurrentlyOverdue(batch: KpiBatch, today: LocalDate): boolean {
-  return isOpenBatch(batch.status) && isBefore(batch.dateBuyerConfirmed, today);
+  return count(input.batches.filter((batch) => isOpenBatch(batch.status) && isBefore(batch.dateBuyerConfirmed, input.today)).length);
 }
 
 export function dateChangeCount(input: KpiInput): KpiMeasure {
@@ -137,7 +119,7 @@ function loadOf({ buyerUserId, input, followUps }: { readonly buyerUserId: Entit
     buyerUserId,
     openLines: input.lines.filter((line) => line.buyerUserId === buyerUserId && isInFollowStage(line.stage)).length,
     openBatches: open.length,
-    overdue: own.filter((batch) => isCurrentlyOverdue(batch, input.today)).length,
+    overdue: open.filter((batch) => isBefore(batch.dateBuyerConfirmed, input.today)).length,
     dueToday: open.filter((batch) => batch.dateBuyerConfirmed === input.today).length,
     missingDate: open.filter((batch) => batch.status === 'awaiting_date').length,
     openExceptions: input.exceptions.filter((item) => item.status === 'open' && item.buyerUserId === buyerUserId).length,
@@ -179,7 +161,7 @@ function noteDelay(batch: KpiBatch, input: KpiInput): number[] {
   return [diffDays(batch.noteReturnedOn, first)];
 }
 
-export function stuckBucket(days: number): StuckBucket {
+function stuckBucket(days: number): string {
   const [short, medium, long] = STUCK_BUCKET_MAX_DAYS;
   if (days <= short) return '0-3';
   if (days <= medium) return '4-7';

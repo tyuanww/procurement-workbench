@@ -6,7 +6,7 @@ import { must, openProcurementImport, procurementImportClient } from './helpers/
 import { loginAs } from './helpers/server.js';
 
 const XLSX = createRequire(new URL('../../../packages/importers/package.json', import.meta.url))('xlsx');
-const PROJECT = '店铺甲项目进度表';
+const PROJECT = '达肤妍项目进度表';
 const ORIGINAL = procurementWithUnit();
 const COMPONENT_SUPPLIER = '测试供应商 D';
 const ARCHIVE_SUPPLIER = '测试供应商 H';

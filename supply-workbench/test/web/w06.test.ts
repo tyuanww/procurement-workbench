@@ -13,9 +13,9 @@ describe('主数据审核', () => {
     expect(multiNameChoice('shared_code', '')).toEqual({ mode: 'shared_code' });
     expect(PARTY_TABS).toEqual(['aliases', 'orders', 'factory', 'kpis']);
     expect(PARTY_TABS.map((tab) => partyTabLabel(tab))).toEqual(['别名', '订单', '代工厂', '指标']);
-    expect(linkNeedsConfirm({ rawName: '甲包装厂', partyName: '甲代工厂', confirmed: false })).toBe(true);
-    expect(linkNeedsConfirm({ rawName: '甲包装厂', partyName: '甲代工厂', confirmed: true })).toBe(false);
-    expect(linkNeedsConfirm({ rawName: '甲代工厂', partyName: '甲代工厂', confirmed: false })).toBe(false);
+    expect(linkNeedsConfirm({ rawName: '怡龙', partyName: '宜侬', confirmed: false })).toBe(true);
+    expect(linkNeedsConfirm({ rawName: '怡龙', partyName: '宜侬', confirmed: true })).toBe(false);
+    expect(linkNeedsConfirm({ rawName: '宜侬', partyName: '宜侬', confirmed: false })).toBe(false);
     expect(roleChoice({ isSupplier: false, isFactory: false })).toBeNull();
     expect(roleChoice({ isSupplier: true, isFactory: false })).toEqual({ isSupplier: true, isFactory: false });
   });

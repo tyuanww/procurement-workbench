@@ -51,15 +51,6 @@ export function isOpenWorkItemStatus(status: WorkItemStatus): boolean {
   return OPEN_WORK_ITEM_STATUSES.some((open) => open === status);
 }
 
-export function hasWorkItemDependencyConflict(input: {
-  readonly kind: DependencyKind;
-  readonly predecessorStatus: WorkItemStatus;
-  readonly successorStatus: WorkItemStatus;
-}): boolean {
-  return input.kind === 'finish_to_start' && input.predecessorStatus === 'blocked' &&
-    (input.successorStatus === 'in_progress' || input.successorStatus === 'blocked');
-}
-
 export type WorkItem = EntityMeta & {
   readonly subjectType: WorkItemSubjectType;
   /** standalone 时为 null；否则是订单行、批次或新品项目 id。 */

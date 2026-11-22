@@ -40,7 +40,7 @@ it('排产重跑只写活动排产格，已关联不改挂，六类重跑和数�
 
 async function seed(fixture: PgFixture): Promise<void> {
   await fixture.uow.run(async (tx) => {
-    await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '甲代工厂', isSupplier: true, isFactory: true }));
+    await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '宜侬', isSupplier: true, isFactory: true }));
     await tx.parties.save(aParty({ id: entityId('factory-2'), displayName: '另一厂', isSupplier: true, isFactory: true }));
     await tx.users.save(aUser({ id: entityId('admin-1'), name: '管理员', roles: ['admin'] }));
     await tx.purchaseOrders.save(aPurchaseOrder({ id: entityId('po-1'), poRaw: 'PO1', poNorm: 'PO1', poFormat: 'OTHER' }));

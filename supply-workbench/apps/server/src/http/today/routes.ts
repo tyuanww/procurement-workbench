@@ -28,7 +28,6 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
       ...(reasons === undefined ? {} : { reasons }),
       sort: sortQuery(raw),
       ...(raw.factoryId === undefined ? {} : { factoryId: raw.factoryId }),
-      ...(raw.itemId === undefined ? {} : { itemId: raw.itemId }),
     });
     return wire(TodayChaseResponseSchema, await api.getToday.chase(input, requireActor(req)));
   });

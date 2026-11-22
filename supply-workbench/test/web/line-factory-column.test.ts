@@ -14,7 +14,7 @@ describe('跟进台工厂列', () => {
   });
 
   it('有工厂显示名字，未关联或没有工厂字段都显示未关联，不造假名字', () => {
-    expect(factoryCell(rowWith({ id: 'factory-1', displayName: '甲代工厂' }))).toEqual({ kind: 'text', text: '甲代工厂' });
+    expect(factoryCell(rowWith({ id: 'factory-1', displayName: '宜侬' }))).toEqual({ kind: 'text', text: '宜侬' });
     expect(factoryCell(rowWith(null))).toEqual({ kind: 'text', text: '未关联' });
     expect(factoryCell(rowWithoutFactory())).toEqual({ kind: 'text', text: '未关联' });
     expect(factoryCell(rowWith({ id: 'factory-1', displayName: null }))).toEqual({ kind: 'text', text: '未关联' });
@@ -22,7 +22,7 @@ describe('跟进台工厂列', () => {
 
   it('契约里 factory 是可选字段，缺失或 null 都能解析', () => {
     expect(rowWithoutFactory().factory).toBeUndefined();
-    expect(rowWith({ id: 'factory-1', displayName: '甲代工厂' }).factory).toEqual({ id: 'factory-1', displayName: '甲代工厂' });
+    expect(rowWith({ id: 'factory-1', displayName: '宜侬' }).factory).toEqual({ id: 'factory-1', displayName: '宜侬' });
     expect(rowWith(null).factory).toBeNull();
   });
 });
@@ -47,7 +47,7 @@ function baseRow() {
     nameRaw: '面膜',
     itemCodeRaw: null,
     barcodeRaw: null,
-    supplier: { id: null, displayName: '样例供应商37', rawName: null },
+    supplier: { id: null, displayName: '样例供应商35', rawName: null },
     receiver: null,
     qtyOrdered: 10,
     receivedQty: 1,

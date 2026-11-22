@@ -4,15 +4,15 @@ import { todoReasonText } from '../../packages/domain/src/index.js';
 import { dateChangeErrors, exceptionErrors, followUpErrors, receiptDefaults, receiptErrors, shipmentDefaults, shipmentErrors } from '../../apps/web/src/features/follow-up/record-forms/defaults.js';
 
 const rows: TodoRow[] = [
-  { id: 'a', severity: 1, overdueDays: 1, dueDate: '2026-10-10', lineId: 'l2', waitingName: '甲代工厂', reasons: ['overdue'] },
-  { id: 'b', severity: 3, overdueDays: 4, dueDate: '2026-10-07', lineId: 'l1', waitingName: '甲代工厂', reasons: ['overdue', 'due_today'] },
-  { id: 'c', severity: 2, overdueDays: null, dueDate: null, lineId: 'l3', waitingName: '样例供应商36', reasons: ['missing_date'] },
+  { id: 'a', severity: 1, overdueDays: 1, dueDate: '2026-10-10', lineId: 'l2', waitingName: '宜侬', reasons: ['overdue'] },
+  { id: 'b', severity: 3, overdueDays: 4, dueDate: '2026-10-07', lineId: 'l1', waitingName: '宜侬', reasons: ['overdue', 'due_today'] },
+  { id: 'c', severity: 2, overdueDays: null, dueDate: null, lineId: 'l3', waitingName: '样例供应商34', reasons: ['missing_date'] },
 ];
 
 describe('今日分组和表单', () => {
   it('按严重度、逾期、到期日排序，再按等待方分组', () => {
     expect(sortTodos(rows).map((row) => row.id)).toEqual(['b', 'c', 'a']);
-    expect(groupByWaiting(rows).map((group) => group.name)).toEqual(['甲代工厂', '样例供应商36']);
+    expect(groupByWaiting(rows).map((group) => group.name)).toEqual(['宜侬', '样例供应商34']);
     expect(filterReasons(rows, ['missing_date']).map((row) => row.id)).toEqual(['c']);
   });
 
@@ -44,7 +44,7 @@ describe('今日分组和表单', () => {
   });
 
   it('等键保持输入顺序，行号更小的在前，空日期排在有日期之后', () => {
-    const tie = { severity: 2, overdueDays: 3, dueDate: '2026-10-08', lineId: 'l9', waitingName: '甲代工厂', reasons: ['overdue'] };
+    const tie = { severity: 2, overdueDays: 3, dueDate: '2026-10-08', lineId: 'l9', waitingName: '宜侬', reasons: ['overdue'] };
     const left = { ...tie, id: 'left' };
     const right = { ...tie, id: 'right' };
     expect(sortTodos([left, right]).map((row) => row.id)).toEqual(['left', 'right']);

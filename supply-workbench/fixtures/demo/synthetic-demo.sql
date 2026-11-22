@@ -14,7 +14,7 @@ DELETE FROM parties WHERE id LIKE 'demo-%';
 WITH aliases AS (
   SELECT raw_name, row_number() OVER (ORDER BY raw_name) AS rn
   FROM party_aliases
-  WHERE raw_name <> '甲代工厂'
+  WHERE raw_name <> '宜侬'
 )
 INSERT INTO parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse, note)
 SELECT 'demo-sup-' || lpad(rn::text, 2, '0'), now(), now(), raw_name, true, false, false, 'demo supplier'

@@ -19,10 +19,10 @@ describe('产品资料模板', () => {
     const named = templateCells(catalogTemplate({
       skuName: '冰冰贴',
       barcodeRaw: '6901',
-      filingName: '店铺甲海葡萄水光冰冰贴',
+      filingName: '示例商品37',
       thumbnail: null,
     }));
-    expect(named.find((cell) => cell.label === '备案名称')?.value).toBe('店铺甲海葡萄水光冰冰贴');
+    expect(named.find((cell) => cell.label === '备案名称')?.value).toBe('示例商品37');
     expect(named.find((cell) => cell.label === '供应商')?.value).toBe('待补充');
     expect(named.find((cell) => cell.label === '周期')?.value).toBe('待补充');
     const blank = templateCells(catalogTemplate({

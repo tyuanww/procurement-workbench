@@ -52,7 +52,7 @@ it('周报、今日、搜索、看板、审核计数的顶层字段和 05 一致
   lock<WeeklyReport>()(['id', 'weekStart', 'weekEnd', 'generatedAt', 'generatedBy', 'supersededBy', 'dataWatermark', 'data']);
   lock<TodayResponse>()(['asOf', 'counts', 'items', 'pendingBatch', 'arrivalMemos', 'truncated']);
   lock<SearchResult>()(['lines', 'products', 'parties']);
-  lock<StuckDashboard>()(['asOf', 'kpis', 'distribution', 'causeCounts', 'total', 'page', 'pageSize', 'items']);
+  lock<StuckDashboard>()(['kpis', 'distribution', 'items']);
   lock<ReviewCounts>()(['aliases', 'codes', 'links', 'multiName']);
   lock<MultiNameView>()(['codeId', 'codeRaw', 'names']);
   lock<FreshnessResponse>()(['sources']);

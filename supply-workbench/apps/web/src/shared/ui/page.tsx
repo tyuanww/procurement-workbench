@@ -56,7 +56,7 @@ export function PageHeader(input: {
 
 export function usePageTitle(title: string): void {
   useEffect(() => {
-    document.title = `${title} | 采购工作台`;
+    document.title = `${title} | SHINEMAGE 供应链工作台`;
   }, [title]);
 }
 

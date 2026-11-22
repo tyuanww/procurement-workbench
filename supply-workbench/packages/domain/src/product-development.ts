@@ -1,4 +1,4 @@
-export const PRODUCT_DEVELOPMENT_STORES = ['store_a', 'store_b'] as const;
+export const PRODUCT_DEVELOPMENT_STORES = ['dafuyan', 'yiling'] as const;
 export type ProductDevelopmentStore = (typeof PRODUCT_DEVELOPMENT_STORES)[number];
 
 export const DEVELOPMENT_DESTINATIONS = [

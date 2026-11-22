@@ -9,7 +9,6 @@ import {
   DailyPlanSchema,
   GenerateWorkItemsRequestSchema,
   GenerateWorkItemsResultSchema,
-  ProjectProgressQuerySchema,
   SchedulePlanQuerySchema,
   ProjectProgressSchema,
   ScheduleViewSchema,
@@ -59,7 +58,7 @@ export function registerPlanRoutes(app: FastifyInstance, api: PlanApi): void {
   });
   app.get('/api/v1/plan/daily', async (req) => wire(DailyPlanSchema, await api.daily(parse(DailyPlanQuerySchema, req.query), requireActor(req))));
   app.get('/api/v1/plan/schedule', async (req) => wire(ScheduleViewSchema, await api.schedule(parse(SchedulePlanQuerySchema, req.query), requireActor(req))));
-  app.get('/api/v1/plan/progress', async (req) => wire(ProjectProgressSchema, await api.progress(parse(ProjectProgressQuerySchema, req.query), requireActor(req))));
+  app.get('/api/v1/plan/progress', async (req) => wire(ProjectProgressSchema, await api.progress(parse(SchedulePlanQuerySchema, req.query), requireActor(req))));
 }
 
 function idOf(req: FastifyRequest): z.output<typeof EntityIdSchema> {

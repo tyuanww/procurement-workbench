@@ -129,10 +129,10 @@ it('从在途行新建订单行，并挂上这条上报', async () => {
     kind: 'in_transit',
     sheetName: '在途订单汇总',
     inTransit: {
-      poRaw: 'PO20260827000034',
-      poNorm: 'PO20260827000034',
+      poRaw: 'PO20260827000032',
+      poNorm: 'PO20260827000032',
       nameRaw: '海葡萄',
-      itemCodeRaw: '70007024',
+      itemCodeRaw: '70007022',
       barcodeRaw: null,
       qtyRequired: 18,
     },

@@ -196,9 +196,8 @@ function LineFilters(props: { readonly search: string; readonly desk: Desk; read
   return (
     <div style={filterRowStyle()}>
       <Segmented
-        aria-label="订单线别"
         value={props.desk.lane}
-        options={[{ label: '成品线', value: 'finished' }, { label: '物料线', value: 'material' }, { label: '全部线', value: 'all' }]}
+        options={[{ label: '成品线', value: 'finished' }, { label: '物料线', value: 'material' }]}
         onChange={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'lane', value } }))}
       />
       <div style={filterBoxStyle()}>

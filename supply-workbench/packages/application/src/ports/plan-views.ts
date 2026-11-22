@@ -90,19 +90,11 @@ export type WorkItemDependencyView = {
   readonly createdAt: string;
 };
 
-export type WorkItemPredecessor = Pick<WorkItemView, 'id' | 'title' | 'plannedEnd' | 'status'>;
-
-export type IncomingWorkItemDependency = WorkItemDependencyView & {
-  readonly predecessor: WorkItemPredecessor | null;
-};
-
-export type WorkItemDependencyConflicts = Readonly<Record<string, readonly WorkItemPredecessor[]>>;
-
 export type WorkItemDetailView = {
   readonly item: WorkItemView;
   readonly events: readonly WorkItemEventView[];
   readonly dependenciesOut: readonly WorkItemDependencyView[];
-  readonly dependenciesIn: readonly IncomingWorkItemDependency[];
+  readonly dependenciesIn: readonly WorkItemDependencyView[];
 };
 
 export type PlanGroupView = {
@@ -128,7 +120,6 @@ export type ScheduleView = {
   readonly to: LocalDate;
   readonly total: number;
   readonly items: readonly WorkItemView[];
-  readonly dependencyConflicts: WorkItemDependencyConflicts;
 };
 
 export type DailyPlanQuery = {

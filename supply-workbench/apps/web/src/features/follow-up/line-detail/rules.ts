@@ -29,3 +29,4 @@ export function timelineLineText(event: { readonly kind: TimelineKind; readonly 
   if (event.voided) return `${label} 已作废`;
   return `${label} ${formatDateTime(event.at) ?? UNREADABLE_TIME}`;
 }
+

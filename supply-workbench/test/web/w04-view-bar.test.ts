@@ -17,7 +17,7 @@ describe('跟进台视图条', () => {
     expect(html).toContain('ant-radio-button-wrapper');
     expect(html).toContain('我的逾期');
     expect(html).toContain('未建要货');
-    expect(html).toContain('甲代工厂在途');
+    expect(html).toContain('宜侬在途');
     expect(html).toContain('保存当前视图');
     expect(html).toContain('导出 Excel');
     expect(html).toContain('>列<');
@@ -86,43 +86,6 @@ describe('密度切换', () => {
 });
 
 describe('已修改状态', () => {
-  it('甲代工厂在途沿用当前线别，可以叠加搜索并保存筛选', () => {
-    const view = presetViews().find((item) => item.id === 'factory_a');
-    if (view === undefined) throw new Error('缺少甲代工厂在途');
-    const address = viewAddress({ search: 'lane=material&page=3&density=middle', view });
-    const desk = readDesk(address.toString());
-    expect(desk.lane).toBe('material');
-    expect(desk.q).toBe('');
-    expect(new URLSearchParams(desk.requestQuery)).toEqual(new URLSearchParams('lane=material&inTransitFactory=factory_a&page=1&pageSize=50'));
-    expect(isViewModified({ search: address.toString(), view })).toBe(false);
-    expect(isViewModified({ search: `${address}&q=纸盒`, view })).toBe(true);
-    expect(saveAddress(`${address}&q=纸盒`)).toBe('inTransitFactory=factory_a&lane=material&q=%E7%BA%B8%E7%9B%92');
-    const exported = new URL(exportAddress({ query: desk.requestQuery, columns: COLUMNS }), 'http://localhost');
-    expect(exported.searchParams.get('inTransitFactory')).toBe('factory_a');
-    expect(exported.searchParams.get('lane')).toBe('material');
-    expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=material&density=middle');
-  });
-
-  it('旧甲代工厂预设链接升级，普通甲代工厂搜索和已存的线别仍按原意使用', () => {
-    const view = presetViews().find((item) => item.id === 'factory_a');
-    if (view === undefined) throw new Error('缺少甲代工厂在途');
-    const factoryQuery = `q=${encodeURIComponent('甲代工厂')}`;
-    const legacy = `lane=material&view=factory_a&${factoryQuery}`;
-    expect(readDesk(legacy).q).toBe('');
-    expect(new URLSearchParams(readDesk(legacy).requestQuery).get('inTransitFactory')).toBe('factory_a');
-    expect(isViewModified({ search: legacy, view })).toBe(false);
-    expect(saveAddress(legacy)).toBe('lane=material&inTransitFactory=factory_a');
-    const custom = { id: 'custom', label: '品名搜索', query: `lane=finished&${factoryQuery}` };
-    const opened = readDesk(viewAddress({ search: 'lane=material', view: custom }).toString());
-    expect(opened.lane).toBe('finished');
-    expect(opened.q).toBe('甲代工厂');
-    expect(new URLSearchParams(opened.requestQuery).has('inTransitFactory')).toBe(false);
-    const legacySaved = { ...custom, query: factoryQuery };
-    const reopened = readDesk(viewAddress({ search: 'lane=material', view: legacySaved }).toString());
-    expect(reopened.lane).toBe('all');
-    expect(reopened.q).toBe('甲代工厂');
-  });
-
   it('筛选偏离选中视图时是已修改，页码和显示设置不算', () => {
     const view = presetViews()[1];
     if (view === undefined) throw new Error('缺少预设视图');
@@ -131,7 +94,7 @@ describe('已修改状态', () => {
     expect(isViewModified({ search: `stage=no_batch&q=面膜&view=${view.id}`, view })).toBe(true);
     expect(isViewModified({ search: 'stage=no_batch', view: undefined })).toBe(false);
     expect(filterSignature('page=2&pageSize=50&density=middle&hide=po&view=x&q=面膜')).toBe('q=面膜');
-    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C&lane=finished');
+    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C');
     expect(clearFiltersAddress('stage=no_batch&view=x&density=middle&hide=received&page=2').toString()).toBe('density=middle&hide=received');
   });
 
@@ -143,7 +106,6 @@ describe('已修改状态', () => {
     expect(modified.replace(/\s+/g, '')).toContain('清除');
     const clean = render(LineViewBar, viewBarProps({ search: `stage=no_batch&view=${view.id}` }));
     expect(clean).not.toContain('已修改');
-    expect(clean).toContain('退出视图');
     const address = viewAddress({ search: `stage=no_batch&q=面膜&density=middle&hide=received&view=${view.id}`, view });
     expect(address.toString()).toBe('stage=no_batch&density=middle&hide=received&view=no-batch');
   });

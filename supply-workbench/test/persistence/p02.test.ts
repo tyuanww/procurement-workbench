@@ -97,12 +97,12 @@ it('在途事实能写回，并按编码找到', async () => {
     kind: 'in_transit',
     shipment: null,
     demand: null,
-    inTransit: { poRaw: 'PO1', poNorm: 'PO1', nameRaw: '面膜', itemCodeRaw: '70007024', barcodeRaw: '2000000003023', qtyRequired: 10 },
+    inTransit: { poRaw: 'PO1', poNorm: 'PO1', nameRaw: '面膜', itemCodeRaw: '70007022', barcodeRaw: '2000000003023', qtyRequired: 10 },
   });
   const loaded = await repo.get('transit-1');
   expect(loaded.kind).toBe('in_transit');
-  expect(loaded.inTransit).toMatchObject({ poNorm: 'PO1', itemCodeRaw: '70007024', qtyRequired: 10 });
-  expect((await repo.listByCodeNorm('70007024')).map((row) => row.id)).toEqual(['transit-1']);
+  expect(loaded.inTransit).toMatchObject({ poNorm: 'PO1', itemCodeRaw: '70007022', qtyRequired: 10 });
+  expect((await repo.listByCodeNorm('70007022')).map((row) => row.id)).toEqual(['transit-1']);
 });
 
 it('批量写入 7339 行出货在 10 秒内完成', async () => {

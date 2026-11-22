@@ -41,7 +41,7 @@ function workItem(input: {
     parentId: null,
     version: 1,
     overdueDays: filled(input.overdueDays, null),
-    orderLine: { id: 'line-1', poRaw: 'P02024700028', nameRaw: '面膜-5片装', itemCodeRaw: null, supplierPartyId: null },
+    orderLine: { id: 'line-1', poRaw: 'P02024700026', nameRaw: '面膜-5片装', itemCodeRaw: null, supplierPartyId: null },
     batch: null,
     supplierPartyId: idOf('party-', input.supplier),
     supplierName: filled(input.supplier, null),
@@ -50,8 +50,8 @@ function workItem(input: {
   };
 }
 
-const DUE = workItem({ id: 'due', start: TODAY, end: TODAY, owner: '采购甲', supplier: '样例供应商37', factory: '甲代工厂', priority: 'high' });
-const OVERDUE = workItem({ id: 'overdue', start: '2026-11-06', end: '2026-11-08', owner: '采购乙', supplier: '样例供应商37', overdueDays: 2, status: 'blocked' });
+const DUE = workItem({ id: 'due', start: TODAY, end: TODAY, owner: '采购甲', supplier: '样例供应商35', factory: '宜侬', priority: 'high' });
+const OVERDUE = workItem({ id: 'overdue', start: '2026-11-06', end: '2026-11-08', owner: '采购乙', supplier: '样例供应商35', overdueDays: 2, status: 'blocked' });
 const UNASSIGNED = workItem({ id: 'unassigned', start: '2026-11-07', end: TODAY, supplier: null });
 
 function dailyPlan(items: readonly WorkItem[]): DailyPlan {
@@ -67,7 +67,7 @@ function dailyPlan(items: readonly WorkItem[]): DailyPlan {
       { key: 'unassigned', label: '未分配', items: items.filter((item) => item.ownerUserId === null) },
     ].filter((group) => group.items.length > 0),
     bySupplier: [
-      { key: 'party-样例供应商37', label: '样例供应商37', items: items.filter((item) => item.supplierName === '样例供应商37') },
+      { key: 'party-样例供应商35', label: '样例供应商35', items: items.filter((item) => item.supplierName === '样例供应商35') },
       { key: 'unassigned', label: '未指定供应商', items: items.filter((item) => item.supplierPartyId === null) },
     ].filter((group) => group.items.length > 0),
     byFactory: [],
@@ -148,8 +148,8 @@ describe('排期任务状态与标签', () => {
   it('来源、供应商、工厂、状态和到期标签都在', () => {
     const labels = taskTags(DUE, TODAY).map((tag) => tag.label);
     expect(labels).toContain('来源 排期任务');
-    expect(labels).toContain('供应商 样例供应商37');
-    expect(labels).toContain('工厂 甲代工厂');
+    expect(labels).toContain('供应商 样例供应商35');
+    expect(labels).toContain('工厂 宜侬');
     expect(labels).toContain('计划中');
     expect(labels).toContain('今日应到');
     const overdue = taskTags(OVERDUE, TODAY).map((tag) => tag.label);
@@ -202,7 +202,7 @@ describe('今日排期看板', () => {
     expect(board.groups[1]?.counts).toEqual([{ label: '任务', count: 1 }]);
     expect(board.groups[1]?.note).toBe('平均逾期 2 天');
     expect(board.rows.map((row) => row.id)).toEqual(['task:due', 'task:unassigned', 'task:overdue']);
-    expect(board.groups[0]?.rows[0]?.meta).toContain('P02024700028');
+    expect(board.groups[0]?.rows[0]?.meta).toContain('P02024700026');
   });
 
   it('负责人分组把未分配单独成组，计数含逾期和阻塞', () => {
@@ -218,7 +218,7 @@ describe('今日排期看板', () => {
   it('供应商分组用未指定供应商兜底', () => {
     const board = planBoard({ view: dailyPlan([DUE, OVERDUE, UNASSIGNED]), group: 'supplier' });
     if (board.kind !== 'groups') throw new Error('expected groups');
-    expect(board.groups.map((group) => group.name)).toEqual(['样例供应商37', '未指定供应商']);
+    expect(board.groups.map((group) => group.name)).toEqual(['样例供应商35', '未指定供应商']);
   });
 
   it('今日没有排期时返回空态文案，指标不造假', () => {

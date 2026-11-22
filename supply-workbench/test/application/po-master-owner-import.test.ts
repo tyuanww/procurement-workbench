@@ -15,7 +15,7 @@ const at = '2026-11-09T00:00:00.000Z';
 const admin = (): Actor => ({ id: entityId('admin-1'), name: '管理员', roles: ['admin'] });
 
 const baseRow: Readonly<Record<string, string>> = {
-  供应商: '甲代工厂',
+  供应商: '宜侬',
   产品名称: '海葡萄水光冰冰贴',
   产品条码: '2000000003023',
   订单数量: '10',
@@ -27,7 +27,7 @@ it('PO 总表带采购负责人和工厂列，提交后写负责人归属和工�
   const fixture = await createPgFixture();
   try {
     await seed(fixture);
-    await commitWith(fixture, { 采购负责人: '采购甲', 工厂: '甲代工厂' });
+    await commitWith(fixture, { 采购负责人: '采购甲', 工厂: '宜侬' });
     const lineId = entityId('row-2:line');
     expect(await lineBuyer(fixture, lineId)).toBe('user-buyer-a');
     const owner = rowsOf(await fixture.handle.exec(`select status, owner_user_id, owner_name_raw, source, source_ref from owner_assignments where subject_id = 'row-2:line'`));
@@ -90,7 +90,7 @@ async function seed(fixture: PgFixture, extraUsers: readonly ReturnType<typeof a
   await fixture.uow.run(async (tx) => {
     await tx.users.save(aUser({ id: entityId('user-buyer-a'), name: '采购甲', roles: ['buyer'] }));
     for (const user of extraUsers) await tx.users.save(user);
-    await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '甲代工厂', isSupplier: true, isFactory: true }));
+    await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '宜侬', isSupplier: true, isFactory: true }));
   });
 }
 

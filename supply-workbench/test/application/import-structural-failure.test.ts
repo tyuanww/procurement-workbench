@@ -10,7 +10,7 @@ const at = '2026-10-12T00:00:00.000Z';
 
 it('采购总表缺表头时不能提交成功，批次保持失败并且写明原因', async () => {
   const memory = createMemory();
-  const bytes = new TextEncoder().encode('供应商,产品名称\n甲代工厂,面膜\n');
+  const bytes = new TextEncoder().encode('供应商,产品名称\n宜侬,面膜\n');
   const stored = await memory.files.put({ bytes, originalName: 'missing.csv', mime: 'text/csv' });
   const clock = new FixedClock(at);
   const ids = new SequentialIds();

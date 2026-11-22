@@ -13,10 +13,10 @@ import {
 } from '../../apps/web/src/features/progress/model/rows.js';
 
 const lines: ProgressLine[] = [
-  { id: 'open', nameRaw: '棉片', poRaw: 'PO1', stage: 'awaiting_shipment', daysInStage: 2, supplier: { displayName: '甲代工厂', rawName: null }, nextDue: null },
+  { id: 'open', nameRaw: '棉片', poRaw: 'PO1', stage: 'awaiting_shipment', daysInStage: 2, supplier: { displayName: '宜侬', rawName: null }, nextDue: null },
   { id: 'stuck', nameRaw: '海葡萄', poRaw: 'PO2', stage: 'awaiting_receipt', daysInStage: 9, supplier: { displayName: null, rawName: '海葡萄厂' }, nextDue: null },
   { id: 'done', nameRaw: '已完成', poRaw: 'PO3', stage: 'done', daysInStage: 30, supplier: { displayName: null, rawName: null }, nextDue: { dateBuyerConfirmed: '2026-10-01', overdueDays: 9 } },
-  { id: 'cancelled', nameRaw: '已取消', poRaw: 'PO4', stage: 'cancelled', daysInStage: 12, supplier: { displayName: '乙加工厂', rawName: null }, nextDue: { dateBuyerConfirmed: '2026-09-01', overdueDays: 20 } },
+  { id: 'cancelled', nameRaw: '已取消', poRaw: 'PO4', stage: 'cancelled', daysInStage: 12, supplier: { displayName: '瑾亭', rawName: null }, nextDue: { dateBuyerConfirmed: '2026-09-01', overdueDays: 20 } },
 ];
 
 const nudges: ProgressNudge[] = [
@@ -52,9 +52,9 @@ const unprovenOverdueDays: readonly (number | null)[] = [null, 0, -2, Number.NaN
 const blankDates: readonly (string | null)[] = [null, '', '   '];
 
 const supplierCases: readonly { readonly displayName: string | null; readonly rawName: string | null; readonly supplierLabel: string }[] = [
-  { displayName: '甲代工厂', rawName: '其他', supplierLabel: '甲代工厂' },
+  { displayName: '宜侬', rawName: '其他', supplierLabel: '宜侬' },
   { displayName: '宜 侬', rawName: null, supplierLabel: '宜 侬' },
-  { displayName: '  甲代工厂  ', rawName: '其他', supplierLabel: '甲代工厂' },
+  { displayName: '  宜侬  ', rawName: '其他', supplierLabel: '宜侬' },
   { displayName: null, rawName: '海葡萄厂', supplierLabel: '海葡萄厂' },
   { displayName: '', rawName: '海葡萄厂', supplierLabel: '海葡萄厂' },
   { displayName: '   ', rawName: '海葡萄厂', supplierLabel: '海葡萄厂' },
@@ -81,18 +81,18 @@ describe('采购进度行', () => {
     const rows = progressRows({ lines, nudges });
     expect(rows.map((row) => row.lineId)).toEqual(['stuck', 'open']);
     expect(rows[0]).toMatchObject({ title: '海葡萄', po: 'PO2', stageLabel: '待收货', daysInStage: 9, nextLabel: '逾期未到 送货单未回' });
-    expect(rows[1]?.nextLabel).toBeNull();
+    expect(rows[1]?.nextLabel).toBe('今天没有要推的事');
     expect(rows[0]?.arrival).toEqual({ kind: 'missing', dateText: '—' });
     expect(rows[0]?.supplierLabel).toBe('海葡萄厂');
-    expect(rows[1]).toMatchObject({ supplierLabel: '甲代工厂', arrival: { kind: 'missing', dateText: '—' } });
+    expect(rows[1]).toMatchObject({ supplierLabel: '宜侬', arrival: { kind: 'missing', dateText: '—' } });
   });
 
-  it('有确认日且逾期天数大于 0 才是逾期，下一步只取已读到的动作', () => {
+  it('有确认日且逾期天数大于 0 才是逾期，下一步仍是安静句', () => {
     const row = shown({
       line: {
         ...base,
         daysInStage: 2,
-        supplier: { displayName: '甲代工厂', rawName: '其他' },
+        supplier: { displayName: '宜侬', rawName: '其他' },
         nextDue: { dateBuyerConfirmed: '2026-10-01', overdueDays: 4 },
       },
     });
@@ -100,8 +100,8 @@ describe('采购进度行', () => {
       daysInStage: 2,
       dayText: '2',
       stay: '0-3',
-      supplierLabel: '甲代工厂',
-      nextLabel: null,
+      supplierLabel: '宜侬',
+      nextLabel: '今天没有要推的事',
       arrival: { kind: 'overdue', dateText: '2026-10-01' },
     });
     expect(row.supplierLabel.includes('待审核')).toBe(false);

@@ -35,28 +35,20 @@ const MATERIAL_COLUMNS = [
 ];
 
 describe('跟进台地址和单元格', () => {
-  it('表头是中文，缺线别时选中并请求成品线', () => {
+  it('表头是中文，缺线别时仍是成品列', () => {
     expect(readDesk('').columns).toEqual([...FINISHED_COLUMNS]);
     expect(readDesk('lane=finished').columns).toEqual([...FINISHED_COLUMNS]);
     expect(readDesk('lane=material').columns).toEqual([...MATERIAL_COLUMNS]);
     expect(readDesk('').lane).toBe('finished');
-    expect(queryOf('').get('lane')).toBe('finished');
+    expect(queryOf('').has('lane')).toBe(false);
     expect(queryOf('lane=finished').get('lane')).toBe('finished');
   });
 
-  it('显式全部线在改搜索后仍查询全部线别', () => {
-    const searched = addressOf('lane=all&q=纸盒&page=2', { kind: 'text', value: '面膜' });
-    expect(readDesk(searched.toString()).lane).toBe('all');
-    expect(queryOf(searched.toString()).has('lane')).toBe(false);
-    expect(queryOf(searched.toString()).get('q')).toBe('面膜');
-    expect(queryOf(searched.toString()).get('page')).toBe('1');
-  });
-
   it('改阶段或逾期保留采购员，并回到第一页', () => {
-    const search = 'buyer=me&q=甲代工厂&supplierPartyId=sup-1&page=2&pageSize=50';
+    const search = 'buyer=me&q=宜侬&supplierPartyId=sup-1&page=2&pageSize=50';
     const staged = addressOf(search, { kind: 'stage', value: 'awaiting_shipment' });
     expect(staged.get('buyer')).toBe('me');
-    expect(staged.get('q')).toBe('甲代工厂');
+    expect(staged.get('q')).toBe('宜侬');
     expect(staged.get('supplierPartyId')).toBe('sup-1');
     expect(staged.has('page')).toBe(false);
     expect(staged.get('stage')).toBe('awaiting_shipment');
@@ -129,8 +121,8 @@ describe('跟进台地址和单元格', () => {
   });
 
   it('页码缺失或非法是 1，每页缺省 50，显式 200 保留，超过上限按 200', () => {
-    expect(queryOf('q=甲代工厂').get('page')).toBe('1');
-    expect(queryOf('q=甲代工厂').get('pageSize')).toBe('50');
+    expect(queryOf('q=宜侬').get('page')).toBe('1');
+    expect(queryOf('q=宜侬').get('pageSize')).toBe('50');
     expect(readDesk('').pageSize).toBe(50);
     expect(readDesk('pageSize=50').pageSize).toBe(50);
     expect(queryOf('page=2&pageSize=500').get('page')).toBe('2');
@@ -166,9 +158,9 @@ describe('跟进台地址和单元格', () => {
     expect(queryOf(written.toString()).get('page')).toBe('1');
     expect(queryOf(written.toString()).get('lane')).toBe('material');
     expect(readDesk('lane=bogus').lane).toBe('finished');
-    expect(queryOf('lane=bogus').get('lane')).toBe('finished');
+    expect(queryOf('lane=bogus').has('lane')).toBe(false);
     const once = writeDesk({
-      search: 'buyer=me&q=甲代工厂&overdueOnly=true&foo=1&page=4',
+      search: 'buyer=me&q=宜侬&overdueOnly=true&foo=1&page=4',
       change: { kind: 'stage', value: 'no_batch' },
     });
     const twice = writeDesk({ search: once, change: { kind: 'stage', value: 'no_batch' } });
@@ -263,7 +255,7 @@ function lineRow(input: RowPatch = {}) {
     nameRaw: '面膜',
     itemCodeRaw: null,
     barcodeRaw: null,
-    supplier: { id: null, displayName: '甲代工厂', rawName: null },
+    supplier: { id: null, displayName: '宜侬', rawName: null },
     receiver: null,
     qtyOrdered: input.qtyOrdered === undefined ? 10 : input.qtyOrdered,
     receivedQty: input.receivedQty === undefined ? 1 : input.receivedQty,

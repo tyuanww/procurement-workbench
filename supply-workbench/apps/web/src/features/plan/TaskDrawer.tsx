@@ -14,7 +14,6 @@ import {
 } from '../today/index.js';
 import { drawerWide, fontSize, space, statusColor } from '../../theme/tokens.js';
 import { loadWorkItem } from './api.js';
-import { TaskDependencyWarning } from './dependency-warning.js';
 import { WorkItemEventHistory } from './event-history.js';
 import { isStatusLocked, statusFeedback } from './model/task-status-flow.js';
 import { TaskActionBar, TaskStatusEditor } from './task-status-controls.js';
@@ -95,7 +94,6 @@ function TaskDetail(props: { readonly detail: WorkItemDetail; readonly change: T
   return (
     <>
       {canRecord ? <Alert style={{ marginBottom: space[3] }} type="info" showIcon title="来源排期任务。改状态后写入事件历史，今日列表和进度总排期同时刷新。" /> : null}
-      <TaskDependencyWarning detail={props.detail} />
       {feedback === null ? null : <Alert style={{ marginBottom: space[3] }} type={feedback.tone} showIcon title={feedback.text} />}
       {canRecord ? (
         <TaskStatusEditor

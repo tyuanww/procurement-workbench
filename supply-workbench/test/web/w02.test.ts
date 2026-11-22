@@ -5,7 +5,7 @@ describe('导入按钮和问题分组', () => {
   it('代工厂模板没选代工厂不能开始解析', () => {
     expect(canStartParse({ requiresFactory: true, factoryPartyId: null })).toBe(false);
     expect(canStartParse({ requiresFactory: true, factoryPartyId: '' })).toBe(false);
-    expect(canStartParse({ requiresFactory: true, factoryPartyId: 'factory-factory_a' })).toBe(true);
+    expect(canStartParse({ requiresFactory: true, factoryPartyId: 'factory-yinong' })).toBe(true);
     expect(canStartParse({ requiresFactory: false, factoryPartyId: null })).toBe(true);
   });
 

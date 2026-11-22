@@ -74,7 +74,7 @@ it('管理周会按店铺读取当前事实，周报冻结该版事实并沿用�
   const monday = localDate('2026-10-12');
   let reply = '供应商确认周三到厂';
   const opened = await open({
-    loadDevelopment: async (_db, input) => input.store === 'store_a' ? [{
+    loadDevelopment: async (_db, input) => input.store === 'dafuyan' ? [{
       id: 'test-node', name: '中试原料', projectName: '示例项目', plannedEnd: monday, destination: 'factory',
       ownerName: '采购甲', latestReply: { text: reply, recordedAt: AT },
     }] : [],
@@ -83,7 +83,7 @@ it('管理周会按店铺读取当前事实，周报冻结该版事实并沿用�
     const manager = { cookie: await loginAs(opened.app, 'manager') };
     const lead = { cookie: await loginAs(opened.app, 'lead') };
     const buyer = { cookie: await loginAs(opened.app, 'buyer') };
-    const url = `/api/v1/dashboard/management-meeting?store=store_a&weekStart=${monday}`;
+    const url = `/api/v1/dashboard/management-meeting?store=dafuyan&weekStart=${monday}`;
     const original = await opened.app.inject({ method: 'GET', url, headers: lead });
     expect(ManagementMeetingSchema.parse(original.json()).development[0]?.latestReply?.text).toBe(reply);
     expect((await opened.app.inject({ method: 'GET', url, headers: buyer })).statusCode).toBe(403);
@@ -93,8 +93,8 @@ it('管理周会按店铺读取当前事实，周报冻结该版事实并沿用�
     reply = '供应商改为周五到厂';
     const current = WeeklyReportSchema.parse((await opened.app.inject({ ...generate, headers: manager })).json());
     expect(current.id).not.toBe(initial.id);
-    expect(current.data.managementMeeting?.find((store) => store.store === 'store_a')?.development[0]?.latestReply?.text).toBe(reply);
-    expect(current.data.managementMeeting?.find((store) => store.store === 'store_b')?.development).toEqual([]);
+    expect(current.data.managementMeeting?.find((store) => store.store === 'dafuyan')?.development[0]?.latestReply?.text).toBe(reply);
+    expect(current.data.managementMeeting?.find((store) => store.store === 'yiling')?.development).toEqual([]);
     const old = await opened.app.inject({ method: 'GET', url: `${generate.url}/${initial.id}`, headers: lead });
     expect(WeeklyReportDetailSchema.parse(old.json()).data).toEqual(initial.data);
     const printed = await opened.app.inject({ url: opened.reporting.printUrlFor(initial.id), headers: { accept: 'text/html' } });

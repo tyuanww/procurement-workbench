@@ -2,8 +2,8 @@ import { ProcurementStoreSchema, type ProcurementStore } from '@sw/contracts';
 
 export const storeLabels = {
   all: '全部店铺',
-  store_a: '店铺甲',
-  store_b: '店铺乙',
+  dafuyan: '达肤妍',
+  yiling: '译龄',
   unassigned: '未分店铺',
 } satisfies Record<ProcurementStore, string>;
 

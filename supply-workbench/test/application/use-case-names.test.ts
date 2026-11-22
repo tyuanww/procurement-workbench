@@ -13,11 +13,11 @@ function names(module: object, expected: readonly string[]) {
   expect(Object.keys(module).sort()).toEqual([...expected].sort());
 }
 
-it('platform、today、search 和 performance 的公开入口', () => {
+it('platform 和 today 的用例名和 08 第 9 节一致', () => {
   names(platform, ['makeListUsers', 'makeCreateUser', 'makeUpdateUser', 'makeGetSettings', 'makeUpdateSettings', 'makeListAuditEntries', 'makeGetFreshness']);
   names(today, ['makeGetToday']);
   names(search, ['makeSearchEverything']);
-  names(performance, ['makeGetStuckBatches', 'makeGetSupplierPerformance', 'makeGetBuyerLoad', 'makeGetBuyerDrill', 'scopedSupplierIds', 'supplierEvents', 'supplierEventFigures']);
+  names(performance, ['makeGetStuckBatches', 'makeGetSupplierPerformance', 'makeGetBuyerLoad']);
 });
 
 it('imports、reporting、product-archive 的用例名和 08 第 9 节一致', () => {

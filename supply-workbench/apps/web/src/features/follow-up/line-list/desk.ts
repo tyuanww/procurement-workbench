@@ -1,11 +1,9 @@
 import { LINE_STAGES, lineStageLabel, type Lane, type LineStage } from '@sw/domain';
-import { LaneSchema, LinesQuerySchema, LineStageSchema, type LinesQuery } from '@sw/contracts';
+import { LaneSchema, LineStageSchema } from '@sw/contracts';
 import { z } from 'zod';
 import { columnsOf, type LineColumnView } from './columns.js';
 
 const PAGE_CAP = 200;
-const DEFAULT_LANE = 'finished';
-const deskLaneSchema = z.union([LaneSchema, z.literal('all')]);
 export const DEFAULT_PAGE_SIZE = 50;
 const textField: z.ZodType<string> = z.string().min(1);
 const overdueFlag = z.literal('1');
@@ -18,7 +16,6 @@ const OWNED_KEYS: ReadonlySet<string> = new Set([
   'q',
   'buyer',
   'supplierPartyId',
-  'inTransitFactory',
   'stage',
   'stages',
   'overdue',
@@ -37,14 +34,11 @@ type StageSlot =
   | { readonly kind: 'one'; readonly stage: LineStage; readonly key: 'stage' | 'stages' }
   | { readonly kind: 'list'; readonly stages: readonly [LineStage, LineStage, ...LineStage[]] };
 
-type DeskLane = Lane | 'all';
-
 type DeskRecord = {
-  readonly lane: DeskLane | undefined;
+  readonly lane: Lane | undefined;
   readonly q: string | undefined;
   readonly buyer: string | undefined;
   readonly supplierPartyId: string | undefined;
-  readonly inTransitFactory: LinesQuery['inTransitFactory'];
   readonly stage: StageSlot;
   readonly isOverdue: boolean;
   readonly pageToken: string | undefined;
@@ -72,7 +66,7 @@ export type StageControl =
   | { readonly kind: 'many'; readonly value: string };
 
 export type DeskRead = {
-  readonly lane: DeskLane;
+  readonly lane: Lane;
   readonly q: string;
   readonly stage: StageControl;
   readonly isOverdue: boolean;
@@ -90,7 +84,7 @@ const STAGE_CHOICES: readonly StageChoice[] = [
 
 export function readDesk(search: string): DeskRead {
   const record = parseDesk(search);
-  const lane = record.lane ?? DEFAULT_LANE;
+  const lane = record.lane ?? 'finished';
   return {
     lane,
     q: record.q ?? '',
@@ -98,9 +92,9 @@ export function readDesk(search: string): DeskRead {
     isOverdue: record.isOverdue,
     page: pageNumber(record.pageToken),
     pageSize: pageSizeOf(record.pageSizeToken),
-    columns: columnsOf(lane === 'all' ? DEFAULT_LANE : lane),
+    columns: columnsOf(lane),
     stageChoices: STAGE_CHOICES,
-    requestQuery: requestOf({ ...record, lane }),
+    requestQuery: requestOf(record),
   };
 }
 
@@ -109,13 +103,12 @@ export function writeDesk(input: { readonly search: string; readonly change: Des
 }
 
 function parseDesk(search: string): DeskRecord {
-  const params = deskAddress(search);
+  const params = new URLSearchParams(stripQuery(search));
   return {
-    lane: takeField({ raw: params.get('lane'), field: deskLaneSchema }),
+    lane: takeField({ raw: params.get('lane'), field: LaneSchema }),
     q: takeField({ raw: params.get('q'), field: textField }),
     buyer: takeField({ raw: params.get('buyer'), field: textField }),
     supplierPartyId: takeField({ raw: params.get('supplierPartyId'), field: textField }),
-    inTransitFactory: takeField({ raw: params.get('inTransitFactory'), field: LinesQuerySchema.shape.inTransitFactory }),
     stage: stageSlot({ stages: stageTokens(params.get('stages')), single: params.get('stage') }),
     isOverdue: isOverdueAddress({ overdue: params.get('overdue'), overdueOnly: params.get('overdueOnly') }),
     pageToken: pageTokenOf(params.get('page')),
@@ -124,22 +117,22 @@ function parseDesk(search: string): DeskRecord {
   };
 }
 
-export function deskAddress(search: string): URLSearchParams {
-  const params = new URLSearchParams(search);
-  if (params.get('view') === 'factory_a' && params.get('q') === '甲代工厂' && !params.has('inTransitFactory')) {
-    params.delete('q');
-    params.set('inTransitFactory', 'factory_a');
-  }
-  return params;
+function stripQuery(search: string): string {
+  if (search.startsWith('?')) return search.slice(1);
+  return search;
 }
 
 function restPairs(params: URLSearchParams): readonly SearchPair[] {
   const rest: SearchPair[] = [];
   for (const [key, value] of params) {
-    if (OWNED_KEYS.has(key)) continue;
+    if (isOwnedKey(key)) continue;
     rest.push({ key, value });
   }
   return rest;
+}
+
+function isOwnedKey(key: string): boolean {
+  return OWNED_KEYS.has(key);
 }
 
 function takeField<T>(input: { readonly raw: string | null; readonly field: z.ZodType<T> }): T | undefined {
@@ -212,8 +205,8 @@ function applyChange(input: { readonly record: DeskRecord; readonly change: Desk
 }
 
 function applyLane(input: { readonly record: DeskRecord; readonly value: unknown }): DeskRecord {
-  const parsed = deskLaneSchema.safeParse(input.value);
-  const lane = parsed.success ? parsed.data : DEFAULT_LANE;
+  const parsed = LaneSchema.safeParse(input.value);
+  const lane = parsed.success ? parsed.data : 'finished';
   return { ...input.record, lane, pageToken: undefined };
 }
 
@@ -256,34 +249,31 @@ function applyPageSize(input: { readonly record: DeskRecord; readonly value: unk
 }
 
 function addressOf(record: DeskRecord): string {
-  const next = commonParams(record);
+  const next = new URLSearchParams();
+  setText({ next, key: 'lane', value: record.lane });
+  setText({ next, key: 'q', value: record.q });
+  setText({ next, key: 'buyer', value: record.buyer });
+  setText({ next, key: 'supplierPartyId', value: record.supplierPartyId });
   setStage({ next, stage: record.stage });
   if (record.isOverdue) next.set('overdue', '1');
   setText({ next, key: 'page', value: record.pageToken });
   setText({ next, key: 'pageSize', value: record.pageSizeToken });
-  for (const { key, value } of record.rest) next.append(key, value);
+  appendRest({ next, rest: record.rest });
   return next.toString();
 }
 
 function requestOf(record: DeskRecord): string {
-  const next = commonParams(record);
-  if (record.lane === 'all') next.delete('lane');
+  const next = new URLSearchParams();
+  setText({ next, key: 'lane', value: record.lane });
+  setText({ next, key: 'q', value: record.q });
+  setText({ next, key: 'buyer', value: record.buyer });
+  setText({ next, key: 'supplierPartyId', value: record.supplierPartyId });
   if (record.isOverdue) next.set('overdueOnly', 'true');
   const stages = stageParam(record.stage);
   if (stages !== undefined) next.set('stages', stages);
   next.set('page', record.pageToken ?? '1');
   next.set('pageSize', String(pageSizeOf(record.pageSizeToken)));
   return next.toString();
-}
-
-function commonParams(record: DeskRecord): URLSearchParams {
-  const next = new URLSearchParams();
-  setText({ next, key: 'lane', value: record.lane });
-  setText({ next, key: 'q', value: record.q });
-  setText({ next, key: 'buyer', value: record.buyer });
-  setText({ next, key: 'supplierPartyId', value: record.supplierPartyId });
-  setText({ next, key: 'inTransitFactory', value: record.inTransitFactory });
-  return next;
 }
 
 function stageParam(stage: StageSlot): string | undefined {
@@ -304,6 +294,13 @@ function setStage(input: { readonly next: URLSearchParams; readonly stage: Stage
 function setText(input: { readonly next: URLSearchParams; readonly key: string; readonly value: string | undefined }): void {
   if (input.value === undefined) return;
   input.next.set(input.key, input.value);
+}
+
+function appendRest(input: { readonly next: URLSearchParams; readonly rest: readonly SearchPair[] }): void {
+  for (const pair of input.rest) {
+    if (isOwnedKey(pair.key)) continue;
+    input.next.append(pair.key, pair.value);
+  }
 }
 
 function stageControl(slot: StageSlot): StageControl {

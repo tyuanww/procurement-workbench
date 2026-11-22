@@ -5,11 +5,11 @@ const at = '2026-10-12T00:00:00.000Z';
 export async function insertSample(db: AppDatabase) {
   const stamp = { createdAt: at, updatedAt: at };
   await db.insert(schema.parties).values([
-    { ...stamp, id: 'supplier', displayName: '甲代工厂', isSupplier: true, isFactory: true, isOwnWarehouse: false, note: null },
+    { ...stamp, id: 'supplier', displayName: '宜侬', isSupplier: true, isFactory: true, isOwnWarehouse: false, note: null },
     { ...stamp, id: 'warehouse', displayName: '上海仓', isSupplier: false, isFactory: false, isOwnWarehouse: true, note: null },
   ]);
   await db.insert(schema.users).values({ ...stamp, id: 'buyer-1', name: '样例采购员', roles: ['buyer'], feishuOpenId: null, active: true });
-  await db.insert(schema.purchaseOrders).values({ ...stamp, id: 'po-1', poRaw: 'PO1', poNorm: 'PO1', poFormat: 'OTHER', relatedPoRaws: [], supplierPartyId: 'supplier', supplierRaw: '甲代工厂', lane: 'finished', oaDemandRef: null });
+  await db.insert(schema.purchaseOrders).values({ ...stamp, id: 'po-1', poRaw: 'PO1', poNorm: 'PO1', poFormat: 'OTHER', relatedPoRaws: [], supplierPartyId: 'supplier', supplierRaw: '宜侬', lane: 'finished', oaDemandRef: null });
   await db.insert(schema.orderLines).values({ ...stamp, id: 'line-1', purchaseOrderId: 'po-1', lane: 'finished', itemId: null, itemCodeRaw: null, barcodeRaw: null, nameRaw: '面膜', qtyOrdered: null, unit: null, buyerUserId: 'buyer-1', receiverPartyId: 'warehouse', origin: 'manual', currentSnapshotId: null, candidateKey: null, missingInLatestImport: false, cancelledAt: null, cancelReason: null, stage: 'awaiting_shipment', stageChangedAt: at, nextDueBatchId: null, nextDueDate: null });
   await db.insert(schema.deliveryBatches).values(sampleBatches().map((row) => ({ ...stamp, ...row, orderLineId: 'line-1', seq: 1, plannedQty: '10', receiverPartyId: 'warehouse', origin: 'manual', originRef: null, confirmedBy: null, confirmedAt: null, closedReason: null, cancelReason: null, dateFactoryRequired: null, dateSupplierPromised: null })));
   await db.insert(schema.receipts).values([

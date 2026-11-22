@@ -98,7 +98,7 @@ describe('缺失和来源', () => {
 
 describe('日期叠放和状态', () => {
   it('确认在第一行，缺的日期不出现', () => {
-    const lines = dateStackLines({ confirmed: { text: '10-07', overdue: true }, required: { text: '10-05', source: '甲代工厂' } });
+    const lines = dateStackLines({ confirmed: { text: '10-07', overdue: true }, required: { text: '10-05', source: '宜侬' } });
     expect(lines.map((line) => line.kind)).toEqual(['confirmed', 'required']);
     expect(lines[0]?.overdue).toBe(true);
   });

@@ -12,9 +12,9 @@ const CLOCK = new FixedClock(AT);
 
 it('列表行按已关联/手工关联给工厂，未关联和没有关联记录都是 null', async () => {
   const linked = await mappedFactory('linked');
-  expect(linked.factory).toEqual({ id: 'factory-1', displayName: '甲代工厂' });
+  expect(linked.factory).toEqual({ id: 'factory-1', displayName: '宜侬' });
   const manual = await mappedFactory('manual');
-  expect(manual.factory).toEqual({ id: 'factory-1', displayName: '甲代工厂' });
+  expect(manual.factory).toEqual({ id: 'factory-1', displayName: '宜侬' });
   const unlinked = await mappedFactory('unlinked');
   expect(unlinked.factory).toBeNull();
   const missing = await mappedFactory(null);
@@ -23,7 +23,7 @@ it('列表行按已关联/手工关联给工厂，未关联和没有关联记录
 
 it('详情行也带同一个工厂，预览抽屉不用再查一遍', async () => {
   const factory = await mappedDetailFactory('linked');
-  expect(factory).toEqual({ id: 'factory-1', displayName: '甲代工厂' });
+  expect(factory).toEqual({ id: 'factory-1', displayName: '宜侬' });
   expect(await mappedDetailFactory('unlinked')).toBeNull();
 });
 
@@ -48,7 +48,7 @@ async function mappedDetailFactory(status: LineFactoryLinkStatus | null): Promis
 async function open(status: LineFactoryLinkStatus | null) {
   const handle = await createDb({ driver: 'pglite' });
   await migrate(handle.exec);
-  const factory = aParty({ id: entityId('factory-1'), displayName: '甲代工厂', isFactory: true, isSupplier: false });
+  const factory = aParty({ id: entityId('factory-1'), displayName: '宜侬', isFactory: true, isSupplier: false });
   await partyRepository(handle.db).save(factory);
   const order = aPurchaseOrder({ id: entityId('po-1'), supplierPartyId: null });
   await purchaseOrderRepository(handle.db).save(order);
