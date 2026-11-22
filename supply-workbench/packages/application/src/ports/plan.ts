@@ -3,7 +3,7 @@ import type { DeliveryBatch } from '../../../domain/src/entities/orders.js';
 import type { DependencyKind, WorkItem, WorkItemDependency, WorkItemEvent, WorkItemSubjectType } from '../../../domain/src/entities/work-items.js';
 import type { EntityId } from '../../../domain/src/values/ids.js';
 import type { UnitOfWork, UnitOfWorkStores } from './unit-of-work.js';
-import type { DailyPlanQuery, SchedulePlanQuery, WorkItemDetailView, WorkItemListQuery, WorkItemListResult, WorkItemView } from './plan-views.js';
+import type { DailyPlanQuery, IncomingWorkItemDependency, SchedulePlanQuery, WorkItemDetailView, WorkItemListQuery, WorkItemListResult, WorkItemView } from './plan-views.js';
 
 export type WorkItemSubjectKey = {
   readonly subjectType: WorkItemSubjectType;
@@ -51,6 +51,7 @@ export type PlanUnitOfWork = UnitOfWork<PlanStores>;
 export interface PlanQueries {
   dailyItems(query: Pick<DailyPlanQuery, 'date'>): Promise<readonly WorkItemView[]>;
   scheduleItems(query: Pick<SchedulePlanQuery, 'from' | 'to' | 'store'>): Promise<readonly WorkItemView[]>;
+  incomingDependencies(workItemIds: readonly string[]): Promise<readonly IncomingWorkItemDependency[]>;
   projectItems(query: Pick<SchedulePlanQuery, 'from' | 'to'>): Promise<readonly WorkItemView[]>;
   listItems(query: WorkItemListQuery): Promise<WorkItemListResult>;
   getItem(query: { readonly workItemId: string; readonly eventLimit: number }): Promise<WorkItemDetailView>;

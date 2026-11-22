@@ -87,4 +87,5 @@ export type {
   WeeklyReport,
 } from './records.js';
 export type { KpiBatch, KpiInput, OrderLineLoad } from './kpi.js';
+export { hasWorkItemDependencyConflict } from './work-items.js';
 export type { WorkItem, WorkItemDependency, WorkItemEvent } from './work-items.js';

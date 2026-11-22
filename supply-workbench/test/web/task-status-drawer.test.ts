@@ -113,12 +113,26 @@ function postBodies(): readonly { readonly url: string; readonly method: string;
   return posts().map((item) => ({ url: item.url, method: item.method, body: item.body }));
 }
 
-async function openTask(input: { readonly id: string; readonly title: string; readonly status: string }): Promise<DrawerHandle> {
+it('任务详情提示已开工任务的前置阻塞，仍显示记录的进行中状态', async () => {
+  const id = 'procurement-schedule:production:line-1';
+  const predecessorId = 'procurement-schedule:materials:line-1';
+  const drawer = await openTask({ id, title: '生产', status: 'in_progress', dependenciesIn: [{
+    id: 'dep-1', fromItemId: predecessorId, toItemId: id, kind: 'finish_to_start', createdAt: '2026-11-17T00:00:00Z',
+    predecessor: { id: predecessorId, title: '齐料', plannedEnd: '2026-11-16', status: 'blocked' },
+  }] });
+  expect(drawer.text()).toContain('依赖冲突');
+  expect(drawer.text()).toContain('本任务计划开始 2026-11-17');
+  expect(drawer.text()).toContain('齐料（计划完成 2026-11-16）仍阻塞');
+  expect(drawer.tag()).toBe('进行中');
+  expect(drawer.isDisabled('标记完成')).toBe(false);
+});
+
+async function openTask(input: Parameters<typeof detail>[0]): Promise<DrawerHandle> {
   installFetch();
   const drawer = await mountDrawer();
   active = drawer;
   await drawer.set({ workItemId: input.id, isOpen: true });
-  await resolveGet({ act: drawer.react.act, urlPart: `/work-items/${input.id}`, body: detail(input) });
+  await resolveGet({ act: drawer.react.act, urlPart: `/work-items/${encodeURIComponent(input.id)}`, body: detail(input) });
   return drawer;
 }
 

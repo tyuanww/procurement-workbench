@@ -1,5 +1,5 @@
 import type { LocalDate } from '../../../../domain/src/values/local-date.js';
-import type { DailyPlanView, PlanGroupView, ScheduleView, WorkItemView } from '../views.js';
+import type { DailyPlanView, PlanGroupView, WorkItemView } from '../views.js';
 
 const UNASSIGNED = 'unassigned';
 
@@ -14,10 +14,6 @@ export function groupDailyPlan(input: { readonly date: LocalDate; readonly today
     bySupplier: grouped({ items: input.items, keyOf: (item) => item.supplierPartyId, labelOf: (item) => item.supplierName, fallback: '未指定供应商' }),
     byFactory: grouped({ items: input.items, keyOf: (item) => item.factoryPartyId, labelOf: (item) => item.factoryName, fallback: '未指定工厂' }),
   };
-}
-
-export function scheduleView(input: { readonly from: LocalDate; readonly to: LocalDate; readonly items: readonly WorkItemView[] }): ScheduleView {
-  return { from: input.from, to: input.to, total: input.items.length, items: input.items };
 }
 
 function grouped(input: {
