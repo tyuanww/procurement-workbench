@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { BottleneckSummarySchema, BuyerLoadDashboardSchema, LaneSchema, LocalDateSchema } from '@sw/contracts';
+import { BottleneckSummarySchema, BuyerLoadDashboardSchema, LaneSchema, LocalDateSchema, StuckDashboardSchema, StuckQuerySchema, type StuckQuery } from '@sw/contracts';
 import { z } from 'zod';
 import { requireActor } from '../app.js';
 import { parse } from '../parse.js';
@@ -12,19 +12,19 @@ const PeriodQuery = z.object({
 }).strict();
 
 export type PerformanceApi = {
-  getStuck(input: z.infer<typeof PeriodQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
+  getStuck(input: StuckQuery, actor: ReturnType<typeof requireActor>): Promise<unknown>;
   getSuppliers(input: z.infer<typeof PeriodQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
   getBuyers(input: z.infer<typeof PeriodQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
   getBottlenecks(input: z.infer<typeof PeriodQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
 };
 
 export function registerPerformanceRoutes(app: FastifyInstance, api: PerformanceApi): void {
-  app.get('/api/v1/dashboard/stuck', async (req) => read(api.getStuck, req));
+  app.get('/api/v1/dashboard/stuck', async (req) => wire(StuckDashboardSchema, await api.getStuck(parse(StuckQuerySchema, req.query), requireActor(req))));
   app.get('/api/v1/dashboard/suppliers', async (req) => read(api.getSuppliers, req));
   app.get('/api/v1/dashboard/buyers', async (req) => wire(BuyerLoadDashboardSchema, await read(api.getBuyers, req)));
   app.get('/api/v1/dashboard/bottlenecks', async (req) => wire(BottleneckSummarySchema, await read(api.getBottlenecks, req)));
 }
 
-function read(handler: PerformanceApi['getStuck'], req: FastifyRequest) {
+function read(handler: PerformanceApi['getSuppliers'], req: FastifyRequest) {
   return handler(parse(PeriodQuery, req.query), requireActor(req));
 }

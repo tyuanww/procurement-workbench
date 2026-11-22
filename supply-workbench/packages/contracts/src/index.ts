@@ -114,10 +114,11 @@ export {
   BuyerLoadRowSchema,
   StuckDashboardSchema,
   StuckItemSchema,
+  StuckQuerySchema,
   SupplierDashboardSchema,
   SupplierKpiRowSchema,
 } from './dashboard-views.js';
-export type { BuyerLoadRow, StuckDashboard, StuckItem, SupplierKpiRow } from './dashboard-views.js';
+export type { BuyerLoadRow, StuckCauseCounts, StuckDashboard, StuckItem, StuckQuery, SupplierKpiRow } from './dashboard-views.js';
 
 export {
   ConfirmedArrivalPayloadSchema,

@@ -1,8 +1,9 @@
-import type { BuyerLoadDashboard, BuyerLoadRow, StuckDashboard, StuckItem, SupplierDashboard, SupplierKpiRow } from '@sw/application';
+import type { BuyerLoadDashboard, BuyerLoadRow, StuckCauseCounts, StuckDashboard, StuckItem, StuckQuery, SupplierDashboard, SupplierKpiRow } from '@sw/application';
+import { STUCK_BUCKETS, STUCK_CAUSES } from '@sw/domain';
 import { z } from 'zod';
-import { BatchStatusSchema, WaitingOnKindSchema } from './enums.js';
+import { BatchStatusSchema, LaneSchema, WaitingOnKindSchema } from './enums.js';
 import { KpiFigureSchema } from './master-views.js';
-import { nullable, strictObject } from './shape.js';
+import { nullable, optional, strictObject } from './shape.js';
 import { LocalDateSchema } from './values.js';
 
 const namedPerson = strictObject({ id: z.string(), name: nullable(z.string()) });
@@ -12,6 +13,21 @@ const buckets = strictObject({
   '4-7': z.number(),
   '8-14': z.number(),
   '15+': z.number(),
+});
+
+const stuckCause = z.enum(STUCK_CAUSES);
+const count = z.number().int().nonnegative();
+const page = z.number().int().positive();
+
+export const StuckQuerySchema: z.ZodType<StuckQuery> = strictObject({
+  from: LocalDateSchema,
+  to: LocalDateSchema,
+  lane: optional(LaneSchema),
+  stage: optional(BatchStatusSchema),
+  bucket: optional(z.enum(STUCK_BUCKETS)),
+  cause: optional(stuckCause),
+  card: optional(z.literal('overdue')),
+  page: optional(z.string().regex(/^[1-9][0-9]*$/).transform(Number).pipe(page)),
 });
 
 export const StuckItemSchema: z.ZodType<StuckItem> = strictObject({
@@ -37,6 +53,7 @@ export const StuckItemSchema: z.ZodType<StuckItem> = strictObject({
 export const StuckDistributionSchema = z.array(strictObject({ stage: BatchStatusSchema, buckets }));
 
 export const StuckDashboardSchema: z.ZodType<StuckDashboard> = strictObject({
+  asOf: LocalDateSchema,
   kpis: strictObject({
     openBatches: z.number(),
     overdue: z.number(),
@@ -44,6 +61,10 @@ export const StuckDashboardSchema: z.ZodType<StuckDashboard> = strictObject({
     shippedNotReceived: z.number(),
   }),
   distribution: StuckDistributionSchema,
+  causeCounts: z.record(stuckCause, count),
+  total: count,
+  page,
+  pageSize: page,
   items: z.array(StuckItemSchema),
 });
 
@@ -84,7 +105,7 @@ export const BuyerLoadDashboardSchema: z.ZodType<BuyerLoadDashboard> = strictObj
   unassignedExceptions: nullable(z.number()),
 });
 
-export type { BuyerLoadRow, StuckDashboard, StuckItem, SupplierKpiRow };
+export type { BuyerLoadRow, StuckCauseCounts, StuckDashboard, StuckItem, StuckQuery, SupplierKpiRow };
 
 const BottleneckCategorySchema = strictObject({
   key: z.enum(['missing_owner', 'missing_factory', 'alias_pending', 'missing_date', 'exception_open', 'aged_15', 'bom_missing', 'factory_demand_unlinked']),

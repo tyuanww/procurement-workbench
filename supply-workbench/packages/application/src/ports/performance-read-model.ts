@@ -1,5 +1,5 @@
 import type { KpiFollowUp, KpiInput } from '@sw/domain';
-import type { BuyerLoadDashboard, BuyerLoadQuery, StuckDashboard, StuckQuery, SupplierDashboard, SupplierQuery } from '../performance/views.js';
+import type { BuyerLoadDashboard, BuyerLoadQuery, PeriodQuery, StuckDashboard, StuckQuery, SupplierDashboard, SupplierQuery } from '../performance/views.js';
 
 export type BatchLabel = {
   readonly poRaw: string | null;
@@ -27,8 +27,7 @@ export type PerformanceFacts = {
 };
 
 export interface PerformanceReadModel {
-  load(query: StuckQuery): Promise<PerformanceFacts>;
-  /** 卡点清单最多 200 条。超出不截成 0，由调用方看 items 长度。 */
+  load(query: PeriodQuery): Promise<PerformanceFacts>;
   stuck(query: StuckQuery): Promise<StuckDashboard>;
   suppliers(query: SupplierQuery): Promise<SupplierDashboard>;
   buyers(query: BuyerLoadQuery): Promise<BuyerLoadDashboard>;
