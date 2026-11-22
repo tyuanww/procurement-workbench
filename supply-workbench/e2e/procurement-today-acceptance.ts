@@ -112,6 +112,58 @@ async function recordFollowUp(page: Page, row: Locator, time: string, text: stri
   return saved.json();
 }
 
+export async function checkKeyboardReceipt({ page, origin, out }: {
+  readonly page: Page;
+  readonly origin: URL;
+  readonly out: string;
+}) {
+  const today = new URL('/today?reasons=follow_up_due', origin);
+  const row = page.getByRole('button', { name: /^查看详情 HZ09-0501/ });
+  const memo = page.locator('section').filter({ has: page.getByRole('heading', { name: '到仓备忘录', exact: true }) }).last();
+  const batchLink = memo.getByRole('link', { name: /HZ09-0501/ });
+  const partial = '合成收货单 A · 第一车';
+  const remaining = '合成收货单 B · 第二车';
+  await page.goto(today.href);
+  await row.waitFor();
+  await batchLink.waitFor();
+  await recordKeyboardReceipt(page, { before: 30_000, recv: 12_000, evidence: partial });
+  await page.reload();
+  await memo.getByText(/待收 18,000 件 · 实收 12,000 件/).waitFor();
+  await batchLink.click();
+  await page.getByText('未发 0 件 · 待收 18,000 件 · 实收 12,000 件', { exact: true }).waitFor();
+  await page.getByText(/实收登记.*12,000 件.*合成收货单 A/).waitFor();
+  await page.screenshot({ path: join(out, 'procurement-partial-receipt.png'), animations: 'disabled' });
+
+  await page.goto(today.href);
+  await row.waitFor();
+  await recordKeyboardReceipt(page, { before: 18_000, recv: 18_000, evidence: remaining });
+  await page.reload();
+  await page.getByRole('status').filter({ hasText: /共 \d+ 条 · 第 1 页/ }).waitFor();
+  assert.equal(await batchLink.count(), 0);
+  await page.goto(new URL('/lines/hz09-line-501?focusBatch=' + batch, origin).href);
+  await page.getByText('未发 0 件 · 待收 0 件 · 实收 30,000 件', { exact: true }).waitFor();
+  await page.getByText(/实收登记.*18,000 件.*合成收货单 B/).waitFor();
+  return { po: 'HZ09-0501', keyboard: ['ArrowDown', 'r'], received: [12_000, 30_000], inTransit: [18_000, 0], evidence: [partial, remaining] };
+}
+
+async function recordKeyboardReceipt(page: Page, { before, recv, evidence }: { readonly before: number; readonly recv: number; readonly evidence: string }) {
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('r');
+  const dialog = page.getByRole('dialog');
+  const qty = dialog.getByRole('spinbutton', { name: '数量', exact: true });
+  await qty.waitFor();
+  assert.equal(Number(await qty.inputValue()), before);
+  await qty.fill(String(recv));
+  await dialog.getByLabel('收货日', { exact: true }).fill('2025-02-02');
+  await dialog.getByLabel('收货及归批依据', { exact: true }).fill(evidence);
+  const saved = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/v1/batches/' + batch + '/receipts'
+    && response.request().method() === 'POST');
+  await dialog.getByRole('button', { name: /^确\s*认$/ }).press('Enter');
+  assert.equal((await saved).status(), 200);
+  await dialog.waitFor({ state: 'hidden' });
+}
+
 async function checkFollowUpReminder({ page, origin, row, out }: {
   readonly page: Page;
   readonly origin: URL;
