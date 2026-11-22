@@ -59,10 +59,10 @@ const changes = kpi(sample.batches, {
   lines: [orderLine('line-1', { stage: 'awaiting_shipment', lane: 'finished' })],
   dateChanges: [
     { field: 'dateBuyerConfirmed', changedAt: '2026-09-01T00:00:00.000Z', isFirstSet: true },
-    { field: 'dateBuyerConfirmed', changedAt: '2026-10-09T00:00:00.000Z', isFirstSet: false },
+    { field: 'dateBuyerConfirmed', changedAt: '2026-10-09T00:00:00.000Z', isFirstSet: false, supplierPartyId: entityId('supplier'), lane: 'finished' },
     { field: 'dateBuyerConfirmed', changedAt: '2026-10-08T00:00:00.000Z', isFirstSet: true },
   ],
-  exceptions: [{ status: 'open', openedAt: '2026-10-01T00:00:00.000Z', closedAt: null, buyerUserId: entityId('buyer-1') }, { status: 'closed', openedAt: '2026-09-01T00:00:00.000Z', closedAt: '2026-10-02T00:00:00.000Z', buyerUserId: entityId('buyer-1') }],
+  exceptions: [{ status: 'open', openedAt: '2026-10-01T00:00:00.000Z', closedAt: null, buyerUserId: entityId('buyer-1'), supplierPartyId: entityId('supplier'), lane: 'finished' }, { status: 'closed', openedAt: '2026-09-01T00:00:00.000Z', closedAt: '2026-10-02T00:00:00.000Z', buyerUserId: entityId('buyer-1') }],
 });
 
 function facts(input: KpiInput, extra: Partial<PerformanceFacts> = {}): PerformanceFacts {
@@ -173,15 +173,35 @@ it('线和期间会改供应商与采购的口径，卡点只吃线', async () =
   expect(buyers.rows[0]?.openBatches).toBe(6);
   expect(buyers.rows[0]?.followUpsInPeriod).toBeNull();
   expect(buyers.rows[0]?.openExceptions).toBeNull();
-  expect(finished.rows[0]?.dateChanges.numerator).toBeNull();
+  expect(finished.rows[0]?.dateChanges.numerator).toBe(0);
 });
 
-it('两个供应商时，对不上的改期不是 0，也不各计一遍', async () => {
-  const other = batch({ id: entityId('other'), status: 'confirmed', supplierPartyId: entityId('other'), firstConfirmedDate: day('2026-10-04'), dateBuyerConfirmed: day('2026-10-04') });
-  const loaded = facts(kpi([...changes.batches, other], { dateChanges: changes.dateChanges, exceptions: changes.exceptions }));
-  const rows = await makeGetSupplierPerformance({ performance: readModel(loaded) })(query(), actor);
-  expect(rows.rows).toHaveLength(2);
-  expect(rows.rows.every((row) => row.dateChanges.numerator === null && row.openExceptions.numerator === null)).toBe(true);
+it('供应商指标保留关联准确的事件，独立列出无法归属的事件', async () => {
+  const unresolved = batch({ id: entityId('unknown'), status: 'confirmed', supplierPartyId: null });
+  const loaded = facts(kpi([...changes.batches, unresolved], {
+    dateChanges: [...changes.dateChanges, { field: 'dateBuyerConfirmed', changedAt: '2026-10-09T00:00:00Z', isFirstSet: false, supplierPartyId: null }],
+    exceptions: [...changes.exceptions, { status: 'open', openedAt: '2026-10-02T00:00:00Z', closedAt: null }],
+  }));
+  const dashboard = await makeGetSupplierPerformance({ performance: readModel(loaded) })(query(), actor);
+  expect(dashboard.rows).toHaveLength(1);
+  expect(dashboard.rows[0]).toMatchObject({ dateChanges: { numerator: 1 }, openExceptions: { numerator: 1 } });
+  expect(dashboard.unassigned).toEqual({ dateChanges: 1, openExceptions: 1 });
+});
+
+it('无批次的供应商仍显示本线开放异常', async () => {
+  const openedAt = '2026-10-02T00:00:00Z';
+  const loaded = facts(kpi([], { exceptions: [
+    { status: 'open', openedAt, closedAt: null, supplierPartyId: entityId('finished-only'), lane: 'finished' },
+    { status: 'open', openedAt, closedAt: null, supplierPartyId: entityId('material-only'), lane: 'material' },
+    { status: 'closed', openedAt, closedAt: openedAt, supplierPartyId: entityId('closed-only'), lane: 'finished' },
+    { status: 'open', openedAt, closedAt: null, supplierPartyId: null, lane: 'finished' },
+  ] }));
+  const getSuppliers = makeGetSupplierPerformance({ performance: readModel(loaded) });
+  const finished = await getSuppliers(query({ lane: 'finished' }), actor);
+  expect(finished.rows).toMatchObject([{ partyId: 'finished-only', dueBatches: { numerator: 0 }, openExceptions: { numerator: 1 } }]);
+  expect(finished.unassigned).toEqual({ dateChanges: 0, openExceptions: 1 });
+  const all = await getSuppliers(query(), actor);
+  expect(all.rows.map((row) => row.partyId)).toEqual(['finished-only', 'material-only']);
 });
 
 it('卡点按订单行映射工厂关联、工厂未关联、未关闭异常、供应商待审和产品缺 BOM', async () => {

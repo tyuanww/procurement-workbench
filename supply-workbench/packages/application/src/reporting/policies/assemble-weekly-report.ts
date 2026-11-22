@@ -4,14 +4,12 @@ import {
   averageDelay,
   buyerLoads,
   currentlyOverdue,
-  dateChangeCount,
   diffDays,
   dueBatches,
   isOpenBatch,
   localDate,
   noteReturnDays,
   onTimeRate,
-  openExceptionCount,
   stuckDistribution,
   weeklyOnTime,
   type KpiInput,
@@ -20,7 +18,7 @@ import {
 } from '@sw/domain';
 import type { PerformanceFacts } from '../../ports/performance-read-model.js';
 import type { FreshnessSource } from '../../platform/index.js';
-import type { BuyerLoadRow, SupplierKpiRow, SupplierWeek } from '../../performance/index.js';
+import { scopedSupplierIds, supplierEvents, supplierEventFigures, type BuyerLoadRow, type SupplierKpiRow, type SupplierWeek } from '../../performance/index.js';
 import type { WeekDelta, WeeklyReportData } from '../views.js';
 
 const WEEK_DAYS = 7;
@@ -43,6 +41,7 @@ export function assembleWeeklyReport(input: WeeklyAssemblyInput): WeeklyReportDa
     risks: risksOf(week, input.facts.batchLabels),
     stuck: distributionOf(week),
     suppliers: supplierRows(week, input.facts.partyNames),
+    supplierUnassigned: supplierEvents(week, { partyId: null }),
     buyers: buyerRows(week, input.facts),
     exceptions: { opened: overview.exceptionsOpened, closed: overview.exceptionsClosed },
     dueNextWeek: dueNext(week, input.facts.batchLabels),
@@ -146,12 +145,10 @@ function count(row: Record<string, number>, key: string): number {
 }
 
 function supplierRows(input: KpiInput, names: Readonly<Record<string, string>>): SupplierKpiRow[] {
-  const ids = [...new Set(input.batches.flatMap((batch) => (batch.supplierPartyId === null ? [] : [batch.supplierPartyId])))].sort();
-  const isShared = ids.length === 1;
-  return ids.map((partyId) => supplierRow({ input, partyId, displayName: names[partyId] ?? null, isShared }));
+  return scopedSupplierIds(input).map((partyId) => supplierRow({ input, partyId, displayName: names[partyId] ?? null }));
 }
 
-function supplierRow(row: { readonly input: KpiInput; readonly partyId: string; readonly displayName: string | null; readonly isShared: boolean }): SupplierKpiRow {
+function supplierRow(row: { readonly input: KpiInput; readonly partyId: string; readonly displayName: string | null }): SupplierKpiRow {
   const scoped = { ...row.input, batches: row.input.batches.filter((batch) => batch.supplierPartyId === row.partyId) };
   return {
     partyId: row.partyId,
@@ -160,9 +157,8 @@ function supplierRow(row: { readonly input: KpiInput; readonly partyId: string; 
     onTime: figure(onTimeRate(scoped)),
     averageDelayDays: figure(averageDelay(scoped)),
     overdueNow: figure(currentlyOverdue(scoped)),
-    dateChanges: row.isShared ? figure(dateChangeCount(row.input)) : unattributed(),
     noteReturnDays: figure(noteReturnDays(scoped)),
-    openExceptions: row.isShared ? figure(openExceptionCount(row.input)) : unattributed(),
+    ...supplierEventFigures(row.input, { partyId: row.partyId }),
     weekly: weeklyOnTime(scoped).map(weekPoint),
   };
 }
@@ -186,8 +182,4 @@ function weekPoint(point: { readonly weekStart: LocalDate; readonly rate: KpiMea
 
 function figure(measure: KpiMeasure): SupplierKpiRow['dueBatches'] {
   return { numerator: measure.numerator, denominator: measure.denominator, n: measure.n };
-}
-
-function unattributed(): SupplierKpiRow['dueBatches'] {
-  return { numerator: null, denominator: null, n: 0 };
 }

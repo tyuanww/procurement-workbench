@@ -46,6 +46,24 @@ function facts(batches: readonly KpiBatch[]): PerformanceFacts {
   };
 }
 
+it('周报把已知和未归属的供应商事件分别冻结', () => {
+  const known = batch('known', '2026-10-13');
+  const unknown = { ...batch('unknown', '2026-10-13'), supplierPartyId: null };
+  const loaded = facts([known, unknown]);
+  const input = { ...loaded, kpi: { ...loaded.kpi, dateChanges: [
+    { field: 'dateBuyerConfirmed' as const, changedAt: at, isFirstSet: false, supplierPartyId: known.supplierPartyId },
+    { field: 'dateBuyerConfirmed' as const, changedAt: at, isFirstSet: false },
+  ], exceptions: [
+    { status: 'open' as const, openedAt: at, closedAt: null, supplierPartyId: known.supplierPartyId },
+    { status: 'open' as const, openedAt: at, closedAt: null },
+    { status: 'open' as const, openedAt: at, closedAt: null, supplierPartyId: entityId('exception-only') },
+  ] } };
+  const report = WeeklyReportDataSchema.parse(assembleWeeklyReport({ weekStart: monday, facts: input, previous: null, sources: [] }));
+  expect(report.suppliers.find((row) => row.partyId === known.supplierPartyId)).toMatchObject({ dateChanges: { numerator: 1 }, openExceptions: { numerator: 1 } });
+  expect(report.suppliers.find((row) => row.partyId === 'exception-only')).toMatchObject({ dueBatches: { numerator: 0 }, openExceptions: { numerator: 1 } });
+  expect(report.supplierUnassigned).toEqual({ dateChanges: 1, openExceptions: 1 });
+});
+
 it('不是周一开始就拒绝，没有上一周时不给出变化值', async () => {
   const memory = createMemory();
   const clock = new FixedClock(at);

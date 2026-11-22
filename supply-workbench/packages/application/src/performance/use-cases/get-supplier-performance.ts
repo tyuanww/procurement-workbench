@@ -1,30 +1,32 @@
 import {
   averageDelay,
   currentlyOverdue,
-  dateChangeCount,
   dueBatches,
   noteReturnDays,
   onTimeRate,
-  openExceptionCount,
+  onTimeBatchResults,
   weeklyOnTime,
-  type KpiBatch,
   type KpiInput,
   type Lane,
 } from '@sw/domain';
 import type { GetSupplierPerformance, GetSupplierPerformanceDeps } from '../boundary.js';
 import type { PerformanceFacts } from '../../ports/performance-read-model.js';
-import type { SupplierKpiRow, SupplierWeek } from '../views.js';
-import { figure, unattributed } from './figures.js';
+import type { SupplierBatchResult, SupplierKpiRow, SupplierWeek } from '../views.js';
+import { figure } from './figures.js';
 import { loadScoped, scopedBatches } from './scope.js';
 import { authorize } from '../../shared/authorize.js';
+import { scopedSupplierIds, supplierEvents, supplierEventFigures } from '../supplier-events.js';
 
 export const makeGetSupplierPerformance =
   (deps: GetSupplierPerformanceDeps): GetSupplierPerformance =>
   async (input, actor) => {
     authorize(actor, 'dashboard.read');
     const facts = await loadScoped(deps.performance, input);
-    // 02 第 9 节还写了只统计等待供应商、收货方另列。D04 没有这两个过滤，行类型也没有收货方块。验收要求与 D04 一致，这里不另写一套。
-    return { rows: supplierIds(facts.kpi.batches).map((partyId) => rowOf({ facts, partyId, lane: input.lane })) };
+    if (input.partyId !== undefined) return { rows: [], detail: detailOf(facts, input.partyId) };
+    return {
+      rows: scopedSupplierIds(facts.kpi, input.lane).map((partyId) => rowOf({ facts, partyId, lane: input.lane })),
+      unassigned: supplierEvents(facts.kpi, { partyId: null, lane: input.lane }),
+    };
   };
 
 function rowOf({ facts, partyId, lane }: { readonly facts: PerformanceFacts; readonly partyId: string; readonly lane: Lane | undefined }): SupplierKpiRow {
@@ -33,7 +35,7 @@ function rowOf({ facts, partyId, lane }: { readonly facts: PerformanceFacts; rea
     partyId,
     displayName: facts.partyNames[partyId] ?? null,
     ...batchMetrics(scoped),
-    ...periodMetrics(facts.kpi, lane),
+    ...supplierEventFigures(facts.kpi, { partyId, lane }),
     weekly: weeksOf(scoped),
   };
 }
@@ -48,20 +50,17 @@ function batchMetrics(kpi: KpiInput): Pick<SupplierKpiRow, 'dueBatches' | 'onTim
   };
 }
 
-function periodMetrics(kpi: KpiInput, lane: Lane | undefined): Pick<SupplierKpiRow, 'dateChanges' | 'openExceptions'> {
-  if (lane !== undefined || !sharesOneSupplier(kpi.batches)) return { dateChanges: unattributed(), openExceptions: unattributed() };
-  return { dateChanges: figure(dateChangeCount(kpi)), openExceptions: figure(openExceptionCount(kpi)) };
+function detailOf(facts: PerformanceFacts, partyId: string): SupplierBatchResult[] {
+  return onTimeBatchResults(scopedBatches(facts.kpi, partyId)).map(({ batch, onTime, lastReceivedOn }) => {
+    const label = facts.batchLabels[batch.id];
+    return {
+      batchId: batch.id, orderLineId: label?.orderLineId ?? null,
+      poRaw: label?.poRaw ?? null, nameRaw: label?.nameRaw ?? null,
+      firstConfirmedDate: batch.firstConfirmedDate, lastReceivedOn, onTime,
+    };
+  });
 }
 
 function weeksOf(kpi: KpiInput): SupplierWeek[] {
   return weeklyOnTime(kpi).map((point) => ({ weekStart: point.weekStart, rate: point.rate.value, n: point.rate.n }));
-}
-
-function supplierIds(batches: readonly KpiBatch[]): string[] {
-  return [...new Set(batches.flatMap((batch) => (batch.supplierPartyId === null ? [] : [batch.supplierPartyId])))].sort();
-}
-
-function sharesOneSupplier(batches: readonly KpiBatch[]): boolean {
-  const ids = new Set(batches.map((batch) => batch.supplierPartyId));
-  return ids.size === 1 && !ids.has(null);
 }

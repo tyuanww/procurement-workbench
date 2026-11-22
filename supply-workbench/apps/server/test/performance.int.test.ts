@@ -33,6 +33,14 @@ it('D04 手算样例写进库后，三个看板接口与期望一致', async () 
   expect(stuck.json().kpis).toMatchObject({ openBatches: 6, overdue: 2, awaitingDate: 0, shippedNotReceived: 0 });
   expect(stuck.json().distribution.find((row: { stage: string }) => row.stage === 'confirmed').buckets).toMatchObject({ '8-14': 1, '15+': 1 });
   expect(suppliers.json().rows[0]).toMatchObject({ displayName: '宜侬', dueBatches: { numerator: 10 }, onTime: { numerator: 2, denominator: 8 } });
+  const supplier = suppliers.json().rows[0];
+  const week = '2026-10-05';
+  const detailQuery = new URLSearchParams({ from: week, to: '2026-10-11', lane: 'finished', partyId: supplier.partyId });
+  const detail = await app.inject({ url: `/api/v1/dashboard/suppliers?${detailQuery}`, headers: { cookie } });
+  const weekPoint = supplier.weekly.find((point: { weekStart: string }) => point.weekStart === week);
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json().detail).toHaveLength(weekPoint.n);
+  expect(detail.json().detail.filter((batch: { onTime: boolean }) => batch.onTime)).toHaveLength(Math.round(weekPoint.n * weekPoint.rate));
   expect(buyers.json().rows[0]).toMatchObject({ buyer: { id: 'buyer-1' }, openLines: 1, openBatches: 6, followUpsInPeriod: 1 });
   const buyerCookie = await loginAs(app, 'buyer');
   const forbidden = await app.inject({ method: 'GET', url: `/api/v1/dashboard/stuck?${query}`, headers: { cookie: buyerCookie } });

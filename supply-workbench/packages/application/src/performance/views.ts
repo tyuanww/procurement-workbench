@@ -74,7 +74,23 @@ export type BuyerLoadRow = {
   readonly followUpsInPeriod: number | null;
 };
 
-export type SupplierDashboard = { readonly rows: readonly SupplierKpiRow[] };
+export type SupplierEvents = { readonly dateChanges: number; readonly openExceptions: number };
+
+export type SupplierBatchResult = {
+  readonly batchId: string;
+  readonly orderLineId: string | null;
+  readonly poRaw: string | null;
+  readonly nameRaw: string | null;
+  readonly firstConfirmedDate: LocalDate | null;
+  readonly lastReceivedOn: LocalDate | null;
+  readonly onTime: boolean;
+};
+
+export type SupplierDashboard = {
+  readonly rows: readonly SupplierKpiRow[];
+  readonly unassigned?: SupplierEvents;
+  readonly detail?: readonly SupplierBatchResult[];
+};
 export type BuyerLoadDashboard = { readonly rows: readonly BuyerLoadRow[]; readonly unassignedExceptions: number | null };
 
 export type PeriodQuery = {
@@ -90,7 +106,7 @@ export type StuckQuery = PeriodQuery & {
   readonly card?: 'overdue';
   readonly page?: number;
 };
-export type SupplierQuery = PeriodQuery;
+export type SupplierQuery = PeriodQuery & { readonly partyId?: string | undefined };
 export type BuyerLoadQuery = PeriodQuery;
 
 export type BottleneckKey =

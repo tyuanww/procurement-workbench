@@ -26,13 +26,18 @@ export type KpiBatch = {
   readonly noteReturnedOn: LocalDate | null;
 };
 
+type SupplierAttribution = {
+  readonly supplierPartyId?: EntityId | null;
+  readonly lane?: Lane;
+};
+
 export type KpiInput = {
   readonly today: LocalDate;
   readonly from: LocalDate;
   readonly to: LocalDate;
   readonly batches: readonly KpiBatch[];
   readonly lines: readonly OrderLineLoad[];
-  readonly dateChanges: readonly { readonly field: 'dateBuyerConfirmed'; readonly changedAt: IsoInstant; readonly isFirstSet: boolean }[];
-  readonly exceptions: readonly { readonly status: ExceptionStatus; readonly openedAt: IsoInstant; readonly closedAt: IsoInstant | null; readonly buyerUserId?: EntityId | null }[];
+  readonly dateChanges: readonly (SupplierAttribution & { readonly field: 'dateBuyerConfirmed'; readonly changedAt: IsoInstant; readonly isFirstSet: boolean })[];
+  readonly exceptions: readonly (SupplierAttribution & { readonly status: ExceptionStatus; readonly openedAt: IsoInstant; readonly closedAt: IsoInstant | null; readonly buyerUserId?: EntityId | null })[];
 };
 

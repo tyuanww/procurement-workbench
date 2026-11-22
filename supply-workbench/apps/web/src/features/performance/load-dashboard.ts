@@ -20,6 +20,7 @@ export type LoadDashboardInput = {
 
 export type DashboardLoad = {
   readonly suppliers: readonly SupplierInput[];
+  readonly supplierUnassigned?: ReturnType<typeof SupplierDashboardSchema.parse>['unassigned'];
   readonly buyers: readonly BuyerInput[];
   readonly project: ProjectProgress;
   readonly unassignedExceptions: number | null;
@@ -32,7 +33,7 @@ export async function loadDashboard(input: LoadDashboardInput): Promise<Dashboar
     apiGet(`/api/v1/dashboard/buyers?${query}`, BuyerLoadDashboardSchema),
     read({ name: 'planProgress', from: input.from, to: input.to }),
   ]);
-  return toLoad({ suppliers: suppliers.rows, buyers: buyers.rows, project, unassignedExceptions: buyers.unassignedExceptions });
+  return toLoad({ suppliers: suppliers.rows, supplierUnassigned: suppliers.unassigned, buyers: buyers.rows, project, unassignedExceptions: buyers.unassignedExceptions });
 }
 
 function apiQuery(input: LoadDashboardInput): string {
@@ -43,12 +44,14 @@ function apiQuery(input: LoadDashboardInput): string {
 
 function toLoad(input: {
   readonly suppliers: readonly SupplierKpiRow[];
+  readonly supplierUnassigned?: ReturnType<typeof SupplierDashboardSchema.parse>['unassigned'];
   readonly buyers: readonly BuyerLoadRow[];
   readonly project: ProjectProgress;
   readonly unassignedExceptions: number | null;
 }): DashboardLoad {
   return {
     suppliers: input.suppliers.map(supplierInput),
+    supplierUnassigned: input.supplierUnassigned,
     buyers: input.buyers.map(buyerInput),
     project: input.project,
     unassignedExceptions: input.unassignedExceptions,
