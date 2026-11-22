@@ -1,0 +1,12 @@
+{
+  "name": "@sw/application",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./errors": "./src/shared/errors.ts"
+  },
+  "dependencies": {
+    "@sw/domain": "workspace:*"
+  }
+}

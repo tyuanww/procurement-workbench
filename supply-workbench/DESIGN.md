@@ -1,0 +1,405 @@
+# 采购工作台视觉规范
+
+本文定义采购工作台的页面组件、主题和视觉验收口径。
+
+组件库是 antd 6.6.5，锁在 `apps/web/package.json`。主题 API、Table 分页和 Tag 全部用 v6。`placement` 替代已废弃的 `position`。Tag 用 `variant`。不安装 `@ant-design/pro-components`。该包的 peer 停在 antd 4 和 5，不支持 antd 6。Pro 的做法只作参照。
+
+做法来自三处，按这个顺序取舍。
+
+1. 沿用现有界面的词汇和密度。品牌色用 oklch 或 OKLab 调和，使用设计系统里的确定值。
+2. 本文和 `apps/web/src/theme/tokens.ts`。
+3. antd 6.6.5 的默认值。覆盖默认值时遵循本文的可用性和对比度要求。
+
+对比度用 WCAG 2.x 相对亮度，公式与 `apps/web/src/theme/contrast.ts` 相同。正文至少 4.5 比 1。输入框边框至少 3 比 1。
+
+## 1. 已经定下的六条
+
+这六条覆盖设计建议稿里标成冲突或未测的点。后文不再给第二套写法。
+
+1. 表格只用 antd `Table`。不引入 TanStack Table。行数超过 200 时打开 antd Table 自带的 `virtual`，并给出 `scroll.y`。每页 50 行的列表不开虚拟滚动。
+2. 翻页、筛选、改条件时保留旧数据，用 Table 自带的 `loading={{ spinning: true, delay: 200 }}`。延迟 200 毫秒再转，避免闪一下。不用顶部细进度条。
+3. 表格里的日期，同一年写 `MM-DD`，跨年写 `YYYY-MM-DD`。悬停用 Tooltip 显示完整日期和星期。详情、时间线、审计、导入时间和导出用 `YYYY-MM-DD HH:mm`，24 小时制，时区 `Asia/Shanghai`。
+4. 抽屉宽度只有 480 和 720。480 给六个字段以内的快捷动作。720 给产品编辑、别名关联、导入冲突和跟进台预览。不要第三档。
+5. 行高以 antd 在本主题下的实际渲染为准，不写 36 或 44。2026-11-03 在本地 Node 24、antd 6.6.5、视口 1440×900 上用 Playwright 量过，结论在第 5 节。
+6. 输入框边框用 `#918A99`。不采用 `#D3CDD9`。对比度写在第 2 节。
+
+## 2. 主题 token
+
+下面这组替换 `apps/web/src/theme/antd.ts`。常量从 `tokens.ts` 引。字面量写在这里，方便对照。
+
+```tsx
+import { theme, type ThemeConfig } from 'antd';
+
+const brand = { 100: '#E8DCF0', 200: '#D3C3E8', 300: '#C2AED5', 400: '#A088BF', 600: '#805D9D', 800: '#4A2D5E' } as const;
+const primaryHover = '#6D4C83';
+const textTertiary = '#6E6777';
+const controlBorder = '#918A99';
+
+export const antdTheme: ThemeConfig = {
+  algorithm: theme.defaultAlgorithm,
+  token: {
+    colorPrimary: brand[600],
+    colorPrimaryHover: primaryHover,
+    colorPrimaryActive: brand[800],
+    colorPrimaryBg: brand[100],
+    colorPrimaryBgHover: brand[200],
+    colorPrimaryBorder: brand[300],
+    colorPrimaryBorderHover: brand[400],
+    colorLink: brand[600],
+    colorLinkHover: primaryHover,
+    colorLinkActive: brand[800],
+    controlItemBgActive: brand[100],
+    colorInfo: '#1849A9',
+    colorInfoText: '#1849A9',
+    colorInfoBg: '#EFF8FF',
+    colorInfoBorder: '#B9CCEA',
+    colorSuccess: '#067647',
+    colorSuccessText: '#067647',
+    colorSuccessBg: '#ECFDF3',
+    colorSuccessBorder: '#B2DBC8',
+    colorWarning: '#93370D',
+    colorWarningText: '#93370D',
+    colorWarningBg: '#FFFAEB',
+    colorWarningBorder: '#E4C9B4',
+    colorError: '#B42318',
+    colorErrorText: '#B42318',
+    colorErrorBg: '#FEF3F2',
+    colorErrorBorder: '#ECBFBC',
+    colorText: '#1F1A24',
+    colorTextHeading: '#1F1A24',
+    colorTextSecondary: '#5C5566',
+    colorTextTertiary: textTertiary,
+    colorTextDescription: textTertiary,
+    colorTextPlaceholder: textTertiary,
+    colorIcon: textTertiary,
+    colorBorder: controlBorder,
+    colorBorderSecondary: '#E6E1EA',
+    colorSplit: '#E6E1EA',
+    colorBgLayout: '#F7F5F9',
+    colorBgContainer: '#FFFFFF',
+    colorBgElevated: '#FFFFFF',
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif',
+    fontSize: 14,
+    fontSizeSM: 12,
+    fontSizeLG: 16,
+    fontSizeHeading1: 20,
+    fontSizeHeading2: 16,
+    fontSizeHeading3: 14,
+    fontSizeHeading4: 14,
+    fontSizeHeading5: 14,
+    lineHeightHeading1: 1.4,
+    lineHeightHeading2: 1.5,
+    borderRadius: 6,
+    borderRadiusSM: 4,
+    borderRadiusLG: 8,
+    controlHeight: 32,
+    controlHeightSM: 24,
+    controlHeightLG: 40,
+  },
+  components: {
+    Layout: {
+      siderBg: brand[800],
+      headerBg: '#FFFFFF',
+      headerHeight: 52,
+      headerPadding: '0 16px',
+      bodyBg: '#F7F5F9',
+    },
+    Menu: {
+      collapsedWidth: 56,
+      itemHeight: 40,
+      darkItemBg: brand[800],
+      darkSubMenuItemBg: brand[800],
+      darkPopupBg: brand[800],
+      darkItemColor: '#C0B6C7',
+      darkItemHoverColor: '#FFFFFF',
+      darkItemHoverBg: 'rgba(255,255,255,0.08)',
+      darkItemSelectedBg: brand[600],
+      darkItemSelectedColor: '#FFFFFF',
+    },
+    Table: {
+      headerBg: '#F7F5F9',
+      headerColor: '#5C5566',
+      headerSplitColor: 'transparent',
+      rowHoverBg: '#F7F5F9',
+      rowSelectedBg: brand[200],
+      rowSelectedHoverBg: brand[300],
+      borderColor: '#E6E1EA',
+      cellFontSize: 13,
+      cellFontSizeMD: 13,
+      cellFontSizeSM: 13,
+      cellPaddingBlockSM: 8,
+      cellPaddingInlineSM: 8,
+      cellPaddingBlockMD: 12,
+      cellPaddingInlineMD: 12,
+    },
+    Statistic: { contentFontSize: 28, titleFontSize: 12 },
+    Tag: { defaultBg: '#F2F0F4', defaultColor: '#5C5566' },
+    Drawer: { footerPaddingBlock: 12, footerPaddingInline: 24 },
+  },
+};
+```
+
+### 2.1 颜色为什么是这些值
+
+`colorPrimary` 保持 `#805D9D`。白字对比度 5.29。品牌紫只用于主按钮、链接、选中和焦点环。
+
+`colorPrimaryHover` 用 `#6D4C83`。它是 brand.600 朝 brand.800 走 35% 的 OKLab 插值。白字 6.97。antd 从 seed 派生的悬停色和 brand.400 `#A088BF` 白字只有 3.10，都不能放白字。brand.400 只做边框和图形。
+
+`colorInfo` 用 `#1849A9`，也就是 `tokens.ts` 里的 status.info。现在 `antd.ts` 把 `colorInfo` 设成 brand.600，信息提示会变成紫色，和「状态色不用紫」冲突。链接仍显式设成 brand.600，不跟着 colorInfo 走。选中行里的链接用 `#4A2D5E`。
+
+`colorTextTertiary`、说明、占位和图标用 `#6E6777`。现在的 `#8A8494` 在白底是 3.62，在页面底 `#F7F5F9` 是 3.34，都不到 4.5。`contrastPairs` 没包含 tertiary，所以单测没拦住。`#6E6777` 白底 5.43，页面底 5.01，中性底 `#F2F0F4` 上 4.79。不要把 `#6E6777` 放在 brand.100 上，那个组合只有 4.12。brand.600 的字放在 brand.100 上只有 4.01，这个底上的字用 `colorText`。
+
+状态色的文字和底色沿用 `tokens.ts`。必须写进 antd 的 `colorErrorText`、`colorWarningText`、`colorSuccessText`。只设 `colorPrimary` 时，这三色仍是 antd 默认的 `#ff4d4f`、`#faad14`、`#52c41a`。白底对比度分别是 3.27、1.90、2.27。`Typography` 的 danger、表单校验和 Alert 图标都会不达标。
+
+| 语义 | 文字 | 底 | 实心边框 |
+| --- | --- | --- | --- |
+| error | `#B42318` | `#FEF3F2` | `#ECBFBC` |
+| warning | `#93370D` | `#FFFAEB` | `#E4C9B4` |
+| info | `#1849A9` | `#EFF8FF` | `#B9CCEA` |
+| success | `#067647` | `#ECFDF3` | `#B2DBC8` |
+| attention | `#B93815` | `#FEF6EE` | `#EDC6B8` |
+| neutral | `#5C5566` | `#F2F0F4` | `#CCC9D0` |
+
+attention 和 neutral 不映射成 antd 的种子色。实心 Tag 用浅边。描边 Tag 底透明，边用前景色。
+
+输入框边框 `#918A99` 落在 `#D3CDD9` 到 `#5C5566` 这条中性紫灰上。按 `contrast.ts` 的公式，对白底 3.33，对页面底 `#F7F5F9` 3.08，两处都超过 3。`#D3CDD9` 对白底只有 1.56。建议稿里的 `#958F9E` 对白底 3.13，对页面底只有 2.89，输入框若直接放在页面底上仍不达标，所以不采用。分割线 `#E6E1EA` 对白底 1.29，只做分割，不做控件唯一边界。
+
+`colorBorderSecondary` 和 `colorSplit` 传 `#E6E1EA`。现在没传给 antd，表格线会落到默认灰。
+
+导航未选中字色用实色 `#C0B6C7`。对 brand.800 的对比度是 5.88。不用半透明白。
+
+### 2.2 字体
+
+西文字体放在中文前面，避免 `PO14` 和日期的数字落到中文字体的西文字形上。不用 Inter、Roboto、Arial。
+
+| 用途 | token | 值 |
+| --- | --- | --- |
+| 正文、表单、按钮 | `fontSize` | 14 |
+| 辅助、Tag、时间戳 | `fontSizeSM` | 12 |
+| 页面标题 | `fontSizeHeading1` | 20，行高 1.4，也就是 28px |
+| 区块标题 | `fontSizeHeading2` | 16，行高 1.5 |
+| h3 到 h5 | `fontSizeHeading3/4/5` | 14，字重 600 |
+| 表格 | `cellFontSize` 三档 | 13 |
+| 指标数字 | `Statistic.contentFontSize` | 28 |
+| 指标标题 | `Statistic.titleFontSize` | 12 |
+
+页面标题用 `Typography.Title` 的 `level={1}`。现在跟进台和进度页用 `level={3}`，在未覆盖标题 token 时渲染成 24px。其余页是原生 `h1`。每页只保留一个 h1。
+
+最小字号 12。不要出现 11 或更小。成段中文行高 1.75。数字列 `font-variant-numeric: tabular-nums`，右对齐，千分位。
+
+### 2.3 间距和圆角
+
+间距阶是 4、8、12、16、24、32，与 antd 默认一致。不要在业务里使用 20。圆角 6，小圆角 4，卡片和表头用 8。控件高度 32、24、40。块与块之间用 `Flex` 的 `gap`，不要逐个写 `marginTop`。
+
+## 3. 壳层
+
+| 项 | 值 |
+| --- | --- |
+| 侧栏展开 | 208。antd 默认 200，不采用 |
+| 侧栏收起 | 56。antd 默认 80，不采用 |
+| 菜单项高 | 40 |
+| 顶栏高 | 52。antd 默认 64，不采用 |
+| 顶栏底边 | `1px solid #E6E1EA` |
+| 顶栏定位 | `position: sticky; top: 0; z-index: 10` |
+| 侧栏定位 | `position: sticky; top: 0; height: 100vh; z-index: 11` |
+| 内容边距 | 宽度小于 1440 时 16，大于等于 1440 时 24 |
+| Logo 区高度 | 52，与顶栏对齐 |
+
+2026-11-03 实测。采购甲登录后在 `/lines`，视口 1440×900。展开时侧栏和菜单都是 208，`scrollWidth` 减 `clientWidth` 为 0，顶栏高 52。点击收起按钮后，侧栏和菜单都是 56，溢出仍是 0。菜单没有被 antd 默认的 80 撑出侧栏。`Menu` 的 `collapsedWidth` 仍写成 56，和 `Sider` 的 `collapsedWidth` 锁在一起，避免以后样式改回 80。
+
+1279 宽不会自动收起。代码里没有 `matchMedia`。把视口改成 1279 时，只有已经手动收起的侧栏保持 56。规格要求 768 到 1279 默认收起，用 `matchMedia('(max-width: 1279px)')`。不要用 antd 的 `breakpoint="xl"`，因为 antd 的 xl 是 1200，不是 04 的 1280。小于 768 时侧栏改成抽屉菜单，点击目标至少 44。
+
+收起按钮放在侧栏底部，用 `MenuFoldOutlined` 和 `MenuUnfoldOutlined`。现在是字符 `«` 和 `»`，见 `shell-frame.tsx` 第 50 行到第 52 行。
+
+顶栏左侧是产品名，14 像素，字重 600，颜色 `#4A2D5E`。中间是搜索按钮，宽 280，文案「搜索单号、品名、供应商」。快捷键在 Mac 显示 `⌘K`，在 Windows 显示 `Ctrl+K`。右侧是数据新鲜度和账号菜单。来源超过 7 天用 warning。
+
+现在顶栏不吸顶。`apps/web/src` 里没有 `sticky`。长表滚动后搜索会离开视口。
+
+页面底是 `#F7F5F9`。内容块是白底，1 像素 `#E6E1EA` 边，圆角 8，无阴影。浮层用 antd 默认阴影。现在 `Shell.tsx` 的 `PageFrame` 把整页包进一个白框，并设了 `minHeight`。删掉这层大白框和这个 `minHeight`。空态自己占高度。
+
+页面标题行高 32，下边距 16。左边是 h1 和次要计数。右边最多一个主按钮。
+
+内容最大宽度按页面分。列表和看板不限宽。详情 1440，左对齐。设置和周报生成这种页内表单 560。成段说明 720。
+
+z-index 只使用 antd 的分层。顶栏 10，侧栏 11。Drawer、Modal 和搜索层用 antd 默认 1000。业务代码不写 1000 以上的 z-index。撤销提示改成 `message.open`，停留 10 秒，这样它自然在抽屉之上。
+
+## 4. 页面模板
+
+### 4.1 路由归哪一类
+
+| 模板 | 路由 |
+| --- | --- |
+| 列表 | `/lines`、`/progress`、`/products`、`/reports`、`/imports`、`/master`、`/settings` |
+| 详情 | `/lines/:id`、`/parties/:id`、`/products/:id`、`/reports/:id`、`/reports/:id/print`、`/imports/:id` |
+| 看板 | `/today`、`/dashboard` |
+| 表单 | 今日抽屉、产品编辑、设置、周报生成、`/login` |
+
+`/login` 是居中 `Card`，宽 360。已登录的 `/` 和 `/login` 按角色跳到首页。审核人在有待审时到 `/master`，管理层到 `/dashboard`，负责人到 `/reports`，只有管理员角色时到 `/settings`，只有采购角色时到 `/today`，其余进入 `/progress`。
+
+### 4.2 列表
+
+跟进台是样板，从上到下是标题行、筛选条、视图条、表格、分页。
+
+标题用 `Typography.Title` `level={1}`，旁边用次要文字写行数。成品线和物料线用 `Segmented`。
+
+筛选放在白块里，`Flex wrap gap={8}`，内边距 12。搜索框宽 280。每个 `Select` 宽 160。勾选和「清空」用 antd。每个筛选写入 URL。1280 宽放不下时，多出来的收进「更多筛选」。
+
+视图用 `Radio.Group` `optionType="button"`。右侧放列、密度和导出。密度只有紧凑 `small` 和舒适 `middle`。视图被改过时显示「已修改」，并给出清除和保存。
+
+有选中行时，批量条换掉视图条，位置不跳。底色 `#E8DCF0`，高 40。文案是「已选 N 行」。分配用 antd `Select`，不要原生 `select`。
+
+表格 `size="small"`，勾选列和采购单号列 `fixed: 'left'`，`scroll={{ x: 'max-content' }}`，`sticky={{ offsetHeader: 52 }}`。去掉现在的 `scroll.y: 480`。数量列右对齐。
+
+分页用 Table 自带的，删掉单独的 `Pagination`。
+
+```ts
+pagination={{
+  placement: ['bottomEnd'],
+  pageSize: 50,
+  pageSizeOptions: [20, 50, 100],
+  showSizeChanger: true,
+  showTotal: (total) => `共 ${total} 行`,
+}}
+```
+
+每页 50 来自 04。现在 `desk.ts` 的 `pageSizeOf` 在地址栏没有页大小时返回 200。2026-11-03 实测跟进台和进度页都一次渲染 200 行。200 只作上限，不作默认。
+
+产品档案的卡片和表格切换用 `Segmented`，并写入 URL。导入中心用 `Upload.Dragger` 替换文件输入框。主数据和设置在标题下用 `Tabs`。
+
+### 4.3 详情
+
+返回是链接按钮，保留来源 URL。头部白块第一行是单号 h1、线别、阶段和负责人 `Select`。第二行用 `Descriptions`。缺值走 `MissingValue`。本次导入没有这一行时用 `Alert` `type="warning"`。
+
+批次用 `Card` 加 `Table`。新增、改期、发货、收货打开 480 抽屉，不在页内放原生表单。来源事实用 `Collapse`，默认收起。跟进和异常在 `xl` 以上左右分栏，窄屏上下堆。详情最大宽 1440，左对齐。
+
+导入批次的底部操作条吸在视口底，白底，上边线。按钮是「放弃这批」和「确认导入」。
+
+### 4.4 看板
+
+今日的标题后接日期。范围用 `Segmented`。原因用 `Tag.CheckableTag`。未分配一类提示用 `Alert`。每一组是一张 `Card`。行上最多三个小号按钮，其余进 `Dropdown`。处理完淡出 180 毫秒。`prefers-reduced-motion` 时不要动画。现在 `today-style.ts` 第 37 行是 `opacity 0.4s`。`?` 打开快捷键 `Modal`。
+
+管理看板的标题用 `Typography.Title` `level={1}`。周期、日期和线别留在现有筛选条。页签依次为卡点、供应商表现、采购负荷、项目进度和管理周会。指标用 `Statistic`。分布用状态色，不另做渐变。点击色块筛选下面的表。
+
+### 4.5 抽屉和表单
+
+480 用于改确认日、登记发货、登记收货、记跟进、标异常、新增批次、指派。720 用于产品档案编辑、主体别名、导入冲突和跟进台预览。
+
+2026-11-08 决定：产品档案编辑、主体别名、导入冲突和跟进台预览均启用 720。代码保留 `drawerWidth = 480`，新增 `drawerWide = 720`，并由对应场景显式引用。验收脚本覆盖四处 720 抽屉，并验证跟进台预览只读、失败可关闭。
+
+抽屉在右侧，有遮罩，Esc 关闭，URL 带 `drawer` 参数。标题用动词开头。`Form` `layout="vertical"`。字段下边距 16。固定说明放在表单顶部的 `Alert`。提交失败时顶部放 error `Alert`，保留已填内容。主按钮在 footer 最右，提交中 `loading`，取消仍可点。页内表单不进抽屉，最大宽 560，提交按钮在字段下方靠左。不可逆操作才用 `Modal.confirm`。
+
+### 4.6 数据展示和产品档案
+
+运营页先回答“现在有多少、哪里卡住、下一步做什么”，再给明细。页面顺序固定为指标卡、最多两张分布图、明细表或行动清单。图表和指标可打开对应明细。指标标明订单行、批次或任务，以及适用期间。原表目标、工厂上报、采购确认和实收使用带文字的来源标签。以角色权限提供原表行或登记记录回查入口。
+
+- 指标卡一屏最多四个。标签用 12px 次要色，数值用 20px，数字等宽。缺值用 U+2014，不写 0。
+- 阶段分布、停留天数、采购负荷用横向条形图。比例用单条横向条。时间序列用折线。不用饼图、3D、渐变或阴影。
+- 图表颜色只取 `statusColor` 和 `brand` token。同一含义的颜色在全站保持一致。图例写清分段名称，点击分段可以筛选。
+- 进度、今日、跟进台保留表格或行动清单。管理看板才承担趋势和对比。分类明细超过一屏时回到表格，不做滚动图表。
+- 产品档案默认卡片视图。卡片图在上、文在下，图片 4:3 裁切，无图时显示占位图标，不出现破图。整卡可点击进入详情。
+- 产品表格用 antd `Table`。品名、条码列允许换行，不用 ellipsis 截断。桌面和平板提供列宽拖动柄，命中区 12px，键盘左右键每次 16px；手机端保留核心列和展开行，不显示拖动柄。
+
+## 5. 表格实测和日期
+
+2026-11-03，采购甲，视口 1440×900，主题尚未覆盖 `cellFontSize`。
+
+跟进台 `size="small"`。单元格 padding 四边都是 8px。字号 14px，line-height 22px。单行内容区是 8 加 22 加 8，等于 38px。加上 1px 行边，单行行高按 39px 验收。当时品名换行，整行量到 83px。表头 61px。表体 `max-height` 480px，一次 200 行。
+
+进度页没有写 `size`，类名是默认的 `ant-table`，也就是 large。padding 四边 16px，字号仍是 14px，line-height 22px。单行内容区 54px，加 1px 边按 55px 验收。当时行高量到 97px，同样是换行。没有 `max-height`，200 行把整页撑得很长。
+
+舒适档 `size="middle"` 没有任何页面在用，所以没有实测行高。规格不补一个 44。切到 middle 之后，用同一套量法重测，再把单行高度写回本节。在那之前，middle 的 padding 用本文 token 里的 12。字号三档都是 13，落地后 small 的单行会比现在的 39px 略矮，以新的实测替换 39，仍然不写 36。
+
+表格日期和详情时间按第 1 节第 3 条。现在没有统一的格式化函数。收到 `apps/web/src/shared/ui/format.ts`。数量用 `Intl.NumberFormat('zh-CN')`，整数不带小数。金额字段当前不存在。规则先冻结为 `¥` 加千分位加两位小数，右对齐。
+
+## 6. 状态、空、加载、错误
+
+### 6.1 状态 Tag
+
+状态是图标、文字和颜色。图标来自 `@ant-design/icons`。实心用 `Tag` `variant="filled"`。描边用 `variant="outlined"`。不要写 `color="red"` 这种颜色名。
+
+已有 `status.ts` 的键保持文案不变。领域词表里还有一批状态没有进 `STATUS_SPEC`。批次、订单行阶段、送货单、异常、导入、关联、审核都要进同一张表，用同一个 `StatusTag` 渲染。
+
+键名现在不一致。领域 `flow.ts` 用 `demand_before_confirmed`、`missing_date`、`shipped_not_received`。界面 `status.ts` 用 `required_before_confirmed`、`missing_confirmed`、`shipped_waiting`。合并时保留领域键，界面只做显示映射，不要再造第三套名字。
+
+总表状态「已完成」「进行中」「未开始」一律中性描边。那是来源数据，不和订单行阶段抢颜色。
+
+### 6.2 缺值
+
+缺值符号是 U+2014。不要用连字符或全角减号。颜色用 `#6E6777`。选中行底是 `#D3C3E8` 或 `#C2AED5` 时，缺值改用 `#1F1A24`。`#6E6777` 在这两层底上只有 3.29 和 2.66。原因放在 antd `Tooltip` 里，键盘聚焦也能看到。原因词只用未填写、原文无法识别、代工厂表无对应记录、不适用、暂无数据来源。数字列里的缺值右对齐。一律走 `MissingValue`。不要把缺失显示成 0。
+
+`ProgressPage.tsx` 的到货标签直接返回字符串缺值，没有颜色和原因。物料线「代工厂需求日」的 `factoryRequiredCell` 不读行，永远返回缺值符号。列表契约里没有这个日期。列要么接上批次上的日期，要么不要出现。
+
+### 6.3 空、加载、错误
+
+表格空态用 `Empty` 的简图，文案写成「现状。下一步。」并带一个下一步按钮。筛选后为空时，下一步是清空筛选。今日没有待办时用默认插图，按钮是「去跟进台」。
+
+首次进入用 `Skeleton`。表格首次加载可以用 `loading` 加空数据。再次请求按第 1 节第 2 条。看板指标用 `Card` 的 `loading`。不要用整页 `Spin` 挡住已有内容。
+
+今日在 `isReady` 为假时 `return null`，见 `TodayBoard.tsx` 第 73 行。这是白屏。改成骨架。
+
+整页读失败用 `Result` `status="error"`。标题沿用「X 没有读出来」。副标题给错误码的中文名和怎么办。按钮是重试和返回。无权限用 403，「这个角色看不到这页。」找不到用 404。会话过期用 warning，「登录过期了。」区块失败用 `Alert` `type="error"` 加重试。不要只写「加载失败」。
+
+## 7. 文案和禁止项
+
+按钮用动词开头。状态名只用领域词表。工作台登记和 SRM 收货不要混用。错误提示写发生了什么，以及下一步怎么办。
+
+禁止这些做法。
+
+- 不把指标、计数、样本数写成常数。查询返回空集合时，页面要能看出是没有数据，而不是查询被写成空数组。
+- 不留点了没有请求、也没有反馈的按钮。配置缺失时可以禁用，但禁用条件必须读配置，并写明原因。
+- 不用原生 `h1`、`table`、`select`、`button`、`form`、`input`、`details` 拼页面。文件选择用 `Upload`。
+- 不在 `tokens.ts` 和 `antd.ts` 以外写十六进制颜色。
+- 不安装 Ant Design Pro。
+- 不把 antd 默认蓝 `#1677ff`、红 `#ff4d4f`、金 `#faad14`、绿 `#52c41a` 留在界面上。
+- 抽屉不出现 480 和 720 以外的宽度。
+
+## 8. 截图验收
+
+在 1280、1440、1920 三个宽度下，各截跟进台、订单行详情、今日、管理看板，并打开 480 与 720 抽屉。跟进台预览额外验证 URL 会话、只读内容和失败关闭入口。每一条都能量到或判断。
+
+1. 页面内没有 `#1677ff`、`#ff4d4f`、`#faad14`、`#52c41a`。抽查主按钮、链接、Alert、校验文字和涨跌色。
+2. Alert info 和 message info 是 `#1849A9`，不是紫色。
+3. 主按钮悬停是 `#6D4C83`，是变深，不是变浅。
+4. 缺值、占位和说明文字是 `#6E6777`。`contrastPairs` 含 tertiary，单测通过，对比度至少 4.5。
+5. 实心 Tag 的边是浅色，描边 Tag 的底透明。`rg` 搜 `Tag color=` 结果为 0。
+6. 选中行底色是 `#D3C3E8`，选中后悬停是 `#C2AED5`。选中行里的链接用 `#4A2D5E`。
+7. 每页只有一个 h1，字号 20，行高 28。区块标题 16。
+8. 表格正文和表头都是 13px。表头颜色 `#5C5566`。没有小于 12px 的文字。
+9. 数字列右对齐、等宽、有千分位。同一列的个位上下对齐。
+10. 字体栈西文在前。DevTools 里 `PO14` 的数字使用系统西文字形。
+11. 侧栏展开 208，收起 56。收起后菜单宽度等于侧栏，不溢出。
+12. 顶栏高 52，滚动后仍在顶部。浮层盖住顶栏。
+13. 1280 下内容左右边距 16。1440 及以上是 24。1279 宽自动收起侧栏。
+14. 页面底是 `#F7F5F9`。内容块白底加 1px `#E6E1EA`。没有整页大白框。只有浮层有阴影。
+15. 收起按钮是图标，不是 `«` 或 `»`。
+16. 跟进台默认每页 50 行。分页在表格右下，有「共 N 行」和 20、50、100。没有独立的 `Pagination`。
+17. 紧凑档单行按第 5 节的实测验收。当前主题下是 39px。品名换行可以更高。不要求 36 或 44。舒适档在有 `size="middle"` 的页面后，用同一次量法重测再勾。
+18. 首列和勾选列在横向滚动时固定。表头吸在顶栏下方。
+19. 选中行后批量条替换视图条，页面不跳动。批量条里没有原生 `select`。
+20. 改筛选后刷新，状态还在。URL 带这些参数。
+21. 订单行详情、主数据、产品、周报、设置、导入页的源码里没有原生 `h1`、`h2`、`table`、`select`、`button`、`details`。
+22. 抽屉宽度只有 480 和 720。提交按钮在底部右侧，主按钮在最右。提交中显示 loading。报错在表单顶部，已填内容还在。
+23. 抽屉 footer 按钮的左右边与正文对齐，都是 24。
+24. 今日、跟进台、看板首次加载是骨架，不白屏。用 Slow 3G 截图。
+25. 断网或接口 500 时，整页是 Result，「X 没有读出来」，带错误码中文名、重试和返回。
+26. 每个空态都有一句说明和一个下一步按钮。
+27. 每个缺值悬停和键盘聚焦都能看到原因，用的是 antd Tooltip。
+28. 今日处理完一行，淡出约 180 毫秒。系统开启减少动态效果时没有动画。
+29. 撤销提示停留 10 秒，层级在抽屉之上。
+30. 跟进台日期同年是 `MM-DD`，跨年是 `YYYY-MM-DD`。详情和审计时间是 `YYYY-MM-DD HH:mm`。时区是上海。
+
+输入框边框另测一条。取色是 `#918A99`。对白底至少 3.33，对页面底至少 3.08。
+
+## 9. 以后用脚本卡住的规则
+
+这些规则这次不接入流水线。下一轮可以做成 `pnpm` 脚本或 eslint，失败即不合。
+
+1. `apps/web/src/pages` 和 `apps/web/src/app` 里不允许原生 `select`、`button`、`table`、`textarea`、`h1`、`h2`、`details`。`input` 只允许出现在 antd 组件内部。文件选择必须是 `Upload`。
+2. 十六进制颜色只允许出现在 `theme/tokens.ts` 和 `theme/antd.ts`。
+3. `colorInfo` 不得等于 `colorPrimary`。
+4. `contrastPairs` 必须包含 tertiary 对白底、tertiary 对页面底、白字对 brand.600、白字对主按钮悬停色、输入框边框对白底、输入框边框对页面底。文字组合低于 4.5 或边框组合低于 3 则失败。
+5. 跟进台默认页大小是 50。地址栏缺省时不得返回 200。
+6. 抽屉宽度字面量只允许 480 和 720。
+7. 页面不得调用 `feishuButton(false)` 或其他把展示用开关写成常数的写法。禁用必须来自配置或接口。
+8. `TodayBoard` 在数据未返回时不得 `return null`。

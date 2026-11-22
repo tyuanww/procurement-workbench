@@ -1,0 +1,6 @@
+dist/
+*.tsbuildinfo
+node_modules/
+coverage/
+
+formal/.tools/

@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.dump
+*.sqlite
+*.sqlite3
+node_modules/
+dist/
+coverage/
+__pycache__/
+*.tsbuildinfo
+supply-workbench/fixtures/real/
+local-data/

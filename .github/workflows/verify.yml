@@ -1,0 +1,369 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Exact 40-character lowercase main commit SHA (ancestors allowed); full verification
+        type: string
+        required: true
+
+concurrency:
+  group: verify-${{ github.ref }}-${{ inputs.sha || '' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: supply-workbench
+
+jobs:
+  plan:
+    name: select verification
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      base: ${{ steps.plan.outputs.base }}
+      head: ${{ steps.plan.outputs.head }}
+      full: ${{ steps.plan.outputs.full }}
+      code: ${{ steps.plan.outputs.code }}
+      db: ${{ steps.plan.outputs.db }}
+      web: ${{ steps.plan.outputs.web }}
+      reports: ${{ steps.plan.outputs.reports }}
+      light: ${{ steps.plan.outputs.light }}
+      proof_step: ${{ steps.plan.outputs.proof_step }}
+      reused_attempt: ${{ steps.plan.outputs.reused_attempt }}
+    steps:
+      - name: Resolve immutable tested SHA before checkout
+        id: resolve
+        working-directory: .
+        env:
+          REQUESTED_SHA: ${{ inputs.sha }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' and os.environ['GITHUB_REF'] != 'refs/heads/main':
+              raise SystemExit('Manual verification must be dispatched from main')
+          sha = os.environ['REQUESTED_SHA'] if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' else os.environ['GITHUB_SHA']
+          if not re.fullmatch(r'[0-9a-f]{40}', sha):
+              raise SystemExit('Expected an exact 40-character lowercase commit SHA')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'sha={sha}\n')
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate graph and select verification
+        id: plan
+        working-directory: .
+        env:
+          TESTED_SHA: ${{ steps.resolve.outputs.sha }}
+          GH_TOKEN: ${{ github.event_name == 'push' && github.token || '' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess, sys
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          def commit(value):
+              if not isinstance(value, str) or not re.fullmatch(r'[0-9a-f]{40}', value):
+                  raise SystemExit('Invalid commit in event payload')
+              if git('rev-parse', '--verify', f'{value}^{{commit}}') != value:
+                  raise SystemExit('Event SHA does not identify a commit')
+              return value
+          sha = commit(os.environ['TESTED_SHA'])
+          if git('rev-parse', 'HEAD') != sha:
+              raise SystemExit('Checkout does not match tested SHA')
+          event = json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          kind = os.environ['GITHUB_EVENT_NAME']
+          full = kind == 'workflow_dispatch'
+          if full:
+              main = git('rev-parse', '--verify', 'refs/remotes/origin/main^{commit}')
+              if subprocess.run(['git', 'merge-base', '--is-ancestor', sha, main]).returncode != 0:
+                  raise SystemExit('Requested SHA is not on main history')
+              base = head = sha
+          elif kind == 'pull_request':
+              pr = event['pull_request']
+              pr_base, pr_head = commit(pr['base']['sha']), commit(pr['head']['sha'])
+              base, head = pr_base, sha
+              if len(git('rev-list', '--parents', '-n', '1', sha).split()) != 3:
+                  raise SystemExit('Expected the actual two-parent PR merge commit')
+              if git('rev-parse', f'{sha}^1') != pr_base or git('rev-parse', f'{sha}^2') != pr_head:
+                  raise SystemExit('PR merge parents do not match the event base and head')
+          elif kind == 'push':
+              head = sha
+              before = event['before']
+              base, full = (sha, True) if before == '0' * 40 else (commit(before), False)
+          else:
+              raise SystemExit('Unsupported event')
+          labels = ['full', 'code', 'db', 'web', 'reports', 'light']
+          if kind == 'workflow_dispatch':
+              # Historical main targets use their own full business contract.
+              # Never borrow CI helpers or tests from another source revision.
+              flags = dict.fromkeys(labels, 'true')
+          else:
+              required = ['.github/ci/plan.py', '.github/ci/check_light.py', 'supply-workbench/e2e/web-smoke.ts']
+              if any(not pathlib.Path(path).is_file() for path in required):
+                  raise SystemExit('Tested SHA is missing required CI helpers')
+              args = [sys.executable, '.github/ci/plan.py', base, head] + (['--full'] if full else [])
+              lines = subprocess.check_output(args, text=True).splitlines()
+              flags = dict(line.split('=', 1) for line in lines)
+              if set(flags) != set(labels) or len(lines) != len(labels) or any(value not in ('true', 'false') for value in flags.values()):
+                  raise SystemExit('Selector returned an invalid job contract')
+          proof_step = reused_attempt = ''
+          reuse_script = pathlib.Path('.github/ci/reuse.py')
+          if reuse_script.is_file():
+              if (
+                  kind == 'pull_request' and pr['base']['ref'] == 'main'
+                  and (pr['head'].get('repo') or {}).get('full_name') == os.environ['GITHUB_REPOSITORY']
+                  and os.environ['GITHUB_ACTOR'].casefold() == os.environ['GITHUB_REPOSITORY_OWNER'].casefold()
+              ):
+                  sys.path.insert(0, str(reuse_script.parent))
+                  from reuse import proof_step_name
+                  proof_step = proof_step_name(base, git('rev-parse', f'{sha}^{{tree}}'))
+              if kind == 'push' and not full and any(flags[label] == 'true' for label in ('code', 'db', 'web', 'reports')):
+                  try:
+                      reuse = subprocess.run([sys.executable, str(reuse_script), base, head], capture_output=True, text=True, timeout=25)
+                      if reuse.returncode == 0 and re.fullmatch(r'[1-9][0-9]*/attempts/[1-9][0-9]*', reuse.stdout.strip()):
+                          reused_attempt = reuse.stdout.strip()
+                          flags = {label: 'true' if label == 'light' else 'false' for label in labels}
+                  except subprocess.TimeoutExpired:
+                      pass
+          if not any(flags[label] == 'true' for label in labels[1:]):
+              raise SystemExit('Selector selected no verification jobs')
+          if (full or flags['full'] == 'true') and any(value != 'true' for value in flags.values()):
+              raise SystemExit('Full verification must select every job')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'base={base}\nhead={head}\n')
+              output.write(f'proof_step={proof_step}\nreused_attempt={reused_attempt}\n')
+              output.write(''.join(f'{label}={flags[label]}\n' for label in labels))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'### Verification plan\n\nTested SHA: `{sha}`\n\nDiff: `{base}` → `{head}`\n\n')
+              if reused_attempt:
+                  summary.write(f"Reused [successful PR verification]({os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{reused_attempt}).\n\n")
+              summary.write('| Job | Selected |\n| --- | --- |\n')
+              summary.write(''.join(f'| {label} | {flags[label]} |\n' for label in labels))
+          PY
+      - name: Test CI control scripts on full verification
+        if: steps.plan.outputs.full == 'true'
+        working-directory: .
+        env:
+          EVENT_KIND: ${{ github.event_name }}
+        run: |
+          if [ -d .github/ci ]; then
+            python3 -m unittest discover -s .github/ci -p 'test_*.py'
+          elif [ "$EVENT_KIND" != workflow_dispatch ]; then
+            echo 'Required CI test directory is missing' >&2
+            exit 1
+          fi
+
+  code:
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - &checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - &validate
+        name: Validate checkout
+        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+        env:
+          TESTED_SHA: ${{ needs.plan.outputs.sha }}
+      - &pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.2
+      - &node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: supply-workbench/pnpm-lock.yaml
+      - &install
+        run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && NODE_OPTIONS=--max-old-space-size=4096 pnpm lint && pnpm lint:deps && pnpm check:conventions
+      - name: Run remaining full-suite tests
+        if: needs.plan.outputs.full == 'true'
+        env:
+          TLA2TOOLS: ${{ runner.temp }}/tla2tools.jar
+        run: |
+          test -x /usr/bin/java
+          curl --fail --silent --show-error --location --retry 3 --output "$TLA2TOOLS" \
+            https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+          echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $TLA2TOOLS" | sha256sum --check
+          pnpm exec vitest run --sequence.shuffle --exclude 'test/persistence/**' --exclude 'test/application/fingerprint-order.test.ts' --exclude 'test/web/**' --exclude 'test/report-renderers/**'
+      - run: pnpm build
+
+  db:
+    name: verify-pg
+    needs: plan
+    if: needs.plan.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sw
+          POSTGRES_PASSWORD: sw
+          POSTGRES_DB: sw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sw"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://sw:sw@127.0.0.1:5432/sw
+    steps:
+      - *checkout
+      - *validate
+      - *pnpm
+      - *node
+      - *install
+      - run: pnpm verify:pg
+      - run: SW_PG_URL="$DATABASE_URL" pnpm exec vitest run test/persistence test/application/fingerprint-order.test.ts --sequence.shuffle
+
+  reports:
+    needs: plan
+    if: needs.plan.outputs.reports == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *validate
+      - *pnpm
+      - *node
+      - *install
+      - name: Install real report browser
+        run: pnpm --filter @sw/report-renderers exec playwright install --with-deps chrome
+      - name: Test real PDF, PNG, XLSX and Feishu renderers
+        run: pnpm exec vitest run test/report-renderers --sequence.shuffle
+
+  web:
+    name: web and procurement acceptance
+    needs: plan
+    if: needs.plan.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *validate
+      - *pnpm
+      - *node
+      - *install
+      - run: pnpm --filter @sw/report-renderers exec playwright install --with-deps chrome
+      - run: pnpm exec vitest run test/web --sequence.shuffle
+      - run: pnpm --filter @sw/web build
+      - name: Real browser smoke on the built web app
+        env:
+          EVENT_KIND: ${{ github.event_name }}
+        run: |
+          if [ -f e2e/web-smoke.ts ]; then
+            node --experimental-strip-types --import ./tools/reconcile/register.mts e2e/web-smoke.ts
+          elif [ "$EVENT_KIND" = workflow_dispatch ]; then
+            echo 'Historical target predates web-smoke; full procurement acceptance remains required.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Required web smoke is missing' >&2
+            exit 1
+          fi
+      - name: Run procurement browser acceptance against isolated PostgreSQL
+        if: needs.plan.outputs.full == 'true'
+        env:
+          TESTED_SHA: ${{ needs.plan.outputs.sha }}
+          ACCEPT_BROWSER: chrome
+        run: |
+          set -euo pipefail
+          if ! command -v pg_config >/dev/null || [ ! -x "$(pg_config --bindir)/initdb" ]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql
+          fi
+          export PGBIN="$(pg_config --bindir)"
+          pnpm build
+          pnpm exec node --experimental-strip-types e2e/native-acceptance.ts "$TESTED_SHA" "$RUNNER_TEMP/linux-acceptance"
+      - name: Upload procurement browser and runner evidence
+        if: always() && needs.plan.outputs.full == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/linux-acceptance
+          retention-days: 7
+          if-no-files-found: ignore
+
+  light:
+    needs: plan
+    if: needs.plan.outputs.light == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - *validate
+      - name: Check lightweight changes or release Compose
+        working-directory: .
+        env:
+          DIFF_BASE: ${{ needs.plan.outputs.base }}
+          DIFF_HEAD: ${{ needs.plan.outputs.head }}
+          EVENT_KIND: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_KIND" == workflow_dispatch ]]; then
+            if [[ -f .github/ci/check_light.py ]]; then
+              python3 .github/ci/check_light.py --release "$DIFF_HEAD"
+            else
+              echo 'Historical target predates the lightweight checks.'
+            fi
+          else
+            python3 .github/ci/check_light.py "$DIFF_BASE" "$DIFF_HEAD"
+          fi
+
+  verify:
+    name: verify
+    needs: [plan, code, db, reports, web, light]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: ${{ needs.plan.outputs.proof_step || 'Require every selected verification job to succeed' }}
+        working-directory: .
+        env:
+          JOBS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          jobs = json.loads(os.environ['JOBS_JSON'])
+          plan = jobs['plan']
+          failures = []
+          flags = plan.get('outputs', {})
+          if plan['result'] != 'success':
+              failures.append('plan did not succeed')
+          labels = ['code', 'db', 'reports', 'web', 'light']
+          if not any(flags.get(label) == 'true' for label in labels):
+              failures.append('plan selected no jobs')
+          for label in labels:
+              expected = 'success' if flags.get(label) == 'true' else 'skipped'
+              if jobs[label]['result'] != expected:
+                  failures.append(f"{label}: expected {expected}, got {jobs[label]['result']}")
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"### Verification result\n\nTested SHA: `{flags.get('sha', 'unresolved')}`\n\n")
+              if reused_attempt := flags.get('reused_attempt'):
+                  summary.write(f"Reused [successful PR verification]({os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{reused_attempt}).\n\n")
+              summary.write('| Job | Selected | Result |\n| --- | --- | --- |\n')
+              summary.write(''.join(f"| {label} | {flags.get(label, 'unknown')} | {jobs[label]['result']} |\n" for label in labels))
+              if failures:
+                  summary.write('\n' + '\n'.join(f'- {failure}' for failure in failures) + '\n')
+          if failures:
+              raise SystemExit('\n'.join(failures))
+          PY

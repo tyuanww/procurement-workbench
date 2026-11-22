@@ -1,0 +1,9 @@
+export { register as registerPlatform } from './platform.js';
+export { register as registerImports } from './imports.js';
+export { register as registerFollowUp } from './follow-up.js';
+export { register as registerToday } from './today.js';
+export { register as registerMasterData } from './master-data.js';
+export { register as registerPerformance } from './performance.js';
+export { register as registerProductArchive } from './product-archive.js';
+export { register as registerSearch } from './search.js';
+export { register as registerReporting } from './reporting.js';

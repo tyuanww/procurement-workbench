@@ -1,0 +1,14 @@
+{
+  "name": "@sw/report-renderers",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@sw/application": "workspace:*",
+    "@sw/domain": "workspace:*",
+    "playwright": "^1.64.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@sw/server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^10.1.3",
+    "@opentelemetry/api": "^1.9.1",
+    "@sw/application": "workspace:*",
+    "@sw/auth": "workspace:*",
+    "@sw/contracts": "workspace:*",
+    "@sw/domain": "workspace:*",
+    "@sw/importers": "workspace:*",
+    "@sw/persistence": "workspace:*",
+    "@sw/report-renderers": "workspace:*",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "pg-boss": "^12.37.1",
+    "zod": "^4.6.5"
+  }
+}

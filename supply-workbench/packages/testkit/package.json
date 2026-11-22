@@ -1,0 +1,12 @@
+{
+  "name": "@sw/testkit",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@sw/domain": "workspace:*",
+    "@sw/application": "workspace:*"
+  }
+}

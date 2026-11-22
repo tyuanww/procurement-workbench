@@ -1,0 +1,80 @@
+name: Procurement workbench native Windows acceptance
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/windows-acceptance.yml
+      - supply-workbench/e2e/**
+      - supply-workbench/fixtures/synthetic/po-master-procurement.xlsx
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Exact 40-character commit SHA to verify on native Windows
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-windows-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  acceptance:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      TESTED_SHA: ${{ inputs.sha || github.event.pull_request.head.sha }}
+      ACCEPT_BROWSER: msedge
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: supply-workbench
+    steps:
+      - name: Validate requested SHA
+        working-directory: .
+        run: |
+          if ($env:TESTED_SHA -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'Expected a full lowercase commit SHA.'
+          }
+      - uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: '2'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+          GIT_CONFIG_KEY_1: core.longpaths
+          GIT_CONFIG_VALUE_1: 'true'
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: supply-workbench/pnpm-lock.yaml
+      - name: Build the locked checkout with production settings
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ((git rev-parse HEAD) -cne $env:TESTED_SHA) { throw 'Checkout SHA does not match.' }
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm --filter '@sw/web' build
+      - name: Run procurement browser acceptance against isolated PostgreSQL
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($env:RUNNER_OS -ne 'Windows' -or -not $env:PGBIN) { throw 'Native Windows and PostgreSQL PGBIN are required.' }
+          $evidence = Join-Path $env:RUNNER_TEMP 'windows-acceptance'
+          "Tested SHA ``$env:TESTED_SHA``" >> $env:GITHUB_STEP_SUMMARY
+          pnpm exec node --experimental-strip-types e2e/native-acceptance.ts $env:TESTED_SHA $evidence
+      - name: Upload browser and runner evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-acceptance
+          retention-days: 7
+          if-no-files-found: ignore

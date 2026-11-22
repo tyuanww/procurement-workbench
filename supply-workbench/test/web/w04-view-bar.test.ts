@@ -1,0 +1,206 @@
+import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import { describe, expect, it } from 'vitest';
+import { presetViews, readDesk } from '../../apps/web/src/features/follow-up/index.js';
+import { LineTable } from '../../apps/web/src/pages/lines/list/LineListPage.js';
+import { LineViewBar, clearFiltersAddress, exportAddress, filterSignature, isViewModified, readDensity, readHiddenColumns, saveAddress, toggleColumn, viewAddress, visibleColumns } from '../../apps/web/src/pages/lines/list/view-bar.js';
+
+const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
+const NOW = new Date('2026-11-03T00:00:00+08:00');
+const COLUMNS = readDesk('lane=finished').columns;
+const SMALL = 'small';
+
+describe('跟进台视图条', () => {
+  it('视图是 Radio.Group 按钮，右侧有列、密度和导出', async () => {
+    const html = render(LineViewBar, viewBarProps({}));
+    expect(html).toContain('ant-radio-group');
+    expect(html).toContain('ant-radio-button-wrapper');
+    expect(html).toContain('我的逾期');
+    expect(html).toContain('未建要货');
+    expect(html).toContain('甲代工厂在途');
+    expect(html).toContain('保存当前视图');
+    expect(html).toContain('导出 Excel');
+    expect(html).toContain('>列<');
+    expect(html).toContain('紧凑');
+    expect(html).toContain('舒适');
+    const source = await readFile(new URL('../../apps/web/src/pages/lines/list/view-bar.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('optionType="button"');
+  });
+});
+
+describe('列显示控制', () => {
+  it('导出链接带上当前筛选和实际显示列', () => {
+    const html = render(LineViewBar, viewBarProps({ query: 'lane=material&q=瓶', hiddenKeys: ['buyer'] }));
+    expect(html).toContain('lane=material');
+    expect(html).toContain('columns=po%2Cname%2Csupplier%2Cfactory');
+    expect(html).not.toContain('hide=buyer');
+    expect(exportAddress({ query: 'lane=finished&page=2', columns: [{ key: 'po' }, { key: 'name' }] })).toBe('/api/v1/lines/export.xlsx?lane=finished&page=2&columns=po%2Cname');
+  });
+
+  it('可选列能隐藏，采购单号列始终保留', () => {
+    const hiddenKeys = ['qtyOrdered', 'received', 'factoryDelivered', 'daysInStage', 'buyer', 'status'];
+    const keys = visibleColumns({ columns: COLUMNS, hiddenKeys }).map((column) => column.key);
+    expect(keys).not.toContain('qtyOrdered');
+    expect(keys).not.toContain('received');
+    expect(keys).not.toContain('factoryDelivered');
+    expect(keys).not.toContain('daysInStage');
+    expect(keys).not.toContain('buyer');
+    expect(keys).not.toContain('status');
+    expect(keys).toContain('po');
+    expect(visibleColumns({ columns: COLUMNS, hiddenKeys: ['po'] }).map((column) => column.key)).toContain('po');
+    expect(toggleColumn({ search: 'lane=finished', hiddenKeys: [], key: 'po' }).toString()).toBe('lane=finished');
+  });
+
+  it('隐藏后表头消失，采购单号表头还在', () => {
+    const shown = render(LineTable, tableProps([]));
+    const hidden = render(LineTable, tableProps(['qtyOrdered', 'received']));
+    expect(shown).toContain('订单数量');
+    expect(shown).toContain('采购单号');
+    expect(hidden).not.toContain('订单数量');
+    expect(hidden).not.toContain('已收');
+    expect(hidden).toContain('采购单号');
+  });
+
+  it('隐藏列和密度写进 URL，筛选和页码位置不变', () => {
+    const search = 'lane=material&q=面膜&page=2';
+    const next = toggleColumn({ search, hiddenKeys: [], key: 'qtyOrdered' });
+    expect(next.get('lane')).toBe('material');
+    expect(next.get('q')).toBe('面膜');
+    expect(next.get('page')).toBe('2');
+    expect(next.get('hide')).toBe('qtyOrdered');
+    expect(readHiddenColumns(next.toString())).toEqual(['qtyOrdered']);
+    expect(toggleColumn({ search: next.toString(), hiddenKeys: readHiddenColumns(next.toString()), key: 'qtyOrdered' }).get('hide')).toBeNull();
+  });
+});
+
+describe('密度切换', () => {
+  it('只有紧凑 small 和舒适 middle，默认 small，切换改变表格尺寸', () => {
+    expect(readDensity('')).toBe(SMALL);
+    expect(readDensity('density=middle')).toBe('middle');
+    expect(readDensity('density=large')).toBe(SMALL);
+    const compact = render(LineTable, tableProps([]));
+    const comfy = render(LineTable, tableProps([], 'middle'));
+    expect(compact).toContain('ant-table-small');
+    expect(comfy).toContain('ant-table-medium');
+  });
+});
+
+describe('已修改状态', () => {
+  it('甲代工厂在途沿用当前线别，可以叠加搜索并保存筛选', () => {
+    const view = presetViews().find((item) => item.id === 'factory_a');
+    if (view === undefined) throw new Error('缺少甲代工厂在途');
+    const address = viewAddress({ search: 'lane=material&page=3&density=middle', view });
+    const desk = readDesk(address.toString());
+    expect(desk.lane).toBe('material');
+    expect(desk.q).toBe('');
+    expect(new URLSearchParams(desk.requestQuery)).toEqual(new URLSearchParams('lane=material&inTransitFactory=factory_a&page=1&pageSize=50'));
+    expect(isViewModified({ search: address.toString(), view })).toBe(false);
+    expect(isViewModified({ search: `${address}&q=纸盒`, view })).toBe(true);
+    expect(saveAddress(`${address}&q=纸盒`)).toBe('inTransitFactory=factory_a&lane=material&q=%E7%BA%B8%E7%9B%92');
+    const exported = new URL(exportAddress({ query: desk.requestQuery, columns: COLUMNS }), 'http://localhost');
+    expect(exported.searchParams.get('inTransitFactory')).toBe('factory_a');
+    expect(exported.searchParams.get('lane')).toBe('material');
+    expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=material&density=middle');
+  });
+
+  it('旧甲代工厂预设链接升级，普通甲代工厂搜索和已存的线别仍按原意使用', () => {
+    const view = presetViews().find((item) => item.id === 'factory_a');
+    if (view === undefined) throw new Error('缺少甲代工厂在途');
+    const factoryQuery = `q=${encodeURIComponent('甲代工厂')}`;
+    const legacy = `lane=material&view=factory_a&${factoryQuery}`;
+    expect(readDesk(legacy).q).toBe('');
+    expect(new URLSearchParams(readDesk(legacy).requestQuery).get('inTransitFactory')).toBe('factory_a');
+    expect(isViewModified({ search: legacy, view })).toBe(false);
+    expect(saveAddress(legacy)).toBe('lane=material&inTransitFactory=factory_a');
+    const custom = { id: 'custom', label: '品名搜索', query: `lane=finished&${factoryQuery}` };
+    const opened = readDesk(viewAddress({ search: 'lane=material', view: custom }).toString());
+    expect(opened.lane).toBe('finished');
+    expect(opened.q).toBe('甲代工厂');
+    expect(new URLSearchParams(opened.requestQuery).has('inTransitFactory')).toBe(false);
+    const legacySaved = { ...custom, query: factoryQuery };
+    const reopened = readDesk(viewAddress({ search: 'lane=material', view: legacySaved }).toString());
+    expect(reopened.lane).toBe('all');
+    expect(reopened.q).toBe('甲代工厂');
+  });
+
+  it('筛选偏离选中视图时是已修改，页码和显示设置不算', () => {
+    const view = presetViews()[1];
+    if (view === undefined) throw new Error('缺少预设视图');
+    expect(isViewModified({ search: `stage=no_batch&view=${view.id}`, view })).toBe(false);
+    expect(isViewModified({ search: `stage=no_batch&page=2&density=middle&hide=qtyOrdered&view=${view.id}`, view })).toBe(false);
+    expect(isViewModified({ search: `stage=no_batch&q=面膜&view=${view.id}`, view })).toBe(true);
+    expect(isViewModified({ search: 'stage=no_batch', view: undefined })).toBe(false);
+    expect(filterSignature('page=2&pageSize=50&density=middle&hide=po&view=x&q=面膜')).toBe('q=面膜');
+    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C&lane=finished');
+    expect(clearFiltersAddress('stage=no_batch&view=x&density=middle&hide=received&page=2').toString()).toBe('density=middle&hide=received');
+  });
+
+  it('已修改时出现提示和清除，清除回到视图查询', () => {
+    const view = presetViews()[1];
+    if (view === undefined) throw new Error('缺少预设视图');
+    const modified = render(LineViewBar, viewBarProps({ search: `stage=no_batch&q=面膜&view=${view.id}` }));
+    expect(modified).toContain('已修改');
+    expect(modified.replace(/\s+/g, '')).toContain('清除');
+    const clean = render(LineViewBar, viewBarProps({ search: `stage=no_batch&view=${view.id}` }));
+    expect(clean).not.toContain('已修改');
+    expect(clean).toContain('退出视图');
+    const address = viewAddress({ search: `stage=no_batch&q=面膜&density=middle&hide=received&view=${view.id}`, view });
+    expect(address.toString()).toBe('stage=no_batch&density=middle&hide=received&view=no-batch');
+  });
+});
+
+function viewBarProps(override: Record<string, unknown>): Record<string, unknown> {
+  const noop = () => undefined;
+  return {
+    search: '',
+    query: readDesk('').requestQuery,
+    views: presetViews(),
+    userId: 'buyer-1',
+    columns: COLUMNS,
+    density: SMALL,
+    hiddenKeys: [],
+    setMessage: noop,
+    setParams: noop,
+    ...override,
+  };
+}
+
+function tableProps(hiddenKeys: readonly string[], density: string = SMALL): Record<string, unknown> {
+  const noop = () => undefined;
+  return {
+    columns: COLUMNS,
+    rows: [],
+    picked: [],
+    setPicked: noop,
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    search: '',
+    setParams: noop,
+    isUpdating: false,
+    density,
+    hiddenKeys,
+    now: NOW,
+  };
+}
+
+function render(type: unknown, props: unknown): string {
+  const react = requireWeb('react');
+  const server = requireWeb('react-dom/server');
+  if (!isCreator(react) || !isRenderer(server)) throw new Error('web 渲染模块不齐');
+  return renderTo(server, react.createElement(type, props));
+}
+
+function renderTo(server: { renderToStaticMarkup: (node: unknown) => unknown }, node: unknown): string {
+  const html = server.renderToStaticMarkup(node);
+  if (typeof html !== 'string') throw new Error('没有渲染成字符串');
+  return html;
+}
+
+function isCreator(value: unknown): value is { createElement: (type: unknown, props: unknown) => unknown } {
+  return typeof value === 'object' && value !== null && 'createElement' in value && typeof value.createElement === 'function';
+}
+
+function isRenderer(value: unknown): value is { renderToStaticMarkup: (node: unknown) => unknown } {
+  return typeof value === 'object' && value !== null && 'renderToStaticMarkup' in value && typeof value.renderToStaticMarkup === 'function';
+}

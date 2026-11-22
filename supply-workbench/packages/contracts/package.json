@@ -1,0 +1,13 @@
+{
+  "name": "@sw/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@sw/application": "workspace:*",
+    "@sw/domain": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

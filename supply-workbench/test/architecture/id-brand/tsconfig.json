@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": ["../../../packages/domain/src/id-brand.violation.ts"]
+}

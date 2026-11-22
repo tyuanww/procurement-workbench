@@ -1,0 +1,35 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/domain"
+    },
+    {
+      "path": "packages/application"
+    },
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/persistence"
+    },
+    {
+      "path": "packages/importers"
+    },
+    {
+      "path": "packages/report-renderers"
+    },
+    {
+      "path": "packages/auth"
+    },
+    {
+      "path": "packages/testkit"
+    },
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/web"
+    }
+  ]
+}

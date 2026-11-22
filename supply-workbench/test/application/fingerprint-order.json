@@ -1,0 +1,97 @@
+{
+  "engine": "PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+  "fileFingerprintOrder": [
+    "fp-1001",
+    "fp-1002"
+  ],
+  "firstReadOrder": [
+    "2026-10-02",
+    "2026-10-01"
+  ],
+  "secondReadOrder": [
+    "2026-10-02",
+    "2026-10-01"
+  ],
+  "cells": [
+    {
+      "import_batch_id": "batch-a1",
+      "fingerprint": "fp-1001",
+      "day": "2026-10-01",
+      "qty": "1.0000",
+      "link_status": "linked",
+      "linked_order_line_id": "line-1"
+    },
+    {
+      "import_batch_id": "batch-a1",
+      "fingerprint": "fp-1002",
+      "day": "2026-10-02",
+      "qty": "2.0000",
+      "link_status": "manual",
+      "linked_order_line_id": "line-2"
+    },
+    {
+      "import_batch_id": "batch-a2",
+      "fingerprint": "fp-1001",
+      "day": "2026-10-01",
+      "qty": "1.0000",
+      "link_status": "linked",
+      "linked_order_line_id": "line-1"
+    },
+    {
+      "import_batch_id": "batch-a2",
+      "fingerprint": "fp-1002",
+      "day": "2026-10-02",
+      "qty": "2.0000",
+      "link_status": "manual",
+      "linked_order_line_id": "line-2"
+    },
+    {
+      "import_batch_id": "batch-b",
+      "fingerprint": "fp-1001",
+      "day": "2026-10-01",
+      "qty": "1.0000",
+      "link_status": "unlinked",
+      "linked_order_line_id": null
+    },
+    {
+      "import_batch_id": "batch-dup",
+      "fingerprint": "fp-dup",
+      "day": "2026-10-03",
+      "qty": "1.0000",
+      "link_status": "unlinked",
+      "linked_order_line_id": null
+    },
+    {
+      "import_batch_id": "batch-dup",
+      "fingerprint": "fp-dup",
+      "day": "2026-10-03",
+      "qty": "1.0000",
+      "link_status": "unlinked",
+      "linked_order_line_id": null
+    },
+    {
+      "import_batch_id": "batch-dup-old",
+      "fingerprint": "fp-dup",
+      "day": "2026-10-03",
+      "qty": "1.0000",
+      "link_status": "linked",
+      "linked_order_line_id": "line-1"
+    },
+    {
+      "import_batch_id": "batch-dup-old",
+      "fingerprint": "fp-dup",
+      "day": "2026-10-03",
+      "qty": "1.0000",
+      "link_status": "manual",
+      "linked_order_line_id": "line-2"
+    },
+    {
+      "import_batch_id": "batch-qty",
+      "fingerprint": "fp-1001-qty-9",
+      "day": "2026-10-01",
+      "qty": "9.0000",
+      "link_status": "unlinked",
+      "linked_order_line_id": null
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+export { makeDetectImportFile } from './use-cases/detect-import-file.js';
+export { makeStartImport } from './use-cases/start-import.js';
+export { makeSaveImportDecisions } from './use-cases/save-import-decisions.js';
+export { makeCommitImport } from './use-cases/commit-import.js';
+export { makeDiscardImport } from './use-cases/discard-import.js';
+export { makeDiscardStaleImports } from './use-cases/discard-stale-imports.js';
+export { makeGetImportBatch } from './use-cases/get-import-batch.js';
+export { makeGetProcurementPreview } from './use-cases/get-procurement-preview.js';
+export { makeListImportBatches } from './use-cases/list-import-batches.js';
+export { makeListImportRows } from './use-cases/list-import-rows.js';
+export { makeGetFactoryTemplate } from './use-cases/get-factory-template.js';
+export type * from './boundary.js';
+export type { ProcurementFact, ProcurementReviewReason, ProcurementPreviewSelection, ProcurementSource, ProcurementCellSource, ProcurementOaRef } from '../ports/procurement-preview.js';
+export type { ProcurementLineDetail } from '../ports/procurement-repository.js';

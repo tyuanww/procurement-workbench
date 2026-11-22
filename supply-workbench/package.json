@@ -1,0 +1,39 @@
+{
+  "name": "supply-workbench",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.28.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc -b --pretty false && tsc -p scripts/tsconfig.json --noEmit --pretty false && tsc -p docker/tsconfig.json --noEmit --pretty false && tsc -p test/tsconfig.json --noEmit --pretty false && tsc -p apps/server/test/tsconfig.json --noEmit --pretty false && tsc -p tools/tsconfig.json --noEmit --pretty false",
+    "lint": "eslint .",
+    "lint:deps": "depcruise --config .dependency-cruiser.ts packages apps",
+    "check:conventions": "node --experimental-strip-types scripts/check-conventions.ts",
+    "test": "vitest run --sequence.shuffle",
+    "build": "tsc -b --pretty false && node --experimental-strip-types scripts/copy-migrations.ts",
+    "verify": "pnpm typecheck && pnpm lint && pnpm lint:deps && pnpm check:conventions && pnpm test && pnpm build",
+    "verify:pg": "node --experimental-strip-types scripts/verify-pg.ts",
+    "db:migrate": "node --experimental-strip-types scripts/db-lifecycle.ts migrate",
+    "verify:e2e": "sh e2e/isolated.sh",
+    "verify:governance": "node --experimental-strip-types scripts/verify-governance.ts",
+    "new:template": "node --experimental-strip-types scripts/new-template.ts",
+    "new:capability": "node --experimental-strip-types scripts/new-capability.ts",
+    "new:feature": "node --experimental-strip-types scripts/new-feature.ts"
+  },
+  "devDependencies": {
+    "@ant-design/cli": "6.6.8",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.10.1",
+    "dependency-cruiser": "^18.5.0",
+    "eslint": "^10.12.0",
+    "happy-dom": "^21.0.4",
+    "jiti": "^2.7.0",
+    "jsdom": "^31.0.1",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  }
+}

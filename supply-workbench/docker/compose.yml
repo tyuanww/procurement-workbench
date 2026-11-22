@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sw
+      POSTGRES_PASSWORD: sw
+      POSTGRES_DB: sw
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sw -d sw"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      DATABASE_URL: postgres://sw:sw@db:5432/sw
+      AUTH_MODE: dev
+      ALLOW_DEV_LOGIN: enabled
+      DEV_ACCESS_CODE: dev-code
+      SESSION_SECRET: 0123456789abcdef0123456789abcdef
+      UPLOAD_DIR: /data/uploads
+      TZ_BUSINESS: Asia/Shanghai
+      SERVE_WEB_DIR: /app/apps/web/dist/app
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+  backup:
+    image: postgres:16
+    environment:
+      PGPASSWORD: sw
+      PGHOST: db
+      PGUSER: sw
+      PGDATABASE: sw
+    volumes:
+      - backups:/backups
+      - uploads:/uploads:ro
+      - ./backup.sh:/backup.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["bash", "-c", "while true; do bash /backup.sh; sleep 86400; done"]
+volumes:
+  pgdata:
+  uploads:
+  backups:
