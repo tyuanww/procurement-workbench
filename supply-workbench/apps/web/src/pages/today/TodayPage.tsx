@@ -20,8 +20,7 @@ import { sessionRows, useTodayPlan } from './use-today-plan.js';
 import { useUndoMessage } from './use-undo-message.js';
 
 export function TodayPage() {
-  const screen = useTodayScreen();
-  return <TodayScreen {...screen} />;
+  return <TodayScreen {...useTodayScreen()} />;
 }
 
 function useTodayScreen(): TodayScreenProps {
