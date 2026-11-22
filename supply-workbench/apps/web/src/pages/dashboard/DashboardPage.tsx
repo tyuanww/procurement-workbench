@@ -1,7 +1,7 @@
 import { Alert, Button, Empty, Result, Skeleton, Tabs, Typography } from 'antd';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { failureText, readFailureOf } from '../../shared/api/reads.js';
+import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
 import {
   DASHBOARD_VIEWS,
   buyerView,
@@ -13,6 +13,7 @@ import {
   type DashboardLane,
   type DashboardLoad,
   type DashboardPatch,
+  type DashboardQuery,
   type DashboardView,
 } from '../../features/performance/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
@@ -55,7 +56,7 @@ export function DashboardPage() {
     () => loadStuck({ from, to, lane, stage, bucket, cause, card, page }),
     [from, to, lane, stage, bucket, cause, card, page],
   );
-  const performanceBoard = useBoardLoad(performance, view !== 'meeting' && view !== 'stuck');
+  const performanceBoard = useBoardLoad(performance, view === 'suppliers' || view === 'buyers');
   const stuckBoard = useBoardLoad(stuck, view === 'stuck');
   const onSearch = (patch: DashboardPatch): void => {
     setParams(dashboardSearch({ current: params.toString(), now, patch }));
@@ -69,7 +70,7 @@ export function DashboardPage() {
             <BoardBody board={stuckBoard.state} onRetry={stuckBoard.reload}>
               {(data, isUpdating) => <StuckPanel data={data} query={query} now={now} onSearch={onSearch} isUpdating={isUpdating} />}
             </BoardBody>
-          ) : (
+          ) : view === 'project' ? <ProjectBoard key={`${from}:${to}`} from={from} to={to} /> : (
             <BoardBody board={performanceBoard.state} onRetry={performanceBoard.reload} keepOnError>
               {(loaded) => <ActiveView view={view} loaded={loaded} lane={lane} onSearch={onSearch} />}
             </BoardBody>
@@ -156,14 +157,21 @@ function BoardBody<T>(props: {
 }
 
 function ActiveView(props: {
-  readonly view: Exclude<DashboardView, 'stuck' | 'meeting'>;
+  readonly view: 'suppliers' | 'buyers';
   readonly lane: DashboardLane;
   readonly loaded: DashboardLoad;
   readonly onSearch: (patch: DashboardPatch) => void;
 }) {
   if (props.view === 'suppliers') return <SupplierBoard loaded={props.loaded} lane={props.lane} onSearch={props.onSearch} />;
-  if (props.view === 'buyers') return <BuyerBoard loaded={props.loaded} onSearch={props.onSearch} />;
-  return <ProjectProgressPanel project={props.loaded.project} />;
+  return <BuyerBoard loaded={props.loaded} onSearch={props.onSearch} />;
+}
+
+function ProjectBoard({ from, to }: Pick<DashboardQuery, 'from' | 'to'>) {
+  const load = useCallback(() => read({ name: 'planProgress', from, to }), [from, to]);
+  const board = useBoardLoad(load, true);
+  return <BoardBody board={board.state} onRetry={board.reload}>
+    {(project) => <ProjectProgressPanel project={project} onChanged={board.reload} />}
+  </BoardBody>;
 }
 
 function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly lane: DashboardLane; readonly onSearch: (patch: DashboardPatch) => void }) {
