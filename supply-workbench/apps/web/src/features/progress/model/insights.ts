@@ -1,8 +1,9 @@
-import { LINE_STAGES, lineStageText, type LineStage } from '@sw/domain';
-import type { ProgressRow, ProgressStay } from './rows.js';
+import { LINE_STAGES, type LineStage } from '@sw/domain';
+import { progressStageLabel, type ProgressRow, type ProgressStay } from './rows.js';
+import { matchesProgressDrill, PROGRESS_STAYS } from './drill.js';
 
 export type ProgressStageCount = {
-  readonly key: string;
+  readonly key: LineStage;
   readonly label: string;
   readonly count: number;
   readonly tone: 'neutral' | 'warning' | 'info' | 'attention';
@@ -18,18 +19,12 @@ export type ProgressStayCount = {
 export type ProgressInsight = {
   readonly total: number;
   readonly overdue: number;
-  readonly missingDate: number;
+  readonly pendingBatch: number;
+  readonly awaitingDate: number;
   readonly longStay: number;
   readonly stages: readonly ProgressStageCount[];
   readonly stays: readonly ProgressStayCount[];
 };
-
-const STAY_META: readonly { readonly bucket: ProgressStay; readonly label: string; readonly tone: ProgressStayCount['tone'] }[] = [
-  { bucket: '0-3', label: '0-3 天', tone: 'neutral' },
-  { bucket: '4-7', label: '4-7 天', tone: 'warning' },
-  { bucket: '8-14', label: '8-14 天', tone: 'attention' },
-  { bucket: '15+', label: '15+ 天', tone: 'danger' },
-];
 
 const STAGE_TONE: Partial<Record<LineStage, ProgressStageCount['tone']>> = {
   no_batch: 'neutral',
@@ -42,9 +37,10 @@ const STAGE_TONE: Partial<Record<LineStage, ProgressStageCount['tone']>> = {
 export function progressInsights(rows: readonly ProgressRow[]): ProgressInsight {
   return {
     total: rows.length,
-    overdue: rows.filter((row) => row.arrival.kind === 'overdue').length,
-    missingDate: rows.filter((row) => row.arrival.kind === 'missing').length,
-    longStay: rows.filter((row) => row.stay === '15+').length,
+    overdue: rows.filter((row) => matchesProgressDrill(row, { kind: 'overdue' })).length,
+    pendingBatch: rows.filter((row) => matchesProgressDrill(row, { kind: 'stage', stage: 'no_batch' })).length,
+    awaitingDate: rows.filter((row) => matchesProgressDrill(row, { kind: 'stage', stage: 'awaiting_date' })).length,
+    longStay: rows.filter((row) => matchesProgressDrill(row, { kind: 'stay', bucket: '15+' })).length,
     stages: stageCounts(rows),
     stays: stayCounts(rows),
   };
@@ -52,12 +48,12 @@ export function progressInsights(rows: readonly ProgressRow[]): ProgressInsight 
 
 function stageCounts(rows: readonly ProgressRow[]): readonly ProgressStageCount[] {
   return LINE_STAGES.flatMap((stage) => {
-    const count = rows.filter((row) => row.stage === stage).length;
+    const count = rows.filter((row) => matchesProgressDrill(row, { kind: 'stage', stage })).length;
     if (count === 0 || STAGE_TONE[stage] === undefined) return [];
-    return [{ key: stage, label: lineStageText(stage), count, tone: STAGE_TONE[stage] }];
+    return [{ key: stage, label: progressStageLabel(stage), count, tone: STAGE_TONE[stage] }];
   });
 }
 
 function stayCounts(rows: readonly ProgressRow[]): readonly ProgressStayCount[] {
-  return STAY_META.map((meta) => ({ ...meta, count: rows.filter((row) => row.stay === meta.bucket).length }));
+  return PROGRESS_STAYS.map((meta) => ({ ...meta, count: rows.filter((row) => matchesProgressDrill(row, { kind: 'stay', bucket: meta.bucket })).length }));
 }

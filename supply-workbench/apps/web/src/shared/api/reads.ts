@@ -1,4 +1,4 @@
-import type { LineSummary, LineTimeline, MeResponse, OrderLineDetail, ProcurementStore, ProjectProgress, TodayResponse } from '@sw/contracts';
+import type { LineSummary, LineTimeline, MeResponse, OrderLineDetail, ProcurementStore, ProjectProgress, TodayPageResponse, TodayResponse } from '@sw/contracts';
 import {
   fetchLine,
   lineReadPath,
@@ -12,6 +12,7 @@ import {
   planSchedulePath,
   fetchPlanWorkItem,
   fetchToday,
+  fetchTodayPage,
   type LinesPage,
   type PlanDaily,
   type PlanSchedule,
@@ -72,6 +73,7 @@ export type ReadView<T> =
 
 const meTable = new Map<string, Shared<MeResponse>>();
 const todayTable = new Map<string, Shared<TodayResponse>>();
+const todayPagesTable = new Map<string, Shared<TodayPageResponse>>();
 const linesTable = new Map<string, Shared<LinesPage>>();
 const summaryTable = new Map<string, Shared<LineSummary>>();
 const lineTable = new Map<string, Shared<OrderLineDetail>>();
@@ -130,11 +132,23 @@ export function listenToday(input: {
   return stop;
 }
 
+export function readTodayPage({ query, scope }: { readonly query: string; readonly scope: TodayScope }): Promise<TodayPageResponse> {
+  return joinFlight({
+    table: todayPagesTable,
+    key: `/api/v1/today?${query}`,
+    signal: undefined,
+    isRetained: false,
+    currentGeneration: () => todayGenerationOf(scope),
+    load: (signal) => fetchTodayPage(query, signal),
+  });
+}
+
 function emptyReads(): void {
   emptySlots();
   abortFlights();
   meTable.clear();
   todayTable.clear();
+  todayPagesTable.clear();
   linesTable.clear();
   summaryTable.clear();
   lineTable.clear();
