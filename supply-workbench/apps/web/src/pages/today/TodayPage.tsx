@@ -44,12 +44,12 @@ function useTodayScreen(): TodayScreenProps {
     isSettled: rowsSettled({ isReady: isSettled, isSchedule: isPlanMode, plan: plan.load.kind }),
   });
   if (nextFocusId !== state.focus) state.setFocus(nextFocusId);
-  useTodaySession({ state, rows: visible, isReady: isSettled });
-  useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode });
+  const closeSession = useTodaySession({ state, rows: visible, isReady: isSettled });
+  useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode, closeSession });
   useUndoMessage({ undo: state.undo, onRestore: () => { void restore(state); } });
   const copy = useChaseCopy({ query, buyerName: state.buyerName });
   return {
-    ...screenProps({ state, board, actionBoard, plan, search, setParams }),
+    ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }),
     actionPage: state.paging === undefined ? undefined : {
       paging: state.paging, sort: query.sort, isLoading: today.isLoading, isSettled, loadError: today.loadError,
       factoryId: params.get('chaseFactory'),
@@ -109,8 +109,9 @@ function useTodayKeys(input: {
   readonly state: ReturnType<typeof useTodayState>;
   readonly visible: readonly { readonly id: string }[];
   readonly isPlanMode: boolean;
+  readonly closeSession: ReturnType<typeof useTodaySession>;
 }): void {
-  const { state, visible, isPlanMode } = input;
+  const { state, visible, isPlanMode, closeSession } = input;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => handleKey({
       event,
@@ -121,8 +122,8 @@ function useTodayKeys(input: {
       actions: {
         setFocus: state.setFocus,
         toggleHelp: () => state.setHelp((value) => !value),
-        closeDraft: () => state.setDraft(null),
-        closeDrawer: () => state.setDrawerId(null),
+        closeDraft: () => closeSession(state.drawerId),
+        closeDrawer: () => { if (state.drawerId !== null) closeSession(null); },
         openDrawer: () => {
           if (state.focus === null) return;
           state.setDrawerId(state.focus);
@@ -136,7 +137,7 @@ function useTodayKeys(input: {
     });
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state, visible]);
+  }, [state, visible, isPlanMode, closeSession]);
 }
 
 type ScreenInput = {
@@ -146,10 +147,11 @@ type ScreenInput = {
   readonly plan: ReturnType<typeof useTodayPlan>;
   readonly search: string;
   readonly setParams: ReturnType<typeof useSearchParams>[1];
+  readonly closeSession: ReturnType<typeof useTodaySession>;
 };
 
 function screenProps(input: ScreenInput): TodayScreenProps {
-  const { state, board, actionBoard, search, setParams, plan } = input;
+  const { state, board, actionBoard, search, setParams, plan, closeSession } = input;
   return {
     board,
     arrivalMemos: state.arrivalMemos,
@@ -177,7 +179,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     onOpen: (id) => { state.setDrawerId(id); state.setFocus(id); state.setDraft(null); state.setSaveError(''); },
     onQuick: ({ id, kind }) => openQuick({ id, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError }),
     onCopy: (text) => { void copyNudge(text, state.setNotice); },
-    onCloseDrawer: () => { state.setDrawerId(null); state.setDraft(null); state.setSaveError(''); },
+    onCloseDrawer: () => closeSession(null),
     onDraft: state.setDraft,
     onSubmit: () => { void submitForm(state); },
     onRetry: state.retry,

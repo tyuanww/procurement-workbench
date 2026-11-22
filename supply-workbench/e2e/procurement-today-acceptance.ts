@@ -137,3 +137,56 @@ async function recordShipment(page: Page, origin: URL, qty: number): Promise<voi
   });
   assert.ok(response.ok(), '合成发货 HTTP ' + response.status());
 }
+
+export async function checkTodayDrawer(page: Page, origin: URL) {
+  const listUrl = new URL('/today?reasons=unshipped&page=11', origin);
+  const detailUrl = new URL(listUrl);
+  detailUrl.searchParams.set('drawer', 'batch:' + batch);
+  const detail = page.getByRole('button', { name: /^查看详情 HZ09-0501/ });
+  const dialog = page.getByRole('dialog');
+  const close = dialog.getByRole('button', { name: '关闭', exact: true });
+
+  await page.goto(listUrl.href);
+  await detail.focus();
+  await page.keyboard.press('Enter');
+  await dialog.getByText(/HZ09-0501/).waitFor();
+  await page.waitForURL(detailUrl.href);
+  await page.keyboard.press('Escape');
+  await page.waitForURL(listUrl.href);
+  await dialog.waitFor({ state: 'hidden' });
+  await page.goBack();
+  assert.equal(page.url(), detailUrl.href);
+  await dialog.getByText(/HZ09-0501/).waitFor();
+  await page.goForward();
+  assert.equal(page.url(), listUrl.href);
+  await dialog.waitFor({ state: 'hidden' });
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await detail.focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    await page.waitForURL(listUrl.href);
+  }
+
+  await page.reload();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*条.*第\s*11\s*页/ }).waitFor();
+  await detail.waitFor();
+  assert.equal(page.url(), listUrl.href);
+  assert.equal(await dialog.isVisible(), false);
+
+  const draftUrl = new URL(detailUrl);
+  draftUrl.searchParams.set('draft', 'date');
+  await page.goto(draftUrl.href);
+  const date = dialog.getByRole('textbox', { name: '确认日', exact: true });
+  await date.waitFor();
+  assert.equal(await date.inputValue(), '2025-02-01');
+  await close.focus();
+  await page.keyboard.press('Escape');
+  await page.waitForURL(detailUrl.href);
+  await date.waitFor({ state: 'hidden' });
+  await close.click();
+  await page.waitForURL(listUrl.href);
+  await dialog.waitFor({ state: 'hidden' });
+  return { settledEscape: true, browserHistoryRestored: true, quickEscapes: 3, filterOnReload: 'unshipped', pageOnReload: 11, draftLinkRestored: true, draftEscape: true, mouseClose: true };
+}
