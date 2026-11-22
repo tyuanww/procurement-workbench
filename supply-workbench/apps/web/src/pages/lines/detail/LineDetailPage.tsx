@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Alert, Button, Collapse, Input, Result, Select, Skeleton, Space, Typography } from 'antd';
+import { Alert, Button, Collapse, Input, Result, Select, Skeleton, Space, Tag, Typography } from 'antd';
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
@@ -122,7 +122,7 @@ function ProcurementScheduleEvidence({ detail, params }: { readonly detail: Orde
   if (store !== null) href.set('store', store);
   return <section aria-label="采购排期日期">
     <Typography.Title level={2}>采购排期日期</Typography.Title>
-    <ProcurementDateEvidence schedule={schedule} />
+    <ProcurementDateEvidence schedule={schedule} batches={detail.batches} />
     <Link to={`/progress?${href.toString()}`}>查看总排期</Link>
   </section>;
 }
@@ -167,12 +167,27 @@ function FactorySummary({ detail }: { readonly detail: OrderLineDetail }) {
   return (
     <>
       <Collapse
-        items={[{ key: 'snapshot', label: '来源事实', children: <p>{detail.snapshot === null ? '没有快照' : detail.snapshot.importBatchId}</p> }]}
+        items={[{ key: 'snapshot', label: '来源事实', children: <ImportedSnapshot snapshot={detail.snapshot} /> }]}
         style={{ marginTop: 12 }}
       />
       {delivered.value === null ? <p style={{ marginTop: 12 }}><MissingValue reason={delivered.missingReason ?? 'no_matching_record'} {...presentRaw(delivered.raw)} /> {missingDeliveredText()}</p> : <p style={{ marginTop: 12 }}>代工厂已交 {delivered.value}</p>}
     </>
   );
+}
+
+function ImportedSnapshot({ snapshot }: { readonly snapshot: OrderLineDetail['snapshot'] }) {
+  const canReadImport = useCanWrite('imports.write');
+  if (snapshot === null) return <p>暂无导入快照</p>;
+  const imported = Object.values(snapshot.fields).map(({ provenance }) => provenance)
+    .filter((source) => source.kind === 'import' || source.kind === 'factory_report');
+  const isFactoryReport = imported.some((source) => source.kind === 'factory_report' || source.template === 'factory-progress-v1');
+  const sources = new Set(imported.map((source) => `${source.sheet} 第 ${source.rowNo} 行`));
+  return <div>
+    <p><Tag variant="filled">{isFactoryReport ? '工厂上报' : '原表'}</Tag>{canReadImport
+      ? <Link to={`/imports/${encodeURIComponent(snapshot.importBatchId)}`}>查看导入批次</Link>
+      : snapshot.importBatchId}</p>
+    {sources.size === 0 ? null : <ul>{[...sources].map((source) => <li key={source}>{source}</li>)}</ul>}
+  </div>;
 }
 
 function DetailTimeline({ events, lineId, showFollowUp, onReload }: { readonly events: readonly TimelineEvent[]; readonly lineId: string; readonly showFollowUp: boolean; readonly onReload: () => void }) {
