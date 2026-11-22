@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { checkFirstBatch } from './procurement-today-acceptance.ts';
+import { checkChaseToday, checkFirstBatch, seedChaseSample } from './procurement-today-acceptance.ts';
 
 const workbook = new URL('../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
 const workbookName = 'po-master-procurement.xlsx';
@@ -70,9 +70,11 @@ try {
 console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure }));
 
 async function procurementAcceptance(): Promise<void> {
+  seedChaseSample();
   const { page: buyer, entry } = await open('buyer', '/', '/today');
   await checkShell(buyer, entry);
   await buyer.getByRole('heading', { name: '今日', exact: true }).waitFor();
+  result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   await checkImportRecovery(buyer);
   await checkProcurementImport(buyer);
   await checkMobileOrders(buyer);

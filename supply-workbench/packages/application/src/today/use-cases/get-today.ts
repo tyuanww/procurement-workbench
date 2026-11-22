@@ -22,7 +22,8 @@ export function makeGetToday(deps: GetTodayDeps): GetToday {
     },
     chase: async (input: TodayChaseQuery, actor: Actor): Promise<readonly TodayChaseRow[]> => {
       const read = await load({ deps, input: { scope: 'mine' }, actor });
-      return chaseRows({ items: selectItems(matchReasons(read.projected, input.reasons), input.sort), read, factoryId: input.factoryId });
+      const candidates = input.itemId === undefined ? read.projected : read.projected.filter((item) => item.id === input.itemId);
+      return chaseRows({ items: selectItems(matchReasons(candidates, input.reasons), input.sort), read, factoryId: input.factoryId });
     },
   });
 }
@@ -85,15 +86,22 @@ function pageOf({ read, input }: { readonly read: TodayRead; readonly input: Tod
   const focusIndex = input.focusId === undefined ? -1 : matched.findIndex((item) => item.id === input.focusId);
   const page = focusIndex < 0 ? Math.min(number, Math.max(1, Math.ceil(total / size))) : Math.floor(focusIndex / size) + 1;
   const start = (page - 1) * size;
+  const shown = matched.slice(start, start + size);
+  const chase = chaseSummary({ items: matched, read });
   return {
-    ...responseOf({ read, matched, shown: matched.slice(start, start + size) }),
+    ...responseOf({ read, matched, shown }),
     truncated: false,
     paging: {
       page, pageSize: size, total,
       urgent: matched.filter((item) => item.severity >= HIGH_PRIORITY).length,
       reasonCounts: countsOf(selectItems(read.projected, input.sort)),
       units: comparisonUnits(candidates),
-      factories: chaseFactories({ items: matched, read }),
+      factories: chase.factories,
+      chaseCounts: {
+        all: input.reasons === undefined && input.sort.kind === 'urgency' ? chase.ids.size : read.projected.filter((item) => chaseEligibility(item, read) !== null).length,
+        filtered: chase.ids.size,
+      },
+      chaseItemIds: shown.filter((item) => chase.ids.has(item.id)).map((item) => item.id),
     },
   };
 }
@@ -122,13 +130,16 @@ function toChaseRow({ item, eligible, line }: { readonly item: Projected; readon
   };
 }
 
-function chaseFactories({ items, read }: ChaseInput): TodayFactory[] {
+function chaseSummary({ items, read }: ChaseInput): { readonly factories: readonly TodayFactory[]; readonly ids: ReadonlySet<string> } {
   const factories = new Map<string, TodayFactory>();
+  const ids = new Set<string>();
   for (const item of items) {
     const eligible = chaseEligibility(item, read);
-    if (eligible !== null) factories.set(eligible.factory.id, eligible.factory);
+    if (eligible === null) continue;
+    ids.add(item.id);
+    factories.set(eligible.factory.id, eligible.factory);
   }
-  return [...factories.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN') || left.id.localeCompare(right.id));
+  return { ids, factories: [...factories.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN') || left.id.localeCompare(right.id)) };
 }
 
 function chaseEligibility(item: Projected, read: TodayRead): ChaseEligibility | null {

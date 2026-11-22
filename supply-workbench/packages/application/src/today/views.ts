@@ -91,7 +91,7 @@ export type PendingBatchRow = {
 
 export type TodaySort = { readonly kind: 'urgency' } | { readonly kind: 'bulk'; readonly unit: string };
 export type TodayFilter = { readonly reasons?: readonly TodoReason[]; readonly sort: TodaySort };
-export type TodayChaseQuery = TodayFilter & { readonly factoryId?: string };
+export type TodayChaseQuery = TodayFilter & { readonly factoryId?: string; readonly itemId?: string };
 export type TodayQuery = Omit<TodayFilter, 'sort'> & {
   readonly scope: 'mine' | 'all';
   readonly includePending?: boolean;
@@ -110,6 +110,8 @@ export type TodayPaging = {
   readonly reasonCounts: TodayResponse['counts'];
   readonly units: readonly string[];
   readonly factories: readonly TodayFactory[];
+  readonly chaseCounts?: { readonly all: number; readonly filtered: number };
+  readonly chaseItemIds?: readonly string[];
 };
 export type TodayPageResponse = TodayResponse & { readonly paging: TodayPaging };
 export type TodayChaseRow = Pick<TodoItem, 'id' | 'dueDate' | 'overdueDays' | 'reasons'> & {

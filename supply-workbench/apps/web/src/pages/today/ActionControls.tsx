@@ -1,11 +1,13 @@
 import { Button, Flex, Pagination, Select, Typography } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import type { TodayPaging, TodaySort } from '@sw/contracts';
+import type { ChaseScope } from './action-query.js';
 
 export type ActionPageControls = {
   readonly paging: TodayPaging;
   readonly sort: TodaySort;
   readonly isLoading: boolean;
+  readonly isFiltered: boolean;
   readonly isSettled: boolean;
   readonly isCopying: boolean;
   readonly copyNotice: string;
@@ -14,16 +16,25 @@ export type ActionPageControls = {
   readonly onPage: (page: number) => void;
   readonly onSort: (sort: TodaySort) => void;
   readonly onFactory: (id: string) => void;
-  readonly onCopyChase: (factoryId?: string) => void;
+  readonly onCopyChase: (scope: ChaseScope) => void;
   readonly onRetry: () => void;
 };
 
 export function ActionControls({ page }: { readonly page: ActionPageControls }) {
+  return <Flex className="today-touch" align="center" gap="small" wrap><SortControls page={page} /></Flex>;
+}
+
+export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
+  const counts = page.paging.chaseCounts;
   return (
     <div>
-      <Flex align="center" gap="small" wrap>
-        <SortControls page={page} />
-        <CopyControls page={page} />
+      <Flex className="today-touch" align="center" gap="small" wrap>
+        <Button type="primary" icon={<CopyOutlined aria-hidden />} disabled={page.isCopying || counts?.all === 0} onClick={() => page.onCopyChase({ kind: 'all' })}>
+          复制全部催单{counts === undefined ? '' : `（${counts.all} 批）`}
+        </Button>
+        {page.isFiltered ? <Button icon={<CopyOutlined aria-hidden />} disabled={!page.isSettled || page.isCopying || page.paging.factories.length === 0}
+          onClick={() => page.onCopyChase({ kind: 'filtered' })}>复制筛选催单{counts === undefined || !page.isSettled ? '' : `（${counts.filtered} 批）`}</Button> : null}
+        <FactoryCopy page={page} />
       </Flex>
       <Typography.Text role="status">{page.copyNotice}</Typography.Text>
     </div>
@@ -56,21 +67,18 @@ function SortControls({ page }: { readonly page: ActionPageControls }) {
   );
 }
 
-function CopyControls({ page }: { readonly page: ActionPageControls }) {
+function FactoryCopy({ page }: { readonly page: ActionPageControls }) {
   const { factories } = page.paging;
   const selected = factories.find((factory) => factory.id === page.factoryId) ?? (factories.length === 1 ? factories[0] : undefined);
   const isDisabled = !page.isSettled || page.isCopying;
   return (
     <>
-      <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={isDisabled || factories.length === 0} onClick={() => page.onCopyChase()}>
-        复制全部催单
-      </Button>
       <Select<string> aria-label="催单工厂" placeholder="选择催单工厂" value={selected?.id ?? null} size="small" virtual={factories.length > 50}
-        disabled={factories.length === 0 || page.isCopying} options={factories.map(({ id, name }) => ({ value: id, label: name }))}
+        disabled={factories.length === 0 || isDisabled} options={factories.map(({ id, name }) => ({ value: id, label: name }))}
         onChange={page.onFactory}
       />
-      <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={isDisabled || selected === undefined} onClick={() => { if (selected !== undefined) page.onCopyChase(selected.id); }}>
-        复制该工厂催单
+      <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={isDisabled || selected === undefined} onClick={() => { if (selected !== undefined) page.onCopyChase({ kind: 'factory', id: selected.id }); }}>
+        {page.isFiltered ? '复制该工厂筛选催单' : '复制该工厂催单'}
       </Button>
     </>
   );

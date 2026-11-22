@@ -114,6 +114,8 @@ export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayRespon
     reasonCounts: todayResponse.shape.counts,
     units: z.array(z.string()),
     factories: z.array(todayFactory),
+    chaseCounts: optional(strictObject({ all: z.int().nonnegative(), filtered: z.int().nonnegative() })),
+    chaseItemIds: optional(z.array(z.string())),
   }),
 });
 
@@ -142,6 +144,7 @@ export const TodayChaseQuerySchema: z.ZodType<TodayChaseQuery> = strictObject({
   reasons: todayQuery.shape.reasons,
   sort: todaySort,
   factoryId: optional(z.string().trim().min(1)),
+  itemId: optional(z.string().min(1)),
 });
 
 export const TodayChaseResponseSchema: z.ZodType<readonly TodayChaseRow[]> = z.array(strictObject({

@@ -45,7 +45,7 @@ describe('动效', () => {
     const css = todayMotionCss();
     expect(css).toContain('opacity 180ms');
     expect(css).toContain('prefers-reduced-motion: reduce');
-    expect(css).toContain('transition:none');
+    expect(css).toMatch(/transition:\s*none/);
   });
 });
 
