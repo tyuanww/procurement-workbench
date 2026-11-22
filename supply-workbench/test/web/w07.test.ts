@@ -247,6 +247,7 @@ describe('卡点筛选', () => {
 
 describe('采购链接', () => {
   const bars = buyerView({
+    lane: 'finished',
     rows: [
       {
         buyerId: 'buyer-1',
@@ -273,24 +274,10 @@ describe('采购链接', () => {
     ],
   });
 
-  it('整行链到跟进台，开放行空值是破折号，0 仍是 0', () => {
-    expect(bars[0]).toMatchObject({
-      name: '—',
-      href: '/lines?buyer=buyer-1',
-      openLines: '—',
-      openExceptions: '—',
-      followUpsInPeriod: 0,
-    });
-    expect(bars[1]?.openLines).toBe(0);
-    expect(bars[0]?.segments.map((segment) => segment.count)).toEqual([2, 1, 1, 0]);
-    expect(bars[0]?.segments[3]).toMatchObject({
-      id: 'other',
-      label: '其他',
-      tone: 'neutral',
-      fill: 'solid',
-    });
-    expect(bars[1]?.href).toBe('/lines?buyer=a%2Fb');
-    expect(bars[1]?.openExceptions).toBe(2);
+  it('开放批次、逾期和待确认分别可见，订单行链接保留线别', () => {
+    expect(bars[0]).toMatchObject({ openBatches: 4, overdue: 2, dueToday: 1, missingDate: 1 });
+    expect(bars[1]?.href).toBe('/lines?buyer=a%2Fb&lane=finished');
+    expect(bars[0]?.openExceptions).toBe('—');
     expect(bars[1]?.followUpsInPeriod).toBe('—');
   });
 });

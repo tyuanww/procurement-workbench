@@ -34,9 +34,10 @@ export type {
   WeekCell,
 } from './model/suppliers.js';
 export { buyerView } from './model/buyers.js';
-export type { BuyerBarRow, BuyerInput, BuyerSegment } from './model/buyers.js';
+export type { BuyerBarRow, BuyerInput } from './model/buyers.js';
 export { loadDashboard } from './load-dashboard.js';
 export type { DashboardLoad, LoadDashboardInput } from './load-dashboard.js';
 export { EM_DASH } from './model/figures.js';
 export type { EmDash, FigureInput } from './model/figures.js';
 export { loadStuck } from './load-stuck.js';
+export { loadBuyerDrill, type BuyerDrillSelection } from './buyer-drill.js';
