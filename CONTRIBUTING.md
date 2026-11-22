@@ -26,3 +26,7 @@ pnpm install --frozen-lockfile
 按改动范围运行检查。代码改动先运行受影响的用例，需要完整工程检查时运行 `pnpm verify`。[CI 验证](supply-workbench/docs/ci-verification.md)
 
 数据库写入验证使用一次性测试库。将真实表格、数据库备份和部署凭据保存在受控位置。示例导入使用合成表格。[运行手册](supply-workbench/RUNBOOK.md)
+
+## 合并改动
+
+每个板块提交一个 PR。合并前同步当前的 `main`，等待 GitHub Actions 的 `verify` 通过。涉及界面操作时，在 PR 记录复现步骤、合成样本和浏览器验收结果。[CI 验证](supply-workbench/docs/ci-verification.md)
