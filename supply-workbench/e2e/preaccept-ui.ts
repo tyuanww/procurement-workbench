@@ -6,7 +6,8 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { checkChaseToday, checkFirstBatch, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
+import { checkManagementMeeting, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
+import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
 
 const workbook = new URL('../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
 const workbookName = 'po-master-procurement.xlsx';
@@ -77,6 +78,7 @@ async function procurementAcceptance(): Promise<void> {
   await buyer.getByRole('heading', { name: '今日', exact: true }).waitFor();
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
+  result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
   await checkImportRecovery(buyer);
   await checkProcurementImport(buyer);
   await checkMobileOrders(buyer);
@@ -95,6 +97,9 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
 
   const { page: reviewer, devtools } = await open('reviewer', '/progress');
+  result.checks.storeSchedule = await checkStoreSchedule({ page: buyer, manager, origin, out });
+  result.checks.productDevelopment = await checkProductDevelopment({ buyer, reviewer, buyerId: users.buyer, reviewerId: users.reviewer, origin, out });
+  result.checks.managementMeeting = await checkManagementMeeting({ page: manager, origin, out, materialPo: componentPo });
   const badge = reviewer.locator('aside').getByRole('link', { name: '主数据', exact: true }).locator('.ant-badge');
   await badge.waitFor();
   const visibleCount = (await badge.innerText()).trim();
