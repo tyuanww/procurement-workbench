@@ -19,6 +19,7 @@ class PlanTest(unittest.TestCase):
         self.git("init", "--quiet")
         self.git("config", "user.name", "CI tests")
         self.git("config", "user.email", "ci@example.invalid")
+        self.git("config", "core.filemode", "true")
         self.base = self.commit({"README.md": "initial\n"})
 
     def git(self, *args):
@@ -75,6 +76,8 @@ class PlanTest(unittest.TestCase):
             "supply-workbench/apps/web/package.json", "supply-workbench/apps/web/vite.config.ts",
             "supply-workbench/pnpm-lock.yaml", ".github/workflows/verify.yml",
             ".github/README.md", "supply-workbench/docs/statecharts/view.ts",
+            "supply-workbench/docs/images/diagram.svg",
+            "supply-workbench/docs/images/generate.py", "supply-workbench/docs/screenshot.png",
         ):
             with self.subTest(path=path):
                 head = self.commit({path: "change\n"})
@@ -105,6 +108,36 @@ class PlanTest(unittest.TestCase):
                 head = self.commit({path: "ordinary documentation\n"})
                 self.assert_plan(self.base, head, {"light"})
                 self.base = head
+
+    def test_documentation_images_run_light_on_addition_and_deletion(self):
+        images = {
+            f"supply-workbench/docs/images/guide/preview.{extension}": "image fixture\n"
+            for extension in ("png", "jpg", "JPEG", "gif", "webp")
+        }
+        head = self.commit({"README.md": "documentation with screenshots\n", **images})
+        self.assert_plan(self.base, head, {"light"})
+        deleted = self.commit(dict.fromkeys(images))
+        self.assert_plan(head, deleted, {"light"})
+
+    def test_documentation_images_add_light_to_runtime_verification(self):
+        head = self.commit({
+            "supply-workbench/docs/images/preview.png": "documentation image\n",
+            "supply-workbench/apps/web/src/images/preview.png": "application image\n",
+        })
+        self.assert_plan(self.base, head, {"code", "web", "light"})
+
+    def test_image_paths_with_non_asset_git_modes_run_full(self):
+        image = "supply-workbench/docs/images/preview.png"
+        asset = self.commit({image: "non-executable image fixture\n"})
+        (self.repo / image).chmod(0o755)
+        executable = self.commit({})
+        self.assert_plan(asset, executable, KEYS)
+
+        (self.repo / image).unlink()
+        (self.repo / image).symlink_to("../../../README.md")
+        symlink = self.commit({})
+        self.assert_plan(executable, symlink, KEYS)
+        self.assert_plan(symlink, asset, KEYS)
 
     def test_web_report_printing_also_runs_export_tests(self):
         for path in (
