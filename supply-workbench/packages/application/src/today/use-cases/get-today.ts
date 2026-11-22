@@ -73,7 +73,7 @@ function responseOf({ read, matched, shown }: {
     counts: countsOf(matched),
     items: shown.map((item) => toView({ item, lines, batches, names, exceptions })),
     ...(candidates === undefined ? {} : { pendingBatch: pendingBatch({ candidates, actor, scope: pendingScope, warehouseId }) }),
-    arrivalMemos: arrivalMemos({ catalog, actor, scope, today: asOf, lines, names }),
+    arrivalMemos: arrivalMemos({ sources: catalog.sources, batches, actor, scope, today: asOf, lines, names }),
     truncated: shown.length < matched.length,
   };
 }

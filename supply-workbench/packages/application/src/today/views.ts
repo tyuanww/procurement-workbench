@@ -54,6 +54,7 @@ type TodoFollowUp = { readonly id: string; readonly text: string; readonly creat
 
 export type ArrivalMemo = {
   readonly batchId: string;
+  readonly batchSeq: number | null;
   readonly line: TodoLineView;
   readonly warehouse: string | null;
   readonly confirmedDate: LocalDate | null;

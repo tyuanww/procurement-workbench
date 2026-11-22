@@ -91,6 +91,7 @@ const todayResponse = strictObject({
   }))),
   arrivalMemos: z.array(strictObject({
     batchId: z.string(),
+    batchSeq: nullable(z.int().positive()),
     line: todoLine,
     warehouse: nullable(z.string()),
     confirmedDate: nullable(LocalDateSchema),
