@@ -9,8 +9,8 @@ PR 的 `verify` 工作流按文件改动选择工程、数据库、前端、报�
 将文档改动提交到本地分支。在仓库根目录运行链接检查。
 
 ```sh
-git fetch origin
-python3 -B .github/ci/check_light.py origin/main HEAD
+git fetch https://github.com/tyuanww/shinemage-supply-workbench.git main
+python3 -B .github/ci/check_light.py FETCH_HEAD HEAD
 ```
 
 ## 在 GitHub 上验证主分支
@@ -18,8 +18,8 @@ python3 -B .github/ci/check_light.py origin/main HEAD
 从公开仓取回最近的 `main`。用有仓库写入权限的账号触发 `verify`，传入该提交的完整 SHA。
 
 ```sh
-git fetch origin
-release_sha=$(git rev-parse origin/main)
+git fetch https://github.com/tyuanww/shinemage-supply-workbench.git main
+release_sha=$(git rev-parse FETCH_HEAD)
 gh workflow run verify.yml --repo tyuanww/shinemage-supply-workbench --ref main -f sha="$release_sha"
 ```
 

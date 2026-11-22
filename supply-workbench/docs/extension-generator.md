@@ -28,6 +28,6 @@ pnpm new:feature demo-status --dry-run
 
 ## 移除本次生成的文件
 
-确认你要移除目标目录和对应的清单项后，运行同一条命令并加上 `--remove`。`--dry-run` 和 `--remove` 分开使用。运行 `git diff --stat` 回读剩下的改动。
+确认你要移除目标目录和对应的清单项后，运行同一条命令并加上 `--remove`。`--dry-run` 和 `--remove` 分开使用。运行 `git status --short` 核对剩余的文件改动。
 
 生成、重复 ID 和移除行为由生成器测试覆盖。[生成器测试](../test/architecture/generator.test.ts) · [CI 验证](ci-verification.md)
