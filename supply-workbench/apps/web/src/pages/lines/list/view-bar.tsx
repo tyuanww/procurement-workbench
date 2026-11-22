@@ -148,7 +148,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
           <div style={viewClusterStyle()}>
             {actions}
           </div>
-          <DisplayControl columns={props.columns} hiddenKeys={props.hiddenKeys} shown={shown} density={props.density} query={props.query} search={props.search} setParams={props.setParams} />
+          <DisplayControl shown={shown} density={props.density} query={props.query} search={props.search} setParams={props.setParams} />
         </div>
       </div>
     );
@@ -177,8 +177,6 @@ function shownColumns(props: ViewBarProps, viewport: { readonly band: string; re
 }
 
 function DisplayControl(props: {
-  readonly columns: readonly ColumnView[];
-  readonly hiddenKeys: readonly string[];
   readonly shown: readonly ColumnView[];
   readonly density: Density;
   readonly query: string;
@@ -197,8 +195,6 @@ function DisplayControl(props: {
 }
 
 function DisplayMenu(props: {
-  readonly columns: readonly ColumnView[];
-  readonly hiddenKeys: readonly string[];
   readonly shown: readonly ColumnView[];
   readonly density: Density;
   readonly query: string;
@@ -208,7 +204,6 @@ function DisplayMenu(props: {
   return (
     <div style={displayMenuStyle()}>
       <DensityControl density={props.density} search={props.search} setParams={props.setParams} />
-      <ColumnMenu columns={props.columns} hiddenKeys={props.hiddenKeys} search={props.search} setParams={props.setParams} />
       <Button href={exportAddress({ query: props.query, columns: props.shown })}>导出 Excel</Button>
     </div>
   );
