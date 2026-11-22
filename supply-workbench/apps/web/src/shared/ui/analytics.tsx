@@ -95,17 +95,23 @@ export function RateBars(input: { readonly rows: readonly { readonly key: string
 }
 
 export function Sparkline(input: { readonly values: readonly (number | null)[]; readonly labels?: readonly string[]; readonly ariaLabel: string }): ReactNode {
-  const points = input.values.flatMap((value, index) => (value === null ? [] : [{ value, index }]));
-  if (points.length === 0) return <Typography.Text type="secondary">—</Typography.Text>;
-  const max = Math.max(1, ...points.map((point) => point.value));
-  const step = points.length === 1 ? 100 : 100 / (points.length - 1);
-  const polyline = points.map((point) => `${point.index * step},${31 - (point.value / max) * 27}`).join(' ');
-  const last = points[points.length - 1];
+  const values = input.values.filter((value) => value !== null);
+  if (values.length === 0) return <Typography.Text type="secondary">—</Typography.Text>;
+  const max = Math.max(1, ...values);
+  const step = 100 / Math.max(1, input.values.length - 1);
+  const points = input.values.map((value, index) => value === null ? null : { value, index });
+  const path = points.flatMap((point, index) => point === null ? [] : [
+    `${points[index - 1] == null ? 'M' : 'L'}${point.index * step},${31 - (point.value / max) * 27}`,
+  ]).join(' ');
   return (
-    <svg viewBox="0 0 100 32" role="img" aria-label={input.ariaLabel} style={{ width: '100%', height: 32, display: 'block', overflow: 'visible' }}>
+    <svg viewBox="0 0 100 32" role="img" aria-label={input.ariaLabel} style={{ width: '100%', height: 92, overflow: 'visible' }}>
       <line x1="0" y1="31" x2="100" y2="31" stroke={border} strokeWidth="1" vectorEffect="non-scaling-stroke" />
-      <polyline points={polyline} fill="none" stroke={brand[600]} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-      {last === undefined ? null : <circle cx={last.index * step} cy={31 - (last.value / max) * 27} r="2.5" fill={brand[600]}><title>{tooltipOf(last, input.labels)}</title></circle>}
+      <path d={path} fill="none" stroke={brand[600]} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      {points.map((point) => point === null ? null : (
+        <circle key={point.index} cx={point.index * step} cy={31 - (point.value / max) * 27} r="0.9" fill={brand[600]}>
+          <title>{tooltipOf(point, input.labels)}</title>
+        </circle>
+      ))}
     </svg>
   );
 }

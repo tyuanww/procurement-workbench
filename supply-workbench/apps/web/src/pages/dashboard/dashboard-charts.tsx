@@ -1,4 +1,5 @@
 import { Typography } from 'antd';
+import { LOW_SAMPLE_THRESHOLD } from '@sw/domain';
 import type { ReactNode } from 'react';
 import type { DashboardLoad } from '../../features/performance/index.js';
 import { MetricStrip, RateBars } from '../../shared/ui/analytics.js';
@@ -9,7 +10,7 @@ export function SupplierRateChart(input: { readonly inputs: DashboardLoad['suppl
     .flatMap((item) => {
       const denominator = item.onTime.denominator;
       const numerator = item.onTime.numerator;
-      if (denominator === null || numerator === null || denominator === 0) return [];
+      if (denominator === null || numerator === null || item.onTime.n < LOW_SAMPLE_THRESHOLD) return [];
       return [{ key: item.partyId, label: item.displayName ?? '未命名主体', rate: numerator / denominator, hint: `${numerator}/${denominator} 批` }];
     })
     .sort((left, right) => right.rate - left.rate || left.label.localeCompare(right.label))

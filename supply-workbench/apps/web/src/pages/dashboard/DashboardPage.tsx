@@ -1,4 +1,4 @@
-import { Alert, Button, Empty, Result, Skeleton, Tabs } from 'antd';
+import { Alert, Button, Empty, Result, Skeleton, Tabs, Typography } from 'antd';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
@@ -10,6 +10,7 @@ import {
   loadDashboard,
   loadStuck,
   supplierView,
+  type DashboardLane,
   type DashboardLoad,
   type DashboardPatch,
   type DashboardView,
@@ -23,6 +24,7 @@ import { ManagementMeetingPanel } from './ManagementMeetingPanel.js';
 import { DashboardChrome } from './DashboardChrome.js';
 import { StuckPanel } from './StuckPanel.js';
 import { SupplierPanel } from './SupplierPanel.js';
+import { SupplierTrend } from './SupplierTrend.js';
 
 const VIEW_LABEL: Record<DashboardView, string> = {
   stuck: '卡点',
@@ -69,7 +71,7 @@ export function DashboardPage() {
             </BoardBody>
           ) : (
             <BoardBody board={performanceBoard.state} onRetry={performanceBoard.reload} keepOnError>
-              {(loaded) => <ActiveView view={view} loaded={loaded} onSearch={onSearch} />}
+              {(loaded) => <ActiveView view={view} loaded={loaded} lane={lane} onSearch={onSearch} />}
             </BoardBody>
           )}
         </ViewTabs>
@@ -155,20 +157,25 @@ function BoardBody<T>(props: {
 
 function ActiveView(props: {
   readonly view: Exclude<DashboardView, 'stuck' | 'meeting'>;
+  readonly lane: DashboardLane;
   readonly loaded: DashboardLoad;
   readonly onSearch: (patch: DashboardPatch) => void;
 }) {
-  if (props.view === 'suppliers') return <SupplierBoard loaded={props.loaded} onSearch={props.onSearch} />;
+  if (props.view === 'suppliers') return <SupplierBoard loaded={props.loaded} lane={props.lane} onSearch={props.onSearch} />;
   if (props.view === 'buyers') return <BuyerBoard loaded={props.loaded} onSearch={props.onSearch} />;
   return <ProjectProgressPanel project={props.loaded.project} />;
 }
 
-function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly onSearch: (patch: DashboardPatch) => void }) {
+function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly lane: DashboardLane; readonly onSearch: (patch: DashboardPatch) => void }) {
   const rows = supplierView({ rows: props.loaded.suppliers });
-  if (rows.length === 0) return <Empty description="这段时间没有供应商数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
+  const unassigned = props.loaded.supplierUnassigned;
+  const hasUnassigned = unassigned !== undefined && unassigned.dateChanges + unassigned.openExceptions > 0;
+  if (rows.length === 0 && !hasUnassigned) return <Empty description="这段时间没有供应商数据。下一步：换个周期或线别。"><Button onClick={() => props.onSearch({ view: 'stuck' })}>去看卡点</Button></Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
       <SupplierRateChart inputs={props.loaded.suppliers} />
+      <SupplierTrend suppliers={props.loaded.suppliers} lane={props.lane} />
+      {hasUnassigned ? <Typography.Text type="secondary">未归属改期 {unassigned.dateChanges} 条 · 未归属开放异常 {unassigned.openExceptions} 条</Typography.Text> : null}
       <SupplierPanel rows={rows} />
     </div>
   );

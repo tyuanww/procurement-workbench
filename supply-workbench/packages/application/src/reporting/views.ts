@@ -21,6 +21,7 @@ export type WeeklyReportData = {
   readonly risks: readonly { readonly batchId: string; readonly orderLineId: string; readonly overdueDays: number | null; readonly nameRaw: string | null }[];
   readonly stuck: StuckDashboard['distribution'];
   readonly suppliers: readonly SupplierKpiRow[];
+  readonly supplierUnassigned?: { readonly dateChanges: number; readonly openExceptions: number };
   readonly buyers: readonly BuyerLoadRow[];
   readonly exceptions: { readonly opened: number; readonly closed: number };
   readonly dueNextWeek: readonly { readonly batchId: string; readonly dueDate: LocalDate; readonly nameRaw: string | null }[];

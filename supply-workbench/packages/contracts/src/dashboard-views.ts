@@ -96,8 +96,20 @@ export const BuyerLoadRowSchema: z.ZodType<BuyerLoadRow> = strictObject({
   followUpsInPeriod: nullable(z.number()),
 });
 
+export const SupplierEventsSchema = strictObject({ dateChanges: z.int().nonnegative(), openExceptions: z.int().nonnegative() });
+
 export const SupplierDashboardSchema: z.ZodType<SupplierDashboard> = strictObject({
   rows: z.array(SupplierKpiRowSchema),
+  unassigned: optional(SupplierEventsSchema),
+  detail: optional(z.array(strictObject({
+    batchId: z.string(),
+    orderLineId: nullable(z.string()),
+    poRaw: nullable(z.string()),
+    nameRaw: nullable(z.string()),
+    firstConfirmedDate: nullable(LocalDateSchema),
+    lastReceivedOn: nullable(LocalDateSchema),
+    onTime: z.boolean(),
+  }))),
 });
 
 export const BuyerLoadDashboardSchema: z.ZodType<BuyerLoadDashboard> = strictObject({

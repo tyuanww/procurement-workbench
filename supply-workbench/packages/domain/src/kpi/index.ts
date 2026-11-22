@@ -41,8 +41,16 @@ export function dueBatches(input: KpiInput): KpiMeasure {
 }
 
 export function onTimeRate(input: KpiInput): KpiMeasure {
-  const concluded = input.batches.filter((batch) => inDueSet(batch, input) && hasConclusion(batch, input.today));
+  const concluded = concludedDueBatches(input);
   return rate(concluded.filter(isOnTime).length, concluded.length);
+}
+
+export function onTimeBatchResults(input: KpiInput) {
+  return concludedDueBatches(input).map((batch) => ({ batch, onTime: isOnTime(batch), lastReceivedOn: lastReceipt(batch) }));
+}
+
+function concludedDueBatches(input: KpiInput): KpiBatch[] {
+  return input.batches.filter((batch) => inDueSet(batch, input) && hasConclusion(batch, input.today));
 }
 
 export function averageDelay(input: KpiInput): KpiMeasure {

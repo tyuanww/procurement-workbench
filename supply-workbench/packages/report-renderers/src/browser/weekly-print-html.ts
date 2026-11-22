@@ -1,3 +1,4 @@
+import { LOW_SAMPLE_THRESHOLD } from '@sw/domain';
 import type { WeeklyReport } from '../../../application/src/reporting/views.js';
 import { managementMeetingTables } from '../management-meeting.js';
 
@@ -26,7 +27,19 @@ function stuckHtml(data: WeeklyReport['data']): string {
 }
 
 function suppliersHtml(data: WeeklyReport['data']): string {
-  return section({ id: 'suppliers', title: '供应商表现', body: table(['供应商', '应到批次', '准时到货率', '当前逾期', '开放异常'], data.suppliers.map((row) => [row.displayName ?? row.partyId, row.dueBatches.numerator ?? '—', row.onTime.numerator === null || row.onTime.denominator === null || row.onTime.denominator === 0 ? '—' : `${Math.round((row.onTime.numerator / row.onTime.denominator) * 100)}%`, row.overdueNow.numerator ?? '—', row.openExceptions.numerator ?? '—'])) });
+  const unassigned = data.supplierUnassigned;
+  const note = unassigned === undefined ? '' : `<p>未归属改期 ${unassigned.dateChanges} 条。未归属开放异常 ${unassigned.openExceptions} 条。</p>`;
+  const rows = data.suppliers.map((row) => [
+    row.displayName ?? row.partyId, numberOrDash(row.dueBatches.numerator), supplierRate(row.onTime),
+    numberOrDash(row.overdueNow.numerator), numberOrDash(row.dateChanges.numerator), numberOrDash(row.openExceptions.numerator),
+  ]);
+  return section({ id: 'suppliers', title: '供应商表现', body: note + table(['供应商', '应到批次', '准时到货率', '当前逾期', '改期', '开放异常'], rows) });
+}
+
+function supplierRate({ numerator, denominator }: WeeklyReport['data']['suppliers'][number]['onTime']): string {
+  if (numerator === null || denominator === null || denominator === 0) return '—';
+  if (denominator < LOW_SAMPLE_THRESHOLD) return `样本少（n=${denominator}）`;
+  return `${Math.round((numerator / denominator) * 100)}%（${numerator}/${denominator}）`;
 }
 
 function buyersHtml(data: WeeklyReport['data']): string {
