@@ -1,6 +1,6 @@
-# 采购工作台
+# SHINEMAGE 供应链工作台
 
-采购、产品和管理团队可以用采购表建立订单进度，按批次跟进排期、发货和收货。采购在今日行动板看待催事项和到仓备忘录。管理层通过卡点、供应商表现、采购负荷和项目进度查看明细。产品经理可以看新品节点及交期预警，周会可以生成全店周报。
+采购、产品和管理团队可以用采购表建立订单进度，按批次跟进排期、发货和收货。采购在今日行动板看待催事项和到仓备忘录。管理店铺显示达肤妍、译龄及总排期。产品经理可以跟进新品节点，管理层可以查看看板并生成管理周会或全店周报。
 
 ## 本地打开
 
@@ -14,7 +14,7 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-示例采购表在[合成样本目录](supply-workbench/fixtures/synthetic/)。[CI 说明](supply-workbench/docs/ci-verification.md)记录验证范围、临时数据库和 Windows 验收方法。[设计规范](supply-workbench/DESIGN.md)定义前端使用的 Ant Design 组件和主题。
+示例采购表在[合成样本目录](supply-workbench/fixtures/synthetic/)。真实业务文件可保存在本机的 `local-data/` 或部署环境，并按需导入。[CI 说明](supply-workbench/docs/ci-verification.md)记录验证范围、临时数据库和 Windows 验收方法。[设计规范](supply-workbench/DESIGN.md)定义前端使用的 Ant Design 组件和主题。
 
 ## 许可证
 

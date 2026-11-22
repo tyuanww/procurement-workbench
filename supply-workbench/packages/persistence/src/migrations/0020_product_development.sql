@@ -8,7 +8,7 @@ ALTER TABLE work_item_events DROP CONSTRAINT work_item_events_kind_check,
 --> statement-breakpoint
 CREATE TABLE product_development_projects (
   id text PRIMARY KEY,
-  store text NOT NULL CHECK (store IN ('store_a', 'store_b')),
+  store text NOT NULL CHECK (store IN ('dafuyan', 'yiling')),
   title text NOT NULL,
   product_lead_user_id text NOT NULL REFERENCES users(id),
   created_by text NOT NULL REFERENCES users(id),

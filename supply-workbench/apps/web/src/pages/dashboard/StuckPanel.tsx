@@ -1,16 +1,14 @@
 import { Button, Empty, Statistic, Table, Typography, type TableColumnType } from 'antd';
 import type { CSSProperties } from 'react';
-import type { StuckDashboard } from '@sw/contracts';
-import { batchStatusLabel } from '@sw/domain';
-import { formatQuantity, formatTableDate } from '../../shared/ui/format.js';
+import { batchStatusLabel, type BatchStatus } from '@sw/domain';
+import { formatTableDate } from '../../shared/ui/format.js';
 import {
   EM_DASH,
-  STUCK_BUCKETS,
-  stuckView,
   type DashboardPatch,
+  type BottleneckCause,
   type StuckBucket,
-  type DashboardQuery,
-  type StuckFilters,
+  type StuckCards,
+  type StuckItemInput,
   type StuckTableRow,
   type StuckView,
 } from '../../features/performance/index.js';
@@ -31,14 +29,12 @@ import { CAUSE_LABEL, CauseFilter } from './cause-filter.js';
 type SearchHandler = (patch: DashboardPatch) => void;
 type TextKey = 'stageLabel' | 'po' | 'name' | 'waiting' | 'owner' | 'confirmed';
 
-const CLEAR_FILTERS: StuckFilters = { stage: null, bucket: null, cause: null, card: null };
-
-const CARDS = [
-  { key: 'overdue', label: '逾期', filters: { ...CLEAR_FILTERS, card: 'overdue' } },
-  { key: 'awaitingDate', label: '待确认日期', filters: { ...CLEAR_FILTERS, stage: 'awaiting_date' } },
-  { key: 'openBatches', label: '开放批次', filters: CLEAR_FILTERS },
-  { key: 'shippedNotReceived', label: '已发待收', filters: { ...CLEAR_FILTERS, stage: 'shipped' } },
-] satisfies readonly { key: keyof StuckDashboard['kpis']; label: string; filters: StuckFilters }[];
+const CARD_LABEL: Record<StuckCards[number]['key'], string> = {
+  openBatches: '开放批次',
+  overdue: '逾期',
+  awaitingDate: '待确认日期',
+  shippedNotReceived: '已发待收',
+};
 
 const metricStyle: CSSProperties = {
   fontSize: fontSize.metric,
@@ -63,73 +59,124 @@ const metricBox: CSSProperties = {
 };
 
 export function StuckPanel(props: {
-  readonly data: StuckDashboard;
-  readonly query: DashboardQuery;
-  readonly isUpdating: boolean;
+  readonly cards: StuckCards;
+  readonly stuck: StuckView;
+  readonly items: readonly StuckItemInput[];
+  readonly from: string;
+  readonly to: string;
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
+  readonly cause: BottleneckCause | null;
   readonly onSearch: SearchHandler;
   readonly now: Date;
 }) {
-  const { data, query, onSearch, isUpdating } = props;
-  const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计</Typography.Text>
-      <CardRow kpis={data.kpis} filters={query} onSearch={onSearch} />
-      <CauseFilter counts={data.causeCounts} from={query.from} to={query.to} cause={query.cause} onSearch={onSearch} />
-      <DwellChart dwell={stuck.dwell} onSearch={onSearch} />
-      <StuckFilter filters={query} onSearch={onSearch} />
+      <CardRow
+        cards={props.cards}
+        stage={props.stage}
+        bucket={props.bucket}
+        onSearch={props.onSearch}
+      />
+      <CauseFilter items={props.items} from={props.from} to={props.to} cause={props.cause} stage={props.stage} bucket={props.bucket} onSearch={props.onSearch} />
+      <DwellChart dwell={props.stuck.dwell} onSearch={props.onSearch} />
+      <StuckFilter stage={props.stage} bucket={props.bucket} cause={props.cause} hasRows={props.stuck.rows.length > 0} onSearch={props.onSearch} />
       <Typography.Title level={2} style={{ margin: 0 }}>
-        卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
+        卡点清单
       </Typography.Title>
-      {data.total === 0 && !isUpdating ? (
-        <Empty description="当前筛选没有卡点" />
+      {props.stuck.rows.length === 0 ? (
+        <Empty description="当前筛选没有卡点。下一步：显示全部。">
+          <Button onClick={() => props.onSearch({ stage: null, bucket: null, cause: null })}>显示全部</Button>
+        </Empty>
       ) : (
-        <StuckTable rows={isUpdating ? [] : stuck.rows} page={data.page} pageSize={data.pageSize}
-          total={data.total} isUpdating={isUpdating} now={props.now} onSearch={onSearch} />
+        <StuckTable rows={props.stuck.rows} now={props.now} />
       )}
     </div>
   );
 }
 
 function CardRow(props: {
-  readonly kpis: StuckDashboard['kpis'];
-  readonly filters: StuckFilters;
+  readonly cards: StuckCards;
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
   readonly onSearch: SearchHandler;
 }) {
+  const cards = [...props.cards].sort(cardPriority);
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2] }}>
-      {CARDS.map((card) => {
-        const isActive = sameFilters(card.filters, props.filters);
-        return (
-          <Button
-            key={card.key}
-            type="text"
-            aria-pressed={isActive}
-            onClick={() => props.onSearch({ ...card.filters, page: 1 })}
-            style={{
-              ...metricBox,
-              textAlign: 'left',
-              cursor: 'pointer',
-              borderTop: metricAccent(card.key),
-              borderBottomColor: isActive ? brand[600] : border,
-            }}
-          >
-            <Statistic title={card.label} value={props.kpis[card.key]} styles={{ content: metricStyle }} />
-          </Button>
-        );
-      })}
+      {cards.map((card) => (
+        <Button
+          key={card.key}
+          type="text"
+          aria-pressed={isCardActive({ key: card.key, stage: props.stage, bucket: props.bucket })}
+          onClick={() => chooseCard(card.key, props.onSearch)}
+          style={{
+            ...metricBox,
+            textAlign: 'left',
+            cursor: 'pointer',
+            borderTop: metricAccent(card.key),
+            borderBottomColor: isCardActive({
+              key: card.key,
+              stage: props.stage,
+              bucket: props.bucket,
+            })
+              ? brand[600]
+              : border,
+          }}
+        >
+          <Statistic
+            title={CARD_LABEL[card.key]}
+            value={card.value}
+            styles={{ content: metricStyle }}
+          />
+        </Button>
+      ))}
     </div>
   );
 }
 
-function metricAccent(key: keyof StuckDashboard['kpis']): string {
+function metricAccent(key: StuckCards[number]['key']): string {
   if (key === 'overdue') return `2px solid ${statusColor.danger.border}`;
   if (key === 'awaitingDate') return `2px solid ${statusColor.warning.border}`;
   return '2px solid transparent';
 }
 
-function sameFilters(left: StuckFilters, right: StuckFilters): boolean {
-  return left.stage === right.stage && left.bucket === right.bucket && left.cause === right.cause && left.card === right.card;
+function cardPriority(left: StuckCards[number], right: StuckCards[number]): number {
+  const order: Record<StuckCards[number]['key'], number> = {
+    overdue: 0,
+    awaitingDate: 1,
+    openBatches: 2,
+    shippedNotReceived: 3,
+  };
+  return order[left.key] - order[right.key];
+}
+
+function chooseCard(key: StuckCards[number]['key'], onSearch: SearchHandler): void {
+  switch (key) {
+    case 'overdue':
+      window.location.assign('/lines?overdue=1');
+      return;
+    case 'awaitingDate':
+      onSearch({ stage: 'awaiting_date', bucket: null });
+      return;
+    case 'shippedNotReceived':
+      onSearch({ stage: 'shipped', bucket: null });
+      return;
+    case 'openBatches':
+      onSearch({ stage: null, bucket: null });
+      return;
+  }
+}
+
+function isCardActive(input: {
+  readonly key: StuckCards[number]['key'];
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
+}): boolean {
+  if (input.key === 'overdue') return false;
+  if (input.key === 'awaitingDate') return input.stage === 'awaiting_date' && input.bucket === null;
+  if (input.key === 'shippedNotReceived') return input.stage === 'shipped' && input.bucket === null;
+  return input.stage === null && input.bucket === null;
 }
 
 function DwellChart(props: {
@@ -156,58 +203,55 @@ function DwellChart(props: {
             fill: dwellColor[block.bucket],
             isActive: block.isActive,
           })),
-          onSelect: (bucket) => { const selected = bucketOf(bucket); if (selected !== undefined) props.onSearch({ ...CLEAR_FILTERS, stage: row.stage, bucket: selected, page: 1 }); },
+          onSelect: (bucket) => { const selected = bucketOf(bucket); if (selected !== undefined) props.onSearch({ stage: row.stage, bucket: selected }); },
         }))}
       />
     </div>
   );
 }
 
+const BUCKETS: readonly StuckBucket[] = ['0-3', '4-7', '8-14', '15+'];
+
 function bucketOf(value: string): StuckBucket | undefined {
-  return STUCK_BUCKETS.find((bucket) => bucket === value);
+  return BUCKETS.find((bucket) => bucket === value);
 }
 
-function StuckFilter(props: { readonly filters: StuckFilters; readonly onSearch: SearchHandler }) {
-  if (sameFilters(props.filters, CLEAR_FILTERS)) return null;
+function StuckFilter(props: {
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
+  readonly cause: BottleneckCause | null;
+  readonly hasRows: boolean;
+  readonly onSearch: SearchHandler;
+}) {
+  if (props.stage === null && props.bucket === null && props.cause === null) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: space[1] }}>
-      <span style={{ color: text.secondary }}>当前筛选 {filterText(props.filters)}</span>
-      <Button type="text" onClick={() => props.onSearch(CLEAR_FILTERS)}>显示全部</Button>
+      <span style={{ color: text.secondary }}>
+        当前筛选 {filterText({ stage: props.stage, bucket: props.bucket, cause: props.cause })}
+      </span>
+      {props.hasRows ? (
+        <Button type="text" onClick={() => props.onSearch({ stage: null, bucket: null, cause: null })}>
+          显示全部
+        </Button>
+      ) : null}
     </div>
   );
 }
 
-function filterText(input: StuckFilters): string {
-  const stage = input.stage === null ? '' : batchStatusLabel(input.stage);
-  const bucket = input.bucket === null ? '' : `${input.bucket} 天`;
-  const cause = input.cause === null ? '' : CAUSE_LABEL[input.cause];
-  return [input.card === 'overdue' ? '逾期' : '', stage, bucket, cause].filter((part) => part !== '').join(' · ');
+function filterText(input: { readonly stage: BatchStatus | null; readonly bucket: StuckBucket | null; readonly cause: BottleneckCause | null }): string {
+  const stageText = input.stage === null ? '' : batchStatusLabel(input.stage);
+  const bucketText = input.bucket ?? '';
+  const causeText = input.cause === null ? '' : CAUSE_LABEL[input.cause];
+  return [stageText, bucketText, causeText].filter((part) => part !== '').join(' ');
 }
 
-function StuckTable(props: {
-  readonly rows: readonly StuckTableRow[];
-  readonly page: number;
-  readonly pageSize: number;
-  readonly total: number;
-  readonly isUpdating: boolean;
-  readonly now: Date;
-  readonly onSearch: SearchHandler;
-}) {
+function StuckTable(props: { readonly rows: readonly StuckTableRow[]; readonly now: Date }) {
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
   return (
     <Table<StuckTableRow>
       size="small"
-      loading={props.isUpdating}
-      pagination={{
-        current: props.page,
-        pageSize: props.pageSize,
-        total: props.total,
-        hideOnSinglePage: true,
-        showSizeChanger: false,
-        disabled: props.isUpdating,
-        onChange: (page) => props.onSearch({ page }),
-      }}
+      pagination={false}
       rowKey="batchId"
       columns={stuckColumns({ now: props.now, isPhone, isNarrowPhone })}
       dataSource={[...props.rows]}

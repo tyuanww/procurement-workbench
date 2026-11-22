@@ -1,13 +1,10 @@
-import { Tag, Typography } from 'antd';
-import { Link } from 'react-router';
+import { Typography } from 'antd';
 import { linkStatusLabel, scheduleBalance, scheduledDayQty, SCHEDULE_LINK_REVIEW } from '@sw/domain';
 import type { OrderLineDetail } from '@sw/contracts';
-import { useCanWrite } from '../../../shared/actor.js';
 
 type ScheduleRow = OrderLineDetail['factoryReports']['schedule'][number];
 
 export function ScheduleReports(props: { readonly rows: readonly ScheduleRow[]; readonly ordered: number | null; readonly shipped: number | null; readonly received: number | null }) {
-  const canReadImport = useCanWrite('imports.write');
   if (props.rows.length === 0) return null;
   const balance = scheduleBalance({
     ordered: props.ordered,
@@ -19,13 +16,7 @@ export function ScheduleReports(props: { readonly rows: readonly ScheduleRow[]; 
     <div>
       <Typography.Title level={2}>排产</Typography.Title>
       <p>{balanceText(balance)}</p>
-      <Tag variant="filled">工厂上报</Tag>
-      <ul aria-label="工厂上报排产记录">{props.rows.map((row) => <li key={row.id}>
-        {scheduleLineText(row)}{' · '}
-        {canReadImport
-          ? <Link to={`/imports/${encodeURIComponent(row.importBatchId)}`}>{row.sheetName} 第 {row.rowNo} 行</Link>
-          : `${row.sheetName} 第 ${row.rowNo} 行`}
-      </li>)}</ul>
+      <ul>{props.rows.map((row) => <li key={row.id}>{scheduleLineText(row)}</li>)}</ul>
     </div>
   );
 }

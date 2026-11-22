@@ -4,11 +4,11 @@ import { classifyDemandOrder, generateBatchCandidates, localDate } from '../../p
 const day = localDate;
 
 it('订单号不是可识别单号时，文字是块标签', () => {
-  const labeled = classifyDemandOrder('甲代工厂店铺甲');
+  const labeled = classifyDemandOrder('宜侬达肤妍');
   expect(labeled.poRaw).toBeNull();
-  expect(labeled.blockLabelRaw).toBe('甲代工厂店铺甲');
+  expect(labeled.blockLabelRaw).toBe('宜侬达肤妍');
   expect(labeled.issues.map((issue) => issue.code)).toEqual(['PO_PLACEHOLDER']);
-  expect(classifyDemandOrder('PO20260827000034').poRaw).toBe('PO20260827000034');
+  expect(classifyDemandOrder('PO20260827000032').poRaw).toBe('PO20260827000032');
   expect(classifyDemandOrder('').issues).toEqual([]);
 });
 

@@ -1,6 +1,6 @@
 CREATE TABLE management_meeting_decisions (
   id text PRIMARY KEY,
-  store text NOT NULL CHECK (store IN ('store_a', 'store_b', 'unassigned')),
+  store text NOT NULL CHECK (store IN ('dafuyan', 'yiling', 'unassigned')),
   week_start date NOT NULL CHECK (extract(isodow FROM week_start) = 1),
   material_line_id text NOT NULL REFERENCES order_lines(id),
   decision text NOT NULL,

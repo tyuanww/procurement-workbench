@@ -1,4 +1,4 @@
-export const PROCUREMENT_STORES = ['store_a', 'store_b', 'unassigned', 'all'] as const;
+export const PROCUREMENT_STORES = ['dafuyan', 'yiling', 'unassigned', 'all'] as const;
 export type ProcurementStore = (typeof PROCUREMENT_STORES)[number];
 
 const OA_REFERENCE = /(?<![a-z0-9])(?:(XPKA[ \t]*[（(][ \t]*CN[ \t]*[）)][ \t]*[0-9０-９]+)(?:[-－][0-9０-９]+)*|(CGSQ[0-9０-９]+))(?![a-z0-9])/giu;

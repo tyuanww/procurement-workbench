@@ -53,7 +53,6 @@ function useTodayScreen(): TodayScreenProps {
     actionPage: state.paging === undefined ? undefined : {
       paging: state.paging, sort: query.sort, isLoading: today.isLoading, isSettled, loadError: today.loadError,
       factoryId: params.get('chaseFactory'),
-      isFiltered: query.reasons.length > 0 || query.sort.kind === 'bulk',
       onFactory: (id) => setParams(actionFactoryParams(search, id)),
       onPage: (page) => setParams(actionPageParams(search, page)),
       onSort: (sort) => setParams(actionSortParams(search, sort)),

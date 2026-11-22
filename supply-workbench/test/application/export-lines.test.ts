@@ -108,7 +108,7 @@ function presentRow(): OrderLineRow {
     nameRaw: '棉片',
     barcodeRaw: '690123',
     itemCodeRaw: 'ITEM-1',
-    supplierName: '甲代工厂',
+    supplierName: '宜侬',
     qtyOrdered: 0,
     receivedQty: 0,
     delivered: 0,

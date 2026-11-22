@@ -1,5 +1,4 @@
 import {
-  BuyerDrillSchema,
   DailyPlanSchema,
   LineOwnerOptionsSchema,
   LineSummarySchema,
@@ -9,7 +8,6 @@ import {
   OrderLineRowSchema,
   ProjectProgressSchema,
   ScheduleViewSchema,
-  SupplierDashboardSchema,
   TodayChaseResponseSchema,
   TodayPageResponseSchema,
   TodayResponseSchema,
@@ -50,14 +48,6 @@ export function fetchTodayPage(query: string, signal?: AbortSignal) {
 
 export function fetchTodayChase(query: string, signal: AbortSignal) {
   return fetchOwned({ path: `/api/v1/today/chase?${query}`, schema: TodayChaseResponseSchema, signal });
-}
-
-export function fetchSupplierWeek(query: URLSearchParams, signal: AbortSignal) {
-  return fetchOwned({ path: `/api/v1/dashboard/suppliers?${query}`, schema: SupplierDashboardSchema, signal });
-}
-
-export function fetchBuyerDrill(query: URLSearchParams, signal: AbortSignal) {
-  return fetchOwned({ path: `/api/v1/dashboard/buyers/drill?${query}`, schema: BuyerDrillSchema, signal });
 }
 
 export function fetchLines(query: string, signal: AbortSignal): Promise<LinesPage> {
@@ -101,7 +91,7 @@ export function fetchPlanSchedule(input: { readonly from: string; readonly to: s
 }
 
 export function fetchPlanProgress(input: { readonly from: string; readonly to: string; readonly signal: AbortSignal }): Promise<ProjectProgress> {
-  const path = `/api/v1/plan/progress?from=${encodeURIComponent(input.from)}&to=${encodeURIComponent(input.to)}&includeItems=true`;
+  const path = `/api/v1/plan/progress?from=${encodeURIComponent(input.from)}&to=${encodeURIComponent(input.to)}`;
   return fetchOwned({ path, schema: ProjectProgressSchema, signal: input.signal });
 }
 

@@ -36,7 +36,7 @@ export function ProgressPage(): ReactNode {
         items={[
           {
             key: 'current', label: '当前进度', children: view === 'current' ? <>
-              <Typography.Paragraph>停得越久越靠前。下一步同时显示成品待办和已核实的物料风险。</Typography.Paragraph>
+              <Typography.Paragraph>停得越久越靠前。下一步来自今天要推的原因。</Typography.Paragraph>
               <ProgressCurrent key={JSON.stringify([store, isMine])} store={store} isMine={isMine} />
             </> : null,
           },

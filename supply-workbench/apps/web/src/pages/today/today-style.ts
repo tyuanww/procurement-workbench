@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { bg, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
+import { bg, brand, fontSize, space, statusColor, text } from '../../theme/tokens.js';
 import type { RowFace } from '../../features/today/index.js';
 
 const [tiny, small, medium, regular] = space;
@@ -40,24 +40,7 @@ export function rowStyle(input: { readonly isFocused: boolean; readonly isFading
 }
 
 export function todayMotionCss(): string {
-  return `
-    .today-row { transition: opacity 180ms ease-out; overflow-wrap: anywhere; }
-    .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
-    .today-touch .ant-select { max-inline-size: 100%; }
-    .today-metric-summary { display: none; }
-    @media (max-width: 480px) {
-      .today-metric-cards { display: none; }
-      .today-metric-summary { display: flex; flex-wrap: wrap; gap: ${tiny}px ${small}px; }
-    }
-    @media (any-pointer: coarse) {
-      .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable {
-        min-block-size: 44px;
-        min-inline-size: 44px;
-      }
-      .today-touch .ant-tag-checkable { display: inline-flex; align-items: center; }
-    }
-    @media (prefers-reduced-motion: reduce) { .today-row { transition: none; } }
-  `;
+  return '.today-row{transition:opacity 180ms ease-out}@media (prefers-reduced-motion: reduce){.today-row{transition:none}}';
 }
 
 export function reasonStyle(): CSSProperties {

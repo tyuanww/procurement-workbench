@@ -11,7 +11,7 @@ export type NudgeLine = {
 export function nudgeText(input: { readonly waitingName: string; readonly buyerName: string; readonly lines: readonly NudgeLine[] }): string {
   const body = input.lines.map((line, index) => `${index + 1}. ${lineOf(line)}`).join('\n');
   const closing = input.buyerName.trim() === '' ? '谢谢！' : `谢谢！— ${input.buyerName}`;
-  return `【采购工作台】${input.waitingName}您好，以下批次请协助确认：\n${body}\n${closing}`;
+  return `【SHINEMAGE 采购】${input.waitingName}您好，以下批次请协助确认：\n${body}\n${closing}`;
 }
 
 export function followUpCount(lines: readonly NudgeLine[], recordFollowUp: boolean): number {

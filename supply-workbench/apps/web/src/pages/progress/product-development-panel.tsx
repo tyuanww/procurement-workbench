@@ -5,12 +5,10 @@ import type { ProductDevelopment, ProductDevelopmentNode, ProductDevelopmentProj
 import { DEVELOPMENT_DESTINATION_LABELS, type ProductDevelopmentStore } from '@sw/domain';
 import { workItemStatusLabel } from '../../features/today/index.js';
 import { apiErrorMessage } from '../../shared/api/client.js';
-import { StatusTag } from '../../shared/ui/widgets.js';
 import { border, space } from '../../theme/tokens.js';
 import { DevelopmentEditModal } from './development-edit-modal.js';
 import { readDevelopment } from './product-development-api.js';
 import { DevelopmentDetail } from './product-development-detail.js';
-import { developmentForecast } from './product-development-forecast.js';
 import { NodeForm, ProjectForm } from './product-development-forms.js';
 import { countdownOf, DevelopmentTimeline } from './product-development-timeline.js';
 import { storeLabels } from './store-query.js';
@@ -85,52 +83,34 @@ function DevelopmentProjectBody({ project, businessDate, onOpen, extra }: {
   const completed = project.nodes.filter((node) => node.status === 'done').length;
   const active = project.nodes.filter((node) => node.status !== 'cancelled').length;
   return <Card title={<Space wrap><span>{project.title}</span><Tag>{storeLabels[project.store]}</Tag></Space>}
-    styles={{ title: { whiteSpace: 'normal', overflowWrap: 'anywhere', paddingInlineEnd: space[1] } }}
     extra={extra}>
     <Space orientation="vertical" style={{ display: 'flex' }} size="large">
       <Space wrap size="large">
         <Typography.Text>主责产品人员 {project.productLeadName ?? '未知'}</Typography.Text>
         <Typography.Text>已完成 {completed} / {active} 个节点</Typography.Text>
       </Space>
+      <DevelopmentTimeline project={project} businessDate={businessDate} onOpen={onOpen} />
       {project.nodes.length === 0 ? null : <section aria-label="开发节点列表">
         {project.nodes.map((node) => <NodeRow key={node.id} node={node} onOpen={() => onOpen(node.id)} />)}
       </section>}
-      <DevelopmentTimeline project={project} businessDate={businessDate} onOpen={onOpen} />
     </Space>
   </Card>;
 }
 
 function NodeRow({ node, prefix, onOpen }: { readonly node: ProductDevelopmentNode; readonly prefix?: string; readonly onOpen: () => void }): ReactNode {
   return <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: space[1], paddingBlock: space[1], borderBottom: `1px solid ${border}` }}>
-    <Space orientation="vertical" size={0} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-      <Button type="link" style={{ paddingInline: 0, height: 'auto', minHeight: 32, whiteSpace: 'normal', textAlign: 'start' }} onClick={onOpen}>{node.title}</Button>
+    <Space orientation="vertical" size={0}>
+      <Button type="link" style={{ paddingInline: 0 }} onClick={onOpen}>{node.title}</Button>
       <Typography.Text type="secondary">
-        {[prefix, DEVELOPMENT_DESTINATION_LABELS[node.destination], `负责人 ${node.ownerName ?? '未分配'}`].filter(Boolean).join(' · ')}
+        {[prefix, DEVELOPMENT_DESTINATION_LABELS[node.destination], node.ownerName, node.plannedEnd].filter(Boolean).join(' · ')}
       </Typography.Text>
-      <Space wrap>
-        <Typography.Text type="secondary">项目要求 {node.plannedEnd}</Typography.Text>
-        <Typography.Text type="secondary">
-          {node.formalLink === null ? '供应商承诺' : '新品阶段承诺'} {node.latestReply?.promisedOn ?? '暂无回复'}
-        </Typography.Text>
-      </Space>
     </Space>
     <Space wrap>
-      <ForecastTag node={node} />
       {node.formalLink === null ? null : <Tag>已关联 OA</Tag>}
       {node.daysUntilRequired === null ? null : <Tag>{workItemStatusLabel(node.status)}</Tag>}
       <Tag>{countdownOf(node)}</Tag>
     </Space>
   </div>;
-}
-
-function ForecastTag({ node }: { readonly node: ProductDevelopmentNode }): ReactNode {
-  const forecast = developmentForecast(node);
-  switch (forecast.kind) {
-    case 'inactive': return null;
-    case 'unknown': return <Tag>交期待确认</Tag>;
-    case 'on-time': return <Tag>承诺未晚于要求</Tag>;
-    case 'late': return <StatusTag status="demand_before_confirmed" label={`预计晚 ${forecast.days} 天`} />;
-  }
 }
 
 function withSelection(previous: URLSearchParams, { projectId, nodeId }: { readonly projectId: string | null; readonly nodeId: string | null }) {

@@ -1,7 +1,5 @@
-import { Button, Empty, Input, Table, Typography, type TableProps } from 'antd';
+import { Button, Empty, Table, Typography, type TableProps } from 'antd';
 import type { ManagementDecision, ManagementMeetingSnapshot, MeetingMaterial, MeetingWaitingOn } from '@sw/contracts';
-import { useState } from 'react';
-import { space } from '../../../theme/tokens.js';
 import { SectionGroup } from '../../../shared/ui/section.js';
 
 const number = new Intl.NumberFormat('zh-CN');
@@ -15,7 +13,7 @@ const WAITING_LABEL: Record<MeetingWaitingOn, string> = {
 };
 
 export const meetingStoreLabels = {
-  store_a: '店铺甲', store_b: '店铺乙', unassigned: '未分店铺',
+  dafuyan: '达肤妍', yiling: '译龄', unassigned: '未分店铺',
 } satisfies Record<ManagementMeetingSnapshot['store'], string>;
 
 export function MeetingSections({ meeting, print = false, onRecord, onComplete }: {
@@ -24,21 +22,11 @@ export function MeetingSections({ meeting, print = false, onRecord, onComplete }
   readonly onRecord?: (row: MeetingMaterial) => void;
   readonly onComplete?: (row: ManagementDecision) => void;
 }) {
-  const [search, setSearch] = useState('');
-  const keyword = print ? '' : searchable(search);
-  const terms = keyword.split(/\s+/);
-  const materials = keyword === '' ? meeting.materials : meeting.materials.filter((row) => matchesMaterial(row, terms));
   return <>
     <SectionGroup title="采购事项" meta={summary(meeting.materials)}>
-      {print ? null : <Input aria-label="搜索采购事项" placeholder="按 OA、PO、品名或编码搜索" allowClear
-        value={search} onChange={(event) => setSearch(event.target.value)}
-        style={{ maxWidth: 360, marginBottom: space[2] }} />}
-      {keyword === '' ? null : <Typography.Paragraph role="status">找到 {materials.length} 条采购事项</Typography.Paragraph>}
-      <Table<MeetingMaterial> key={keyword}
-        size="small" rowKey="materialLineId" dataSource={materials} columns={materialColumns(onRecord)}
-        {...tableLayout(print)} locale={{ emptyText: <Typography.Text type="secondary">
-          {keyword === '' ? '这个店铺没有采购事项。' : '本店铺本周未找到匹配的采购事项。'}
-        </Typography.Text> }}
+      <Table<MeetingMaterial>
+        size="small" rowKey="materialLineId" dataSource={meeting.materials} columns={materialColumns(onRecord)}
+        {...tableLayout(print)} locale={{ emptyText: <Typography.Text type="secondary">这个店铺没有采购事项。</Typography.Text> }}
         expandable={{
           rowExpandable: (row) => row.batches.length > 0 || row.sourceReportedProgress !== null,
           expandedRowRender: (row) => <MaterialDetails row={row} />,
@@ -49,16 +37,6 @@ export function MeetingSections({ meeting, print = false, onRecord, onComplete }
     {meeting.development.length === 0 ? null : <DevelopmentTable rows={meeting.development} print={print} />}
     <DecisionTable meeting={meeting} print={print} {...(onComplete === undefined ? {} : { onComplete })} />
   </>;
-}
-
-function searchable(value: string): string {
-  return value.normalize('NFKC').trim().toLowerCase();
-}
-
-function matchesMaterial(row: MeetingMaterial, terms: readonly string[]): boolean {
-  const fields = [row.poRef, row.name, row.code, ...row.affectedFinished.flatMap(({ oaRef, name }) => [oaRef, name])]
-    .flatMap((value) => value === null ? [] : [searchable(value)]);
-  return terms.every((term) => fields.some((value) => value.includes(term)));
 }
 
 function summary(rows: readonly MeetingMaterial[]): string {

@@ -63,7 +63,7 @@ function unknown(raw: string, code: string): CellParse<ParsedItemCode> {
 }
 
 function matchSemi(code: string): ParsedItemCode | null {
-  if (code !== '50007003' && code !== '50007004') return null;
+  if (!/^500068(?:70|76)$/.test(code)) return null;
   return { codeType: 'semi_50', codeNorm: code };
 }
 

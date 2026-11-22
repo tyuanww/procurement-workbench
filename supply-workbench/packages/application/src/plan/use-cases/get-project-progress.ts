@@ -6,5 +6,5 @@ export const makeGetProjectProgress =
   async (input) => {
     const today = deps.clock.today();
     const items = await deps.plan.projectItems({ from: input.from, to: input.to });
-    return projectProgress({ from: input.from, to: input.to, today, items, includeItems: input.includeItems === true });
+    return projectProgress({ from: input.from, to: input.to, today, items });
   };

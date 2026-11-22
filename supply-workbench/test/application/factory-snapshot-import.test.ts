@@ -42,3 +42,4 @@ it('工厂快照提交会退休旧来源，重复 fingerprint 不重复写入', 
   expect((await memory.stores.imports.get('factory-b3')).error).toContain('factory-b2');
   expect([...memory.box.current.factoryReports.values()]).toHaveLength(2);
 });
+

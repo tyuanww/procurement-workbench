@@ -38,7 +38,7 @@ function workItem(input: {
     parentId: null,
     version: 1,
     overdueDays: filled(input.overdueDays, null),
-    orderLine: { id: 'line-1', poRaw: 'P02024700028', nameRaw: '面膜-5片装', itemCodeRaw: null, supplierPartyId: null },
+    orderLine: { id: 'line-1', poRaw: 'P02024700026', nameRaw: '面膜-5片装', itemCodeRaw: null, supplierPartyId: null },
     batch: null,
     supplierPartyId: idOf('party-', input.supplier),
     supplierName: filled(input.supplier, null),
@@ -119,7 +119,7 @@ describe('总排期筛选参数', () => {
 
   it('负责人、供应商、工厂和状态可以组合过滤，未分配用 unassigned 命中空值', () => {
     const items = [
-      workItem({ id: 'a', start: '2026-11-09', end: '2026-11-10', owner: '采购甲', supplier: '样例供应商37', factory: '甲代工厂', status: 'in_progress' }),
+      workItem({ id: 'a', start: '2026-11-09', end: '2026-11-10', owner: '采购甲', supplier: '样例供应商35', factory: '宜侬', status: 'in_progress' }),
       workItem({ id: 'b', start: '2026-11-09', end: '2026-11-09', status: 'blocked' }),
       workItem({ id: 'c', start: '2026-11-11', end: '2026-11-12', owner: '采购甲' }),
     ];
@@ -127,19 +127,19 @@ describe('总排期筛选参数', () => {
     expect(applyScheduleFilters({ items, filters: filter({ ownerUserId: 'user-采购甲' }) }).map((item) => item.id)).toEqual(['a', 'c']);
     expect(applyScheduleFilters({ items, filters: filter({ ownerUserId: 'unassigned' }) }).map((item) => item.id)).toEqual(['b']);
     expect(applyScheduleFilters({ items, filters: filter({ supplierPartyId: 'unassigned' }) }).map((item) => item.id)).toEqual(['b', 'c']);
-    expect(applyScheduleFilters({ items, filters: filter({ factoryPartyId: 'factory-甲代工厂' }) }).map((item) => item.id)).toEqual(['a']);
+    expect(applyScheduleFilters({ items, filters: filter({ factoryPartyId: 'factory-宜侬' }) }).map((item) => item.id)).toEqual(['a']);
     expect(applyScheduleFilters({ items, filters: filter({ status: 'blocked' }) }).map((item) => item.id)).toEqual(['b']);
   });
 
   it('筛选下拉列出实际出现的负责人、供应商和工厂，未分配排最后', () => {
     const options = scheduleOptions([
-      workItem({ id: 'a', start: '2026-11-09', end: '2026-11-09', owner: '采购甲', supplier: '样例供应商37', factory: '甲代工厂' }),
-      workItem({ id: 'b', start: '2026-11-09', end: '2026-11-09', owner: '采购甲', supplier: '样例供应商37' }),
+      workItem({ id: 'a', start: '2026-11-09', end: '2026-11-09', owner: '采购甲', supplier: '样例供应商35', factory: '宜侬' }),
+      workItem({ id: 'b', start: '2026-11-09', end: '2026-11-09', owner: '采购甲', supplier: '样例供应商35' }),
       workItem({ id: 'c', start: '2026-11-09', end: '2026-11-09' }),
     ]);
     expect(options.owners).toEqual([{ value: 'user-采购甲', label: '采购甲' }, { value: 'unassigned', label: '未分配' }]);
-    expect(options.suppliers).toEqual([{ value: 'party-样例供应商37', label: '样例供应商37' }, { value: 'unassigned', label: '未指定供应商' }]);
-    expect(options.factories).toEqual([{ value: 'factory-甲代工厂', label: '甲代工厂' }, { value: 'unassigned', label: '未指定工厂' }]);
+    expect(options.suppliers).toEqual([{ value: 'party-样例供应商35', label: '样例供应商35' }, { value: 'unassigned', label: '未指定供应商' }]);
+    expect(options.factories).toEqual([{ value: 'factory-宜侬', label: '宜侬' }, { value: 'unassigned', label: '未指定工厂' }]);
     expect(statusOptions().map((option) => option.value)).toEqual(['planned', 'in_progress', 'blocked']);
   });
 });

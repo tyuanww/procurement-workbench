@@ -23,3 +23,4 @@ it('快照内重复业务 fingerprint 只取一行', () => {
   }]);
   expect(result.totals).toEqual({ 'line-1': 10 });
 });
+

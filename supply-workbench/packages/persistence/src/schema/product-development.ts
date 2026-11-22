@@ -14,7 +14,7 @@ export const productDevelopmentProjects = pgTable('product_development_projects'
   createdAt: at('created_at').notNull(),
 }, (table) => [
   index('product_development_projects_store_idx').on(table.store),
-  check('product_development_projects_store_check', sql`${table.store} in ('store_a', 'store_b')`),
+  check('product_development_projects_store_check', sql`${table.store} in ('dafuyan', 'yiling')`),
 ]);
 
 export const productDevelopmentNodes = pgTable('product_development_nodes', {

@@ -27,7 +27,7 @@ function row(overrides: Partial<BoardItem> & { readonly id: string }): BoardItem
     overdueDays: null,
     dueDate: null,
     lineId: overrides.id,
-    waitingName: '甲代工厂',
+    waitingName: '宜侬',
     reasons: ['overdue'],
     poRaw: null,
     productName: null,
@@ -64,14 +64,14 @@ function flatIds(board: TodayBoard): string[] {
 const waitingItems = [
   row({ id: 'a', severity: 1, overdueDays: 1, dueDate: '2026-10-10', lineId: 'l2', reasons: ['overdue'] }),
   row({ id: 'b', severity: 3, overdueDays: 4, dueDate: '2026-10-07', lineId: 'l1', reasons: ['overdue', 'due_today'] }),
-  row({ id: 'c', severity: 2, overdueDays: null, dueDate: null, lineId: 'l3', waitingName: '样例供应商36', reasons: ['missing_date'] }),
+  row({ id: 'c', severity: 2, overdueDays: null, dueDate: null, lineId: 'l3', waitingName: '样例供应商34', reasons: ['missing_date'] }),
 ];
 
 describe('今日看板', () => {
-  it('等待方沿用 b、a 在甲代工厂，c 在样例供应商36，表头计数没有原因码', () => {
+  it('等待方沿用 b、a 在宜侬，c 在样例供应商34，表头计数没有原因码', () => {
     const board = project({ items: waitingItems });
     expect(board.group).toBe('waiting');
-    expect(names(board)).toEqual(['甲代工厂', '样例供应商36']);
+    expect(names(board)).toEqual(['宜侬', '样例供应商34']);
     expect(memberIds(board)).toEqual([['b', 'a'], ['c']]);
     expect(flatIds(board)).toEqual(['b', 'a', 'c']);
     if (board.body.kind !== 'groups') throw new Error('expected groups');
@@ -103,7 +103,7 @@ describe('今日看板', () => {
       items: [
         row({ id: 'late', severity: 3, overdueDays: 1, dueDate: '2026-10-10', lineId: 'l2' }),
         row({ id: 'early', severity: 1, overdueDays: 1, dueDate: '2026-10-01', lineId: 'l1' }),
-        row({ id: 'none', severity: 2, overdueDays: null, dueDate: null, lineId: 'l3', waitingName: '样例供应商36', reasons: ['missing_date'] }),
+        row({ id: 'none', severity: 2, overdueDays: null, dueDate: null, lineId: 'l3', waitingName: '样例供应商34', reasons: ['missing_date'] }),
       ],
     });
     expect(names(board)).toEqual(['2026-10-01', '2026-10-10', '未定日期']);
@@ -148,17 +148,17 @@ describe('今日看板', () => {
   it('无批次的逾期催办带采购前缀、逾期天数和破折号品名', () => {
     const board = project({
       buyerName: '采购甲',
-      items: [row({ id: 'b', waitingName: '甲代工厂', productName: null, poRaw: null, qty: null, overdueDays: 4, dueDate: '2026-10-07', reasons: ['overdue'], batchStatus: null })],
+      items: [row({ id: 'b', waitingName: '宜侬', productName: null, poRaw: null, qty: null, overdueDays: 4, dueDate: '2026-10-07', reasons: ['overdue'], batchStatus: null })],
     });
     if (board.body.kind !== 'groups') throw new Error('expected groups');
     expect(board.body.groups[0]?.nudgeText).toBe([
-      '【采购工作台】甲代工厂您好，以下批次请协助确认：',
+      '【SHINEMAGE 采购】宜侬您好，以下批次请协助确认：',
       '1. — — —，确认到货 2026-10-07，已逾期 4 天，请回复发货情况。',
       '谢谢！— 采购甲',
     ].join('\n'));
     const unnamed = project({
       buyerName: '',
-      items: [row({ id: 'b', waitingName: '甲代工厂', productName: null, poRaw: null, qty: null, overdueDays: 4, dueDate: '2026-10-07', reasons: ['overdue'], batchStatus: null })],
+      items: [row({ id: 'b', waitingName: '宜侬', productName: null, poRaw: null, qty: null, overdueDays: 4, dueDate: '2026-10-07', reasons: ['overdue'], batchStatus: null })],
     });
     if (unnamed.body.kind !== 'groups') throw new Error('expected groups');
     expect(unnamed.body.groups[0]?.nudgeText.endsWith('谢谢！')).toBe(true);
@@ -202,8 +202,8 @@ describe('今日看板', () => {
     expect(mapped.waitingName).toBe('工厂未分组');
     const named = toBoardItem({ ...bareView(), waitingOnParty: { id: 'p1', displayName: null, rawName: '原料名' } });
     expect(named.waitingName).toBe('原料名');
-    const shown = toBoardItem({ ...bareView(), waitingOnParty: { id: 'p1', displayName: '甲代工厂', rawName: '原料名' } });
-    expect(shown.waitingName).toBe('甲代工厂');
+    const shown = toBoardItem({ ...bareView(), waitingOnParty: { id: 'p1', displayName: '宜侬', rawName: '原料名' } });
+    expect(shown.waitingName).toBe('宜侬');
     expect(mapped.productName).toBeNull();
     expect(mapped.batchStatus).toBeNull();
     const coded = toBoardItem(viewWithCodes());

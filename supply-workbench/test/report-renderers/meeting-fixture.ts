@@ -27,14 +27,14 @@ export const closedShortMaterial = {
 } satisfies MeetingMaterial;
 
 export const meeting = {
-  store: 'store_a', weekStart: monday, weekEnd: localDate('2026-11-22'), previousWeekStart: localDate('2026-11-09'),
+  store: 'dafuyan', weekStart: monday, weekEnd: localDate('2026-11-22'), previousWeekStart: localDate('2026-11-09'),
   materials: [meetingMaterial],
   development: [{
     id: 'node-1', name: '送中试原料', projectName: '新品中试', plannedEnd: friday,
     destination: 'factory', ownerName: buyer.name, latestReply: { text: '周五到工厂', recordedAt: at },
   }],
   decisions: [{
-    id: 'decision-1', store: 'store_a', weekStart: monday, materialLineId: meetingMaterial.materialLineId,
+    id: 'decision-1', store: 'dafuyan', weekStart: monday, materialLineId: meetingMaterial.materialLineId,
     decision: '货齐后复查', owner: buyer, dueDate: friday, recordedAt: at, decidedBy: manager,
     completionCriteria: '核对点收依据', completion: { evidence: '点收完成回执', at, by: buyer },
   }],

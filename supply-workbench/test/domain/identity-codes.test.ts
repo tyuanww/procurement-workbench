@@ -7,19 +7,19 @@ function codesOf(raw: string, context = { isBomPartColumn: false }): string[] {
   return parseItemCode(raw, context).issues.map((issue) => issue.code);
 }
 
-it('k1496 规范成大写并报 CODE_CASE，已经是大写的不报', () => {
-  const parsed = parseItemCode('k1496');
-  expect(parsed.value).toEqual({ codeType: 'raw_k', codeNorm: 'K1496' });
-  expect(codesOf('k1496')).toEqual(['CODE_CASE']);
-  expect(parseItemCode('K1497').value).toEqual({ codeType: 'raw_k', codeNorm: 'K1497' });
-  expect(codesOf('K1497')).toEqual([]);
+it('k1494 规范成大写并报 CODE_CASE，已经是大写的不报', () => {
+  const parsed = parseItemCode('k1494');
+  expect(parsed.value).toEqual({ codeType: 'raw_k', codeNorm: 'K1494' });
+  expect(codesOf('k1494')).toEqual(['CODE_CASE']);
+  expect(parseItemCode('K1495').value).toEqual({ codeType: 'raw_k', codeNorm: 'K1495' });
+  expect(codesOf('K1495')).toEqual([]);
 });
 
 it('品号、包材码、半成品码按格式识别', () => {
-  expect(parseItemCode('70007019').value).toEqual({ codeType: 'erp_70', codeNorm: '70007019' });
+  expect(parseItemCode('70007017').value).toEqual({ codeType: 'erp_70', codeNorm: '70007017' });
   expect(parseItemCode('30000001').value).toEqual({ codeType: 'pack_30', codeNorm: '30000001' });
-  expect(parseItemCode('50007003').value).toEqual({ codeType: 'semi_50', codeNorm: '50007003' });
-  expect(parseItemCode('50007004').value).toEqual({ codeType: 'semi_50', codeNorm: '50007004' });
+  expect(parseItemCode('50006870').value).toEqual({ codeType: 'semi_50', codeNorm: '50006870' });
+  expect(parseItemCode('50006876').value).toEqual({ codeType: 'semi_50', codeNorm: '50006876' });
 });
 
 it('13 位和带 -数字 后缀的条码原文保留后缀', () => {

@@ -4,14 +4,17 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { devAuth } from '@sw/auth';
-import { createDb, migrate, seed, userDirectory } from '@sw/persistence';
+import { createDb, migrate, schema, seed, userDirectory, type AppDatabase } from '@sw/persistence';
 import { FixedClock } from '../../../packages/testkit/src/index.js';
 import { composeFollowUp, followUpAttachmentMaxBytes } from '../src/composition/follow-up.js';
 import { buildHttpApp, type HttpApp } from '../src/http/app.js';
 import { registerFollowUpRoutes } from '../src/http/follow-up/routes.js';
 import { loginAs } from './helpers/server.js';
-import { at, seedFactoryTransit, seedLines } from './helpers/line-export-fixtures.js';
 
+const at = '2026-10-13T00:00:00.000Z';
+const stamp = { createdAt: at, updatedAt: at };
+const BUYER_A = '0199f0a0-0000-7000-8000-000000000002';
+const BUYER_B = '0199f0a0-0000-7000-8000-000000000003';
 const CODE = 'dev-code';
 const FILTERED = '/api/v1/lines/export.xlsx?lane=finished&supplierPartyId=sup-a&page=1&pageSize=1&hide=po,buyer,status&fields=id&barcodeRaw=SECRET-A';
 
@@ -25,7 +28,6 @@ beforeAll(async () => {
   await migrate(handle.exec);
   await seed(handle.exec);
   await seedLines(handle.db);
-  await seedFactoryTransit(handle.db);
   const uploadDir = await mkdtemp(path.join(tmpdir(), 'sw-export-'));
   const api = composeFollowUp({ db: handle.db, uploadDir, timeZone: 'Asia/Shanghai', clock: new FixedClock(at) });
   app = await buildHttpApp({
@@ -103,29 +105,75 @@ it('没有命中时只返回表头', async () => {
   expect(texts(bytes, '采购单号')).toEqual([]);
 });
 
-it('甲代工厂在途按已关联工厂和实物在途量筛选，分页、汇总和导出一致', async () => {
-  const get = (suffix: string) => app.inject({ method: 'GET', url: `/api/v1/lines${suffix}`, headers: { cookie: buyerCookie } });
-  const filter = 'inTransitFactory=factory_a';
-  const [finished, second, material, allLanes, summary, exported, mine, ordinarySearch] = await Promise.all([
-    get(`?${filter}&lane=finished&pageSize=1`),
-    get(`?${filter}&lane=finished&pageSize=1&page=2`),
-    get(`?${filter}&lane=material`),
-    get(`?${filter}`),
-    get(`/summary?${filter}&lane=finished&pageSize=1`),
-    get(`/export.xlsx?${filter}&lane=finished&pageSize=1&page=2`),
-    get(`?${filter}&lane=finished&buyer=me`),
-    get(`?q=${encodeURIComponent('甲代工厂')}`),
+async function seedLines(db: AppDatabase): Promise<void> {
+  await db.insert(schema.users).values({ ...stamp, id: 'user-none', name: '无角色', roles: [], feishuOpenId: null, active: true });
+  await db.insert(schema.parties).values([
+    party({ id: 'sup-a', displayName: '甲厂', isSupplier: true }),
+    party({ id: 'sup-b', displayName: '乙厂', isSupplier: true }),
+    party({ id: 'recv-a', displayName: '甲仓', isSupplier: false }),
   ]);
-  for (const response of [finished, second, material, allLanes, summary, exported, mine, ordinarySearch]) expect(response.statusCode).toBe(200);
-  expect(finished.json()).toMatchObject({ items: [{ id: 'line-a' }], page: { total: 2, pageSize: 1 } });
-  expect(second.json()).toMatchObject({ items: [{ id: 'line-transit' }], page: { total: 2, page: 2 } });
-  expect(material.json()).toMatchObject({ items: [{ id: 'line-m' }], page: { total: 1 } });
-  expect(allLanes.json().page.total).toBe(3);
-  expect(summary.json()).toMatchObject({ total: 2, stages: [{ stage: 'awaiting_receipt', count: 2 }] });
-  expect(texts(bytesOf(exported.rawPayload), '采购单号')).toEqual(['PO-A', 'PO-transit']);
-  expect(mine.json()).toMatchObject({ items: [{ id: 'line-a' }], page: { total: 1 } });
-  expect(ordinarySearch.json()).toMatchObject({ items: [{ id: 'line-c' }], page: { total: 1 } });
-});
+  await db.insert(schema.purchaseOrders).values([
+    order({ id: 'po-a', poRaw: 'PO-A', supplierPartyId: 'sup-a', lane: 'finished' }),
+    order({ id: 'po-b', poRaw: 'PO-B', supplierPartyId: 'sup-a', lane: 'finished' }),
+    order({ id: 'po-c', poRaw: 'PO-C', supplierPartyId: 'sup-b', lane: 'finished' }),
+    order({ id: 'po-m', poRaw: 'PO-M', supplierPartyId: 'sup-a', lane: 'material' }),
+  ]);
+  await db.insert(schema.orderLines).values([
+    line({ id: 'line-a', purchaseOrderId: 'po-a', lane: 'finished', nameRaw: '棉片', buyerUserId: BUYER_A, qtyOrdered: '0', barcodeRaw: 'SECRET-A', itemCodeRaw: 'ITEM-A', nextDueDate: '2026-10-01', nextDueBatchId: 'due-a' }),
+    line({ id: 'line-b', purchaseOrderId: 'po-b', lane: 'finished', nameRaw: null, buyerUserId: BUYER_A, qtyOrdered: null, barcodeRaw: 'SECRET-B', itemCodeRaw: 'ITEM-B', nextDueDate: null, nextDueBatchId: null }),
+    line({ id: 'line-c', purchaseOrderId: 'po-c', lane: 'finished', nameRaw: '其他', buyerUserId: BUYER_B, qtyOrdered: '4', barcodeRaw: 'SECRET-C', itemCodeRaw: 'ITEM-C', nextDueDate: null, nextDueBatchId: null }),
+    line({ id: 'line-m', purchaseOrderId: 'po-m', lane: 'material', nameRaw: '瓶', buyerUserId: BUYER_A, qtyOrdered: '0', barcodeRaw: 'SECRET-M', itemCodeRaw: 'ITEM-M', nextDueDate: null, nextDueBatchId: 'batch-m', receiverPartyId: 'recv-a' }),
+  ]);
+  await db.insert(schema.deliveryBatches).values({
+    ...stamp,
+    id: 'batch-m',
+    orderLineId: 'line-m',
+    seq: 1,
+    plannedQty: '1',
+    receiverPartyId: 'recv-a',
+    dateFactoryRequired: '2026-11-02',
+    dateSupplierPromised: null,
+    dateBuyerConfirmed: null,
+    firstConfirmedDate: null,
+    confirmedBy: null,
+    confirmedAt: null,
+    status: 'awaiting_date',
+    statusChangedAt: at,
+    origin: 'manual',
+    originRef: null,
+    closedAt: null,
+    closedReason: null,
+    cancelledAt: null,
+    cancelReason: null,
+  });
+}
+
+function party(input: { readonly id: string; readonly displayName: string; readonly isSupplier: boolean }) {
+  return { ...stamp, id: input.id, displayName: input.displayName, isSupplier: input.isSupplier, isFactory: input.isSupplier, isOwnWarehouse: !input.isSupplier, note: null };
+}
+
+function order(input: { readonly id: string; readonly poRaw: string; readonly supplierPartyId: string; readonly lane: string }) {
+  return { ...stamp, id: input.id, poRaw: input.poRaw, poNorm: input.poRaw, poFormat: 'OTHER', relatedPoRaws: [], supplierPartyId: input.supplierPartyId, supplierRaw: input.poRaw, lane: input.lane, oaDemandRef: null };
+}
+
+function line(input: { readonly id: string; readonly purchaseOrderId: string; readonly lane: string; readonly nameRaw: string | null; readonly buyerUserId: string; readonly qtyOrdered: string | null; readonly barcodeRaw: string; readonly itemCodeRaw: string; readonly nextDueDate: string | null; readonly nextDueBatchId: string | null; readonly receiverPartyId?: string }) {
+  return {
+    ...stamp,
+    ...input,
+    receiverPartyId: input.receiverPartyId ?? null,
+    itemId: null,
+    unit: null,
+    origin: 'manual',
+    candidateKey: null,
+    missingInLatestImport: false,
+    latestImportPresence: 'not_applicable',
+    cancelledAt: null,
+    cancelReason: null,
+    stage: 'no_batch',
+    stageChangedAt: at,
+    currentSnapshotId: null,
+  };
+}
 
 async function loginUser(opened: HttpApp, userId: string): Promise<string> {
   const login = await opened.inject({ method: 'POST', url: '/api/v1/auth/dev/login', payload: { userId, accessCode: CODE } });

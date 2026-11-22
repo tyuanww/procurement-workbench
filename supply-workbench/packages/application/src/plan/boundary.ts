@@ -19,7 +19,7 @@ import type {
   WorkItemListQuery,
   WorkItemListResult,
 } from './views.js';
-import type { ProjectProgressQuery, ProjectProgressView } from './progress.js';
+import type { ProjectProgressView } from './progress.js';
 
 export type PlanWriteDeps = {
   readonly uow: PlanUnitOfWork;
@@ -41,7 +41,7 @@ export type GetDailyPlan = (input: DailyPlanQuery, actor: Actor) => Promise<Dail
 export type GetSchedule = (input: SchedulePlanQuery, actor: Actor) => Promise<ScheduleView>;
 export type ListWorkItems = (input: WorkItemListQuery, actor: Actor) => Promise<WorkItemListResult>;
 export type GetWorkItem = (input: GetWorkItemInput, actor: Actor) => Promise<WorkItemDetailView>;
-export type GetProjectProgress = (input: ProjectProgressQuery, actor: Actor) => Promise<ProjectProgressView>;
+export type GetProjectProgress = (input: SchedulePlanQuery, actor: Actor) => Promise<ProjectProgressView>;
 
 export type CreateWorkItemDeps = PlanWriteDeps;
 export type UpdateWorkItemDeps = PlanWriteDeps;

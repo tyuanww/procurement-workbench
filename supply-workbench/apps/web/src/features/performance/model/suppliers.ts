@@ -169,6 +169,6 @@ function textTone(text: string): 'value' | 'missing' {
 }
 
 function weekCell(week: WeekInput): WeekCell {
-  const text = week.n > 0 && week.n < LOW_SAMPLE_THRESHOLD ? `样本少（n=${week.n}）` : ratioText(week.rate);
+  const text = ratioText(week.rate);
   return { weekStart: week.weekStart, text, tone: text === EM_DASH ? 'missing' : 'value' };
 }

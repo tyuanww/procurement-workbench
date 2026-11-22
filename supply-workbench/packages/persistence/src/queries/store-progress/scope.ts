@@ -9,8 +9,8 @@ export const STORE_EVIDENCE = sql`
   observed_edges as (
     select edge.finished_id, o.material_line_id, o.import_batch_id, o.sheet_name, o.row_no,
       case btrim(o.sheet_name)
-        when '店铺甲项目进度表' then 'store_a'
-        when '店铺乙项目进度表' then 'store_b'
+        when '达肤妍项目进度表' then 'dafuyan'
+        when '译龄项目进度表' then 'yiling'
       end as store
     from procurement_observations o
     join import_batches b on b.id = o.import_batch_id and b.status = 'committed' and b.template = 'po-master-v1'

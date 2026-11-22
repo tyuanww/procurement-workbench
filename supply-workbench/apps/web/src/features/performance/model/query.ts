@@ -1,14 +1,10 @@
 import {
   BATCH_STATUSES,
   LANES,
-  STUCK_BUCKETS,
-  STUCK_CAUSES,
   parseLocalDate,
   type BatchStatus,
   type Lane,
   type LocalDate,
-  type StuckBucket,
-  type StuckCause,
 } from '@sw/domain';
 import {
   DASHBOARD_PRESETS,
@@ -19,8 +15,8 @@ import {
   type NamedPreset,
 } from './period.js';
 
-export { DASHBOARD_PRESETS, STUCK_BUCKETS, STUCK_CAUSES as BOTTLENECK_CAUSES };
-export type { DashboardPreset, StuckBucket, StuckCause as BottleneckCause };
+export { DASHBOARD_PRESETS };
+export type { DashboardPreset };
 
 export const DASHBOARD_VIEWS = ['stuck', 'suppliers', 'buyers', 'project', 'meeting'] as const;
 export type DashboardView = (typeof DASHBOARD_VIEWS)[number];
@@ -28,40 +24,44 @@ export type DashboardView = (typeof DASHBOARD_VIEWS)[number];
 export const DASHBOARD_LANES = ['all', 'finished', 'material'] as const;
 export type DashboardLane = (typeof DASHBOARD_LANES)[number];
 
-export type StuckFilters = {
-  readonly stage: BatchStatus | null;
-  readonly bucket: StuckBucket | null;
-  readonly cause: StuckCause | null;
-  readonly card: 'overdue' | null;
-};
+export const STUCK_BUCKETS = ['0-3', '4-7', '8-14', '15+'] as const;
+export const BOTTLENECK_CAUSES = ['missing_owner', 'missing_factory', 'supplier_pending', 'missing_date', 'exception_open', 'aged_15', 'bom_missing', 'factory_demand_unlinked'] as const;
+export type BottleneckCause = (typeof BOTTLENECK_CAUSES)[number];
+export type StuckBucket = (typeof STUCK_BUCKETS)[number];
 
-export type DashboardQuery = StuckFilters & {
+export type DashboardQuery = {
   readonly preset: DashboardPreset;
   readonly from: LocalDate;
   readonly to: LocalDate;
   readonly lane: DashboardLane;
   readonly view: DashboardView;
-  readonly page: number;
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
+  readonly cause: BottleneckCause | null;
 };
 
-export type DashboardPatch = Partial<StuckFilters> & {
+export type DashboardPatch = {
   readonly preset?: DashboardPreset;
   readonly from?: string;
   readonly to?: string;
   readonly lane?: DashboardLane;
   readonly view?: DashboardView;
-  readonly page?: number;
+  readonly stage?: BatchStatus | null;
+  readonly bucket?: StuckBucket | null;
+  readonly cause?: BottleneckCause | null;
 };
 
 type ListedView = Exclude<DashboardView, 'stuck'>;
 
-type SparseUrl = StuckFilters & {
+type SparseUrl = {
   readonly preset: DashboardPreset | null;
   readonly from: LocalDate | null;
   readonly to: LocalDate | null;
   readonly lane: Lane | null;
   readonly view: ListedView | null;
-  readonly page: number;
+  readonly stage: BatchStatus | null;
+  readonly bucket: StuckBucket | null;
+  readonly cause: BottleneckCause | null;
 };
 
 export function dashboardQuery(search: string, now: Date): DashboardQuery {
@@ -77,8 +77,6 @@ export function dashboardQuery(search: string, now: Date): DashboardQuery {
     stage: url.stage,
     bucket: url.bucket,
     cause: url.cause,
-    card: url.card,
-    page: url.page,
   };
 }
 
@@ -105,9 +103,7 @@ function readSparse(search: string): SparseUrl {
     view: readView(params.get('view')),
     stage: readMember(params.get('stage'), BATCH_STATUSES),
     bucket: readMember(params.get('bucket'), STUCK_BUCKETS),
-    cause: readMember(params.get('cause'), STUCK_CAUSES),
-    card: readMember(params.get('card'), ['overdue']),
-    page: readPage(params.get('page')),
+    cause: readMember(params.get('cause'), BOTTLENECK_CAUSES),
   };
 }
 
@@ -136,12 +132,6 @@ function readMember<T extends string>(raw: string | null, members: readonly T[])
   const found = members.find((member) => member === raw);
   if (found === undefined) return null;
   return found;
-}
-
-function readPage(raw: string | null): number {
-  if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return 1;
-  const page = Number(raw);
-  return Number.isSafeInteger(page) ? page : 1;
 }
 
 function readDate(raw: string | null): LocalDate | null {
@@ -186,20 +176,15 @@ function applyPatch(input: {
   readonly patch: DashboardPatch;
 }): SparseUrl {
   const ranged = applyPreset(input);
-  const filters = {
+  return {
+    preset: ranged.preset,
+    from: ranged.from,
+    to: ranged.to,
     lane: applyLane(ranged.lane, input.patch.lane),
+    view: applyView(ranged.view, input.patch.view),
     stage: applyOptional(ranged.stage, input.patch.stage),
     bucket: applyOptional(ranged.bucket, input.patch.bucket),
     cause: applyOptional(ranged.cause, input.patch.cause),
-    card: applyOptional(ranged.card, input.patch.card),
-  };
-  const hasChanged = filters.lane !== ranged.lane || filters.stage !== ranged.stage ||
-    filters.bucket !== ranged.bucket || filters.cause !== ranged.cause || filters.card !== ranged.card;
-  return {
-    ...ranged,
-    ...filters,
-    view: applyView(ranged.view, input.patch.view),
-    page: hasChanged ? 1 : (input.patch.page ?? ranged.page),
   };
 }
 
@@ -260,14 +245,8 @@ function writeSparse(url: SparseUrl): string {
   }
   if (url.lane !== null) params.append('lane', url.lane);
   if (url.view !== null) params.append('view', url.view);
-  appendStuckFilters(params, url);
+  if (url.stage !== null) params.append('stage', url.stage);
+  if (url.bucket !== null) params.append('bucket', url.bucket);
+  if (url.cause !== null) params.append('cause', url.cause);
   return params.toString();
-}
-
-export function appendStuckFilters(params: URLSearchParams, input: StuckFilters & { readonly page: number }): void {
-  if (input.stage !== null) params.append('stage', input.stage);
-  if (input.bucket !== null) params.append('bucket', input.bucket);
-  if (input.cause !== null) params.append('cause', input.cause);
-  if (input.card !== null) params.append('card', input.card);
-  if (input.page > 1) params.append('page', String(input.page));
 }

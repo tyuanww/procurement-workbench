@@ -186,29 +186,7 @@ it('取消订单行后停止催工厂，已实发的货仍在到仓备忘录', a
     expect(cancelled.statusCode).toBe(200);
     const result = await today({ app: opened.app, cookie: buyer, scope: 'mine' });
     expect(itemOf(result, batchId)).toMatchObject({ waitingOn: { kind: 'internal' }, reasons: ['note_missing'] });
-    expect(result.arrivalMemos).toEqual([expect.objectContaining({ batchId, batchSeq: 1, inTransitQty: 1, status: 'due_today' })]);
-  } finally {
-    await opened.close();
-  }
-});
-
-it('同一订单行同日到仓的两批货各保留自己的批次编号', async () => {
-  const opened = await open();
-  try {
-    const buyer = await loginAs(opened.app, 'buyer');
-    const { lineId, batchId: first } = await partShipped(opened.app, buyer);
-    const second = await batch({ app: opened.app, cookie: buyer, input: { lineId, dates: { dateBuyerConfirmed: '2099-01-10' } } });
-    const shipment = await opened.app.inject({
-      method: 'POST', url: `/api/v1/batches/${second}/shipments`, headers: { cookie: buyer },
-      payload: { qty: 1, shippedOn: '2099-01-09', fulfillment: { kind: 'verified', unit: '件', evidence: '合成交运单 2' } },
-    });
-    expect(shipment.statusCode).toBe(200);
-    const result = await today({ app: opened.app, cookie: buyer, scope: 'mine' });
-    expect(result.arrivalMemos).toHaveLength(2);
-    expect(result.arrivalMemos).toEqual(expect.arrayContaining([
-      expect.objectContaining({ batchId: first, batchSeq: 1, inTransitQty: 1 }),
-      expect.objectContaining({ batchId: second, batchSeq: 2, inTransitQty: 1 }),
-    ]));
+    expect(result.arrivalMemos).toEqual([expect.objectContaining({ batchId, inTransitQty: 1, status: 'due_today' })]);
   } finally {
     await opened.close();
   }

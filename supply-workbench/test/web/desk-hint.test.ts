@@ -145,7 +145,7 @@ function lineRow(stage: 'awaiting_date' | 'no_batch' = 'awaiting_date') {
     nameRaw: '面膜',
     itemCodeRaw: null,
     barcodeRaw: null,
-    supplier: { id: null, displayName: '甲代工厂', rawName: null },
+    supplier: { id: null, displayName: '宜侬', rawName: null },
     receiver: null,
     qtyOrdered: 10,
     receivedQty: 0,

@@ -13,7 +13,7 @@ export function sampleRow(patch: {
     nameRaw: '面膜',
     itemCodeRaw: null,
     barcodeRaw: null,
-    supplier: patch.supplier ?? { id: null, displayName: '甲代工厂', rawName: null },
+    supplier: patch.supplier ?? { id: null, displayName: '宜侬', rawName: null },
     ...(patch.factory === undefined ? {} : { factory: patch.factory }),
     receiver: patch.receiver === undefined ? null : patch.receiver,
     qtyOrdered: 10,
@@ -39,7 +39,7 @@ export function partyBody(id: string, name: string) {
   const isSupplierName = id.endsWith('supplier') || id === 'party-supplier';
   return {
     party: { id, displayName: name, isSupplier: true, isFactory: id !== 'party-supplier', isOwnWarehouse: false, note: null },
-    aliases: isSupplierName ? [{ id: 'alias-1', rawName: '甲代工厂原料', normName: '甲代工厂原料', partyId: id, status: 'approved', firstSeenImportBatchId: null, seenCount: 2, reviewedBy: null, reviewedAt: null, similar: [] }] : [],
+    aliases: isSupplierName ? [{ id: 'alias-1', rawName: '宜侬原料', normName: '宜侬原料', partyId: id, status: 'approved', firstSeenImportBatchId: null, seenCount: 2, reviewedBy: null, reviewedAt: null, similar: [] }] : [],
     kpis: {
       dueBatches: { ...figure, n: 4 },
       onTime: { ...figure, n: 3 },

@@ -85,3 +85,4 @@ function add(input: { readonly totals: Map<string, number | null>; readonly row:
   if (current === null) return;
   totals.set(key, current === undefined ? value : current + value);
 }
+

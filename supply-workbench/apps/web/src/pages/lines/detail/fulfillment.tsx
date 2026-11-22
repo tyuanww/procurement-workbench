@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Button, Input, Space, Tag, Typography } from 'antd';
+import { Button, Input, Space, Typography } from 'antd';
 import { ReceiptViewSchema, ShipmentViewSchema, type BatchView, type ReceiptView, type ShipmentView } from '@sw/contracts';
 import { countsInRecordedQuantity, isNotProvided, normalizeUnit, type FulfillmentEvidence, type FulfillmentReviewReason } from '@sw/domain';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
@@ -73,7 +73,7 @@ function RecordText({ row, title, date }: { readonly row: ShipmentView | Receipt
   const facts = row.fulfillment;
   const recorded = formatDateTime(row.recordedAt ?? null);
   return <span>
-    <Tag variant="filled">{title}</Tag>{' '}{date} · {qtyText(row.qty, facts?.unit ?? null)}
+    {title} · {date} · {qtyText(row.qty, facts?.unit ?? null)}
     {facts == null ? ' · 历史记录待补证' : ` · ${facts.evidence}`}
     {recordWarning(facts)}
     {recorded === null ? '' : ` · 登记于 ${recorded}`}

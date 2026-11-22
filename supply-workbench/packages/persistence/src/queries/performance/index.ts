@@ -46,7 +46,7 @@ async function loadFacts(db: AppDatabase, ctx: { readonly clock: Clock; readonly
   const batches = batchRows.flatMap((row) => toBatch({ row, lines, orders, receiptRows, shipmentRows, noteRows, lane: ctx.lane }));
   const batchesById = new Map<string, (typeof batches)[number]>(batches.map((batch) => [batch.id, batch]));
   return {
-    kpi: kpiOf({ ctx, batches, batchesById, lineRows, changeRows, exceptionRows, lines, orders }),
+    kpi: kpiOf({ ctx, batches, batchesById, lineRows, changeRows, exceptionRows, lines }),
     followUps: followRows.map((row) => ({ buyerUserId: entityId(row.createdBy), on: businessDay(instant(row.createdAt), ctx.timeZone) })),
     partyNames: Object.fromEntries(partyRows.map((row) => [row.id, row.displayName])),
     buyerNames: Object.fromEntries(userRows.map((row) => [row.id, row.name])),
@@ -67,7 +67,6 @@ type KpiSources = {
   readonly changeRows: readonly (typeof batchDateChanges.$inferSelect)[];
   readonly exceptionRows: readonly (typeof exceptions.$inferSelect)[];
   readonly lines: ReadonlyMap<string, typeof orderLines.$inferSelect>;
-  readonly orders: ReadonlyMap<string, typeof purchaseOrders.$inferSelect>;
 };
 
 function kpiOf(input: KpiSources): KpiInput {
@@ -77,32 +76,13 @@ function kpiOf(input: KpiSources): KpiInput {
     to: input.ctx.to,
     batches: input.batches,
     lines: input.lineRows.flatMap(lineLoad),
-    dateChanges: input.changeRows.flatMap((row) => dateChangeOf(row, input.batchesById)),
-    exceptions: input.exceptionRows.map((row) => exceptionOf(row, input)),
-  };
-}
-
-function dateChangeOf(row: KpiSources['changeRows'][number], batches: KpiSources['batchesById']): KpiInput['dateChanges'] {
-  if (row.field !== 'dateBuyerConfirmed') return [];
-  const batch = batches.get(row.batchId);
-  return [{
-    field: 'dateBuyerConfirmed', changedAt: instant(row.changedAt), isFirstSet: row.oldValue === null,
-    supplierPartyId: batch?.supplierPartyId ?? null, ...(batch === undefined ? {} : { lane: batch.lane }),
-  }];
-}
-
-function exceptionOf(row: KpiSources['exceptionRows'][number], input: KpiSources): KpiInput['exceptions'][number] {
-  const line = input.lines.get(row.orderLineId);
-  const batch = row.batchId === null ? undefined : input.batchesById.get(row.batchId);
-  const lane = line === undefined ? null : known(LANES, line.lane);
-  const supplier = line === undefined ? null : input.orders.get(line.purchaseOrderId)?.supplierPartyId ?? null;
-  return {
-    status: row.status === 'closed' ? 'closed' : 'open',
-    openedAt: instant(row.createdAt),
-    closedAt: instantOrNull(row.closedAt),
-    buyerUserId: resolveExceptionBuyer({ lineBuyerUserId: line?.buyerUserId, batchBuyerUserId: batch?.buyerUserId }),
-    supplierPartyId: entityIdOrNull(supplier),
-    ...(lane === null ? {} : { lane }),
+    dateChanges: input.changeRows.filter((row) => row.field === 'dateBuyerConfirmed').map((row) => ({ field: 'dateBuyerConfirmed' as const, changedAt: instant(row.changedAt), isFirstSet: row.oldValue === null })),
+    exceptions: input.exceptionRows.map((row) => ({
+      status: row.status === 'closed' ? 'closed' as const : 'open' as const,
+      openedAt: instant(row.createdAt),
+      closedAt: instantOrNull(row.closedAt),
+      buyerUserId: resolveExceptionBuyer({ lineBuyerUserId: input.lines.get(row.orderLineId)?.buyerUserId, batchBuyerUserId: row.batchId === null ? null : input.batchesById.get(row.batchId)?.buyerUserId }),
+    })),
   };
 }
 
@@ -179,3 +159,4 @@ function labelOf({ row, lines, orders }: { readonly row: typeof deliveryBatches.
   if (line === undefined || order === undefined) return [];
   return [[row.id, { poRaw: order.poRaw, nameRaw: line.nameRaw, orderLineId: line.id }]];
 }
+

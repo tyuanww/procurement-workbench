@@ -46,7 +46,7 @@ function poRow(id: string, batchId: string): ImportRow {
     raw: {},
     parsed: {
       oaDemandRef: cell(null),
-      supplierRaw: cell('甲代工厂'),
+      supplierRaw: cell('宜侬'),
       nameRaw: cell('海葡萄'),
       barcodeRaw: cell('2000000003023'),
       qtyOrdered: cell(10),
@@ -239,7 +239,7 @@ it('别名出现次数按有效原始行数累计，并单独记录批次数', a
   await memory.stores.imports.saveRow({ ...poRow('alias-r2', 'alias-b1'), rowNo: 3 });
   await memory.stores.imports.saveRow({ ...poRow('alias-r3', 'alias-b1'), rowNo: 4 });
   await commit({ importBatchId: 'alias-b1' }, buyer());
-  const first = await memory.stores.aliases.get('alias:甲代工厂');
+  const first = await memory.stores.aliases.get('alias:宜侬');
   expect(first.seenCount).toBe(3);
   expect(first.seenBatchCount).toBe(1);
 
@@ -247,7 +247,7 @@ it('别名出现次数按有效原始行数累计，并单独记录批次数', a
   await memory.stores.imports.saveRow({ ...poRow('alias-r4', 'alias-b2'), action: 'unchanged' });
   await memory.stores.imports.saveRow({ ...poRow('alias-r5', 'alias-b2'), action: 'skip', rowNo: 3 });
   await commit({ importBatchId: 'alias-b2' }, buyer());
-  const second = await memory.stores.aliases.get('alias:甲代工厂');
+  const second = await memory.stores.aliases.get('alias:宜侬');
   expect(second.seenCount).toBe(5);
   expect(second.seenBatchCount).toBe(2);
 });

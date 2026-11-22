@@ -60,7 +60,7 @@ describe('主体预览地址', () => {
 describe('主体预览记录', () => {
   it('只在有主体 id 时给出供应商、工厂和收货代工厂', () => {
     const linked = sampleRow({
-      supplier: { id: 'party-supplier', displayName: '甲代工厂', rawName: null },
+      supplier: { id: 'party-supplier', displayName: '宜侬', rawName: null },
       factory: { id: 'party-factory', displayName: '代工甲' },
       receiver: { id: 'party-receiver', displayName: '收货厂' },
     });

@@ -42,7 +42,7 @@ export function anActor(role: Role): Actor {
 }
 
 export function aParty(overrides: Partial<Party> = {}): Party {
-  return { ...meta(entityId(nextId())), displayName: '甲代工厂', isSupplier: true, isFactory: true, isOwnWarehouse: false, note: null, ...overrides };
+  return { ...meta(entityId(nextId())), displayName: '宜侬', isSupplier: true, isFactory: true, isOwnWarehouse: false, note: null, ...overrides };
 }
 
 export function anItem(overrides: Partial<Item> = {}): Item {
@@ -57,7 +57,7 @@ export function aPurchaseOrder(overrides: Partial<PurchaseOrder> = {}): Purchase
     poFormat: 'PO14',
     relatedPoRaws: [],
     supplierPartyId: null,
-    supplierRaw: '甲代工厂',
+    supplierRaw: '宜侬',
     lane: 'finished',
     oaDemandRef: null,
     ...overrides,

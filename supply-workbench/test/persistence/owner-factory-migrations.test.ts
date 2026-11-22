@@ -29,9 +29,9 @@ it('0014 用已审批别名回填采购单供应商，并回填已有手工工�
   const handle = await createDb({ driver: 'pglite' });
   try {
     await migrate(handle.exec);
-    await handle.exec(`insert into parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse, note) values ('supplier-1', '${at}', '${at}', '甲代工厂', true, false, false, null)`);
-    await handle.exec(`insert into party_aliases (id, created_at, updated_at, raw_name, norm_name, party_id, status, first_seen_import_batch_id, seen_count, seen_batch_count, reviewed_by, reviewed_at) values ('alias-1', '${at}', '${at}', '甲代工厂', '甲代工厂', 'supplier-1', 'approved', null, 1, 1, 'admin-1', '${at}')`);
-    await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values ('po-1', '${at}', '${at}', 'PO1', 'PO1', 'OTHER', '{}', null, '  甲代工厂 ', 'finished', null)`);
+    await handle.exec(`insert into parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse, note) values ('supplier-1', '${at}', '${at}', '宜侬', true, false, false, null)`);
+    await handle.exec(`insert into party_aliases (id, created_at, updated_at, raw_name, norm_name, party_id, status, first_seen_import_batch_id, seen_count, seen_batch_count, reviewed_by, reviewed_at) values ('alias-1', '${at}', '${at}', '宜侬', '宜侬', 'supplier-1', 'approved', null, 1, 1, 'admin-1', '${at}')`);
+    await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values ('po-1', '${at}', '${at}', 'PO1', 'PO1', 'OTHER', '{}', null, '  宜侬 ', 'finished', null)`);
     await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values ('po-2', '${at}', '${at}', 'PO2', 'PO2', 'OTHER', '{}', null, '别的供应商', 'finished', null)`);
     await handle.exec(`insert into factory_shipment_rows (id, import_batch_id, factory_party_id, sheet_name, row_no, raw, fingerprint, linked_order_line_id, link_status, link_reason, created_at, updated_at, po_raw, po_norm, item_code_raw, name_raw) values ('row-1', 'batch-1', 'factory-1', '出货明细', 2, '{}', 'fp-1', 'line-1', 'manual', null, '${at}', '${at}', 'PO1', 'PO1', 'ITEM1', '海葡萄')`);
 

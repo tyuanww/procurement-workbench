@@ -1,4 +1,4 @@
-import type { BatchStatus, Lane, LocalDate, StuckBucket, StuckCause, WaitingOnKind } from '@sw/domain';
+import type { BatchStatus, Lane, LocalDate, WaitingOnKind } from '@sw/domain';
 import type { KpiFigure } from '../master-data/index.js';
 
 /** 姓名可以没有。没有就留 null，不用 id 冒充姓名。 */
@@ -7,8 +7,12 @@ export type NamedPerson = {
   readonly name: string | null;
 };
 
-export type StuckBuckets = Readonly<Record<StuckBucket, number>>;
-export type StuckCauseCounts = Readonly<Record<StuckCause, number>>;
+export type StuckBuckets = {
+  readonly '0-3': number;
+  readonly '4-7': number;
+  readonly '8-14': number;
+  readonly '15+': number;
+};
 
 export type StuckItem = {
   readonly batchId: string;
@@ -29,7 +33,6 @@ export type StuckItem = {
 };
 
 export type StuckDashboard = {
-  readonly asOf: LocalDate;
   readonly kpis: {
     readonly openBatches: number;
     readonly overdue: number;
@@ -37,10 +40,6 @@ export type StuckDashboard = {
     readonly shippedNotReceived: number;
   };
   readonly distribution: readonly { readonly stage: BatchStatus; readonly buckets: StuckBuckets }[];
-  readonly causeCounts: StuckCauseCounts;
-  readonly total: number;
-  readonly page: number;
-  readonly pageSize: number;
   readonly items: readonly StuckItem[];
 };
 
@@ -74,23 +73,7 @@ export type BuyerLoadRow = {
   readonly followUpsInPeriod: number | null;
 };
 
-export type SupplierEvents = { readonly dateChanges: number; readonly openExceptions: number };
-
-export type SupplierBatchResult = {
-  readonly batchId: string;
-  readonly orderLineId: string | null;
-  readonly poRaw: string | null;
-  readonly nameRaw: string | null;
-  readonly firstConfirmedDate: LocalDate | null;
-  readonly lastReceivedOn: LocalDate | null;
-  readonly onTime: boolean;
-};
-
-export type SupplierDashboard = {
-  readonly rows: readonly SupplierKpiRow[];
-  readonly unassigned?: SupplierEvents;
-  readonly detail?: readonly SupplierBatchResult[];
-};
+export type SupplierDashboard = { readonly rows: readonly SupplierKpiRow[] };
 export type BuyerLoadDashboard = { readonly rows: readonly BuyerLoadRow[]; readonly unassignedExceptions: number | null };
 
 export type PeriodQuery = {
@@ -99,14 +82,8 @@ export type PeriodQuery = {
   readonly lane?: Lane;
 };
 
-export type StuckQuery = PeriodQuery & {
-  readonly stage?: BatchStatus;
-  readonly bucket?: StuckBucket;
-  readonly cause?: StuckCause;
-  readonly card?: 'overdue';
-  readonly page?: number;
-};
-export type SupplierQuery = PeriodQuery & { readonly partyId?: string | undefined };
+export type StuckQuery = PeriodQuery;
+export type SupplierQuery = PeriodQuery;
 export type BuyerLoadQuery = PeriodQuery;
 
 export type BottleneckKey =

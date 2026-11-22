@@ -6,6 +6,7 @@ import {
   dashboardSearch,
   stuckView,
   supplierView,
+  type StuckBucket,
 } from '../../apps/web/src/features/performance/index.js';
 import { stuckItem, supplierRow } from './w07-rows.js';
 
@@ -52,8 +53,6 @@ describe('管理看板期间', () => {
       stage: null,
       bucket: null,
       cause: null,
-      card: null,
-      page: 1,
     });
   });
 
@@ -109,16 +108,6 @@ describe('管理看板期间', () => {
     expect(dashboardSearch({ current: '', now, patch: { stage: 'shipped', bucket: '15+' } })).toBe(
       'stage=shipped&bucket=15%2B',
     );
-  });
-
-  it('逾期及分页保存在地址，线别或筛选改变会回到第一页', () => {
-    const current = 'lane=finished&card=overdue&page=5';
-    expect(dashboardQuery(current, now)).toMatchObject({ lane: 'finished', card: 'overdue', page: 5 });
-    expect(dashboardSearch({ current, now, patch: { page: 4 } })).toBe('lane=finished&card=overdue&page=4');
-    expect(dashboardSearch({ current, now, patch: { cause: 'missing_owner' } })).toBe('lane=finished&cause=missing_owner&card=overdue');
-    expect(dashboardSearch({ current, now, patch: { lane: 'material' } })).toBe('lane=material&card=overdue');
-    expect(dashboardSearch({ current, now, patch: { card: null } })).toBe('lane=finished');
-    expect(dashboardQuery('page=0&card=unknown', now)).toMatchObject({ card: null, page: 1 });
   });
 });
 
@@ -209,7 +198,9 @@ describe('卡点筛选', () => {
   const stuck = stuckView({
     items: [
       stuckItem({ batchId: 'a', stage: 'confirmed', daysInStage: 9, poRaw: null, nameRaw: '螺栓' }),
+      stuckItem({ batchId: 'b', stage: 'shipped', daysInStage: 20 }),
       stuckItem({ batchId: 'c', stage: 'confirmed', daysInStage: 12 }),
+      stuckItem({ batchId: 'd', stage: 'confirmed', daysInStage: 3 }),
     ],
     distribution: [
       { stage: 'shipped', buckets: { '0-3': 0, '4-7': 0, '8-14': 0, '15+': 40 } },
@@ -217,9 +208,10 @@ describe('卡点筛选', () => {
     ],
     stage: 'confirmed',
     bucket: '8-14',
+    cause: null,
   });
 
-  it('服务端筛选的清单保持顺序，色块读全量分布', () => {
+  it('按阶段和天数过滤，顺序保持服务端，色块计数不重算', () => {
     expect(stuck.rows.map((row) => row.batchId)).toEqual(['a', 'c']);
     expect(stuck.rows[0]).toMatchObject({
       po: '—',
@@ -232,6 +224,13 @@ describe('卡点筛选', () => {
     expect(stuck.dwell[1]?.blocks[2]).toMatchObject({ bucket: '8-14', count: 2, isActive: true });
   });
 
+  it('天数落在 0-3、4-7、8-14、15+', () => {
+    expect(daysIn('0-3')).toEqual([3]);
+    expect(daysIn('4-7')).toEqual([4, 7]);
+    expect(daysIn('8-14')).toEqual([8, 14]);
+    expect(daysIn('15+')).toEqual([15]);
+  });
+
   it('卡住 0 天仍是 0，空字符串不是破折号', () => {
     const zero = stuckView({
       items: [
@@ -240,6 +239,7 @@ describe('卡点筛选', () => {
       distribution: [],
       stage: null,
       bucket: '0-3',
+      cause: null,
     });
     expect(zero.rows[0]).toMatchObject({ daysInStage: 0, po: '', name: '—' });
   });
@@ -247,7 +247,6 @@ describe('卡点筛选', () => {
 
 describe('采购链接', () => {
   const bars = buyerView({
-    lane: 'finished',
     rows: [
       {
         buyerId: 'buyer-1',
@@ -274,13 +273,41 @@ describe('采购链接', () => {
     ],
   });
 
-  it('开放批次、逾期和待确认分别可见，订单行链接保留线别', () => {
-    expect(bars[0]).toMatchObject({ openBatches: 4, overdue: 2, dueToday: 1, missingDate: 1 });
-    expect(bars[1]?.href).toBe('/lines?buyer=a%2Fb&lane=finished');
-    expect(bars[0]?.openExceptions).toBe('—');
+  it('整行链到跟进台，开放行空值是破折号，0 仍是 0', () => {
+    expect(bars[0]).toMatchObject({
+      name: '—',
+      href: '/lines?buyer=buyer-1',
+      openLines: '—',
+      openExceptions: '—',
+      followUpsInPeriod: 0,
+    });
+    expect(bars[1]?.openLines).toBe(0);
+    expect(bars[0]?.segments.map((segment) => segment.count)).toEqual([2, 1, 1, 0]);
+    expect(bars[0]?.segments[3]).toMatchObject({
+      id: 'other',
+      label: '其他',
+      tone: 'neutral',
+      fill: 'solid',
+    });
+    expect(bars[1]?.href).toBe('/lines?buyer=a%2Fb');
+    expect(bars[1]?.openExceptions).toBe(2);
     expect(bars[1]?.followUpsInPeriod).toBe('—');
   });
 });
+
+const DAY_SAMPLES = [3, 4, 7, 8, 14, 15] as const;
+
+function daysIn(bucket: StuckBucket): number[] {
+  return stuckView({
+    items: DAY_SAMPLES.map((daysInStage, index) =>
+      stuckItem({ batchId: String(index), stage: 'confirmed', daysInStage }),
+    ),
+    distribution: [],
+    stage: 'confirmed',
+    bucket,
+    cause: null,
+  }).rows.map((row) => row.daysInStage);
+}
 
 function onTimeOf(
   rows: readonly { readonly cells: readonly { readonly key: string; readonly text: string }[] }[],

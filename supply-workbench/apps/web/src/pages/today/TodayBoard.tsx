@@ -1,4 +1,4 @@
-import { Button, Flex, Result, Skeleton, Tabs, Typography } from 'antd';
+import { Button, Result, Skeleton, Tabs } from 'antd';
 import type { ReactNode } from 'react';
 import type { TodayResponse } from '@sw/contracts';
 import { ArrivalMemos, groupForView, taskIdOf, todayViewFromKey, todayViewOf, type BoardRow, type GroupMode, type PlanLoad, type QuickAction, type TodayBoard, type TodayInsight, type TodayView } from '../../features/today/index.js';
@@ -110,18 +110,8 @@ function TodayViewTabs(props: { readonly view: TodayView; readonly onGroup: (gro
 }
 
 function ActionPane(props: TodayScreenProps): ReactNode {
-  const pending = props.pendingBatch ?? [];
-  const arrivals = props.arrivalMemos ?? [];
-  const chaseCount = props.actionPage?.paging.chaseCounts?.all;
   return (
     <>
-      <nav className="today-touch" aria-label="今日快捷入口">
-        <Flex gap="small" align="center" wrap>
-          <SectionJump id="today-chase" name={chaseCount === undefined ? '要催货' : `要催货 ${chaseCount} 批`} />
-          <SectionJump id="today-pending-batches" name={`待建批次 ${pending.length} 行`} hasTarget={pending.length > 0} />
-          <SectionJump id="today-arrival-memos" name={`到仓待收 ${arrivals.length} 批`} hasTarget={arrivals.length > 0} />
-        </Flex>
-      </nav>
       <ActionBoard
         board={props.board}
         page={props.actionPage}
@@ -135,25 +125,10 @@ function ActionPane(props: TodayScreenProps): ReactNode {
         onQuick={props.onQuick}
         onCopy={props.onCopy}
       />
-      <div id="today-pending-batches" className="today-jump-target" tabIndex={-1}>
-        <PendingBatches rows={pending} onChanged={props.onPendingBatchChanged} />
-      </div>
-      <div id="today-arrival-memos" className="today-jump-target" tabIndex={-1}>
-        <ArrivalMemos memos={arrivals} />
-      </div>
+      <PendingBatches rows={props.pendingBatch ?? []} onChanged={props.onPendingBatchChanged} />
+      <ArrivalMemos memos={props.arrivalMemos ?? []} />
     </>
   );
-}
-
-function SectionJump({ id, name, hasTarget = true }: { readonly id: string; readonly name: string; readonly hasTarget?: boolean }) {
-  if (!hasTarget) return <Typography.Text type="secondary">{name}</Typography.Text>;
-  return <Button size="small" href={`#${id}`} onClick={(event) => {
-    const target = document.getElementById(id);
-    if (target === null) return;
-    event.preventDefault();
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: 'start' });
-  }}>{name}</Button>;
 }
 
 function SchedulePane(props: TodayScreenProps): ReactNode {

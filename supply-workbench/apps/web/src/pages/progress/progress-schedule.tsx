@@ -37,10 +37,7 @@ export function ProgressSchedule({ store }: { readonly store: ProcurementStore }
   const load = scheduleLoad.load;
   const items = load.kind === 'ready' ? applyScheduleFilters({ items: load.view.items, filters: query.filters }) : [];
   const options = scheduleOptions(load.kind === 'ready' ? load.view.items : []);
-  const timeline = timelineOf({
-    items, window, today, scale: query.scale,
-    dependencyConflicts: load.kind === 'ready' ? load.view.dependencyConflicts : {},
-  });
+  const timeline = timelineOf({ items, window, today, scale: query.scale });
   const requestedDrawer = taskIdOf(params.get('drawer'));
   const drawerId = store === 'all' || load.kind === 'ready' && load.view.items.some((item) => item.id === requestedDrawer) ? requestedDrawer : null;
   const write = (next: ScheduleQuery): void => setParams(new URLSearchParams(writeScheduleQuery({ search: params.toString(), query: next })));

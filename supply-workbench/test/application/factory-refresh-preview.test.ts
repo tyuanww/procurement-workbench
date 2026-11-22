@@ -10,8 +10,8 @@ import './load-import-registry.js';
 
 function factoryWorkbook(delivered: readonly number[]): Uint8Array {
   const rows = delivered.map((quantity, index) => [
-    'PO20260920000001', '面膜', '甲代工厂', String(6975853662700 + index),
-    '2026-09-20', 100, quantity, 0, 100 - quantity, '否', String(70007020 + index),
+    'PO20260920000001', '面膜', '宜侬', String(6975853662700 + index),
+    '2026-09-20', 100, quantity, 0, 100 - quantity, '否', String(70007018 + index),
   ]);
   return write({ sheets: [SHEETS.inTransit, SHEETS.shipment, SHEETS.stock].map((sheet) => ({
     name: sheet.title,
@@ -27,8 +27,8 @@ it('工厂整表刷新按当前有效版本比对，改回旧值的明细仍是�
   const commit = makeCommitImport({ uow: memory.unitOfWork, clock });
 
   async function upload(quantities: readonly number[]) {
-    const file = await memory.files.put({ bytes: factoryWorkbook(quantities), originalName: '甲代工厂.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const { importBatchId } = await start({ fileId: entityId(file.sha256), template: 'factory-progress-v1', factoryPartyId: entityId('factory-factory_a') }, actor);
+    const file = await memory.files.put({ bytes: factoryWorkbook(quantities), originalName: '宜侬.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const { importBatchId } = await start({ fileId: entityId(file.sha256), template: 'factory-progress-v1', factoryPartyId: entityId('factory-yinong') }, actor);
     return importBatchId;
   }
 

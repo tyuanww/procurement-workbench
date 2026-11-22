@@ -87,10 +87,10 @@ it('确认进行中按钮在转，接口错误只留下说明', () => {
 it('代工厂这一页没列全时给出提示，读失败时不给已选工厂', () => {
   const partial = markup(FactorySelect, {
     factoryPartyId: 'factory-1',
-    factories: { kind: 'ready', items: [{ id: 'factory-1', displayName: '甲代工厂' }], total: 2 },
+    factories: { kind: 'ready', items: [{ id: 'factory-1', displayName: '宜侬' }], total: 2 },
     onFactory: () => undefined,
   });
-  expect(partial).toContain('甲代工厂');
+  expect(partial).toContain('宜侬');
   expect(partial).toContain('还有代工厂没显示在这页');
   const failed = markup(FactorySelect, {
     factoryPartyId: '',
@@ -99,7 +99,7 @@ it('代工厂这一页没列全时给出提示，读失败时不给已选工厂'
   });
   expect(failed).toContain('代工厂没有读出来。');
   expect(failed).toContain('选择代工厂');
-  expect(failed).not.toContain('甲代工厂');
+  expect(failed).not.toContain('宜侬');
 });
 
 function idle(): CommitRequest {

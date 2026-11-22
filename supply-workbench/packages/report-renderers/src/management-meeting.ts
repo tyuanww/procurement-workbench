@@ -6,7 +6,7 @@ type MeetingTable = {
   readonly rows: readonly (readonly string[])[];
 };
 
-const STORE = { store_a: '店铺甲', store_b: '店铺乙', unassigned: '未分店铺' } satisfies Record<ManagementMeetingSnapshot['store'], string>;
+const STORE = { dafuyan: '达肤妍', yiling: '译龄', unassigned: '未分店铺' } satisfies Record<ManagementMeetingSnapshot['store'], string>;
 const WAITING = {
   verification: '待核实凭据', buyer: '等采购确认', supplier: '等供应商发货',
   receiver: '等收货方点收', none: '无待处理履约',

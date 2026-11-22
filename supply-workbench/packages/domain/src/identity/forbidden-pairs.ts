@@ -2,12 +2,12 @@ import { DomainRuleViolation } from '../errors.js';
 import { normalizeText } from './text.js';
 
 const GROUPS: readonly (readonly string[])[] = [
-  ['甲包装厂', '甲代工厂'],
-  ['乙包材厂', '乙加工厂'],
-  ['丙代工厂', '丙包装厂', '丙加工厂'],
+  ['怡龙', '宜侬'],
+  ['景婷', '瑾亭'],
+  ['伸美', '伸懿', '伸燚'],
 ];
 
-const UNSUGGESTED = ['丁印刷厂'];
+const UNSUGGESTED = ['瀛彩'];
 
 export function isForbiddenPair(left: string, right: string): boolean {
   const a = normalizeText(left);

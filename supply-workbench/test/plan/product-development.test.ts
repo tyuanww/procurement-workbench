@@ -25,7 +25,7 @@ it('用同一未下单节点流转项目要求和采购回复，保护写入范�
     const { app, login } = fixture;
     const [productCookie, buyerCookie, otherBuyerCookie, managerCookie] = await Promise.all([login(product), login(buyer), login(otherBuyer), login(manager)]);
     const projectId = randomUUID();
-    const project = { id: projectId, title: '屏障修护乳', store: 'store_a', productLeadUserId: product };
+    const project = { id: projectId, title: '屏障修护乳', store: 'dafuyan', productLeadUserId: product };
     const newProject = () => app.inject({ method: 'POST', url: `${root}/projects`, payload: project, headers: productCookie });
     expect((await newProject()).statusCode).toBe(200);
     expect((await newProject()).statusCode).toBe(200);
@@ -36,11 +36,11 @@ it('用同一未下单节点流转项目要求和采购回复，保护写入范�
     const newNode = () => app.inject({ method: 'POST', url: `${root}/nodes`, payload: node, headers: productCookie });
     expect((await newNode()).statusCode).toBe(200);
     expect((await newNode()).statusCode).toBe(200);
-    const list = (headers: typeof buyerCookie, store = 'store_a') => app.inject({ method: 'GET', url: `${root}?store=${store}`, headers });
+    const list = (headers: typeof buyerCookie, store = 'dafuyan') => app.inject({ method: 'GET', url: `${root}?store=${store}`, headers });
     expect(ProductDevelopmentSchema.parse((await list(buyerCookie)).json()).projects[0]?.nodes).toMatchObject([
       { id: nodeId, daysUntilRequired: 4, canReply: true, latestReply: null },
     ]);
-    expect(ProductDevelopmentSchema.parse((await list(managerCookie, 'store_b')).json()).projects).toEqual([]);
+    expect(ProductDevelopmentSchema.parse((await list(managerCookie, 'yiling')).json()).projects).toEqual([]);
 
     const reply = { id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', projectId, nodeId, promisedOn: '2026-11-24', evidence: '供应商回复最早周二到' };
     const postReply = (headers: typeof buyerCookie) => app.inject({ method: 'POST', url: `${root}/replies`, payload: reply, headers });
@@ -107,27 +107,27 @@ it('只可关联同店且自身单行有 OA 的成品，交付到厂读取指定
     const nodeId = randomUUID();
     const contact = { projectId, nodeId };
     const create = (route: string, payload: object) => app.inject({ method: 'POST', url: `${root}/${route}`, payload, headers });
-    expect((await create('projects', { id: projectId, title: '双店样例', store: 'store_a', productLeadUserId: product })).statusCode).toBe(200);
+    expect((await create('projects', { id: projectId, title: '双店样例', store: 'dafuyan', productLeadUserId: product })).statusCode).toBe(200);
     expect((await create('nodes', {
       id: nodeId, projectId, title: '包材到加工厂', destination: 'packaging_to_factory', plannedStart: '2026-11-19',
       plannedEnd: '2026-11-23', ownerUserId: product, buyerUserId: buyer,
     })).statusCode).toBe(200);
-    const orderResults = await app.inject({ method: 'GET', url: `${root}/orders?store=store_a&search=9971`, headers });
+    const orderResults = await app.inject({ method: 'GET', url: `${root}/orders?store=dafuyan&search=9971`, headers });
     expect(orderResults.json()).toMatchObject([{ orderLineId: 'finished-with-oa', oaRef: 'XPKA(CN)9971' }]);
-    const noOa = await create('links', { ...contact, orderLineId: 'finished-no-oa', procurementLineId: 'material-store_a' });
+    const noOa = await create('links', { ...contact, orderLineId: 'finished-no-oa', procurementLineId: 'material-dafuyan' });
     expect(noOa.statusCode).toBe(400);
-    const wrongShop = await create('links', { ...contact, orderLineId: 'finished-store_b', procurementLineId: 'material-store_a' });
+    const wrongShop = await create('links', { ...contact, orderLineId: 'finished-yiling', procurementLineId: 'material-dafuyan' });
     expect(wrongShop.statusCode).toBe(400);
     const wrongDelivery = await create('links', { ...contact, orderLineId: 'finished-with-oa', procurementLineId: 'finished-with-oa' });
     expect(wrongDelivery.statusCode).toBe(400);
-    const valid = { ...contact, orderLineId: 'finished-with-oa', procurementLineId: 'material-store_a' };
+    const valid = { ...contact, orderLineId: 'finished-with-oa', procurementLineId: 'material-dafuyan' };
 
     const reply = { id: randomUUID(), ...contact, promisedOn: '2026-11-24', evidence: '工厂回复最早周二到' };
     expect((await app.inject({ method: 'POST', url: `${root}/replies`, payload: reply, headers: buyerHeaders })).statusCode).toBe(200);
     expect((await create('links', valid)).statusCode).toBe(200);
     expect((await create('links', valid)).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url: `${root}/replies`, payload: { ...reply, id: randomUUID() }, headers: buyerHeaders })).statusCode).toBe(409);
-    const after = await app.inject({ method: 'GET', url: `${root}?store=store_a`, headers: buyerHeaders });
+    const after = await app.inject({ method: 'GET', url: `${root}?store=dafuyan`, headers: buyerHeaders });
     const development = ProductDevelopmentSchema.parse(after.json());
     expect(development.projects[0]?.nodes).toMatchObject([{ canReply: false, replies: [{ id: reply.id }], formalLink: {
       oaRef: 'XPKA(CN)9971', orderLineId: valid.orderLineId, procurementLineId: valid.procurementLineId,
@@ -147,7 +147,7 @@ it('按规范 OA 主号或原始 OA 号搜索同店成品，返回原始凭据',
     await fixture.exec(`update import_rows set parsed = jsonb_build_object('oaDemandRef', jsonb_build_object('raw', '${oaRef}')) where id = 'source-oa'`);
     const headers = await fixture.login(product);
     for (const search of ['XPKA(CN)9971', 'xPka ( CN ) 9971-2', '９９７１', oaRef]) {
-      const query = new URLSearchParams({ store: 'store_a', search });
+      const query = new URLSearchParams({ store: 'dafuyan', search });
       const response = await fixture.app.inject({ url: `${root}/orders?${query}`, headers });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject([{ orderLineId: 'finished-with-oa', oaRef }]);
@@ -169,7 +169,7 @@ it('管理周会从各成品行的已提交快照读取 OA，周报保留当时�
     const expected = [
       { id: 'finished-no-oa', oaRef: null }, { id: 'finished-with-oa', oaRef: 'XPKA（CN）9988-2' },
     ];
-    const response = await fixture.app.inject({ url: '/api/v1/dashboard/management-meeting?store=store_a&weekStart=2026-11-16', headers });
+    const response = await fixture.app.inject({ url: '/api/v1/dashboard/management-meeting?store=dafuyan&weekStart=2026-11-16', headers });
     expect(response.statusCode).toBe(200);
     expect(ManagementMeetingSchema.parse(response.json()).materials[0]?.affectedFinished).toMatchObject(expected);
 
@@ -188,9 +188,9 @@ it('周会只按仍待履约的开放批次判断日期和等谁，历史凭据�
     const at = "'2026-11-19T00:00:00Z'";
     await fixture.exec(`
       insert into delivery_batches (id, created_at, updated_at, order_line_id, seq, planned_qty, planned_unit, receiver_party_id, date_buyer_confirmed, status, status_changed_at, origin)
-      values ('meeting-closed', ${at}, ${at}, 'material-store_a', 1, 30, '个', 'meeting-factory', '2026-11-20', 'closed', ${at}, 'manual'),
-        ('meeting-complete', ${at}, ${at}, 'material-store_a', 2, 30, '个', 'meeting-factory', '2026-11-21', 'confirmed', ${at}, 'manual'),
-        ('meeting-next', ${at}, ${at}, 'material-store_a', 3, 40, '个', 'meeting-factory', '2026-11-24', 'confirmed', ${at}, 'manual');
+      values ('meeting-closed', ${at}, ${at}, 'material-dafuyan', 1, 30, '个', 'meeting-factory', '2026-11-20', 'closed', ${at}, 'manual'),
+        ('meeting-complete', ${at}, ${at}, 'material-dafuyan', 2, 30, '个', 'meeting-factory', '2026-11-21', 'confirmed', ${at}, 'manual'),
+        ('meeting-next', ${at}, ${at}, 'material-dafuyan', 3, 40, '个', 'meeting-factory', '2026-11-24', 'confirmed', ${at}, 'manual');
       insert into shipments (id, created_at, updated_at, batch_id, qty, shipped_on, fulfillment, source, created_by)
       values ('meeting-delivery', ${at}, ${at}, 'meeting-closed', 20, '2026-11-19', '{"kind":"verified","reportId":"meeting-reported","unit":"个","evidence":"发运凭据","reviewReason":null}', 'manual', '${buyer}'),
         ('meeting-reported', ${at}, ${at}, 'meeting-closed', 10, '2026-11-19', '{"kind":"reported","unit":"个","evidence":"原报数"}', 'manual', '${buyer}');
@@ -200,7 +200,7 @@ it('周会只按仍待履约的开放批次判断日期和等谁，历史凭据�
     `);
     const headers = await fixture.login(manager);
     const meeting = async () => {
-      const response = await fixture.app.inject({ url: '/api/v1/dashboard/management-meeting?store=store_a&weekStart=2026-11-16', headers });
+      const response = await fixture.app.inject({ url: '/api/v1/dashboard/management-meeting?store=dafuyan&weekStart=2026-11-16', headers });
       expect(response.statusCode).toBe(200);
       return ManagementMeetingSchema.parse(response.json()).materials[0];
     };
@@ -223,18 +223,18 @@ it('周会新品风险显示实际跟进采购，未分配采购时返回空值'
     const headers = await fixture.login(product);
     const projectId = randomUUID();
     const create = (route: string, payload: object) => fixture.app.inject({ method: 'POST', url: `${root}/${route}`, payload, headers });
-    expect((await create('projects', { id: projectId, title: '光感防护霜', store: 'store_a', productLeadUserId: product })).statusCode).toBe(200);
+    expect((await create('projects', { id: projectId, title: '光感防护霜', store: 'dafuyan', productLeadUserId: product })).statusCode).toBe(200);
     const assignedId = randomUUID();
     const unassignedId = randomUUID();
     const node = { projectId, destination: 'pilot_material_to_factory', plannedStart: '2026-11-19', plannedEnd: '2026-11-23', ownerUserId: product };
     expect((await create('nodes', { ...node, id: assignedId, title: '已分配采购', buyerUserId: buyer })).statusCode).toBe(200);
     expect((await create('nodes', { ...node, id: unassignedId, title: '待分配采购', buyerUserId: null })).statusCode).toBe(200);
-    const current = await fixture.app.inject({ url: `${root}?store=store_a`, headers });
+    const current = await fixture.app.inject({ url: `${root}?store=dafuyan`, headers });
     const assigned = ProductDevelopmentSchema.parse(current.json()).projects[0]?.nodes.find(({ id }) => id === assignedId);
     expect(assigned?.buyerName).toEqual(expect.any(String));
     expect(assigned?.buyerName).not.toBe(assigned?.ownerName);
 
-    const response = await fixture.app.inject({ url: '/api/v1/dashboard/management-meeting?store=store_a&weekStart=2026-11-23', headers: await fixture.login(manager) });
+    const response = await fixture.app.inject({ url: '/api/v1/dashboard/management-meeting?store=dafuyan&weekStart=2026-11-23', headers: await fixture.login(manager) });
     expect(response.statusCode).toBe(200);
     expect(ManagementMeetingSchema.parse(response.json()).development).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: assignedId, ownerName: assigned?.buyerName }),
@@ -248,11 +248,11 @@ it('周会新品风险显示实际跟进采购，未分配采购时返回空值'
 async function seedMeetingMaterial(exec: (statement: string) => Promise<unknown>): Promise<void> {
   await seedOrderScope(exec);
   await exec(`
-    update procurement_observations set material_line_id = 'material-store_a', fact = jsonb_build_object(
+    update procurement_observations set material_line_id = 'material-dafuyan', fact = jsonb_build_object(
       'componentNameRaw', '防护霜包材', 'componentCodeRaw', 'M1', 'unitRaw', '个', 'quantity', 100,
-      'source', jsonb_build_object('sheetName', '店铺甲项目进度表', 'rowNo', row_no)
-    ) where sheet_name = '店铺甲项目进度表';
-    insert into procurement_finished_lines (finished_line_id, material_line_id) values ('finished-no-oa', 'material-store_a');
+      'source', jsonb_build_object('sheetName', '达肤妍项目进度表', 'rowNo', row_no)
+    ) where sheet_name = '达肤妍项目进度表';
+    insert into procurement_finished_lines (finished_line_id, material_line_id) values ('finished-no-oa', 'material-dafuyan');
   `);
 }
 
@@ -265,22 +265,22 @@ async function seedOrderScope(exec: (statement: string) => Promise<unknown>): Pr
     insert into order_lines (id, created_at, updated_at, purchase_order_id, lane, origin, current_snapshot_id, missing_in_latest_import, stage, stage_changed_at)
     values ('finished-with-oa', ${at}, ${at}, 'shared-po', 'finished', 'import_po_master', 'snapshot-oa', false, 'no_batch', ${at}),
       ('finished-no-oa', ${at}, ${at}, 'shared-po', 'finished', 'import_po_master', 'snapshot-no', false, 'no_batch', ${at}),
-      ('finished-store_b', ${at}, ${at}, 'shared-po', 'finished', 'import_po_master', 'snapshot-store_b', false, 'no_batch', ${at}),
-      ('material-store_a', ${at}, ${at}, 'material-po', 'material', 'import_po_master', null, false, 'no_batch', ${at});
+      ('finished-yiling', ${at}, ${at}, 'shared-po', 'finished', 'import_po_master', 'snapshot-yiling', false, 'no_batch', ${at}),
+      ('material-dafuyan', ${at}, ${at}, 'material-po', 'material', 'import_po_master', null, false, 'no_batch', ${at});
     insert into import_batches (id, created_at, updated_at, committed_at, template, status, file_id, file_meta, stats, decisions, created_by)
     values ('scope-import', ${at}, ${at}, ${at}, 'po-master-v1', 'committed', 'fake-book', '{}', '{}', '{}', '${buyer}');
     insert into import_rows (id, import_batch_id, sheet_name, row_no, raw, parsed, issues, action, target_id)
     values ('source-oa', 'scope-import', '采购订单总表', 1, '{}', '{"oaDemandRef":{"raw":"XPKA(CN)9971"}}', '[]', 'create', 'finished-with-oa'),
       ('source-no', 'scope-import', '采购订单总表', 2, '{}', '{"oaDemandRef":{"raw":null}}', '[]', 'create', 'finished-no-oa'),
-      ('source-store_b', 'scope-import', '采购订单总表', 3, '{}', '{"oaDemandRef":{"raw":"XPKA(CN)9971"}}', '[]', 'create', 'finished-store_b');
+      ('source-yiling', 'scope-import', '采购订单总表', 3, '{}', '{"oaDemandRef":{"raw":"XPKA(CN)9971"}}', '[]', 'create', 'finished-yiling');
     insert into order_line_snapshots (id, order_line_id, import_batch_id, import_row_id, data)
     values ('snapshot-oa', 'finished-with-oa', 'scope-import', 'source-oa', '{}'),
       ('snapshot-no', 'finished-no-oa', 'scope-import', 'source-no', '{}'),
-      ('snapshot-store_b', 'finished-store_b', 'scope-import', 'source-store_b', '{}');
+      ('snapshot-yiling', 'finished-yiling', 'scope-import', 'source-yiling', '{}');
     insert into procurement_observations (import_batch_id, sheet_name, row_no, finished_line_ids, material_line_id, reasons, fact)
-    values ('scope-import', '店铺甲项目进度表', 1, '{finished-with-oa}', 'material-store_a', '{}', '{}'),
-      ('scope-import', '店铺甲项目进度表', 2, '{finished-no-oa}', null, '{}', '{}'),
-      ('scope-import', '店铺乙项目进度表', 1, '{finished-store_b}', null, '{}', '{}');
-    insert into procurement_finished_lines (finished_line_id, material_line_id) values ('finished-with-oa', 'material-store_a');
+    values ('scope-import', '达肤妍项目进度表', 1, '{finished-with-oa}', 'material-dafuyan', '{}', '{}'),
+      ('scope-import', '达肤妍项目进度表', 2, '{finished-no-oa}', null, '{}', '{}'),
+      ('scope-import', '译龄项目进度表', 1, '{finished-yiling}', null, '{}', '{}');
+    insert into procurement_finished_lines (finished_line_id, material_line_id) values ('finished-with-oa', 'material-dafuyan');
   `);
 }

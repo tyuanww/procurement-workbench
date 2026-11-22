@@ -13,7 +13,6 @@ export type MetricItem = {
   readonly unit?: string;
   readonly hint?: string;
   readonly tone?: MetricTone;
-  readonly action?: { readonly isActive?: boolean; readonly select: () => void };
 };
 
 export type BarSegment = {
@@ -47,30 +46,12 @@ export function MetricStrip(input: { readonly items: readonly MetricItem[]; read
 }
 
 function MetricCard(input: { readonly item: MetricItem }): ReactNode {
-  if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} />;
   return (
     <Card size="small" styles={{ body: { padding: space[2] } }} style={{ borderTop: `2px solid ${toneColor(input.item.tone)}` }}>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
       <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
       {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
     </Card>
-  );
-}
-
-function MetricButton({ item, action }: { readonly item: MetricItem; readonly action: NonNullable<MetricItem['action']> }): ReactNode {
-  return (
-    <Button block aria-pressed={action.isActive} onClick={action.select} style={{
-      display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: space[2],
-      borderTop: `2px solid ${toneColor(item.tone)}`,
-      background: action.isActive ? brand[100] : bg.surface,
-      borderInlineColor: action.isActive ? brand[600] : border, borderBottomColor: action.isActive ? brand[600] : border,
-    }}>
-      <span style={{ display: 'grid', minWidth: 0 }}>
-        <span style={{ color: text.secondary, fontSize: fontSize.meta }}>{item.label}{action.isActive ? <> <CheckOutlined aria-hidden="true" /></> : null}</span>
-        <strong style={metricValueStyle()}>{typeof item.value === 'number' ? formatQuantity(item.value) : item.value}{item.unit}</strong>
-        {item.hint === undefined ? null : <span style={{ color: text.secondary, fontSize: fontSize.meta }}>{item.hint}</span>}
-      </span>
-    </Button>
   );
 }
 
@@ -114,55 +95,28 @@ export function RateBars(input: { readonly rows: readonly { readonly key: string
 }
 
 export function Sparkline(input: { readonly values: readonly (number | null)[]; readonly labels?: readonly string[]; readonly ariaLabel: string }): ReactNode {
-  const values = input.values.filter((value) => value !== null);
-  if (values.length === 0) return <Typography.Text type="secondary">—</Typography.Text>;
-  const max = Math.max(1, ...values);
-  const step = 100 / Math.max(1, input.values.length - 1);
-  const points = input.values.map((value, index) => value === null ? null : { value, index });
-  const path = points.flatMap((point, index) => point === null ? [] : [
-    `${points[index - 1] == null ? 'M' : 'L'}${point.index * step},${31 - (point.value / max) * 27}`,
-  ]).join(' ');
+  const points = input.values.flatMap((value, index) => (value === null ? [] : [{ value, index }]));
+  if (points.length === 0) return <Typography.Text type="secondary">—</Typography.Text>;
+  const max = Math.max(1, ...points.map((point) => point.value));
+  const step = points.length === 1 ? 100 : 100 / (points.length - 1);
+  const polyline = points.map((point) => `${point.index * step},${31 - (point.value / max) * 27}`).join(' ');
+  const last = points[points.length - 1];
   return (
-    <svg viewBox="0 0 100 32" role="img" aria-label={input.ariaLabel} style={{ width: '100%', height: 92, overflow: 'visible' }}>
+    <svg viewBox="0 0 100 32" role="img" aria-label={input.ariaLabel} style={{ width: '100%', height: 32, display: 'block', overflow: 'visible' }}>
       <line x1="0" y1="31" x2="100" y2="31" stroke={border} strokeWidth="1" vectorEffect="non-scaling-stroke" />
-      <path d={path} fill="none" stroke={brand[600]} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-      {points.map((point) => point === null ? null : (
-        <circle key={point.index} cx={point.index * step} cy={31 - (point.value / max) * 27} r="0.9" fill={brand[600]}>
-          <title>{tooltipOf(point, input.labels)}</title>
-        </circle>
-      ))}
+      <polyline points={polyline} fill="none" stroke={brand[600]} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      {last === undefined ? null : <circle cx={last.index * step} cy={31 - (last.value / max) * 27} r="2.5" fill={brand[600]}><title>{tooltipOf(last, input.labels)}</title></circle>}
     </svg>
   );
 }
 
 function BarLine({ row, total, scaleMax }: BarLineProps): ReactNode {
-  const [segment] = row.segments;
-  if (row.onSelect !== undefined && segment !== undefined && row.segments.length === 1) {
-    return <SingleBarButton segment={segment} scaleMax={scaleMax} onSelect={row.onSelect} />;
-  }
   return (
     <div style={barLineStyle()}>
       <Typography.Text style={{ fontSize: fontSize.table, color: text.secondary }}>{row.label}</Typography.Text>
       {total <= 0 ? <div style={emptyTrackStyle()} /> : <BarTrack row={row} scaleMax={scaleMax} />}
       <Typography.Text style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: fontSize.table }}>{total}</Typography.Text>
     </div>
-  );
-}
-
-function SingleBarButton({ segment, scaleMax, onSelect }: { readonly segment: BarSegment; readonly scaleMax: number; readonly onSelect: NonNullable<BarRow['onSelect']> }): ReactNode {
-  const count = formatQuantity(segment.value);
-  const isActive = segment.isActive === true;
-  return (
-    <Button block type="text" title={`${segment.label} ${count}`} aria-pressed={isActive} onClick={() => onSelect(segment.key)}
-      style={{ display: 'block', minHeight: 44, height: 'auto', paddingInline: space[1], textAlign: 'start', whiteSpace: 'normal', borderColor: isActive ? brand[600] : 'transparent', background: isActive ? brand[100] : undefined }}>
-      <span style={barLineStyle()}>
-        <span style={{ color: text.secondary }}>{segment.label}</span>
-        <span aria-hidden="true" style={trackStyle()}>
-          <span style={{ width: `${scaleMax <= 0 ? 0 : (segment.value / scaleMax) * 100}%`, background: segmentColor(segment) }} />
-        </span>
-        <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
-      </span>
-    </Button>
   );
 }
 

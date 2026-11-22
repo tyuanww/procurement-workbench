@@ -38,7 +38,7 @@ const item: WorkItemView = {
 };
 
 const daily: DailyPlanView = { date: localDate('2026-11-09'), asOf: localDate('2026-11-09'), total: 1, overdueCount: 0, items: [item], byOwner: [{ key: 'buyer-1', label: '采购甲', items: [item] }], bySupplier: [], byFactory: [] };
-const schedule: ScheduleView = { from: localDate('2026-11-09'), to: localDate('2026-11-15'), total: 1, items: [item], dependencyConflicts: {} };
+const schedule: ScheduleView = { from: localDate('2026-11-09'), to: localDate('2026-11-15'), total: 1, items: [item] };
 const detail: WorkItemDetailView = { item, events: [], dependenciesOut: [], dependenciesIn: [] };
 
 const api: PlanApi = {

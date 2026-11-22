@@ -4,6 +4,7 @@ import type { Role } from '../../packages/domain/src/index.js';
 import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { CauseFilter } from '../../apps/web/src/pages/dashboard/cause-filter.js';
 import { act, element, fulfill, installFetch, memoryRouter, mount, resetDom, waitFor } from './party-preview-dom.js';
+import { stuckItem } from './w07-rows.js';
 
 let mounted: ReturnType<typeof mount> | undefined;
 
@@ -30,8 +31,8 @@ it('同时拥有审核能力的管理角色可继续进入主数据来源', asyn
 
 async function showSources(roles: readonly Role[]): Promise<Element> {
   installFetch();
-  const counts = { missing_owner: 3, missing_factory: 3, supplier_pending: 0, missing_date: 3, exception_open: 0, aged_15: 0, bom_missing: 0, factory_demand_unlinked: 0 };
-  const filter = element(CauseFilter, { counts, from: '2026-11-01', to: '2026-11-21', cause: null, onSearch: () => undefined });
+  const items = ['a', 'b', 'c'].map((batchId) => stuckItem({ batchId, stage: 'confirmed', daysInStage: 3 }));
+  const filter = element(CauseFilter, { items, from: '2026-11-01', to: '2026-11-21', cause: null, stage: null, bucket: null, onSearch: () => undefined });
   mounted = mount(memoryRouter(element(ActorRoles, { roles, children: filter })));
   fulfill({ urlPart: '/api/v1/dashboard/bottlenecks', status: 200, body: { categories: [
     { key: 'missing_owner', label: '缺负责人', count: 605, href: '/master?tab=owner-map' },

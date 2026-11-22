@@ -11,12 +11,6 @@ export type ActionQuery = {
   readonly sort: TodaySort;
 };
 
-export type ChaseScope =
-  | { readonly kind: 'all' }
-  | { readonly kind: 'filtered' }
-  | { readonly kind: 'factory'; readonly id: string }
-  | { readonly kind: 'batch'; readonly id: string };
-
 export function actionQuery(search: string): ActionQuery {
   const params = new URLSearchParams(search);
   const page = Number(params.get('page'));
@@ -49,11 +43,9 @@ export function actionPageSearch(query: ActionQuery): string {
   return params.toString();
 }
 
-export function actionChaseSearch(query: ActionQuery, scope: ChaseScope): string {
-  if (scope.kind === 'all') return '';
-  if (scope.kind === 'batch') return new URLSearchParams({ itemId: scope.id }).toString();
+export function actionChaseSearch(query: ActionQuery, factoryId: string | undefined): string {
   const params = actionFilters(query);
-  if (scope.kind === 'factory') params.set('factoryId', scope.id);
+  if (factoryId !== undefined) params.set('factoryId', factoryId);
   return params.toString();
 }
 

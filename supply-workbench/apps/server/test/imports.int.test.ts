@@ -95,13 +95,13 @@ it('采购大表预览保留共用子件与源行，刷新后仍可查且不写�
     const procurement = ProcurementPreviewSelectionSchema.parse(preview.json());
     expect(procurement?.finishedRows.filter((row) => row.oaRefs.some((ref) => ref.main === 'XPKA(CN)9901'))).toHaveLength(3);
     expect(procurement?.componentFacts.filter((fact) => fact.componentCodeRaw === '99010003')).toEqual([
-      expect.objectContaining({ source: { sheetName: '店铺甲项目进度表', rowNo: 5 }, quantity: 200000 }),
+      expect.objectContaining({ source: { sheetName: '达肤妍项目进度表', rowNo: 5 }, quantity: 200000 }),
     ]);
-    expect(procurement?.links.filter((link) => link.component.rowNo === 5 && link.component.sheetName === '店铺甲项目进度表')).toEqual(expect.arrayContaining([
+    expect(procurement?.links.filter((link) => link.component.rowNo === 5 && link.component.sheetName === '达肤妍项目进度表')).toEqual(expect.arrayContaining([
       expect.objectContaining({ finishedRow: { sheetName: '采购订单总表', rowNo: 2 }, kind: 'shared' }),
       expect.objectContaining({ finishedRow: { sheetName: '采购订单总表', rowNo: 3 }, kind: 'shared' }),
     ]));
-    expect(procurement?.links.filter((link) => link.component.rowNo === 3 && link.component.sheetName === '店铺甲项目进度表').map((link) => link.kind)).toEqual(['group', 'group']);
+    expect(procurement?.links.filter((link) => link.component.rowNo === 3 && link.component.sheetName === '达肤妍项目进度表').map((link) => link.kind)).toEqual(['group', 'group']);
 
     const reloaded = await opened.app.inject({ method: 'GET', url: previewUrl, headers: { cookie } });
     expect(ProcurementPreviewSelectionSchema.parse(reloaded.json())).toEqual(procurement);

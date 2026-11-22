@@ -48,10 +48,10 @@ export async function seedPlanBase(handle: AppHandle): Promise<void> {
     ('buyer-1', '${AT}', '${AT}', '采购甲', array['buyer'], true),
     ('buyer-2', '${AT}', '${AT}', '采购乙', array['buyer'], true)`);
   await handle.exec(`insert into parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse, note) values
-    ('party-supplier', '${AT}', '${AT}', '甲代工厂', true, true, false, null),
-    ('party-other', '${AT}', '${AT}', '示例工厂', false, true, false, null)`);
+    ('party-supplier', '${AT}', '${AT}', '宜侬', true, true, false, null),
+    ('party-other', '${AT}', '${AT}', '杭州工厂', false, true, false, null)`);
   await handle.exec(`insert into purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane, oa_demand_ref) values
-    ('po-1', '${AT}', '${AT}', 'PO-1', 'PO-1', 'OTHER', array[]::text[], 'party-supplier', '甲代工厂', 'finished', null)`);
+    ('po-1', '${AT}', '${AT}', 'PO-1', 'PO-1', 'OTHER', array[]::text[], 'party-supplier', '宜侬', 'finished', null)`);
   await handle.exec(`insert into order_lines (id, created_at, updated_at, purchase_order_id, lane, item_id, item_code_raw, barcode_raw, name_raw, qty_ordered, unit, buyer_user_id, receiver_party_id, origin, current_snapshot_id, candidate_key, missing_in_latest_import, cancelled_at, cancel_reason, stage, stage_changed_at, next_due_batch_id, next_due_date) values
     ('line-1', '${AT}', '${AT}', 'po-1', 'finished', null, null, null, '海葡萄', null, null, 'buyer-1', null, 'manual', null, null, false, null, null, 'no_batch', '${AT}', null, null)`);
   await handle.exec(`insert into delivery_batches (id, created_at, updated_at, order_line_id, seq, planned_qty, receiver_party_id, date_factory_required, date_supplier_promised, date_buyer_confirmed, status, status_changed_at, origin) values

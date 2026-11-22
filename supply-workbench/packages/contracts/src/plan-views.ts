@@ -7,7 +7,6 @@ import type {
   GenerateWorkItemsInput,
   SchedulePlanQuery,
   ScheduleView,
-  WorkItemPredecessor,
   UpdateWorkItemInput,
   WorkItemDependencyView,
   WorkItemDetailView,
@@ -15,7 +14,7 @@ import type {
   WorkItemListQuery,
   WorkItemView,
 } from '../../application/src/plan/views.js';
-import type { ProjectProgressGroup, ProjectProgressQuery, ProjectProgressView } from '../../application/src/plan/progress.js';
+import type { ProjectProgressGroup, ProjectProgressView } from '../../application/src/plan/progress.js';
 import {
   COUNTERPARTY_ROLES,
   DEPENDENCY_KINDS,
@@ -99,7 +98,7 @@ export const WorkItemEventViewSchema: z.ZodType<WorkItemEventView> = strictObjec
   createdAt: z.string(),
 });
 
-const workItemDependency = strictObject({
+export const WorkItemDependencyViewSchema: z.ZodType<WorkItemDependencyView> = strictObject({
   id: z.string(),
   fromItemId: z.string(),
   toItemId: z.string(),
@@ -107,19 +106,11 @@ const workItemDependency = strictObject({
   createdAt: z.string(),
 });
 
-export const WorkItemDependencyViewSchema: z.ZodType<WorkItemDependencyView> = workItemDependency;
-
-const predecessor: z.ZodType<WorkItemPredecessor> = strictObject({
-  id: z.string(), title: z.string(), plannedEnd: LocalDateSchema, status: WorkItemStatusSchema,
-});
-
-const incomingDependency = workItemDependency.extend({ predecessor: nullable(predecessor) });
-
 export const WorkItemDetailSchema: z.ZodType<WorkItemDetailView> = strictObject({
   item: WorkItemViewSchema,
   events: z.array(WorkItemEventViewSchema),
   dependenciesOut: z.array(WorkItemDependencyViewSchema),
-  dependenciesIn: z.array(incomingDependency),
+  dependenciesIn: z.array(WorkItemDependencyViewSchema),
 });
 
 export const PlanGroupViewSchema = strictObject({ key: z.string(), label: nullable(z.string()), items: z.array(WorkItemViewSchema) });
@@ -140,7 +131,6 @@ export const ScheduleViewSchema: z.ZodType<ScheduleView> = strictObject({
   to: LocalDateSchema,
   total: z.number(),
   items: z.array(WorkItemViewSchema),
-  dependencyConflicts: z.record(z.string(), z.array(predecessor)),
 });
 
 export const WorkItemListResponseSchema = listResponseSchema(WorkItemViewSchema);
@@ -204,7 +194,7 @@ export const DailyPlanQuerySchema: z.ZodType<DailyPlanQuery> = strictObject({
   factoryPartyId: optional(z.string()),
 });
 
-const schedulePlanQuery = strictObject({
+export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = strictObject({
   store: optional(ProcurementStoreSchema),
   from: LocalDateSchema,
   to: LocalDateSchema,
@@ -212,9 +202,6 @@ const schedulePlanQuery = strictObject({
   supplierPartyId: optional(z.string()),
   factoryPartyId: optional(z.string()),
 });
-
-export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = schedulePlanQuery;
-export const ProjectProgressQuerySchema: z.ZodType<ProjectProgressQuery> = schedulePlanQuery.extend({ includeItems: optional(BooleanQuerySchema) });
 
 export const WorkItemListQuerySchema: z.ZodType<WorkItemListQuery> = strictObject({
   status: optional(z.array(WorkItemStatusSchema)),
@@ -252,7 +239,6 @@ const ProjectProgressGroupSchema: z.ZodType<ProjectProgressGroup> = strictObject
   overdue: z.number().int().nonnegative(),
   blocked: z.number().int().nonnegative(),
   completionRate: z.union([z.number().min(0).max(1), z.null()]),
-  itemIds: optional(z.array(z.string())),
 });
 
 export type ProjectProgressGroupView = ProjectProgressGroup;
@@ -269,7 +255,4 @@ export const ProjectProgressSchema: z.ZodType<ProjectProgressView> = strictObjec
   byOwner: z.array(ProjectProgressGroupSchema),
   bySupplier: z.array(ProjectProgressGroupSchema),
   byFactory: z.array(ProjectProgressGroupSchema),
-  details: optional(strictObject({ asOf: LocalDateSchema, tasks: z.array(strictObject({ item: WorkItemViewSchema, overdue: z.boolean() })) })),
 });
-
-export type { WorkItemPredecessor };

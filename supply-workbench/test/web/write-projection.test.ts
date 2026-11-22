@@ -26,7 +26,7 @@ const CASES: readonly { readonly marker: string; readonly action: PermissionActi
   { marker: '开始解析', action: 'imports.write', show: showImport },
   { marker: '保存当前页', action: 'imports.write', show: showConflict },
   { marker: '选择现有订单行或新建', action: 'imports.write', show: showConflictForm },
-  { marker: '生成全店周报', action: 'reports.generate', show: showGenerate },
+  { marker: '生 成', action: 'reports.generate', show: showGenerate },
   { marker: '写入飞书文档', action: 'reports.generate', show: showFeishu },
 ];
 
@@ -160,7 +160,7 @@ function shipBoard(): TodayBoard {
     chips: [],
     body: {
       kind: 'groups',
-      groups: [{ key: 'g', name: '甲代工厂', counts: [], nudgeText: '催一下', rows: [row] }],
+      groups: [{ key: 'g', name: '宜侬', counts: [], nudgeText: '催一下', rows: [row] }],
       rows: [row],
     },
   };

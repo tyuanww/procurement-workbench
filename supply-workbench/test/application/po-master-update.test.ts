@@ -10,7 +10,7 @@ import './load-import-registry.js';
 const at = '2026-10-12T00:00:00.000Z';
 
 const filled: Readonly<Record<string, string>> = {
-  供应商: '甲代工厂',
+  供应商: '宜侬',
   产品名称: '海葡萄水光冰冰贴',
   产品条码: '2000000003023',
   采购订单号: 'PO-2026-1',

@@ -1,7 +1,6 @@
 import { Button, Typography } from 'antd';
-import { useId, type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { ScheduleDay, ScheduleScale, Timeline, TimelineGroup, TimelineRow } from '../../features/progress/index.js';
-import { predecessorWarningText } from '../../features/plan/index.js';
 import { statusColor, bg, border, brand, fontSize, radius, space, text } from '../../theme/tokens.js';
 
 const LEFT_WIDTH = 280;
@@ -50,7 +49,6 @@ export function ScheduleList(props: { readonly timeline: Timeline; readonly onOp
                 <Typography.Text strong style={{ fontSize: fontSize.body }}>{row.title}</Typography.Text>
                 <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{row.meta}</Typography.Text>
                 <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{row.when}</Typography.Text>
-                <DependencySummary row={row} />
               </span>
             </Button>
           ))}
@@ -89,41 +87,27 @@ function TimelineGroupRows(props: { readonly group: TimelineGroup; readonly time
 }
 
 function TimelineRowView(props: { readonly row: TimelineRow; readonly timeline: Timeline; readonly dayWidth: number; readonly onOpen: () => void }): ReactNode {
-  const warningId = useId();
-  const hasConflict = (props.row.dependencyConflicts?.length ?? 0) > 0;
   return (
     <>
       <div style={labelStyle(props.row)}>
         <span style={labelTitleStyle()}>{props.row.title}</span>
         <span style={labelMetaStyle()}>{props.row.meta}</span>
         <span style={labelMetaStyle()}>{props.row.when}</span>
-        <DependencySummary row={props.row} id={warningId} />
       </div>
-      <div style={trackStyle(props.dayWidth, hasConflict)}>
+      <div style={trackStyle(props.dayWidth)}>
         {props.timeline.todayPercent === null ? null : <span style={todayLineStyle(props.timeline.todayPercent)} />}
-        <BarButton row={props.row} onOpen={props.onOpen} warningId={hasConflict ? warningId : undefined} />
+        <BarButton row={props.row} onOpen={props.onOpen} />
       </div>
     </>
   );
 }
 
-function DependencySummary(props: { readonly row: TimelineRow; readonly id?: string }): ReactNode {
-  const conflicts = props.row.dependencyConflicts;
-  if (conflicts === undefined || conflicts.length === 0) return null;
-  return (
-    <span id={props.id} style={{ fontSize: fontSize.meta, color: statusColor.warning.text, whiteSpace: 'normal', textAlign: 'left', overflowWrap: 'anywhere' }}>
-      依赖冲突 · {conflicts.map(predecessorWarningText).join('、')}
-    </span>
-  );
-}
-
-function BarButton(props: { readonly row: TimelineRow; readonly onOpen: () => void; readonly warningId: string | undefined }): ReactNode {
+function BarButton(props: { readonly row: TimelineRow; readonly onOpen: () => void }): ReactNode {
   const color = statusColor[props.row.bar.tone];
   return (
     <Button
       size="small"
       aria-label={`${props.row.title} ${props.row.bar.label}`}
-      aria-describedby={props.warningId}
       title={`${props.row.title} · ${props.row.when}`}
       onClick={props.onOpen}
       style={barStyle({ bar: props.row.bar, color })}
@@ -222,11 +206,11 @@ function labelMetaStyle(): CSSProperties {
   return { color: text.tertiary, fontSize: fontSize.meta, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 }
 
-function trackStyle(dayWidth: number, hasConflict: boolean): CSSProperties {
+function trackStyle(dayWidth: number): CSSProperties {
   return {
     gridColumn: '2 / -1',
     position: 'relative',
-    ...(hasConflict ? { minHeight: TRACK_TOP * 2 + BAR_HEIGHT } : { height: TRACK_TOP * 2 + BAR_HEIGHT }),
+    height: TRACK_TOP * 2 + BAR_HEIGHT,
     backgroundImage: `repeating-linear-gradient(90deg, transparent 0, transparent ${dayWidth - 1}px, ${border} ${dayWidth - 1}px, ${border} ${dayWidth}px)`,
     borderBottom: `1px solid ${border}`,
   };

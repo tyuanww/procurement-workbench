@@ -93,7 +93,7 @@ function boardItem(batchStatus: BatchStatus): BoardItem {
     overdueDays: null,
     dueDate: null,
     lineId: 'line-1',
-    waitingName: '甲代工厂',
+    waitingName: '宜侬',
     reasons: ['missing_date'],
     poRaw: null,
     productName: '面膜',

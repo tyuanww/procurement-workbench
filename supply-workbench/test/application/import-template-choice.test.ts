@@ -11,7 +11,7 @@ const at = '2026-10-12T00:00:00.000Z';
 
 it('识别结果保留全部候选和代工厂推导，开始解析只认显式模板', async () => {
   const memory = createMemory();
-  const bytes = new TextEncoder().encode('供应商,产品名称\n甲代工厂,面膜\n');
+  const bytes = new TextEncoder().encode('供应商,产品名称\n宜侬,面膜\n');
   const stored = await memory.files.put({ bytes, originalName: 'choice.csv', mime: 'text/csv' });
   const actor = aUser({ id: entityId('buyer-1'), roles: ['buyer'], name: '采购' });
   const clock = new FixedClock(at);
