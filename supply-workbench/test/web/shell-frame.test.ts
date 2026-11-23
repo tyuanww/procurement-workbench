@@ -43,7 +43,7 @@ describe('视口探针', () => {
 describe('壳标记', () => {
   it('1279 的壳收起侧栏，菜单不用 inline-collapsed', () => {
     installMedia([shellQuery.max1279, shellQuery.atLeast768]);
-    const html = inRouter(h(Shell, { view: buyerView(), devLogin: false, roles: ['buyer'], navRoutes: NAV_ROUTES }));
+    const html = inRouter(h(Shell, { view: buyerView(), roles: ['buyer'], navRoutes: NAV_ROUTES }));
     expect(html).toContain('ant-layout-sider-collapsed');
     expect(html).not.toContain('ant-menu-inline-collapsed');
   });
@@ -77,7 +77,6 @@ describe('壳标记', () => {
     vi.stubGlobal('navigator', { platform });
     onTestFinished(() => { vi.unstubAllGlobals(); });
     const html = inRouter(h(ShellTop, {
-      devLogin: false,
       freshness: { headline: '数据', chips: [] },
       account: { entries: [] },
       onSearch: () => undefined,
@@ -87,6 +86,8 @@ describe('壳标记', () => {
     expect(html).toMatch(/z-index:10(?!\d)/);
     expect(html).toContain('position:sticky');
     expect(html).toMatch(/top:0(?!\d)/);
+    expect(html).toContain('SHINEMAGE 供应链工作台');
+    expect(html).not.toContain('开发登录');
     const searchButton = html.match(/<button\b[^>]*aria-label="搜索单号、品名、供应商"[^>]*>.*?<\/button>/)?.[0];
     expect(searchButton).toContain(`aria-keyshortcuts="${ariaKeys}"`);
     expect(searchButton?.match(/<span aria-hidden="true"[^>]*>([^<]*)<\/span>/)?.[1]).toBe(shortcut);
@@ -95,13 +96,13 @@ describe('壳标记', () => {
 
   it('内容区自成层叠上下文，表头再 sticky 也盖不住顶栏', () => {
     installMedia([shellQuery.min1440, shellQuery.atLeast768]);
-    const html = inRouter(h(Shell, { view: buyerView(), devLogin: false, roles: ['buyer'], navRoutes: NAV_ROUTES }));
+    const html = inRouter(h(Shell, { view: buyerView(), roles: ['buyer'], navRoutes: NAV_ROUTES }));
     expect(html).toContain('isolation:isolate');
   });
 
   it('手机只给 44 的菜单按钮，没有常驻侧栏，也不挤产品名', () => {
     installMedia([]);
-    const html = inRouter(h(Shell, { view: buyerView(), devLogin: false, roles: ['buyer'], navRoutes: NAV_ROUTES }));
+    const html = inRouter(h(Shell, { view: buyerView(), roles: ['buyer'], navRoutes: NAV_ROUTES }));
     expect(html).toContain('aria-label="打开菜单"');
     expect(html).toContain('44px');
     expect(html).toContain('grid-template-columns:auto minmax(0, 1fr) auto');
@@ -137,7 +138,6 @@ describe('页标题', () => {
 
   it('手机顶栏只留菜单、搜索和账号，不塞新鲜度和产品名', () => {
     const html = inRouter(h(ShellTop, {
-      devLogin: true,
       freshness: { headline: '数据', chips: [{ key: 'a', text: '采购订单总表 11-04 12:58', tooltip: '采购订单总表 2026-11-04 12:58', isStale: false }] },
       account: { entries: [] },
       onSearch: () => undefined,

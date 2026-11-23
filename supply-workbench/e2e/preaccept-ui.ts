@@ -151,6 +151,9 @@ async function open(role: Role, path: string, landing = path) {
   await devtools.send('Network.enable');
   await devtools.send('Runtime.enable');
   await page.goto(new URL(path, origin).href);
+  const submit = page.getByRole('button', { name: '登录', exact: true });
+  await submit.waitFor();
+  assert.equal(await submit.getAttribute('type'), 'submit');
   await page.getByLabel('用户').fill(users[role]);
   await page.getByLabel('访问码').fill(accessCode);
   const loggedIn = page.waitForResponse((response) =>
@@ -172,6 +175,9 @@ async function open(role: Role, path: string, landing = path) {
 }
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {
+  const header = page.getByRole('banner');
+  await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
+  assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
   const search = page.getByRole('button', { name: searchLabel });
   const mac = process.platform === 'darwin';
   const label = mac ? '⌘K' : 'Ctrl+K';

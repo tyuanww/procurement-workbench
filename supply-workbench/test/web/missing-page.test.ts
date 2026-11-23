@@ -89,7 +89,7 @@ function mount(pathname: string, roles: readonly Role[] | undefined): void {
 
 function screen(roles: readonly Role[] | undefined): ReactNode {
   const user = roles === undefined ? undefined : { id: entityId('user-1'), name: '用户', roles };
-  const page = node(antdApp(), { children: node(AppRoutes, { user, devLogin: false }) });
+  const page = node(antdApp(), { children: node(AppRoutes, { user }) });
   return node(react().Fragment, { children: [node(PathMark, null), node(Jump, null), page] });
 }
 
@@ -110,7 +110,7 @@ function go(navigate: unknown, pathname: string): void {
 }
 
 function markup(pathname: string, roles: readonly Role[]): string {
-  const page = node(AppRoutes, { user: { id: entityId('user-1'), name: '用户', roles }, devLogin: false });
+  const page = node(AppRoutes, { user: { id: entityId('user-1'), name: '用户', roles } });
   const html = server().renderToStaticMarkup(node(router().MemoryRouter, { initialEntries: [pathname], children: page }));
   if (typeof html !== 'string') throw new Error('没有渲染成字符串');
   return html;

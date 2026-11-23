@@ -61,7 +61,7 @@ function BootScreen(props: { readonly state: BootState }) {
       />
     );
   }
-  return <AppRoutes user={props.state.session} devLogin={props.state.session?.devLogin ?? false} />;
+  return <AppRoutes user={props.state.session} />;
 }
 
 async function loadSession(): Promise<BootState> {

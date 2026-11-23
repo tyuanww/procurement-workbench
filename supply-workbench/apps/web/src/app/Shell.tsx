@@ -25,7 +25,6 @@ import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-fram
 
 export function Shell(props: {
   readonly view: ShellView;
-  readonly devLogin: boolean;
   readonly roles: readonly Role[];
   readonly navRoutes: readonly NavRoute[];
 }) {
@@ -39,7 +38,6 @@ export function Shell(props: {
     <Layout style={{ minHeight: '100vh', background: bg.page }}>
       <ShellColumns
         view={props.view}
-        devLogin={props.devLogin}
         roles={props.roles}
         navRoutes={props.navRoutes}
         viewport={viewport}
@@ -55,7 +53,6 @@ export function Shell(props: {
 
 function ShellColumns(input: {
   readonly view: ShellView;
-  readonly devLogin: boolean;
   readonly roles: readonly Role[];
   readonly navRoutes: readonly NavRoute[];
   readonly viewport: ViewportSnapshot;
@@ -69,7 +66,6 @@ function ShellColumns(input: {
       <FrameSlot chrome={input.chrome} nav={input.view.nav} onToggle={input.onToggle} onClose={input.onClose} />
       <Layout style={{ background: bg.page }}>
         <ShellTop
-          devLogin={input.devLogin}
           freshness={input.view.freshness}
           account={input.view.account}
           onSearch={input.onSearch}

@@ -9,9 +9,9 @@ import { LoginPage } from '../pages/login/LoginPage.js';
 import { ReportPrintPage } from '../pages/reports/ReportPages.js';
 
 
-export function AppRoutes({ user, devLogin }: { readonly user: SessionUser | undefined; readonly devLogin: boolean }) {
+export function AppRoutes({ user }: { readonly user: SessionUser | undefined }) {
   if (user === undefined) return <SignedOutRoutes />;
-  return <SignedInRoutes user={user} devLogin={devLogin} />;
+  return <SignedInRoutes user={user} />;
 }
 
 function SignedOutRoutes() {
@@ -28,12 +28,12 @@ function SignInRequired() {
   return <Navigate to="/login" replace state={{ returnTo: pathname + search + hash }} />;
 }
 
-function SignedInRoutes({ user, devLogin }: { readonly user: SessionUser; readonly devLogin: boolean }) {
+function SignedInRoutes({ user }: { readonly user: SessionUser }) {
   return (
     <ActorRoles roles={user.roles}>
     <Routes>
       <Route path="/reports/:id/print" element={<PrintGate user={user} navRoutes={NAV_ROUTES} />} />
-      <Route element={<Workbench user={user} devLogin={devLogin} />}>
+      <Route element={<Workbench user={user} />}>
         <Route path="/" element={<Blank />} />
         <Route path="/login" element={<Blank />} />
         {PAGE_MANIFEST.map((entry) => (
@@ -46,7 +46,7 @@ function SignedInRoutes({ user, devLogin }: { readonly user: SessionUser; readon
   );
 }
 
-function Workbench({ user, devLogin }: { readonly user: SessionUser; readonly devLogin: boolean }) {
+function Workbench({ user }: { readonly user: SessionUser }) {
   const loaded = useShellLoad({ name: user.name, roles: user.roles });
   const view = shellView({
     user,
@@ -58,15 +58,15 @@ function Workbench({ user, devLogin }: { readonly user: SessionUser; readonly de
   });
   return (
     <ReviewQueueProvider refresh={loaded.refreshReviewQueue}>
-      <ShellGate view={view} roles={user.roles} devLogin={devLogin} navRoutes={NAV_ROUTES} />
+      <ShellGate view={view} roles={user.roles} navRoutes={NAV_ROUTES} />
     </ReviewQueueProvider>
   );
 }
 
-function ShellGate({ view, roles, devLogin, navRoutes }: { readonly view: ShellView; readonly roles: SessionUser['roles']; readonly devLogin: boolean; readonly navRoutes: readonly NavRoute[] }) {
+function ShellGate({ view, roles, navRoutes }: { readonly view: ShellView; readonly roles: SessionUser['roles']; readonly navRoutes: readonly NavRoute[] }) {
   const location = useLocation();
   if (isHomeGate(location.pathname)) return <HomeGate home={view.home} />;
-  return <Shell view={view} devLogin={devLogin} roles={roles} navRoutes={navRoutes} />;
+  return <Shell view={view} roles={roles} navRoutes={navRoutes} />;
 }
 
 function PrintGate({ user, navRoutes }: { readonly user: SessionUser; readonly navRoutes: readonly NavRoute[] }) {

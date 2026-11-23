@@ -38,7 +38,6 @@ function render(pathname: string, roles: readonly Role[]): string {
   if (!isCreator(react) || !isRenderer(server) || !isRouter(router)) throw new Error('web 渲染模块不齐');
   const page = react.createElement(AppRoutes, {
     user: { id: entityId('user-1'), name: '用户', roles },
-    devLogin: false,
   });
   const html = server.renderToStaticMarkup(react.createElement(router.MemoryRouter, { initialEntries: [pathname], children: page }));
   if (typeof html !== 'string') throw new Error('没有渲染成字符串');

@@ -1,4 +1,4 @@
-import { Button, ConfigProvider, Drawer, Layout, Menu, Tag, Typography } from 'antd';
+import { Button, ConfigProvider, Drawer, Layout, Menu, Typography } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation } from 'react-router';
@@ -147,7 +147,6 @@ export function ShellSider(input: {
 }
 
 export function ShellTop(input: {
-  readonly devLogin: boolean;
   readonly freshness: ShellView['freshness'];
   readonly account: ShellView['account'];
   readonly onSearch: () => void;
@@ -157,7 +156,7 @@ export function ShellTop(input: {
   const isPhone = input.menuButton !== null;
   return (
     <Layout.Header style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
-      <HeaderStart devLogin={input.devLogin} menuButton={input.menuButton} />
+      <HeaderStart menuButton={input.menuButton} />
       <SearchButton onSearch={input.onSearch} />
       <div style={headerClusterStyle({ edge: 'end' })}>
         {isPhone ? null : <FreshnessLink freshness={input.freshness} />}
@@ -229,11 +228,10 @@ function CollapseButton(input: {
   );
 }
 
-function HeaderStart(input: { readonly devLogin: boolean; readonly menuButton: MenuButton | null }) {
+function HeaderStart(input: { readonly menuButton: MenuButton | null }) {
   if (input.menuButton !== null) return <div style={headerClusterStyle({ edge: 'start' })}><HeaderMenuButton button={input.menuButton} /></div>;
   return (
     <div style={headerClusterStyle({ edge: 'start' })}>
-      {input.devLogin ? <Tag>开发登录</Tag> : null}
       <Typography.Text style={headerTitleStyle()}>SHINEMAGE 供应链工作台</Typography.Text>
     </div>
   );
