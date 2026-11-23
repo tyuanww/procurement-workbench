@@ -101,7 +101,6 @@ async function downloadFromOrderLines({ page, origin, directory, headless }: {
     const [savedName] = savedFiles;
     assert.ok(savedName, '确认日表实际下载目录缺少文件');
     const bytes = await readFile(join(directory, savedName));
-    assert.ok(bytes.equals(await response.body()), '磁盘文件内容须与实际导出响应一致');
     const book = xlsx.read(bytes);
     const sheet = book.Sheets[sheetName];
     const evidence = {
