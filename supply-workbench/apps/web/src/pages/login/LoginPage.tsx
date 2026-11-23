@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Flex, Form, Input, Result, Skeleton, Typography } from 'antd';
-import { AuthModeSchema, SessionUserSchema } from '@sw/contracts';
+import { Alert, Button, Card, Flex, Form, Input, Result, Skeleton, Typography } from 'antd';
+import { AuthModeSchema, SessionUserSchema, type DevLoginRequest } from '@sw/contracts';
 import { useLocation } from 'react-router';
 import { apiGet, apiSend } from '../../shared/api/client.js';
 import { usePageTitle } from '../../shared/ui/page.js';
-import { bg, brand } from '../../theme/tokens.js';
+import { bg, brand, space } from '../../theme/tokens.js';
 
 export function LoginPage() {
   const returnTo = loginDestination(useLocation().state);
   usePageTitle('登录');
-  const [message, setMessage] = useState('');
   const [mode, setMode] = useState<'loading' | 'dev' | 'feishu' | 'error'>('loading');
   useEffect(() => {
     void apiGet('/api/v1/meta/auth', AuthModeSchema).then((value) => setMode(value.mode)).catch(() => setMode('error'));
@@ -22,36 +21,57 @@ export function LoginPage() {
         </Typography.Title>
         {mode === 'loading' ? <Skeleton active paragraph={{ rows: 4 }} /> : null}
         {mode === 'error' ? <Result status="error" title="无法读取登录配置" subTitle="请联系管理员检查服务配置。" /> : null}
-        {mode === 'dev' ? <DevLoginForm onMessage={setMessage} returnTo={returnTo} /> : null}
+        {mode === 'dev' ? <AccessCodeLoginForm returnTo={returnTo} /> : null}
         {mode === 'feishu' ? <>
           <Typography.Paragraph type="secondary">使用企业飞书账号登录。</Typography.Paragraph>
           <Button type="primary" href={feishuStartHref(returnTo)} block>
             使用飞书登录
           </Button>
         </> : null}
-        {message === '' ? null : (
-          <Typography.Paragraph type="danger">{message}</Typography.Paragraph>
-        )}
       </Card>
     </Flex>
   );
 }
 
-function DevLoginForm({ onMessage, returnTo }: { readonly onMessage: (value: string) => void; readonly returnTo: string }) {
-  return <Form
+function AccessCodeLoginForm({ returnTo }: { readonly returnTo: string }) {
+  const [status, setStatus] = useState<'ready' | 'submitting' | 'failed'>('ready');
+
+  async function submit(credentials: DevLoginRequest): Promise<void> {
+    if (status === 'submitting') return;
+    setStatus('submitting');
+    try {
+      await apiSend({
+        path: '/api/v1/auth/dev/login',
+        method: 'POST',
+        body: credentials,
+        schema: SessionUserSchema,
+      });
+      window.location.replace(returnTo);
+    } catch {
+      setStatus('failed');
+    }
+  }
+
+  return <Form<DevLoginRequest>
     layout="vertical"
-    onFinish={(values: { readonly userId?: string; readonly accessCode?: string }) => {
-      void login({ userId: values.userId ?? '', accessCode: values.accessCode ?? '', returnTo }).then(onMessage);
+    scrollToFirstError={{ focus: true }}
+    validateTrigger={[]}
+    onFinish={(credentials) => { void submit(credentials); }}
+    onValuesChange={() => {
+      if (status === 'failed') setStatus('ready');
     }}
   >
-    <Form.Item name="userId" label="用户" rules={[{ required: true, message: '填写用户' }]}>
+    {status === 'failed' ? (
+      <Alert type="error" showIcon title="登录失败。请核对用户和访问码。" style={{ marginBottom: space[3] }} />
+    ) : null}
+    <Form.Item<DevLoginRequest> name="userId" label="用户" rules={[{ required: true, message: '请填写用户' }]}>
       <Input />
     </Form.Item>
-    <Form.Item name="accessCode" label="访问码" rules={[{ required: true, message: '填写访问码' }]}>
+    <Form.Item<DevLoginRequest> name="accessCode" label="访问码" rules={[{ required: true, message: '请填写访问码' }]}>
       <Input.Password />
     </Form.Item>
-    <Button type="primary" htmlType="submit" block>
-      开发登录
+    <Button autoInsertSpace={false} type="primary" htmlType="submit" loading={status === 'submitting'} block>
+      登录
     </Button>
   </Form>;
 }
@@ -69,19 +89,4 @@ function loginDestination(state: unknown): string {
 function feishuStartHref(returnTo: string): string {
   const start = '/api/v1/auth/feishu/start';
   return returnTo === '/' ? start : `${start}?${new URLSearchParams({ returnTo })}`;
-}
-
-async function login({ userId, accessCode, returnTo }: { readonly userId: string; readonly accessCode: string; readonly returnTo: string }): Promise<string> {
-  try {
-    await apiSend({
-      path: '/api/v1/auth/dev/login',
-      method: 'POST',
-      body: { userId, accessCode },
-      schema: SessionUserSchema,
-    });
-    window.location.replace(returnTo);
-    return '';
-  } catch {
-    return '登录失败。请核对用户和访问码。';
-  }
 }
