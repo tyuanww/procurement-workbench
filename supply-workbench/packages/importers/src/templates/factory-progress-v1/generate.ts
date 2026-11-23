@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { writeXlsx } from '../../workbook/write.js';
 import { SHEETS, type ColumnSpec, type SheetSpec } from './spec/index.js';
 
 const DEMAND_TITLE = '09月排产包材原料需求表';
@@ -11,7 +12,7 @@ export function generateBlankTemplate(): Uint8Array {
   for (const spec of Object.values(SHEETS)) {
     XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(sheetRows(spec)), titleOf(spec));
   }
-  return toBytes(XLSX.write(book, { type: 'array', bookType: 'xlsx' }));
+  return writeXlsx(book);
 }
 
 function sheetRows(spec: SheetSpec): string[][] {
@@ -55,10 +56,4 @@ function isDateColumn(name: string): boolean {
 
 function isQtyColumn(name: string): boolean {
   return name.includes('数量') || name.includes('用量') || name.includes('需求量');
-}
-
-function toBytes(value: unknown): Uint8Array {
-  if (value instanceof Uint8Array) return value;
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  throw new Error('空白模板没有写成字节');
 }

@@ -1,3 +1,5 @@
+export const PO_MASTER_SHEET_NAME = '采购订单总表';
+
 /** 表头去掉空白和换行后必须正好有这 17 列，顺序不限。 */
 export const REQUIRED_COLUMNS = [
   'OA需求编号',

@@ -5,7 +5,10 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import { devAuth } from '@sw/auth';
 import { ImportBatchSummarySchema, ProcurementPreviewSelectionSchema } from '@sw/contracts';
+import { readXlsx } from '@sw/importers';
 import { createDb, importBatchRepository, importQueries, migrate, seed, userDirectory, type SqlExec } from '@sw/persistence';
+import { OPTIONAL_COLUMNS, REQUIRED_COLUMNS } from '../../../packages/importers/src/templates/po-master-v1/columns.js';
+import { template as poMaster } from '../../../packages/importers/src/templates/po-master-v1/index.js';
 import { composeImports, importTriggers } from '../src/composition/imports.js';
 import { buildHttpApp } from '../src/http/app.js';
 import { assertUpload, registerImportRoutes } from '../src/http/imports/routes.js';
@@ -52,6 +55,39 @@ it('上传接口拒绝错误类型，管理层上传返回 403', async () => {
   expect(template.statusCode).toBe(200);
   expect(template.rawPayload[0]).toBe(0x50);
   await opened.close();
+});
+
+it('采购可下载能识别且无数据行的采购订单总表，管理层与未登录用户无权下载', async () => {
+  const opened = await openHttp();
+  try {
+    const url = '/api/v1/templates/po-master-v1.xlsx';
+    const guest = await opened.app.inject({ method: 'GET', url });
+    expect(guest.statusCode).toBe(401);
+    const manager = await loginAs(opened.app, 'manager');
+    const denied = await opened.app.inject({ method: 'GET', url, headers: { cookie: manager } });
+    expect(denied.statusCode).toBe(403);
+    const buyer = await loginAs(opened.app, 'buyer');
+    const file = await opened.app.inject({ method: 'GET', url, headers: { cookie: buyer } });
+    expect(file.statusCode).toBe(200);
+    expect(file.headers).toMatchObject({
+      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'content-disposition': 'attachment; filename="po-master-v1.xlsx"',
+    });
+    const workbook = readXlsx({ bytes: file.rawPayload, fileName: 'po-master-v1.xlsx' });
+    expect(workbook.sheets.map((sheet) => sheet.name)).toEqual(['采购订单总表', '说明']);
+    const [master] = workbook.sheets;
+    expect(master?.rowCount).toBe(1);
+    const columns = [...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS];
+    expect(columns.map((_, index) => master?.cell(1, index + 1)?.text)).toEqual(columns);
+    expect(master?.cell(1, columns.length + 1)).toBeNull();
+    expect(poMaster.detect(workbook).score).toBe(100);
+    expect(poMaster.parse(workbook, { factoryPartyId: null, uploadedAt: '2026-11-23T00:00:00.000Z' })).toMatchObject({
+      coverage: 'full_snapshot',
+      rows: [],
+    });
+  } finally {
+    await opened.close();
+  }
 });
 
 it.each(['误标', '截断'])('采购上传%s的 XLSX 时收到换文件提示', async (kind) => {

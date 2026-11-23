@@ -8,7 +8,7 @@ export { makeGetImportBatch } from './use-cases/get-import-batch.js';
 export { makeGetProcurementPreview } from './use-cases/get-procurement-preview.js';
 export { makeListImportBatches } from './use-cases/list-import-batches.js';
 export { makeListImportRows } from './use-cases/list-import-rows.js';
-export { makeGetFactoryTemplate } from './use-cases/get-factory-template.js';
+export { makeGetImportTemplate } from './use-cases/get-import-template.js';
 export type * from './boundary.js';
 export type { ProcurementFact, ProcurementReviewReason, ProcurementPreviewSelection, ProcurementSource, ProcurementCellSource, ProcurementOaRef } from '../ports/procurement-preview.js';
 export type { ProcurementLineDetail } from '../ports/procurement-repository.js';

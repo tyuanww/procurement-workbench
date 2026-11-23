@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
+import type { GetImportTemplate } from '@sw/application';
 import { DetectResponseSchema, ImportActionSchema, ImportBatchSummarySchema, ImportDecisionsRequestSchema, ImportStatusSchema, IssueCodeSchema, ProcurementPreviewSelectionSchema, StartImportRequestSchema, TemplateIdSchema } from '@sw/contracts';
 import { z } from 'zod';
 import { HttpError } from '../plugins/errors.js';
@@ -41,7 +42,8 @@ export type ImportApi = {
   procurementPreview(input: { readonly importBatchId: string } & z.infer<typeof ProcurementPreviewQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
   list(input: z.infer<typeof ListQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
   rows(input: { readonly importBatchId: string } & z.infer<typeof RowsQuery>, actor: ReturnType<typeof requireActor>): Promise<unknown>;
-  template(actor: ReturnType<typeof requireActor>): Promise<{ readonly bytes: Uint8Array; readonly fileName: string }>;
+  template: (actor: ReturnType<typeof requireActor>) => ReturnType<GetImportTemplate>;
+  poMasterTemplate: ImportApi['template'];
 };
 
 export function registerImportRoutes(app: FastifyInstance, api: ImportApi): void {
@@ -55,7 +57,12 @@ export function registerImportRoutes(app: FastifyInstance, api: ImportApi): void
     app.put('/api/v1/imports/:id/decisions', async (req) => afterDecide(api, req));
     app.post('/api/v1/imports/:id/commit', async (req) => afterCommand({ api, command: api.commit, req }));
     app.post('/api/v1/imports/:id/discard', async (req) => afterCommand({ api, command: api.discard, req }));
-    app.get('/api/v1/templates/factory-progress-v1.xlsx', async (req, reply) => sendTemplate({ api, req, reply }));
+    app.get('/api/v1/templates/factory-progress-v1.xlsx', async (req, reply) => sendTemplate(reply, (await api.template(requireActor(req))).bytes));
+    app.get('/api/v1/templates/po-master-v1.xlsx', async (req, reply) => {
+      const file = await api.poMasterTemplate(requireActor(req));
+      reply.header('content-disposition', `attachment; filename="${file.fileName}"`);
+      return sendTemplate(reply, file.bytes);
+    });
   });
 }
 
@@ -107,9 +114,8 @@ async function afterCommand({ api, command, req }: { readonly api: ImportApi; re
   return wire(ImportBatchSummarySchema, await api.get({ importBatchId }, actor));
 }
 
-async function sendTemplate({ api, req, reply }: { readonly api: ImportApi; readonly req: FastifyRequest; readonly reply: FastifyReply }) {
-  const file = await api.template(requireActor(req));
-  return reply.header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(file.bytes));
+function sendTemplate(reply: FastifyReply, bytes: Uint8Array) {
+  return reply.header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(bytes));
 }
 
 function idOf(req: FastifyRequest): string {

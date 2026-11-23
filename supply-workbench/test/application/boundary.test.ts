@@ -27,7 +27,7 @@ it('各能力导出的用例工厂和 08 第 9 节一致', () => {
       'makeDetectImportFile',
       'makeDiscardImport',
       'makeDiscardStaleImports',
-      'makeGetFactoryTemplate',
+      'makeGetImportTemplate',
       'makeGetImportBatch',
       'makeGetProcurementPreview',
       'makeListImportBatches',

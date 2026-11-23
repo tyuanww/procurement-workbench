@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkManagementMeeting, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
+import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
 
 const workbook = new URL('../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
@@ -111,6 +112,7 @@ async function procurementAcceptance(): Promise<void> {
   const queueReads = result.network.filter((row) => row.path === queuePath);
   assert.ok(queueReads.length > 0 && queueReads.every(({ role, status }) => role === 'reviewer' && status === 200));
   result.checks.reviewQueue = { accessibleName: '主数据', describedCount: visibleCount, reads: queueReads.length };
+  result.checks.poMasterTemplate = await checkPoMasterTemplate({ page: buyer, origin, out, xlsx });
 }
 
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {

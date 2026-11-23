@@ -1,5 +1,5 @@
 import type { SheetLike, WorkbookLike } from '../../../../application/src/ports/workbook-reader.js';
-import { OPTIONAL_COLUMNS, REQUIRED_COLUMNS, compactHeader } from './columns.js';
+import { OPTIONAL_COLUMNS, PO_MASTER_SHEET_NAME, REQUIRED_COLUMNS, compactHeader } from './columns.js';
 
 const HEADER_SCAN = 40;
 const BLANK_RUN = 3;
@@ -13,7 +13,7 @@ export type PoHeader = {
 };
 
 export function masterSheet(book: WorkbookLike): SheetLike | undefined {
-  return book.sheets.find((sheet) => sheet.name.trim() === '采购订单总表') ?? book.sheets[0];
+  return book.sheets.find((sheet) => sheet.name.trim() === PO_MASTER_SHEET_NAME) ?? book.sheets[0];
 }
 
 export function readHeader(sheet: SheetLike): PoHeader {

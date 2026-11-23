@@ -61,5 +61,5 @@ export type ListImportBatches = (input: ImportListQuery, actor: Actor) => Promis
 export type ListImportRowsDeps = { readonly imports: ImportQueries };
 export type ListImportRows = (input: ImportRowsQuery, actor: Actor) => Promise<ListResult<ImportRowView>>;
 
-export type GetFactoryTemplateDeps = { readonly blankFactoryTemplate: () => Uint8Array };
-export type GetFactoryTemplate = (input: NoInput, actor: Actor) => Promise<FileBytes>;
+export type GetImportTemplateDeps = { readonly generate: () => Uint8Array; readonly fileName: string };
+export type GetImportTemplate = (input: NoInput, actor: Actor) => Promise<FileBytes>;
