@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkManagementMeeting, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
@@ -36,7 +37,8 @@ const warehouse = '0199f0a0-0000-7000-8000-000000000010';
 const queuePath = '/api/v1/master/review-queue/counts';
 const loginPath = '/api/v1/auth/dev/login';
 const searchLabel = '搜索单号、品名、供应商';
-const browser = await chromium.launch({ headless: true, channel });
+const headless = process.env.ACCEPT_HEADLESS !== '0';
+const browser = await chromium.launch({ headless, channel });
 type Role = keyof typeof users;
 type BrowserElement = Element;
 type ResponseRecord = { readonly role: Role; readonly session: number; readonly path: string; readonly status: number; readonly signedIn: boolean };
@@ -74,7 +76,7 @@ console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(resu
 
 async function procurementAcceptance(): Promise<void> {
   seedChaseSample();
-  const { page: buyer, entry } = await open('buyer', '/', '/today');
+  const { page: buyer, entry, devtools: buyerDevtools } = await open('buyer', '/', '/today');
   await checkShell(buyer, entry);
   await buyer.getByRole('heading', { name: '今日', exact: true }).waitFor();
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
@@ -113,6 +115,7 @@ async function procurementAcceptance(): Promise<void> {
   assert.ok(queueReads.length > 0 && queueReads.every(({ role, status }) => role === 'reviewer' && status === 200));
   result.checks.reviewQueue = { accessibleName: '主数据', describedCount: visibleCount, reads: queueReads.length };
   result.checks.poMasterTemplate = await checkPoMasterTemplate({ page: buyer, origin, out, xlsx });
+  result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse });
 }
 
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {
