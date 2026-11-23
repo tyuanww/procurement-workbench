@@ -1,11 +1,11 @@
-import { importCommitExecutors, templates, workbookReader } from '@sw/importers';
+import { generateBlankPoMasterTemplate, importCommitExecutors, templates, workbookReader } from '@sw/importers';
 import { bindCommitExecutors } from '../../../../packages/application/src/imports/commit/index.js';
 import {
   makeCommitImport,
   makeDetectImportFile,
   makeDiscardImport,
-  makeGetFactoryTemplate,
   makeGetImportBatch,
+  makeGetImportTemplate,
   makeGetProcurementPreview,
   makeIdempotentImportCommand,
   makeListImportBatches,
@@ -83,7 +83,8 @@ export function composeImports(input: { readonly db: AppDatabase; readonly uploa
     procurementPreview: makeGetProcurementPreview({ imports: queries }),
     list: makeListImportBatches({ imports: queries }),
     rows: makeListImportRows({ imports: queries }),
-    template: (actor) => makeGetFactoryTemplate({ blankFactoryTemplate: generateBlankTemplate })({}, actor),
+    template: (actor) => makeGetImportTemplate({ generate: generateBlankTemplate, fileName: 'factory-progress-v1.xlsx' })({}, actor),
+    poMasterTemplate: (actor) => makeGetImportTemplate({ generate: generateBlankPoMasterTemplate, fileName: 'po-master-v1.xlsx' })({}, actor),
   };
 }
 
