@@ -99,6 +99,12 @@ describe('已修改状态', () => {
     expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=all&importBatchId=batch%2Ba%3Db');
   });
 
+  it('切换到明确保存了另一批次的视图时，按保存的批次查询', () => {
+    const view = { id: 'saved-b', label: 'B 批订单', query: 'lane=all&importBatchId=batch-b' };
+    const address = viewAddress({ search: 'lane=all&importBatchId=batch-a', view });
+    expect(new URLSearchParams(readDesk(address.toString()).requestQuery).get('importBatchId')).toBe('batch-b');
+  });
+
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {
     const view = presetViews().find((item) => item.id === 'yinong');
     if (view === undefined) throw new Error('缺少宜侬在途');
