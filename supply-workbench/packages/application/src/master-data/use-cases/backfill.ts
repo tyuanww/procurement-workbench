@@ -2,11 +2,10 @@ import type { EntityId } from '@sw/domain';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 
 export async function backfillSupplier(tx: UnitOfWorkStores, input: { readonly normName: string; readonly partyId: EntityId; readonly at: string }): Promise<string[]> {
-  const orders = await tx.purchaseOrders.listMissingSupplier(input.normName);
+  const orderIds = await tx.purchaseOrders.backfillMissingSupplier(input);
   const lineIds: string[] = [];
-  for (const order of orders) {
-    await tx.purchaseOrders.save({ ...order, supplierPartyId: input.partyId, updatedAt: input.at });
-    const lines = await tx.orderLines.listByPurchaseOrder(order.id);
+  for (const orderId of orderIds) {
+    const lines = await tx.orderLines.listByPurchaseOrder(orderId);
     for (const line of lines) lineIds.push(line.id);
   }
   return lineIds;

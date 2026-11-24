@@ -78,11 +78,14 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
 
   await confirmAction(admin, '重跑排产关联', '确认重跑', 'relink-schedule', /^已重跑排产关联.*排产格 1 条/);
   await confirmAction(admin, '重跑工厂关联', '确认重跑', 'relink', /^已重跑工厂关联/);
-  await confirmAction(admin, '回填供应商主体', '确认回填', 'backfill-suppliers', /^已回填 \d+ 条采购单/);
+  const backfill = (updated: number) => confirmAction(admin, '回填供应商主体', '确认回填', 'backfill-suppliers', new RegExp(`^已回填 ${updated} 条采购单`));
+  assert.deepEqual(await backfill(1), { updated: 1 });
+  assert.equal(queryAcceptanceDb(`SELECT supplier_party_id FROM purchase_orders WHERE id = 'sc06-backfill-po';`).trim(), 'sc06-supplier');
+  assert.deepEqual(await backfill(0), { updated: 0 });
   await adminPanel.getByText('共 20 条', { exact: true }).waitFor();
   await adminPanel.getByLabel('筛选本页表名或行号', { exact: true }).fill('');
   await admin.screenshot({ path: join(out, 'factory-link-board.png'), animations: 'disabled' });
-  return { legacyPath, scopeTotals: [22, 21, 21], uniqueRows: keys.length, linked: linked.linkedOrderLineId, created: created.line.id, remaining: 20, bulkActions: 3 };
+  return { legacyPath, scopeTotals: [22, 21, 21], uniqueRows: keys.length, linked: linked.linkedOrderLineId, created: created.line.id, remaining: 20, bulkActions: 3, backfillUpdated: 1 };
 }
 
 async function goToNextPage(page: Page, scope: string): Promise<readonly string[]> {
@@ -112,20 +115,24 @@ async function post(page: Page, path: string, trigger: () => Promise<void>) {
 }
 
 async function confirmAction(page: Page, label: string, confirm: string, endpoint: string, notice: RegExp) {
-  await page.getByRole('button', { name: label, exact: true }).click();
+  await page.getByRole('button').filter({ has: page.getByText(label, { exact: true }) }).click();
   const prompt = page.locator('.ant-popconfirm').filter({ has: page.getByText(`确认${label}？`, { exact: true }) });
-  await post(page, `${factoryPath}/${endpoint}`, () => prompt.getByRole('button', { name: confirm, exact: true }).click());
+  const result = await post(page, `${factoryPath}/${endpoint}`, () => prompt.getByRole('button', { name: confirm, exact: true }).click());
   await prompt.waitFor({ state: 'hidden' });
   await page.getByText(notice).waitFor();
+  return result;
 }
 
 function seedFactoryRows(): void {
-  const { DATABASE_URL: database, PGBIN: pgBin, E2E_ALLOW_MUTATION: allowed } = process.env;
-  assert.equal(allowed, '1');
-  assert.ok(database && /^postgresql:\/\/sw_accept@127\.0\.0\.1:\d+\/sw_accept_[0-9a-f]+$/.test(database), '仅可使用浏览器验收临时库');
-  const executable = process.platform === 'win32' ? 'psql.exe' : 'psql';
-  execFileSync(pgBin === undefined ? executable : join(pgBin, executable), [database, '-X', '-v', 'ON_ERROR_STOP=1'], { input: `
+  queryAcceptanceDb(`
     BEGIN;
+    INSERT INTO parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse)
+    VALUES ('sc06-supplier', now(), now(), 'SC06 合成供应商', true, false, false);
+    INSERT INTO party_aliases (id, created_at, updated_at, raw_name, norm_name, party_id, status, seen_count, reviewed_by, reviewed_at)
+    VALUES ('sc06-alias', now(), now(), 'SC06 供应商别名', 'SC06 供应商别名', 'sc06-supplier', 'approved', 1,
+      '0199f0a0-0000-7000-8000-000000000001', now());
+    INSERT INTO purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_raw, lane)
+    VALUES ('sc06-backfill-po', now(), now(), 'SC06-PO', 'SC06-PO', 'OTHER', '{}', ' SC06 供应商别名 ', 'finished');
     INSERT INTO import_batches (id, created_at, updated_at, file_id, template, factory_party_id, status, source_key, superseded_at,
       file_meta, stats, decisions, created_by, committed_by, committed_at)
     SELECT 'sc06-' || phase, now(), now(), 'sc06-file-' || phase, 'factory-progress-v1', 'hz09-factory-a', 'committed', 'sc06-source',
@@ -148,5 +155,13 @@ function seedFactoryRows(): void {
     VALUES ('sc06-schedule', 'sc06-active', 'hz09-factory-a', 'SC06 排产', 1, '{"day":"2026-11-20","qty":10}',
       'sc06-schedule-fp', 'unlinked', now(), now(), '2026-11-20', 10);
     COMMIT;
-  ` });
+  `);
+}
+
+function queryAcceptanceDb(input: string): string {
+  const { DATABASE_URL: database, PGBIN: pgBin, E2E_ALLOW_MUTATION: allowed } = process.env;
+  assert.equal(allowed, '1');
+  assert.ok(database && /^postgresql:\/\/sw_accept@127\.0\.0\.1:\d+\/sw_accept_[0-9a-f]+$/.test(database), '仅可使用浏览器验收临时库');
+  const executable = process.platform === 'win32' ? 'psql.exe' : 'psql';
+  return execFileSync(pgBin === undefined ? executable : join(pgBin, executable), [database, '-XqAt', '-v', 'ON_ERROR_STOP=1'], { input, encoding: 'utf8' });
 }

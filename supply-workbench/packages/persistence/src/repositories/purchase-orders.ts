@@ -1,6 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
-import { normalizeText, type Lane, type PoFormat, type PurchaseOrder } from '@sw/domain';
+import { normalizeText, type EntityId, type Lane, type PoFormat, type PurchaseOrder } from '@sw/domain';
 import { LANES, PO_FORMATS } from '@sw/domain';
 import type { PurchaseOrderRepository } from '../../../application/src/ports/purchase-order-repository.js';
 import type { AppDatabase } from '../client.js';
@@ -27,9 +27,19 @@ export function purchaseOrderRepository(db: AppDatabase): PurchaseOrderRepositor
       const rows = await db.select().from(purchaseOrders).where(and(isNull(purchaseOrders.poRaw), eq(purchaseOrders.poFormat, 'NONE'), eq(purchaseOrders.lane, lane)));
       return rows.map(purchaseOrderOfRow);
     },
-    async listMissingSupplier(normName) {
-      const rows = await db.select().from(purchaseOrders).where(isNull(purchaseOrders.supplierPartyId));
-      return rows.map(purchaseOrderOfRow).filter((row) => row.supplierRaw !== null && normalizeText(row.supplierRaw) === normName);
+    async backfillMissingSupplier({ normName, partyId, at }) {
+      const missing = isNull(purchaseOrders.supplierPartyId);
+      const candidates = await db.select({ id: purchaseOrders.id, supplierRaw: purchaseOrders.supplierRaw })
+        .from(purchaseOrders).where(missing).orderBy(purchaseOrders.id);
+      const updated: EntityId[] = [];
+      for (const { id, supplierRaw } of candidates) {
+        if (supplierRaw === null || normalizeText(supplierRaw) !== normName) continue;
+        const [row] = await db.update(purchaseOrders).set({ supplierPartyId: partyId, updatedAt: at })
+          .where(and(eq(purchaseOrders.id, id), eq(purchaseOrders.supplierRaw, supplierRaw), missing))
+          .returning();
+        if (row !== undefined) updated.push(entityId(row.id));
+      }
+      return updated;
     },
   };
 }

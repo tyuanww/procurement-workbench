@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { LatestNote } from '@sw/application';
 import type { AppDatabase } from '../../client.js';
 import { followUps } from '../../schema/orders.js';
@@ -16,7 +16,7 @@ export async function latestNotes(db: AppDatabase, orderLineIds: readonly string
   const rows = await db
     .select({ orderLineId: followUps.orderLineId, text: followUps.text, createdAt: followUps.createdAt, id: followUps.id })
     .from(followUps)
-    .where(and(eq(followUps.kind, 'note'), inArray(followUps.orderLineId, ids)));
+    .where(and(eq(followUps.kind, 'note'), isNull(followUps.batchId), inArray(followUps.orderLineId, ids)));
   return pickLatest(rows);
 }
 

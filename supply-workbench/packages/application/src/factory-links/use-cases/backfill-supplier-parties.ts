@@ -12,12 +12,8 @@ export const makeBackfillSupplierParties =
     let updated = 0;
     await deps.uow.run(async (tx) => {
       for (const alias of aliases) {
-        const partyId = entityId(alias.partyId);
-        const orders = await tx.purchaseOrders.listMissingSupplier(alias.normName);
-        for (const order of orders) {
-          await tx.purchaseOrders.save({ ...order, supplierPartyId: partyId, updatedAt: at });
-          updated += 1;
-        }
+        const orders = await tx.purchaseOrders.backfillMissingSupplier({ normName: alias.normName, partyId: entityId(alias.partyId), at });
+        updated += orders.length;
       }
     });
     return { updated };

@@ -7,7 +7,8 @@ import type { AppDatabase } from '../../client.js';
 import { orderLines, purchaseOrders } from '../../schema/orders.js';
 import { storeFilter } from '../store-progress/scope.js';
 import { storeProgressOf } from '../store-progress/rows.js';
-import { inTransitFactoryWhere, linkedFactoryWhere } from './line-factory-filter.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
+import { factoryPartyWhere, inTransitFactoryWhere } from './line-factory-filter.js';
 import { loadRelations, toRow } from './line-row.js';
 
 const PAGE_MAX = 200;
@@ -21,18 +22,20 @@ type Line = typeof orderLines.$inferSelect;
 
 export async function listLines(read: Read, query: LinesQuery): Promise<ListResult<OrderLineRow>> {
   const sorts = sortsOf(query.sort);
-  const where = await whereForRead({ db: read.db, query, today: read.clock.today() });
-  if (query.pageSize === undefined) return unpaged({ read, where, sorts, store: query.store });
+  const activeIds = await activeFactoryBatchIds(read.db);
+  const where = await whereForRead({ db: read.db, query, today: read.clock.today(), activeIds });
+  if (query.pageSize === undefined) return unpaged({ read, where, sorts, store: query.store, activeIds });
   const page = query.page ?? 1;
   assertPage(page, query.pageSize);
   const total = await countLines(read.db, where);
   const lines = await selectLines(read.db, { where, sorts, page: { limit: query.pageSize, offset: (page - 1) * query.pageSize } });
-  return { items: await rowsOf(read, { lines, store: query.store }), page: { page, pageSize: query.pageSize, total } };
+  return { items: await rowsOf(read, { lines, store: query.store, activeIds }), page: { page, pageSize: query.pageSize, total } };
 }
 
 export async function summarizeLines(read: Read, query: LinesQuery): Promise<LineSummary> {
   const today = read.clock.today();
-  const where = await whereForRead({ db: read.db, query, today });
+  const activeIds = query.factoryPartyId === undefined ? new Set<string>() : await activeFactoryBatchIds(read.db);
+  const where = await whereForRead({ db: read.db, query, today, activeIds });
   const [total, stages, counts] = await Promise.all([countLines(read.db, where), stageCounts(read.db, where), summaryCounts({ db: read.db, where, today })]);
   return { total, ...counts, stages };
 }
@@ -55,14 +58,14 @@ async function summaryCounts(input: { readonly db: AppDatabase; readonly where: 
   return { overdue: countOf(row.overdue), dueToday: countOf(row.dueToday), missingDate: countOf(row.missingDate) };
 }
 
-async function unpaged({ read, where, sorts, store }: { readonly read: Read; readonly where: SQL | undefined; readonly sorts: readonly Sort[]; readonly store: LinesQuery['store'] }): Promise<ListResult<OrderLineRow>> {
+async function unpaged({ read, where, sorts, store, activeIds }: { readonly read: Read; readonly where: SQL | undefined; readonly sorts: readonly Sort[]; readonly store: LinesQuery['store']; readonly activeIds: ReadonlySet<string> }): Promise<ListResult<OrderLineRow>> {
   const lines = await selectLines(read.db, { where, sorts });
-  return { items: await rowsOf(read, { lines, store }), page: { page: 1, pageSize: lines.length, total: lines.length } };
+  return { items: await rowsOf(read, { lines, store, activeIds }), page: { page: 1, pageSize: lines.length, total: lines.length } };
 }
 
-async function rowsOf(read: Read, { lines, store }: { readonly lines: readonly Line[]; readonly store: LinesQuery['store'] }): Promise<OrderLineRow[]> {
+async function rowsOf(read: Read, { lines, store, activeIds }: { readonly lines: readonly Line[]; readonly store: LinesQuery['store']; readonly activeIds: ReadonlySet<string> }): Promise<OrderLineRow[]> {
   const [world, progress] = await Promise.all([
-    loadRelations(read.db, lines),
+    loadRelations(read.db, { lines, activeFactoryBatchIds: activeIds }),
     store === undefined ? undefined : storeProgressOf(read.db, lines.filter((line) => line.lane === 'finished').map((line) => line.id)),
   ]);
   return lines.map((line) => {
@@ -98,10 +101,10 @@ function countOf(value: unknown): number {
   throw new Error('订单行汇总计数失败');
 }
 
-async function whereForRead({ db, query, today }: { readonly db: AppDatabase; readonly query: LinesQuery; readonly today: LocalDate }): Promise<SQL | undefined> {
+async function whereForRead({ db, query, today, activeIds }: { readonly db: AppDatabase; readonly query: LinesQuery; readonly today: LocalDate; readonly activeIds: ReadonlySet<string> }): Promise<SQL | undefined> {
   const where = and(
     whereOf({ query, today, actorId: actorUserId(query) }),
-    query.factoryPartyId === undefined ? undefined : linkedFactoryWhere(db, query.factoryPartyId),
+    query.factoryPartyId === undefined ? undefined : factoryPartyWhere({ db, partyId: query.factoryPartyId, activeFactoryBatchIds: activeIds }),
   );
   return query.inTransitFactory === undefined ? where : inTransitFactoryWhere({ db, factory: query.inTransitFactory, where });
 }

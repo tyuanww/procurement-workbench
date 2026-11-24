@@ -334,15 +334,34 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   const denied = await manager.request.post(followUps.href, { data: { orderLineId: lineId, kind: 'note', text: '管理账号不可写' } });
   assert.equal(denied.status(), 403);
 
-  await page.goto(new URL('/lines/hz09-line-250?focusBatch=hz09-batch-250', origin).href);
+  const batchedLineId = 'hz09-line-250';
+  const batchId = 'hz09-batch-250';
+  const batchedOrder = new URL(`/lines/${batchedLineId}?focusBatch=${batchId}`, origin);
+  await page.goto(batchedOrder.href);
   const promise = '合成批次工厂承诺';
   await page.getByRole('textbox', { name: '工厂承诺', exact: true }).fill(promise);
   assert.deepEqual(await recordOrderFollowUp(page, page.getByRole('button', { name: '记工厂承诺', exact: true })), {
-    orderLineId: 'hz09-line-250', batchId: 'hz09-batch-250', kind: 'promise', text: promise,
+    orderLineId: batchedLineId, batchId, kind: 'promise', text: promise,
   });
   await page.getByText(promise, { exact: true }).waitFor();
   await note.getByText('暂无订单行备注', { exact: true }).waitFor();
-  return { po: finishedPo, initialBatches: 0, oldNote, newNote, mobile: true, restoredFilter: progress.search, isolatedDraft: true, managerWrite: denied.status(), promise };
+  const batchedLineNote = '整笔合成订单等待确认';
+  await textbox.fill(batchedLineNote);
+  await recordOrderFollowUp(page, note.getByRole('button', { name: '保存备注', exact: true }));
+  await note.getByText(batchedLineNote, { exact: true }).waitFor();
+
+  const batchNote = '合成批次等待承运回复';
+  await page.goto(new URL(`/today?drawer=batch%3A${batchId}&draft=note`, origin).href);
+  const followUp = page.getByRole('dialog', { name: '合成待催 250', exact: true });
+  await select(followUp.getByRole('combobox', { name: '类型', exact: true }), page, '备注');
+  await followUp.getByLabel('内容', { exact: true }).fill(batchNote);
+  assert.deepEqual(await recordOrderFollowUp(page, followUp.getByRole('button', { name: /^确\s*认$/ })), {
+    orderLineId: batchedLineId, batchId, kind: 'note', text: batchNote,
+  });
+  await page.goto(batchedOrder.href);
+  await note.getByText(batchedLineNote, { exact: true }).waitFor();
+  await page.getByRole('listitem').filter({ hasText: batchNote }).waitFor();
+  return { po: finishedPo, initialBatches: 0, oldNote, newNote, mobile: true, restoredFilter: progress.search, isolatedDraft: true, managerWrite: denied.status(), promise, batchedLineNote, batchNote };
 }
 
 async function recordOrderFollowUp(page: Page, button: Locator): Promise<unknown> {

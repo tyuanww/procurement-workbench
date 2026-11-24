@@ -1,7 +1,9 @@
-import { and, eq, inArray, isNull, lt, notExists, sql } from 'drizzle-orm';
-import { bomLines, factoryShipmentRows, lineFactoryLinks, orderLines, partyAliases, products } from '../../schema/index.js';
+import { and, eq, inArray, isNotNull, isNull, lt, notExists, sql } from 'drizzle-orm';
+import { bomLines, factoryShipmentRows, orderLines, partyAliases, products } from '../../schema/index.js';
 import { exceptions, ownerAssignments } from '../../schema/orders.js';
 import type { AppDatabase } from '../../client.js';
+import { effectiveFactoryLinks } from '../factory-links/line-association.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 
 export type BottleneckKey =
   | 'missing_owner'
@@ -23,9 +25,9 @@ export type BottleneckCategory = {
 export type BottleneckSummary = { readonly categories: readonly BottleneckCategory[] };
 
 const ACTIVE = ['no_batch', 'awaiting_date', 'awaiting_shipment', 'awaiting_receipt', 'partially_received'];
-const LINKED = ['linked', 'manual'];
 
 export async function bottleneckSummary(db: AppDatabase, today: string): Promise<BottleneckSummary> {
+  const factoryLinks = effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db) }).as('effective_factory_links');
   const [missingOwner, missingFactory, aliasPending, missingDate, exceptionOpen, aged, bomMissing, factoryUnlinked] = await Promise.all([
     countOf(db.select({ count: sql<number>`count(*)::int` }).from(orderLines).where(and(
       inArray(orderLines.stage, ACTIVE),
@@ -38,7 +40,7 @@ export async function bottleneckSummary(db: AppDatabase, today: string): Promise
     ))),
     countOf(db.select({ count: sql<number>`count(*)::int` }).from(orderLines).where(and(
       inArray(orderLines.stage, ACTIVE),
-      notExists(db.select({ one: sql`1` }).from(lineFactoryLinks).where(and(eq(lineFactoryLinks.orderLineId, orderLines.id), inArray(lineFactoryLinks.status, LINKED)))),
+      notExists(db.select({ one: sql`1` }).from(factoryLinks).where(and(eq(factoryLinks.orderLineId, orderLines.id), isNotNull(factoryLinks.factoryPartyId)))),
     ))),
     countOf(db.select({ count: sql<number>`count(*)::int` }).from(partyAliases).where(eq(partyAliases.status, 'pending'))),
     countOf(db.select({ count: sql<number>`count(*)::int` }).from(orderLines).where(eq(orderLines.stage, 'awaiting_date'))),

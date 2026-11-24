@@ -1,25 +1,25 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { normalizeText, type FactoryReportKind, type LineFactoryLinkSource, type LineFactoryLinkStatus, type LineFactoryMatchBasis } from '@sw/domain';
-import type { FactoryDiagnosticScope, FactoryLinkQueries, FactoryRowMatchRef, LineFactoryLinkView, OrderLineMatchRef, UnmatchedFactoryRowView } from '../../../../application/src/ports/factory-link-views.js';
+import type { FactoryLinkQueries, FactoryRowMatchRef, LineFactoryLinkView, OrderLineMatchRef } from '../../../../application/src/ports/factory-link-views.js';
 import type { AppDatabase } from '../../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { lineFactoryLinks, orderLines, purchaseOrders } from '../../schema/orders.js';
 import { parties, partyAliases } from '../../schema/platform.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
-import { listUnlinkedKeys } from '../master-data/unlinked.js';
+import { effectiveFactoryLinks, type EffectiveFactoryLink } from './line-association.js';
+import { activeFactoryBatchIds } from './snapshot-scope.js';
+import { listDiagnosticPage, listUnmatched } from './unmatched.js';
 
 const STATUSES: readonly LineFactoryLinkStatus[] = ['linked', 'unlinked', 'manual'];
 const SOURCES: readonly LineFactoryLinkSource[] = ['po_master', 'factory_progress', 'relink', 'manual'];
 const CONFIDENCES: readonly LineFactoryMatchBasis[] = ['po', 'item_code', 'barcode', 'column', 'manual', 'none'];
-
-type StoredFactoryRow = FactoryRowMatchRef & { readonly importBatchId: string };
 
 export function factoryLinkQueries(db: AppDatabase): FactoryLinkQueries {
   return {
     listOrderLineRefs: () => listOrderLineRefs(db),
     listFactoryRowRefs: () => listFactoryRowRefs(db),
     listActiveScheduleRefs: () => listActiveScheduleRefs(db),
-    listUnmatched: (scope) => listUnmatched(db, scope),
+    listUnmatched: (limit) => listUnmatched(db, limit),
+    listDiagnosticPage: (input) => listDiagnosticPage(db, input),
     getView: (orderLineId) => getView(db, orderLineId),
     countStates: () => countStates(db),
     listApprovedSupplierAliases: () => listApprovedSupplierAliases(db),
@@ -48,7 +48,7 @@ async function listOrderLineRefs(db: AppDatabase): Promise<readonly OrderLineMat
   });
 }
 
-async function listFactoryRowRefs(db: AppDatabase): Promise<readonly StoredFactoryRow[]> {
+async function listFactoryRowRefs(db: AppDatabase): Promise<readonly FactoryRowMatchRef[]> {
   const [shipments, transits, stocks, schedules, combos, supplied, demands] = await Promise.all([
     db.select().from(factoryShipmentRows),
     db.select().from(factoryInTransitRows),
@@ -58,7 +58,7 @@ async function listFactoryRowRefs(db: AppDatabase): Promise<readonly StoredFacto
     db.select().from(customerSuppliedReceiptRows),
     db.select().from(factoryMaterialDemandRows),
   ]);
-  const rows: StoredFactoryRow[] = [
+  const rows = [
     ...shipments.map((row) => refOf({ row, kind: 'shipment', poNorm: row.poNorm, poRaw: row.poRaw, itemCodeRaw: row.itemCodeRaw, barcodeRaw: null })),
     ...transits.map((row) => refOf({ row, kind: 'in_transit', poNorm: row.poNorm, poRaw: row.poRaw, itemCodeRaw: row.itemCodeRaw, barcodeRaw: row.barcodeRaw })),
     ...stocks.map((row) => refOf({ row, kind: 'stock', poNorm: normOf(row.poRaw), poRaw: row.poRaw, itemCodeRaw: row.itemCodeRaw, barcodeRaw: null })),
@@ -78,16 +78,15 @@ async function listActiveScheduleRefs(db: AppDatabase): Promise<readonly Factory
 }
 
 function refOf(input: {
-  readonly row: { readonly id: string; readonly importBatchId: string; readonly factoryPartyId: string; readonly linkStatus: string; readonly linkReason: string | null; readonly linkedOrderLineId: string | null };
+  readonly row: { readonly id: string; readonly factoryPartyId: string; readonly linkStatus: string; readonly linkReason: string | null; readonly linkedOrderLineId: string | null };
   readonly kind: FactoryReportKind;
   readonly poNorm: string | null;
   readonly poRaw: string | null;
   readonly itemCodeRaw: string | null;
   readonly barcodeRaw: string | null;
-}): StoredFactoryRow {
+}): FactoryRowMatchRef {
   return {
     rowId: input.row.id,
-    importBatchId: input.row.importBatchId,
     kind: input.kind,
     factoryPartyId: input.row.factoryPartyId,
     poNorm: poNormOf(input.poNorm),
@@ -102,71 +101,19 @@ function refOf(input: {
   };
 }
 
-async function listUnmatched(db: AppDatabase, scope?: FactoryDiagnosticScope): Promise<readonly UnmatchedFactoryRowView[]> {
-  const unmatched = (await listFactoryRowRefs(db))
-    .filter((row) => row.linkStatus !== 'linked' && row.linkStatus !== 'manual' && row.linkedOrderLineId === null);
-  const rows = scope === undefined ? unmatched : await scopedUnmatched(db, { rows: unmatched, scope });
-  return rows
-    .map((row) => {
-      const reason = row.linkReason ?? 'NO_CANDIDATE_LINE';
-      return {
-        rowId: row.rowId,
-        kind: row.kind,
-        factoryPartyId: row.factoryPartyId,
-        poRaw: row.poRaw,
-        itemCodeRaw: row.itemCodeRaw,
-        barcodeRaw: row.barcodeRaw,
-        reason,
-        suggestedAction: suggestedActionOf(reason),
-      };
-    });
-}
-
-async function scopedUnmatched(db: AppDatabase, { rows, scope }: {
-  readonly rows: readonly StoredFactoryRow[];
-  readonly scope: FactoryDiagnosticScope;
-}): Promise<readonly StoredFactoryRow[]> {
-  const activeIds = await activeFactoryBatchIds(db);
-  if (scope === 'historical') return rows.filter((row) => !activeIds.has(row.importBatchId));
-  const actionable = new Set((await listUnlinkedKeys(db, { activeBatchIds: [...activeIds] })).map(({ kind, id }) => `${kind}:${id}`));
-  return rows.filter((row) => activeIds.has(row.importBatchId) && !actionable.has(`${row.kind}:${row.rowId}`));
-}
-
 async function getView(db: AppDatabase, orderLineId: string): Promise<LineFactoryLinkView | undefined> {
-  const links = await db.select().from(lineFactoryLinks).where(eq(lineFactoryLinks.orderLineId, orderLineId));
-  const link = links[0];
-  if (link !== undefined) return viewOf({ row: link, factory: await factoryRef(db, link.factoryPartyId) });
-  return fallbackView(db, orderLineId);
-}
-
-async function fallbackView(db: AppDatabase, orderLineId: string): Promise<LineFactoryLinkView | undefined> {
-  const [shipments, transits, stocks] = await Promise.all([
-    db.select().from(factoryShipmentRows).where(eq(factoryShipmentRows.linkedOrderLineId, orderLineId)),
-    db.select().from(factoryInTransitRows).where(eq(factoryInTransitRows.linkedOrderLineId, orderLineId)),
-    db.select().from(factoryStockRows).where(eq(factoryStockRows.linkedOrderLineId, orderLineId)),
-  ]);
-  const row = shipments[0] ?? transits[0] ?? stocks[0];
-  if (row === undefined) return undefined;
-  return {
-    orderLineId,
-    factory: await factoryRef(db, row.factoryPartyId),
-    status: 'linked',
-    source: 'factory_progress',
-    confidence: 'none',
-    reason: null,
-    linkedAt: new Date(row.updatedAt).toISOString(),
-  };
+  const [link] = await effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db), lineIds: [orderLineId] });
+  return link === undefined ? undefined : viewOf({ row: link, factory: await factoryRef(db, link.factoryPartyId) });
 }
 
 async function countStates(db: AppDatabase): Promise<{ readonly linked: number; readonly manual: number; readonly unlinked: number }> {
-  const [lines, links] = await Promise.all([db.select().from(orderLines), db.select().from(lineFactoryLinks)]);
-  let linked = 0;
-  let manual = 0;
-  for (const link of links) {
-    if (link.status === 'linked') linked += 1;
-    else if (link.status === 'manual') manual += 1;
-  }
-  return { linked, manual, unlinked: Math.max(lines.length - linked - manual, 0) };
+  const links = effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db) }).as('effective_factory_links');
+  const [counts] = await db.select({
+    linked: sql<number>`count(*) filter (where ${links.status} = 'linked')::int`,
+    manual: sql<number>`count(*) filter (where ${links.status} = 'manual')::int`,
+    unlinked: sql<number>`count(*) filter (where ${links.status} is null or ${links.status} = 'unlinked')::int`,
+  }).from(orderLines).leftJoin(links, eq(links.orderLineId, orderLines.id));
+  return counts ?? { linked: 0, manual: 0, unlinked: 0 };
 }
 
 async function listApprovedSupplierAliases(db: AppDatabase): Promise<readonly { readonly normName: string; readonly partyId: string }[]> {
@@ -185,7 +132,7 @@ async function factoryRef(db: AppDatabase, partyId: string | null): Promise<{ re
   return row === undefined ? null : { id: row.id, displayName: row.displayName };
 }
 
-function viewOf(input: { readonly row: typeof lineFactoryLinks.$inferSelect; readonly factory: { readonly id: string; readonly displayName: string } | null }): LineFactoryLinkView {
+function viewOf(input: { readonly row: EffectiveFactoryLink; readonly factory: { readonly id: string; readonly displayName: string } | null }): LineFactoryLinkView {
   return {
     orderLineId: input.row.orderLineId,
     factory: input.factory,
@@ -195,13 +142,6 @@ function viewOf(input: { readonly row: typeof lineFactoryLinks.$inferSelect; rea
     reason: input.row.reason,
     linkedAt: new Date(input.row.linkedAt).toISOString(),
   };
-}
-
-function suggestedActionOf(reason: string): string {
-  if (reason === 'FACTORY_LINK_CONFLICT') return '按 PO、品号、条码人工选定订单行';
-  if (reason === 'LINE_LINK_IS_MANUAL') return '检查订单行的手工工厂关联';
-  if (reason === 'NO_FACTORY_ROW_MATCH') return '补工厂进度行或人工挂接';
-  return '补订单行或人工挂接';
 }
 
 function poNormOf(value: string | null): string | null {

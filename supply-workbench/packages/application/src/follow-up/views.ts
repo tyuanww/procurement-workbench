@@ -36,7 +36,7 @@ export type OrderLineRow = {
   readonly itemCodeRaw: string | null;
   readonly barcodeRaw: string | null;
   readonly supplier: PartyRef;
-  /** 当前代工厂；只有 line_factory_links 的 linked/manual 记录才给名字，未关联为 null。 */
+  /** 当前代工厂；以订单行关联为准，自动未匹配或无记录时取活动工厂上报。 */
   readonly factory?: { readonly id: string; readonly displayName: string | null } | null;
   readonly receiver: { readonly id: string | null; readonly displayName: string | null } | null;
   readonly qtyOrdered: number | null;

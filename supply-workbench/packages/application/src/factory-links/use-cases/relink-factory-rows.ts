@@ -12,7 +12,7 @@ const DEFAULT_LIMIT = 20000;
 type Matched = Extract<FactoryMatch, { readonly kind: 'matched' }>;
 type Failure = Extract<FactoryMatch, { readonly kind: 'conflict' | 'none' }>;
 type Counters = { factoryLinked: number; factoryManual: number; factoryUnlinked: number; conflicts: number; byBasis: { po: number; item_code: number; barcode: number } };
-type Write = { readonly tx: UnitOfWorkStores; readonly at: string; readonly links: LineFactoryLinkRepository; readonly lines: ReadonlyMap<string, OrderLineMatchRef>; readonly matchedLines: Set<string>; readonly counters: Counters };
+type Write = { readonly tx: UnitOfWorkStores; readonly at: string; readonly links: LineFactoryLinkRepository; readonly matchedLines: Set<string>; readonly counters: Counters };
 
 export const makeRelinkFactoryRows =
   (deps: RelinkFactoryRowsDeps): RelinkFactoryRows =>
@@ -25,7 +25,7 @@ export const makeRelinkFactoryRows =
     const counters = emptyCounters();
     const matchedLines = new Set<string>();
     await deps.uow.run(async (tx) => {
-      const write = { tx, at, links: lineFactoryLinksOf(tx), lines: new Map(orderLines.map((line) => [line.orderLineId, line])), matchedLines, counters };
+      const write = { tx, at, links: lineFactoryLinksOf(tx), matchedLines, counters };
       for (const result of plan) await applyResult({ ...write, result });
       await writeUnlinkedLines({ links: write.links, orderLines, matchedLines, at });
     });
@@ -56,14 +56,8 @@ async function applyResult(input: Write & { readonly result: FactoryMatch }): Pr
 }
 
 async function applyMatched(input: Write & { readonly result: Matched }): Promise<void> {
-  const line = input.lines.get(input.result.line.orderLineId);
-  if (line === undefined || line.linkStatus === 'manual') {
-    input.counters.factoryUnlinked += 1;
-    await markRow({ tx: input.tx, row: input.result.row, status: 'unlinked', reason: 'LINE_LINK_IS_MANUAL' });
-    return;
-  }
-  input.matchedLines.add(line.orderLineId);
-  await input.links.save(linkOf({
+  const line = input.result.line;
+  const isSaved = await input.links.save(linkOf({
     id: line.linkId ?? linkIdOf(line.orderLineId),
     at: input.at,
     orderLineId: line.orderLineId,
@@ -75,6 +69,12 @@ async function applyMatched(input: Write & { readonly result: Matched }): Promis
     itemCodeRaw: input.result.row.itemCodeRaw,
     barcodeRaw: input.result.row.barcodeRaw,
   }));
+  if (!isSaved) {
+    input.counters.factoryUnlinked += 1;
+    await markRow({ tx: input.tx, row: input.result.row, status: 'unlinked', reason: 'LINE_LINK_IS_MANUAL' });
+    return;
+  }
+  input.matchedLines.add(line.orderLineId);
   await markRow({ tx: input.tx, row: input.result.row, status: 'linked', reason: null, orderLineId: line.orderLineId });
   input.counters.factoryLinked += 1;
   input.counters.byBasis[input.result.basis] += 1;

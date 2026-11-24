@@ -82,23 +82,57 @@ it('工厂诊断先排除可挂接的活动行，再按快照范围分页', asyn
     await reports.save(report({ id: 'same-id', batchId: ACTIVE_BATCH, kind: 'schedule', sheetName: '排产计划', rowNo: 4, linkStatus: 'unlinked' }));
     await reports.save(report({ id: 'history-1', batchId: OLD_BATCH, kind: 'in_transit', sheetName: '在途订单汇总', rowNo: 5, linkStatus: 'unlinked' }));
     await reports.save(report({ id: 'history-2', batchId: OLD_BATCH, kind: 'in_transit', sheetName: '在途订单汇总', rowNo: 6, linkStatus: 'unlinked' }));
+    const otherKinds = ['customer_supplied', 'demand', 'packaging_combo', 'schedule', 'shipment', 'stock'] as const;
+    for (const kind of otherKinds) {
+      await reports.save(report({ id: `history-${kind}`, batchId: OLD_BATCH, kind, sheetName: kind, rowNo: 1, linkStatus: 'ambiguous' }));
+    }
+    await reports.save(report({ id: 'history-linked', batchId: OLD_BATCH, kind: 'stock', sheetName: '库存数量汇总', rowNo: 2, linkStatus: 'unlinked', linkedOrderLineId: 'line-1' }));
+    await handle.exec(`INSERT INTO factory_schedule_cells (id, import_batch_id, factory_party_id, sheet_name, row_no, raw, day, fingerprint, link_status, created_at, updated_at)
+      SELECT id, 'factory-batch-active', 'factory-1', '排产计划', row_no, raw::jsonb, day::date, id, status, now(), now()
+      FROM (VALUES
+        ('schedule-raw-only', 1, '{"day":"2024-02-29"}', NULL, 'ambiguous'),
+        ('schedule-column-fallback', 2, '{"day":"2023-02-29"}', '2026-12-01', 'unlinked'),
+        ('schedule-invalid', 3, '{"day":"2023-02-29"}', NULL, 'unlinked'),
+        ('schedule-manual', 5, '{"day":"2024-02-29"}', NULL, 'manual')
+      ) AS fixture(id, row_no, raw, day, status)`);
     const queue = await masterDataQueries(handle.db, new FixedClock(AT)).listUnlinked({});
-    expect(queue.items).toEqual([expect.objectContaining({ id: 'same-id', kind: 'in_transit' })]);
+    expect(queue.items).toEqual([
+      expect.objectContaining({ id: 'same-id', kind: 'in_transit' }),
+      expect.objectContaining({ id: 'schedule-raw-only', kind: 'schedule', payload: expect.objectContaining({ day: '2024-02-29' }) }),
+      expect.objectContaining({ id: 'schedule-column-fallback', kind: 'schedule', payload: expect.objectContaining({ day: '2026-12-01' }) }),
+    ]);
 
     const unmatched = makeListUnmatchedFactoryRows({ links: factoryLinkQueries(handle.db) });
     const reviewer = { id: entityId('reviewer-1'), name: '审核人', roles: ['reviewer'] as const };
     expect(await unmatched({ scope: 'active', page: 1, pageSize: 1 }, reviewer)).toEqual({
       items: [expect.objectContaining({ rowId: 'same-id', kind: 'schedule' })],
-      page: { page: 1, pageSize: 1, total: 1 },
+      page: { page: 1, pageSize: 1, total: 2 },
+    });
+    expect(await unmatched({ scope: 'active', page: 2, pageSize: 1 }, reviewer)).toEqual({
+      items: [expect.objectContaining({ rowId: 'schedule-invalid', kind: 'schedule' })],
+      page: { page: 2, pageSize: 1, total: 2 },
     });
     for (const page of [1, 2]) {
       expect(await unmatched({ scope: 'historical', page, pageSize: 1 }, reviewer)).toEqual({
         items: [expect.objectContaining({ rowId: `history-${page}` })],
-        page: { page, pageSize: 1, total: 2 },
+        page: { page, pageSize: 1, total: 8 },
       });
     }
-    expect(await unmatched({ limit: 500 }, reviewer)).toEqual({
-      items: ['history-1', 'history-2', 'same-id', 'same-id'].map((rowId) => expect.objectContaining({ rowId })),
+    expect(await unmatched({ scope: 'historical', page: 2, pageSize: 2 }, reviewer)).toEqual({
+      items: otherKinds.slice(0, 2).map((kind) => expect.objectContaining({ rowId: `history-${kind}`, kind })),
+      page: { page: 2, pageSize: 2, total: 8 },
+    });
+    expect(await unmatched({ scope: 'historical', page: 99, pageSize: 20 }, reviewer)).toEqual({
+      items: [], page: { page: 99, pageSize: 20, total: 8 },
+    });
+    expect(await unmatched({ limit: 1 }, reviewer)).toEqual({ items: [expect.objectContaining({ rowId: 'history-1', kind: 'in_transit' })] });
+    expect(await unmatched({}, reviewer)).toEqual({
+      items: [
+        ...['history-1', 'history-2'].map((rowId) => expect.objectContaining({ rowId, kind: 'in_transit' })),
+        ...otherKinds.map((kind) => expect.objectContaining({ rowId: `history-${kind}`, kind })),
+        ...['in_transit', 'schedule'].map((kind) => expect.objectContaining({ rowId: 'same-id', kind })),
+        ...['schedule-column-fallback', 'schedule-invalid', 'schedule-raw-only'].map((rowId) => expect.objectContaining({ rowId, kind: 'schedule' })),
+      ],
     });
   } finally {
     await handle.close();
