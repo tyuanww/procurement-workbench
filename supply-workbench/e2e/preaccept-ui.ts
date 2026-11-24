@@ -708,7 +708,7 @@ async function fits(field: Locator) {
   return field.evaluate((node: BrowserElement) => {
     const range = node.ownerDocument.createRange();
     range.selectNodeContents(node);
-    const cell = node.closest('td');
+    const cell = node.closest('th, td');
     if (cell === null) return false;
     const bounds = cell.getBoundingClientRect();
     let top = bounds.top;
