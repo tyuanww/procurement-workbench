@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { devAuth } from '@sw/auth';
+import { BatchViewSchema, FollowUpViewSchema, LatestNotesSchema, LineTimelineSchema } from '@sw/contracts';
 import { createDb, migrate, seed, userDirectory } from '@sw/persistence';
 import type { Role } from '@sw/domain';
 import { expect, it } from 'vitest';
@@ -31,6 +32,45 @@ it('同一时刻后写的备注仍是最新', async () => {
     expect(read.json().items).toEqual([{ orderLineId: lineId, text: '后写的' }]);
   } finally {
     await opened.close();
+  }
+});
+
+it('批次备注保留在时间线，订单行只显示自身最新备注', async () => {
+  const { app, clock, close } = await openApp();
+  try {
+    const cookie = await loginAs(app, 'buyer');
+    const orderLineId = await createLine({ app, cookie, name: '分批跟进' });
+    const batch = await app.inject({
+      method: 'POST', url: `/api/v1/lines/${orderLineId}/batches`, headers: { cookie },
+      payload: { plannedQty: 10, receiverPartyId: WAREHOUSE, dateBuyerConfirmed: '2026-10-20' },
+    });
+    expect(batch.statusCode).toBe(200);
+    const batchId = BatchViewSchema.parse(batch.json()).id;
+    const lineNote = await writeFollow({ app, cookie, input: { orderLineId, kind: 'note', text: '整笔订单等待确认' } });
+    clock.advance(1);
+    const batchNote = await writeFollow({ app, cookie, input: { orderLineId, batchId, kind: 'note', text: '这批等待承运回复' } });
+    const readNotes = async () => {
+      const read = await app.inject({
+        method: 'POST', url: '/api/v1/follow-ups/latest-notes', headers: { cookie },
+        payload: { orderLineIds: [orderLineId] },
+      });
+      expect(read.statusCode).toBe(200);
+      return LatestNotesSchema.parse(read.json()).items;
+    };
+    expect(await readNotes()).toEqual([{ orderLineId, text: lineNote.text }]);
+
+    const history = await app.inject({ url: `/api/v1/lines/${orderLineId}/timeline`, headers: { cookie } });
+    expect(history.statusCode).toBe(200);
+    expect(LineTimelineSchema.parse(history.json()).events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: lineNote.id, batchId: null, text: lineNote.text }),
+      expect.objectContaining({ id: batchNote.id, batchId, text: batchNote.text }),
+    ]));
+
+    const undo = await app.inject({ method: 'DELETE', url: `/api/v1/follow-ups/${lineNote.id}`, headers: { cookie } });
+    expect(undo.statusCode).toBe(204);
+    expect(await readNotes()).toEqual([]);
+  } finally {
+    await close();
   }
 });
 
@@ -126,7 +166,7 @@ async function createLine({ app, cookie, name }: { readonly app: HttpApp; readon
   return id;
 }
 
-async function writeFollow({ app, cookie, input }: { readonly app: HttpApp; readonly cookie: string; readonly input: { readonly orderLineId: string; readonly kind: 'note' | 'call'; readonly text: string } }): Promise<void> {
+async function writeFollow({ app, cookie, input }: { readonly app: HttpApp; readonly cookie: string; readonly input: { readonly orderLineId: string; readonly batchId?: string; readonly kind: 'note' | 'call'; readonly text: string } }) {
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/follow-ups',
@@ -134,6 +174,7 @@ async function writeFollow({ app, cookie, input }: { readonly app: HttpApp; read
     payload: input,
   });
   expect(response.statusCode).toBe(200);
+  return FollowUpViewSchema.parse(response.json());
 }
 
 async function openApp() {
