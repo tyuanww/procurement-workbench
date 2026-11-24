@@ -1,11 +1,11 @@
 import { Descriptions, Table, type TableColumnsType } from 'antd';
 import { useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Link } from 'react-router';
 import type { ProductCard } from '@sw/contracts';
 import { useShellViewport } from '../../features/shell/index.js';
 import { formatQuantity } from '../../shared/ui/format.js';
 import { border, brand, space } from '../../theme/tokens.js';
+import { CatalogProductLink } from './product-cards.js';
 
 export type ProductColumnSpec = {
   readonly key: string;
@@ -22,7 +22,7 @@ export const MAX_COLUMN_WIDTH = 480;
 export const KEYBOARD_RESIZE_STEP = space[3];
 
 export const PRODUCT_COLUMN_SPECS: readonly ProductColumnSpec[] = [
-  { key: 'skuName', title: '品名', width: 240, minWidth: 160, isPhoneHidden: false, isNumeric: false, cell: (item) => <Link to={`/products/${item.id}`}>{item.skuName}</Link> },
+  { key: 'skuName', title: '品名', width: 240, minWidth: 160, isPhoneHidden: false, isNumeric: false, cell: (item) => <CatalogProductLink id={item.id}>{item.skuName}</CatalogProductLink> },
   { key: 'barcodeRaw', title: '条码', width: 160, minWidth: 120, isPhoneHidden: false, isNumeric: false, cell: (item) => item.barcodeRaw },
   { key: 'filingName', title: '备案名', width: 200, minWidth: 120, isPhoneHidden: true, isNumeric: false, cell: (item) => item.filingName ?? '未备案' },
   { key: 'netContent', title: '净含量', width: 100, minWidth: 80, isPhoneHidden: true, isNumeric: false, cell: (item) => item.netContent ?? '—' },

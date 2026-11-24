@@ -2,7 +2,7 @@ import { PictureOutlined } from '@ant-design/icons';
 import { Card, Flex, Image, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import type { ProductCard } from '@sw/contracts';
 import { formatQuantity } from '../../shared/ui/format.js';
 import { bg, border, fontSize, radius, space, text } from '../../theme/tokens.js';
@@ -39,7 +39,7 @@ export function ProductCards({ items }: { readonly items: readonly ProductCard[]
   return (
     <div style={gridStyle()}>
       {items.map((item) => (
-        <Link key={item.id} to={`/products/${item.id}`} style={cardLinkStyle()}>
+        <CatalogProductLink key={item.id} id={item.id} style={cardLinkStyle()}>
           <Card
             hoverable
             size="small"
@@ -49,10 +49,15 @@ export function ProductCards({ items }: { readonly items: readonly ProductCard[]
           >
             <CardBody item={item} />
           </Card>
-        </Link>
+        </CatalogProductLink>
       ))}
     </div>
   );
+}
+
+export function CatalogProductLink({ id, children, style }: { readonly id: string; readonly children: ReactNode; readonly style?: CSSProperties }) {
+  const { search } = useLocation();
+  return <Link to={`/products/${encodeURIComponent(id)}`} state={{ catalogSearch: search }} style={style}>{children}</Link>;
 }
 
 function CardBody({ item }: { readonly item: ProductCard }): ReactNode {

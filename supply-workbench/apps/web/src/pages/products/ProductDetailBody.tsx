@@ -1,4 +1,4 @@
-import { Button, Descriptions, Image, Modal, Result, Skeleton, Space, Typography } from 'antd';
+import { Button, Descriptions, Empty, Image, Modal, Result, Skeleton, Space, Table, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
@@ -10,6 +10,8 @@ import {
 import { missingReasonLabel } from '@sw/domain';
 import { imageLabel, materialsCopy, purchaseStageButtons, stockMissingText, templateCells, type TemplateInput } from '../../features/product-archive/index.js';
 import { useCanWrite } from '../../shared/actor.js';
+import { formatQuantity } from '../../shared/ui/format.js';
+import { StatusTag } from '../../shared/ui/widgets.js';
 
 export type ProductCardLoad =
   | { readonly kind: 'idle' }
@@ -36,7 +38,7 @@ export function ProductDetailBody(props: {
   return (
     <>
       <TemplateTable input={templateOf(props.overview, visible.length)} />
-      <CardButtons scope={props.scope} setParams={props.setParams} />
+      <CardButtons card={props.card} scope={props.scope} setParams={props.setParams} />
       <ImageStrip visible={visible} imageIndex={props.imageIndex} setImageIndex={props.setImageIndex} />
       <DetailCards card={props.card} cardLoad={props.cardLoad} onRetryCard={props.onRetryCard} scope={props.scope} rows={rows} purchases={props.purchases} overview={props.overview} stock={props.stock} materials={props.materials} setParams={props.setParams} />
     </>
@@ -48,7 +50,7 @@ export function TemplateTable({ input }: { readonly input: TemplateInput }) {
     <Descriptions
       bordered
       size="small"
-      column={2}
+      column={{ xs: 1, sm: 2 }}
       items={templateCells(input).map((cell) => ({ key: cell.label, label: cell.label, children: cell.value }))}
     />
   );
@@ -73,12 +75,12 @@ function templateOf(overview: ProductOverview | null, imageCount: number): Templ
   };
 }
 
-function CardButtons(props: { readonly scope: string; readonly setParams: (params: Record<string, string>) => void }) {
+function CardButtons(props: { readonly card: string | null; readonly scope: string; readonly setParams: (params: Record<string, string>) => void }) {
   return (
-    <Space style={{ marginTop: 12 }}>
-      <Button onClick={() => props.setParams({ card: 'purchases', scope: props.scope })}>采购</Button>
-      <Button onClick={() => props.setParams({ card: 'stock' })}>库存</Button>
-      <Button onClick={() => props.setParams({ card: 'materials' })}>组成物料</Button>
+    <Space wrap style={{ marginTop: 12 }}>
+      <Button type={props.card === 'purchases' ? 'primary' : 'default'} aria-pressed={props.card === 'purchases'} onClick={() => props.setParams({ card: 'purchases', scope: props.scope })}>采购</Button>
+      <Button type={props.card === 'stock' ? 'primary' : 'default'} aria-pressed={props.card === 'stock'} onClick={() => props.setParams({ card: 'stock' })}>库存</Button>
+      <Button type={props.card === 'materials' ? 'primary' : 'default'} aria-pressed={props.card === 'materials'} onClick={() => props.setParams({ card: 'materials' })}>组成物料</Button>
     </Space>
   );
 }
@@ -150,6 +152,15 @@ function PurchasesPanel(props: {
         {(props.purchases === null ? [] : purchaseStageButtons(props.purchases.byStage)).map((button) => <Button key={button.code} onClick={() => props.setParams({ card: 'purchases', scope: props.scope, stage: button.code })}>{button.text}</Button>)}
       </Space>
       <Typography.Paragraph style={{ marginTop: 12 }}>采购 {props.rows.length} 行</Typography.Paragraph>
+      <Table<ProductPurchases['rows'][number]>
+        size="small" rowKey={(row) => row.orderLine.id} pagination={false} dataSource={props.rows} scroll={{ x: 420 }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此范围没有采购记录。" /> }}
+        columns={[
+          { title: '单号', key: 'po', render: (_, { orderLine }) => <Link to={`/lines/${encodeURIComponent(orderLine.id)}`}>{orderLine.po.poRaw ?? '查看订单行'}</Link> },
+          { title: '品名', key: 'name', render: (_, { orderLine }) => orderLine.nameRaw ?? '—' },
+          { title: '阶段', key: 'stage', render: (_, { orderLine }) => <StatusTag status={orderLine.stage} /> },
+        ]}
+      />
     </div>
   );
 }
@@ -166,15 +177,53 @@ function StockPanel({ overview, stock }: { readonly overview: ProductOverview | 
       </div>
     );
   }
-  return <div id="stock"><p>库存 {stock?.factory.rows.length ?? card?.rowCount ?? ''} 行</p></div>;
+  if (stock === null) return <Skeleton active paragraph={{ rows: 2 }} />;
+  const { rows } = stock.factory;
+  return (
+    <div id="stock">
+      <Typography.Paragraph>库存 {rows.length} 行</Typography.Paragraph>
+      <FactoryStockTable rows={rows} />
+    </div>
+  );
+}
+
+function FactoryStockTable({ rows }: { readonly rows: ProductStock['factory']['rows'] }) {
+  return (
+    <Table<ProductStock['factory']['rows'][number]>
+      size="small" rowKey="id" pagination={false} dataSource={rows} scroll={{ x: 420 }}
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可显示的工厂库存记录。" /> }}
+      columns={[
+        { title: '物料编码', key: 'code', render: (_, row) => row.payload.itemCodeRaw.value ?? '—' },
+        { title: '库存数量', key: 'quantity', align: 'right', render: (_, row) => formatQuantity(row.payload.qtyOnHand.value) },
+        { title: '来源', key: 'source', render: (_, row) => `${row.sheetName} · 第 ${row.rowNo} 行` },
+      ]}
+    />
+  );
 }
 
 function MaterialsPanel({ materials }: { readonly materials: ProductMaterials | null }) {
-  return <div id="materials"><p>{materialsCopy()}</p><p>{materialsSummary(materials)}</p></div>;
+  return (
+    <div id="materials">
+      <Typography.Paragraph type="secondary">{materialsCopy()}</Typography.Paragraph>
+      {materials === null ? <Skeleton active paragraph={{ rows: 2 }} /> : !('parts' in materials)
+        ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有 BOM" /> : <MaterialsTable parts={materials.parts} />}
+    </div>
+  );
 }
 
-function materialsSummary(materials: ProductMaterials | null): string {
-  if (materials !== null && 'kind' in materials && materials.kind === 'no_bom') return '没有 BOM';
-  const parts = materials !== null && 'parts' in materials ? materials.parts.length : 0;
-  return `子件 ${parts}`;
+type MaterialPart = Extract<ProductMaterials, { readonly parts: unknown }>['parts'][number];
+
+function MaterialsTable({ parts }: { readonly parts: readonly MaterialPart[] }) {
+  return (
+    <>
+      <Typography.Paragraph>子件 {parts.length}</Typography.Paragraph>
+      <Table
+        size="small" rowKey="index" pagination={false} dataSource={parts.map((part, index) => ({ ...part, index }))} scroll={{ x: 320 }}
+        columns={[
+          { title: '子件编码', dataIndex: 'partCodeRaw', key: 'code' },
+          { title: '子件名称', dataIndex: 'partName', key: 'name' },
+        ]}
+      />
+    </>
+  );
 }
