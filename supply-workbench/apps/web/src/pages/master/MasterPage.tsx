@@ -1,9 +1,9 @@
-import { Alert, Button, Empty, Input, Result, Skeleton, Space, Tabs, Typography } from 'antd';
+import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Tabs, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { FactoryReportRowViewSchema, MultiNameViewSchema, OrderLineDetailSchema, PartyAliasViewSchema, PartyDetailSchema, listResponseSchema, type FactoryReportRowView, type MultiNameView, type PartyAliasView, type PartyDetail } from '@sw/contracts';
 import { apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
-import { multiNameChoice, PARTY_TABS, partyTabLabel, roleChoice } from '../../features/master-data/index.js';
+import { multiNameChoice, roleChoice } from '../../features/master-data/index.js';
 import { useRefreshReviewQueue } from '../../features/shell/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
@@ -262,7 +262,7 @@ export function PartyPage() {
   const params = useParams();
   const [detail, setDetail] = useState<PartyDetail | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [tab, setTab] = useState<(typeof PARTY_TABS)[number]>('aliases');
+  const [tab, setTab] = useState<'aliases' | 'kpis'>('aliases');
   const partyId = params.id ?? '';
   const load = () => {
     if (params.id === undefined) {
@@ -277,43 +277,39 @@ export function PartyPage() {
   useEffect(() => { load(); }, [params.id]);
   if (loadState === 'loading') return <WorkbenchPage title="主体"><Skeleton active paragraph={{ rows: 6 }} /></WorkbenchPage>;
   if (loadState === 'error' || detail === null) return <WorkbenchPage title="主体"><Result status="error" title="主体详情没有读出来" extra={<Button type="primary" onClick={load}>重试</Button>} /></WorkbenchPage>;
+  const partyName = detail.party.displayName;
   return (
-    <WorkbenchPage title={`主体 ${partyTitle(detail)}`}>
+    <WorkbenchPage title={`主体 ${partyName}`} action={<PartyOrderLinks partyId={partyId} partyName={partyName} />}>
       <Tabs
         activeKey={tab}
-        onChange={(key) => setTab(partyTabOf(key))}
-        items={PARTY_TABS.map((item) => ({ key: item, label: partyTabLabel(item) }))}
+        onChange={(key) => setTab(key === 'kpis' ? 'kpis' : 'aliases')}
+        items={[
+          { key: 'aliases', label: '别名', children: <PartyAliases detail={detail} /> },
+          { key: 'kpis', label: '指标', children: <PartyKpis detail={detail} /> },
+        ]}
       />
-      <PartyPanel tab={tab} detail={detail} partyId={partyId} />
     </WorkbenchPage>
   );
 }
 
-function partyTabOf(key: string): (typeof PARTY_TABS)[number] {
-  const found = PARTY_TABS.find((item) => item === key);
-  return found ?? 'aliases';
+function PartyOrderLinks({ partyId, partyName }: { readonly partyId: string; readonly partyName: string }) {
+  const supplierOrders = new URLSearchParams({ lane: 'all', supplierPartyId: partyId });
+  const factoryOrders = new URLSearchParams({ lane: 'all', q: partyName });
+  return (
+    <Flex gap="small" justify="flex-end" wrap>
+      <Button href={`/lines?${supplierOrders}`}>查看供应商订单</Button>
+      <Button href={`/lines?${factoryOrders}`}>查看代工厂相关订单</Button>
+    </Flex>
+  );
 }
 
-function partyTitle(detail: PartyDetail | null): string {
-  return detail?.party.displayName ?? '';
+function PartyAliases({ detail }: { readonly detail: PartyDetail }) {
+  return <ul>{detail.aliases.map((alias) => <li key={alias.id}>{alias.rawName}</li>)}</ul>;
 }
 
-function PartyPanel(props: { readonly tab: (typeof PARTY_TABS)[number]; readonly detail: PartyDetail | null; readonly partyId: string }) {
-  if (props.tab === 'orders') return <a href={`/lines?lane=all&supplierPartyId=${encodeURIComponent(props.partyId)}`}>订单</a>;
-  if (props.tab === 'factory') return <a href={`/lines?lane=all&q=${encodeURIComponent(partyTitle(props.detail))}`}>代工厂相关订单</a>;
-  if (props.tab === 'kpis') return <PartyKpis detail={props.detail} />;
-  return <PartyAliases detail={props.detail} />;
-}
-
-function PartyAliases({ detail }: { readonly detail: PartyDetail | null }) {
-  const aliases = detail?.aliases ?? [];
-  return <ul>{aliases.map((alias) => <li key={alias.id}>{alias.rawName}</li>)}</ul>;
-}
-
-function PartyKpis({ detail }: { readonly detail: PartyDetail | null }) {
-  const due = detail?.kpis.dueBatches.n ?? '';
-  const onTime = detail?.kpis.onTime.n ?? '';
-  const from = detail?.kpiWindow.from ?? '';
-  const to = detail?.kpiWindow.to ?? '';
+function PartyKpis({ detail }: { readonly detail: PartyDetail }) {
+  const due = detail.kpis.dueBatches.n;
+  const onTime = detail.kpis.onTime.n;
+  const { from, to } = detail.kpiWindow;
   return <Typography.Text id="kpis">应到 {due} · 准时样本 {onTime} · 近一个月 {from} 至 {to}</Typography.Text>;
 }

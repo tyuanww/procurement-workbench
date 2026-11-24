@@ -87,6 +87,7 @@ async function procurementAcceptance(): Promise<void> {
   await checkMobileOrders(buyer);
   await checkLineColumns(buyer);
   await checkNavigation(buyer);
+  result.checks.partyOrderNavigation = await checkPartyOrderNavigation(buyer);
   result.checks.firstBatch = await checkFirstBatch({ page: buyer, origin, buyer: users.buyer, warehouse });
 
   const deep = '/lines?lane=material&q=' + componentPo + '#batch';
@@ -365,6 +366,32 @@ async function checkNavigation(page: Page) {
   await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
   await navigation.waitFor({ state: 'hidden' });
   result.checks.navigation = { accessibleName: '跟进台', touch: [target.width, target.height], itemTouch: [item.width, item.height], keyboardNavigated: true };
+}
+
+async function checkPartyOrderNavigation(page: Page) {
+  const partyId = 'hz09-factory-b';
+  const partyName = '合成催货乙厂';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(new URL('/parties/' + partyId, origin).href);
+  await page.getByRole('heading', { name: '主体 ' + partyName, exact: true }).waitFor();
+  await page.getByRole('tab', { name: '别名', exact: true }).waitFor();
+  await page.getByRole('tab', { name: '指标', exact: true }).click();
+  await page.getByText(/近一个月/).waitFor();
+  assert.equal(await page.getByRole('tab', { name: /^(订单|代工厂)$/ }).count(), 0);
+
+  await page.getByRole('link', { name: '查看供应商订单', exact: true }).press('Enter');
+  await page.waitForURL((url) => url.pathname === '/lines'
+    && url.searchParams.get('lane') === 'all' && url.searchParams.get('supplierPartyId') === partyId);
+  await page.getByRole('link', { name: 'HZ09-0250', exact: true }).waitFor();
+
+  await page.goBack();
+  await page.setViewportSize({ width: 320, height: 780 });
+  await page.getByRole('link', { name: '查看代工厂相关订单', exact: true }).click();
+  await page.waitForURL((url) => url.pathname === '/lines'
+    && url.searchParams.get('lane') === 'all' && url.searchParams.get('q') === partyName);
+  await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  return { supplierPartyId: partyId, supplierOrder: 'HZ09-0250', factorySearch: partyName, phoneWidth: 320 };
 }
 
 async function checkImportRecovery(page: Page) {
