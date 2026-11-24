@@ -32,6 +32,7 @@ const users = {
   buyer: '0199f0a0-0000-7000-8000-000000000002',
   reviewer: '0199f0a0-0000-7000-8000-000000000004',
   manager: '0199f0a0-0000-7000-8000-000000000005',
+  lead: '0199f0a0-0000-7000-8000-000000000006',
 };
 const warehouse = '0199f0a0-0000-7000-8000-000000000010';
 const queuePath = '/api/v1/master/review-queue/counts';
@@ -103,7 +104,10 @@ async function procurementAcceptance(): Promise<void> {
   const { page: reviewer, devtools } = await open('reviewer', '/progress');
   result.checks.storeSchedule = await checkStoreSchedule({ page: buyer, manager, origin, out });
   result.checks.productDevelopment = await checkProductDevelopment({ buyer, reviewer, buyerId: users.buyer, reviewerId: users.reviewer, origin, out });
-  result.checks.managementMeeting = await checkManagementMeeting({ page: manager, origin, out, materialPo: componentPo });
+  const meeting = await checkManagementMeeting({ page: manager, origin, out, materialPo: componentPo });
+  result.checks.managementMeeting = meeting;
+  const { page: lead } = await open('lead', '/', '/reports');
+  result.checks.managementNavigation = await checkManagementNavigation({ manager, lead, buyer, reviewer, reportPath: meeting.frozenReport });
   const badge = reviewer.locator('aside').getByRole('link', { name: '主数据', exact: true }).locator('.ant-badge');
   await badge.waitFor();
   const visibleCount = (await badge.innerText()).trim();
@@ -178,6 +182,50 @@ async function open(role: Role, path: string, landing = path) {
   await page.waitForURL(new URL(landing, origin).href);
   if (queue) assert.equal(queue.status(), 200);
   return { page, entry, devtools };
+}
+
+async function checkManagementNavigation({ manager, lead, buyer, reviewer, reportPath }: {
+  readonly manager: Page;
+  readonly lead: Page;
+  readonly buyer: Page;
+  readonly reviewer: Page;
+  readonly reportPath: string;
+}) {
+  const sidebar = manager.locator('aside');
+  const selected = sidebar.locator('.ant-menu-item-selected').getByRole('link', { name: '管理看板', exact: true });
+  await selected.waitFor();
+  assert.equal(await sidebar.getByRole('link', { name: '周报', exact: true }).count(), 0);
+  const management = manager.getByRole('navigation', { name: '管理视图' });
+  await management.getByRole('link', { name: '看板', exact: true }).click();
+  await manager.waitForURL(new URL('/dashboard', origin).href);
+  await selected.waitFor();
+  await management.getByRole('link', { name: '周报', exact: true }).click();
+  await manager.waitForURL(new URL('/reports', origin).href);
+  await selected.waitFor();
+  await manager.getByRole('button', { name: '生成全店周报', exact: true }).waitFor();
+
+  await lead.locator(`a[href="${reportPath}"]`).waitFor();
+  assert.equal(await lead.getByRole('button', { name: '生成全店周报', exact: true }).count(), 0);
+  await lead.goto(new URL(reportPath, origin).href);
+  const download = lead.waitForEvent('download');
+  await lead.getByRole('button', { name: '导出 Excel', exact: true }).click();
+  assert.match((await download).suggestedFilename(), /\.xlsx$/);
+  await lead.setViewportSize({ width: 320, height: 780 });
+  await lead.getByRole('button', { name: '打开菜单', exact: true }).click();
+  const menu = lead.getByRole('dialog', { name: '导航', exact: true });
+  await menu.locator('.ant-menu-item-selected').getByRole('link', { name: '管理看板', exact: true }).waitFor();
+  assert.equal(await menu.getByRole('link', { name: '周报', exact: true }).count(), 0);
+  await lead.goto(new URL(reportPath + '/print', origin).href);
+  await lead.getByRole('heading', { name: '管理周会 · 达肤妍', exact: true }).waitFor();
+  assert.equal(await lead.getByRole('navigation', { name: '管理视图' }).count(), 0);
+
+  const forbidden = { name: '这个角色看不到这页。', exact: true };
+  await buyer.goto(new URL(reportPath + '/print', origin).href);
+  await buyer.getByRole('heading', forbidden).waitFor();
+  await reviewer.goto(new URL(reportPath, origin).href);
+  await reviewer.getByRole('heading', forbidden).waitFor();
+  await reviewer.goto(new URL('/progress', origin).href);
+  return { manager: ['/dashboard', '/reports', reportPath], leadHome: '/reports', phoneWidth: 320, deniedRoles: ['buyer', 'reviewer'] };
 }
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {

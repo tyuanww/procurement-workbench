@@ -6,6 +6,7 @@ import { apiDownload, apiErrorMessage, apiGet, apiSend } from '../../shared/api/
 import { feishuButton, printStyle } from '../../features/reporting/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { PageHeader, WorkbenchPage } from '../../shared/ui/page.js';
+import { ManagementViewNav } from '../../shared/ui/management-view-nav.js';
 import { horizontalFormLayout } from '../../shared/ui/form.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
@@ -34,29 +35,31 @@ export function ReportListPage() {
     setLoadError('');
     setMessage(null);
     void loadList(setItems, setMessage).then((ok) => {
-      setLoaded(true);
       if (!ok) setLoadError('检查登录或网络后重试。');
     }).catch(() => {
-      setLoaded(true);
       setLoadError('检查登录或网络后重试。');
-    });
+    }).finally(() => setLoaded(true));
   };
   useEffect(() => { load(); }, []);
-  if (!isLoaded) return <WorkbenchPage title="周报"><Skeleton active paragraph={{ rows: 8 }} /></WorkbenchPage>;
-  if (loadError !== '') return (
+  let body;
+  if (!isLoaded) {
+    body = <Skeleton active paragraph={{ rows: 8 }} />;
+  } else if (loadError !== '') {
+    body = <Result
+      status="error"
+      title="周报列表没有读出来"
+      subTitle={loadError}
+      extra={<Button type="primary" onClick={load}>重试</Button>}
+    />;
+  } else {
+    body = <ReportListBody items={items} message={message} setItems={setItems} setMessage={setMessage} canGenerate={canGenerate} />;
+  }
+  return (
     <WorkbenchPage title="周报">
-      <Result
-        status="error"
-        title="周报列表没有读出来"
-        subTitle={loadError}
-        extra={[
-          <Button key="retry" type="primary" onClick={load}>重试</Button>,
-          <Button key="dashboard" href="/dashboard">返回管理看板</Button>,
-        ]}
-      />
+      <ManagementViewNav />
+      {body}
     </WorkbenchPage>
   );
-  return <ReportListBody items={items} message={message} setItems={setItems} setMessage={setMessage} canGenerate={canGenerate} />;
 }
 
 function ReportListBody(props: {
@@ -68,13 +71,13 @@ function ReportListBody(props: {
 }) {
   const { items, message, canGenerate } = props;
   return (
-    <WorkbenchPage title="周报">
+    <>
       {canGenerate ? <ReportForm setItems={props.setItems} setMessage={props.setMessage} /> : null}
       <SectionGroup title="已生成周报" {...(items.length === 0 ? {} : { meta: `${items.length} 份` })}>
         {items.length === 0 ? <Empty description={canGenerate ? '还没有周报。下一步：填写周一后生成。' : '还没有周报。'}>{canGenerate ? <Button onClick={() => document.getElementById(REPORT_WEEK_INPUT_ID)?.focus()}>去填周一</Button> : null}</Empty> : <div>{items.map((item) => <SectionRow key={item.id} action={<Flex gap={space[1]}><Button href={`/reports/${item.id}`}>打开</Button><Button href={`/reports/${item.id}/print`}>打印</Button></Flex>}><Typography.Text>全店 · {item.weekStart} 到 {item.weekEnd}</Typography.Text><br /><Typography.Text type="secondary">{new Date(item.generatedAt).toLocaleString('zh-CN')} · {item.supersededBy === null ? '当前版本' : '历史版本'}</Typography.Text></SectionRow>)}</div>}
       </SectionGroup>
       {message === null ? null : <Alert type={message.kind} showIcon title={message.text} />}
-    </WorkbenchPage>
+    </>
   );
 }
 
@@ -137,6 +140,7 @@ export function ReportDetailPage() {
   useEffect(() => { load(); }, [id]);
   return (
     <WorkbenchPage title="周报详情" browserTitle={report === null ? '周报详情' : `周报 ${report.weekStart}`} maxWidth={1440}>
+      <ManagementViewNav />
       <ReportDetailContent report={report} message={message} isLoaded={isLoaded} load={load} id={id} isConfigured={isConfigured} isPublishing={isPublishing} setPublishing={setPublishing} exporting={exporting} setExporting={setExporting} setMessage={setMessage} />
     </WorkbenchPage>
   );

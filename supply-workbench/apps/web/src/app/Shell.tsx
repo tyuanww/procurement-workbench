@@ -1,16 +1,12 @@
 import { Input, Layout, Modal, Typography } from 'antd';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { Link, Outlet, useNavigate } from 'react-router';
 import { SearchResultSchema } from '@sw/contracts';
 import { searchGroups, type SearchGroups } from '../features/search/hits.js';
 import { apiGet } from '../shared/api/client.js';
 import { useEffect, useState } from 'react';
-import type { Role } from '@sw/domain';
-import type { NavRoute } from '../shared/page-manifest.js';
 import {
-  ForbiddenPage,
   closeDrawer,
   initialFrame,
-  routeAccess,
   shellChrome,
   syncFrame,
   toggleFrame,
@@ -25,8 +21,6 @@ import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-fram
 
 export function Shell(props: {
   readonly view: ShellView;
-  readonly roles: readonly Role[];
-  readonly navRoutes: readonly NavRoute[];
 }) {
   const viewport = useShellViewport();
   const [frame, setFrame] = useState(() => initialFrame(viewport));
@@ -38,8 +32,6 @@ export function Shell(props: {
     <Layout style={{ minHeight: '100vh', background: bg.page }}>
       <ShellColumns
         view={props.view}
-        roles={props.roles}
-        navRoutes={props.navRoutes}
         viewport={viewport}
         chrome={shellChrome(synced)}
         onToggle={() => setFrame(toggleFrame)}
@@ -53,8 +45,6 @@ export function Shell(props: {
 
 function ShellColumns(input: {
   readonly view: ShellView;
-  readonly roles: readonly Role[];
-  readonly navRoutes: readonly NavRoute[];
   readonly viewport: ViewportSnapshot;
   readonly chrome: ShellChrome;
   readonly onToggle: () => void;
@@ -73,7 +63,7 @@ function ShellColumns(input: {
           menuButton={menuButtonOf(input)}
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
-          <ShellOutlet roles={input.roles} navRoutes={input.navRoutes} />
+          <Outlet />
         </Layout.Content>
       </Layout>
     </>
@@ -100,13 +90,6 @@ function menuButtonOf(input: { readonly chrome: ShellChrome; readonly onToggle: 
     isOpen: input.chrome.isOpen,
     onToggle: input.onToggle,
   };
-}
-
-function ShellOutlet({ roles, navRoutes }: { readonly roles: readonly Role[]; readonly navRoutes: readonly NavRoute[] }) {
-  const location = useLocation();
-  const access = routeAccess({ roles, pathname: location.pathname, navRoutes });
-  if (access === 'forbidden') return <ForbiddenPage />;
-  return <Outlet />;
 }
 
 function useSearchShortcut(setSearchOpen: (isOpen: boolean) => void): void {

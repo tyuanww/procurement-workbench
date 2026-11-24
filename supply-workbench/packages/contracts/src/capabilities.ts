@@ -132,7 +132,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     writePermissions: ['reports.generate', 'reports.export'],
     routePrefixes: ['/api/v1/reports', '/api/v1/dashboard/management-meeting'],
     webFeature: 'reporting',
-    navLabel: '周报',
+    navLabel: null,
     dependsOn: ['platform', 'performance'],
   },
   {

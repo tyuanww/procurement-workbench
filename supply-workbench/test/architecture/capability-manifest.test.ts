@@ -49,6 +49,11 @@ describe('能力清单', () => {
     }
   });
 
+  it('周报能力在管理看板内提供入口', () => {
+    expect(CAPABILITY_MANIFEST.find((entry) => entry.id === 'reporting')?.navLabel).toBeNull();
+    expect(NAV_ROUTES.find((route) => route.matchPaths.includes('/reports'))?.to).toBe('/dashboard');
+  });
+
   it('manifest 本身不依赖框架运行时', () => {
     const source = readFileSync(path.join(root, 'packages/contracts/src/capabilities.ts'), 'utf8');
     const specifiers = [...source.matchAll(/^import .* from '([^']+)';$/gm)].map((match) => match[1] ?? '');

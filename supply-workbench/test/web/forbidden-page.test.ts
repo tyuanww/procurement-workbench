@@ -22,13 +22,43 @@ it('采购打开看板是 403，页面请求没有发出', () => {
   }
 });
 
-it('管理层进不了设置，负责人仍能看周报', () => {
-  const settings = render('/settings', ['manager']);
-  expect(settings).toContain('这个角色看不到这页。');
-  expect(settings).not.toContain('name="roles"');
-  const reports = render('/reports', ['lead']);
-  expect(reports.replace(/\s+/g, '')).toContain('生成');
-  expect(reports).not.toContain('这个角色看不到这页。');
+it.each(['/reports', '/reports/r1', '/reports/r1/print', '/REPORTS/r1/print'])('采购和审核人直接打开 %s 时被拒', (path) => {
+  for (const role of ['buyer', 'reviewer'] satisfies Role[]) {
+    const html = render(path, [role]);
+    expect(html).toContain('这个角色看不到这页。');
+    expect(html).not.toContain('aria-label="管理视图"');
+    expect(html).not.toContain('class="report-print"');
+  }
+});
+
+it.each([
+  { path: '/dashboard', title: '管理看板', label: '看板', current: 'page' },
+  { path: '/dashboard/', title: '管理看板', label: '看板', current: 'page' },
+  { path: '/reports', title: '周报', label: '周报', current: 'page' },
+  { path: '/reports/', title: '周报', label: '周报', current: 'page' },
+  { path: '/reports/r1', title: '周报详情', label: '周报', current: 'location' },
+])('$path 高亮管理看板，并提供两个管理视图的链接', ({ path, title, label, current }) => {
+  const html = render(path, ['lead']);
+  expect(html).toContain(`>${title}</h1>`);
+  expect(html).not.toContain('这个角色看不到这页。');
+  expect(html).not.toContain('aria-label="周报"');
+  expect(html).toMatch(/<li[^>]*class="[^"]*\bant-menu-item-selected\b[^>]*><[^>]+>\s*<a[^>]*aria-label="管理看板"/);
+  const nav = html.match(/<nav aria-label="管理视图"[^>]*>.*?<\/nav>/)?.[0];
+  expect(nav).toMatch(/<a[^>]*href="\/dashboard"[^>]*>看板<\/a>/);
+  expect(nav).toMatch(/<a[^>]*href="\/reports"[^>]*>周报<\/a>/);
+  expect(nav).toMatch(new RegExp(`<a[^>]*aria-current="${current}"[^>]*>${label}</a>`));
+});
+
+it('负责人可查看和打印周报，管理层可生成周报但无设置权限', () => {
+  expect(render('/settings', ['manager'])).toContain('这个角色看不到这页。');
+  const leadList = render('/reports', ['lead']);
+  expect(leadList).toContain('已生成周报');
+  expect(leadList).not.toContain('id="report-week-start"');
+  expect(render('/reports?weekStart=2026-10-19', ['manager'])).toMatch(/<input[^>]*id="report-week-start"[^>]*value="2026-10-19"/);
+  const printed = render('/reports/r1/print', ['lead']);
+  expect(printed).toContain('class="report-print"');
+  expect(printed).not.toContain('aria-label="管理视图"');
+  expect(printed).not.toContain('aria-label="管理看板"');
 });
 
 function render(pathname: string, roles: readonly Role[]): string {

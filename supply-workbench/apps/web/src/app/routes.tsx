@@ -1,12 +1,10 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router';
-import { NAV_ROUTES, PAGE_MANIFEST } from './page-manifest.js';
-import type { NavRoute } from '../shared/page-manifest.js';
+import { NAV_ROUTES, PAGE_MANIFEST, type PageManifestEntry } from './page-manifest.js';
 import type { SessionUser } from '@sw/contracts';
 import { ActorRoles } from '../shared/actor.js';
 import { ForbiddenPage, MissingPage, ReviewQueueProvider, routeAccess, shellView, useShellLoad, type ShellView } from '../features/shell/index.js';
 import { Shell } from './Shell.js';
 import { LoginPage } from '../pages/login/LoginPage.js';
-import { ReportPrintPage } from '../pages/reports/ReportPages.js';
 
 
 export function AppRoutes({ user }: { readonly user: SessionUser | undefined }) {
@@ -31,22 +29,26 @@ function SignInRequired() {
 function SignedInRoutes({ user }: { readonly user: SessionUser }) {
   return (
     <ActorRoles roles={user.roles}>
-    <Routes>
-      <Route path="/reports/:id/print" element={<PrintGate user={user} navRoutes={NAV_ROUTES} />} />
-      <Route element={<Workbench user={user} />}>
-        <Route path="/" element={<Blank />} />
-        <Route path="/login" element={<Blank />} />
-        {PAGE_MANIFEST.map((entry) => (
-          <Route key={entry.path} path={entry.path} element={entry.element} />
-        ))}
-        <Route path="*" element={<MissingPage />} />
-      </Route>
-    </Routes>
+      <Routes>
+        {PAGE_MANIFEST.filter((entry) => entry.standalone).map((entry) => pageRoute(entry, user.roles))}
+        <Route element={<Workbench user={user} />}>
+          <Route path="/" element={<Blank />} />
+          <Route path="/login" element={<Blank />} />
+          {PAGE_MANIFEST.filter((entry) => !entry.standalone).map((entry) => pageRoute(entry, user.roles))}
+          <Route path="*" element={<MissingPage />} />
+        </Route>
+      </Routes>
     </ActorRoles>
   );
 }
 
+function pageRoute(entry: PageManifestEntry, roles: SessionUser['roles']) {
+  const access = routeAccess({ roles, gate: entry.gate ?? 'always' });
+  return <Route key={entry.path} path={entry.path} element={access === 'open' ? entry.element : <ForbiddenPage />} />;
+}
+
 function Workbench({ user }: { readonly user: SessionUser }) {
+  const { pathname } = useLocation();
   const loaded = useShellLoad({ name: user.name, roles: user.roles });
   const view = shellView({
     user,
@@ -56,23 +58,12 @@ function Workbench({ user }: { readonly user: SessionUser }) {
     now: loaded.now,
     navRoutes: NAV_ROUTES,
   });
+  if (isHomeGate(pathname)) return <HomeGate home={view.home} />;
   return (
     <ReviewQueueProvider refresh={loaded.refreshReviewQueue}>
-      <ShellGate view={view} roles={user.roles} navRoutes={NAV_ROUTES} />
+      <Shell view={view} />
     </ReviewQueueProvider>
   );
-}
-
-function ShellGate({ view, roles, navRoutes }: { readonly view: ShellView; readonly roles: SessionUser['roles']; readonly navRoutes: readonly NavRoute[] }) {
-  const location = useLocation();
-  if (isHomeGate(location.pathname)) return <HomeGate home={view.home} />;
-  return <Shell view={view} roles={roles} navRoutes={navRoutes} />;
-}
-
-function PrintGate({ user, navRoutes }: { readonly user: SessionUser; readonly navRoutes: readonly NavRoute[] }) {
-  const location = useLocation();
-  if (routeAccess({ roles: user.roles, pathname: location.pathname, navRoutes }) === 'forbidden') return <ForbiddenPage />;
-  return <ReportPrintPage />;
 }
 
 function isHomeGate(pathname: string): boolean {
