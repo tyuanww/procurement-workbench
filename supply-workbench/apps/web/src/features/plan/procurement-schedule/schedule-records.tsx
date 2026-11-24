@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Alert, Button, Input, Space, Typography } from 'antd';
+import { useId, useState } from 'react';
+import { Alert, Button, Form, Input, Space, Typography } from 'antd';
 import { BatchViewSchema, LocalDateSchema, WorkItemVersionResponseSchema, type BatchView, type OrderLineDetail } from '@sw/contracts';
 import { diffDays, PROCUREMENT_STAGE_LABELS } from '@sw/domain';
 import { useCanWrite } from '../../../shared/actor.js';
@@ -74,6 +74,7 @@ function PhaseDates({ item, onChanged }: { readonly item: Item } & Refresh) {
 }
 
 export function SupplierPromiseEditor({ batch, onChanged }: { readonly batch: BatchView } & Refresh) {
+  const id = useId();
   const canWrite = useCanWrite('records.write');
   const [date, setDate] = useState<string>(batch.dateSupplierPromised ?? '');
   const [isSaving, setSaving] = useState(false);
@@ -96,7 +97,9 @@ export function SupplierPromiseEditor({ batch, onChanged }: { readonly batch: Ba
   }
   return (
     <Space wrap>
-      <label>供应商承诺日 <Input aria-label={`批次 ${batch.seq} 供应商承诺日`} type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+      <Form.Item label="供应商承诺日" htmlFor={id} style={{ marginBottom: 0 }}>
+        <Input id={id} aria-label={`批次 ${batch.seq} 供应商承诺日`} type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+      </Form.Item>
       <Button disabled={date === (batch.dateSupplierPromised ?? '') || date !== '' && !LocalDateSchema.safeParse(date).success}
         loading={isSaving} onClick={() => { void save(); }}>保存供应商承诺</Button>
       {error === '' ? null : <Typography.Text type="danger" role="alert">{error}</Typography.Text>}

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Select, Skeleton, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Select, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import type { ProductDevelopment, ProductDevelopmentNode, ProductDevelopmentProject } from '@sw/contracts';
@@ -6,7 +6,7 @@ import { DEVELOPMENT_DESTINATION_LABELS, type ProductDevelopmentStore } from '@s
 import { workItemStatusLabel } from '../../features/today/index.js';
 import { apiErrorMessage } from '../../shared/api/client.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
-import { border, space } from '../../theme/tokens.js';
+import { space } from '../../theme/tokens.js';
 import { DevelopmentEditModal } from './development-edit-modal.js';
 import { readDevelopment } from './product-development-api.js';
 import { DevelopmentDetail } from './product-development-detail.js';
@@ -47,15 +47,18 @@ function DevelopmentWorkspace({ data, store, reload }: { readonly data: ProductD
   const show = (projectId: string | null, nodeId: string | null) => setParams((previous) => withSelection(previous, { projectId, nodeId }));
   const saved = (projectId: string | null, nodeId: string | null) => { show(projectId, nodeId); reload(); };
   return <Space orientation="vertical" size="large" style={{ display: 'flex' }}>
+    <Card size="small">
+      <Flex wrap align="center" gap={space[2]}>
+        <Select aria-label="新品项目" placeholder="选择新品项目" value={project?.id} style={{ width: 260, maxWidth: '100%' }}
+          showSearch={{ optionFilterProp: 'label' }}
+          options={data.projects.map((value) => ({ value: value.id, label: `${storeLabels[value.store]} · ${value.title}` }))}
+          onChange={(value) => show(value ?? null, null)} />
+        {data.canCreateProject ? <DevelopmentEditModal title="新建新品项目" onSaved={(id) => saved(id, null)}>
+          {(onSaved) => <ProjectForm users={data.users} store={store} saved={onSaved} />}
+        </DevelopmentEditModal> : null}
+      </Flex>
+    </Card>
     <PendingDevelopment projects={data.projects} onOpen={show} />
-    <Space wrap>
-      <Select aria-label="新品项目" placeholder="选择新品项目" value={project?.id} style={{ minWidth: 260 }}
-        options={data.projects.map((value) => ({ value: value.id, label: `${storeLabels[value.store]} · ${value.title}` }))}
-        onChange={(value) => show(value ?? null, null)} />
-      {data.canCreateProject ? <DevelopmentEditModal title="新建新品项目" onSaved={(id) => saved(id, null)}>
-        {(onSaved) => <ProjectForm users={data.users} store={store} saved={onSaved} />}
-      </DevelopmentEditModal> : null}
-    </Space>
     {project === undefined ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该店铺暂无新品项目" /> :
       <DevelopmentProjectBody key={project.id} project={project} businessDate={data.businessDate} onOpen={(id) => show(project.id, id)}
         extra={project.canManage ? <DevelopmentEditModal primary title="新增开发节点" onSaved={(id) => saved(project.id, id)}>
@@ -73,8 +76,7 @@ function PendingDevelopment({ projects, onOpen }: {
     .sort((left, right) => left.node.plannedEnd.localeCompare(right.node.plannedEnd));
   if (pending.length === 0) return null;
   return <Card size="small" title={`采购待跟进（${pending.length}）`}>
-    {pending.map(({ node, project }) => <NodeRow key={node.id} node={node} prefix={`${storeLabels[project.store]} · ${project.title}`}
-      onOpen={() => onOpen(project.id, node.id)} />)}
+    <DevelopmentNodes rows={pending} showProject onOpen={onOpen} />
   </Card>;
 }
 
@@ -84,6 +86,9 @@ function DevelopmentProjectBody({ project, businessDate, onOpen, extra }: {
 }): ReactNode {
   const completed = project.nodes.filter((node) => node.status === 'done').length;
   const active = project.nodes.filter((node) => node.status !== 'cancelled').length;
+  const next = project.nodes
+    .filter((node) => node.status !== 'done' && node.status !== 'cancelled')
+    .sort((left, right) => left.plannedEnd.localeCompare(right.plannedEnd))[0];
   return <Card title={<Space wrap><span>{project.title}</span><Tag>{storeLabels[project.store]}</Tag></Space>}
     styles={{ title: { whiteSpace: 'normal', overflowWrap: 'anywhere', paddingInlineEnd: space[1] } }}
     extra={extra}>
@@ -92,35 +97,52 @@ function DevelopmentProjectBody({ project, businessDate, onOpen, extra }: {
         <Typography.Text>主责产品人员 {project.productLeadName ?? '未知'}</Typography.Text>
         <Typography.Text>已完成 {completed} / {active} 个节点</Typography.Text>
       </Space>
+      {next === undefined ? null : <Flex wrap align="center" gap={space[1]}>
+        <Typography.Text strong>最早待完成节点</Typography.Text>
+        <Button type="link" style={{ paddingInline: 0 }} onClick={() => onOpen(next.id)}>{next.title}</Button>
+        <Typography.Text type="secondary">{next.plannedEnd}</Typography.Text>
+        <ForecastTag node={next} />
+      </Flex>}
       {project.nodes.length === 0 ? null : <section aria-label="开发节点列表">
-        {project.nodes.map((node) => <NodeRow key={node.id} node={node} onOpen={() => onOpen(node.id)} />)}
+        <DevelopmentNodes rows={project.nodes.map((node) => ({ node, project }))} onOpen={(_projectId, nodeId) => onOpen(nodeId)} />
       </section>}
       <DevelopmentTimeline project={project} businessDate={businessDate} onOpen={onOpen} />
     </Space>
   </Card>;
 }
 
-function NodeRow({ node, prefix, onOpen }: { readonly node: ProductDevelopmentNode; readonly prefix?: string; readonly onOpen: () => void }): ReactNode {
-  return <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: space[1], paddingBlock: space[1], borderBottom: `1px solid ${border}` }}>
-    <Space orientation="vertical" size={0} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-      <Button type="link" style={{ paddingInline: 0, height: 'auto', minHeight: 32, whiteSpace: 'normal', textAlign: 'start' }} onClick={onOpen}>{node.title}</Button>
-      <Typography.Text type="secondary">
-        {[prefix, DEVELOPMENT_DESTINATION_LABELS[node.destination], `负责人 ${node.ownerName ?? '未分配'}`].filter(Boolean).join(' · ')}
-      </Typography.Text>
-      <Space wrap>
-        <Typography.Text type="secondary">项目要求 {node.plannedEnd}</Typography.Text>
-        <Typography.Text type="secondary">
-          {node.formalLink === null ? '供应商承诺' : '新品阶段承诺'} {node.latestReply?.promisedOn ?? '暂无回复'}
-        </Typography.Text>
-      </Space>
-    </Space>
-    <Space wrap>
-      <ForecastTag node={node} />
-      {node.formalLink === null ? null : <Tag>已关联 OA</Tag>}
-      {node.daysUntilRequired === null ? null : <Tag>{workItemStatusLabel(node.status)}</Tag>}
-      <Tag>{countdownOf(node)}</Tag>
-    </Space>
-  </div>;
+type DevelopmentNodeRow = { readonly node: ProductDevelopmentNode; readonly project: ProductDevelopmentProject };
+
+function DevelopmentNodes({ rows, showProject, onOpen }: {
+  readonly rows: readonly DevelopmentNodeRow[];
+  readonly showProject?: boolean;
+  readonly onOpen: (projectId: string, nodeId: string) => void;
+}) {
+  return <Table<DevelopmentNodeRow> size="small" rowKey={({ node }) => node.id} dataSource={rows}
+    pagination={{ defaultPageSize: 10, hideOnSinglePage: true, showSizeChanger: false }} columns={[
+      { title: '开发节点', rowScope: 'row', render: (_, { node, project }) => (
+        <Flex vertical style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+          <Button type="link" style={{ paddingInline: 0, height: 'auto', minHeight: 32, whiteSpace: 'normal', textAlign: 'start', alignSelf: 'start' }}
+            onClick={() => onOpen(project.id, node.id)}>{node.title}</Button>
+          {showProject ? <Typography.Text type="secondary">{storeLabels[project.store]} · {project.title}</Typography.Text> : null}
+          <Typography.Text type="secondary">{DEVELOPMENT_DESTINATION_LABELS[node.destination]} · {node.ownerName ?? '未分配'}</Typography.Text>
+        </Flex>
+      ) },
+      { title: '交期与状态', render: (_, { node }) => (
+        <Flex vertical gap={space[0]}>
+          <Typography.Text>项目要求 {node.plannedEnd}</Typography.Text>
+          <Typography.Text type="secondary">
+            {node.formalLink === null ? '供应商承诺' : '新品阶段承诺'} {node.latestReply?.promisedOn ?? '暂无回复'}
+          </Typography.Text>
+          <Flex wrap gap={space[0]}>
+            <ForecastTag node={node} />
+            {node.formalLink === null ? null : <Tag>已关联 OA</Tag>}
+            {node.daysUntilRequired === null ? null : <Tag>{workItemStatusLabel(node.status)}</Tag>}
+            <Tag>{countdownOf(node)}</Tag>
+          </Flex>
+        </Flex>
+      ) },
+    ]} />;
 }
 
 function ForecastTag({ node }: { readonly node: ProductDevelopmentNode }): ReactNode {

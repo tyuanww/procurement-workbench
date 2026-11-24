@@ -11,10 +11,13 @@ type OverviewInput = {
   readonly onDrill: (drill: ProgressDrill) => void;
 };
 
-export function ProgressOverview(input: OverviewInput): ReactNode {
+export function ProgressMetrics(input: OverviewInput): ReactNode {
+  return <MetricStrip ariaLabel="进度关键指标" items={metricItems(input)} />;
+}
+
+export function ProgressBreakdown(input: OverviewInput): ReactNode {
   return (
-    <SectionGroup title="进度概览" meta={`${input.insight.total} 行`}>
-      <MetricStrip ariaLabel="进度关键指标" items={metricItems(input)} />
+    <SectionGroup title="进度分布" meta={`${input.insight.total} 行`}>
       <div style={chartGridStyle()}>
         <ChartPanel title="阶段分布"><ProgressStageChart {...input} /></ChartPanel>
         <ChartPanel title="停留天数分布"><ProgressStayChart {...input} /></ChartPanel>
@@ -33,7 +36,7 @@ function metricItems({ insight, drill, onDrill }: OverviewInput): MetricItem[] {
   ];
   const selected = progressDrillKey(drill);
   return metrics.map(({ filter, label, tone, value, hint }) => ({
-    key: progressDrillKey(filter), label: label ?? progressDrillLabel(filter), value, tone,
+    key: progressDrillKey(filter), label: label ?? progressDrillLabel(filter), value, unit: ' 行', tone,
     ...(hint === undefined ? {} : { hint }),
     action: { isActive: selected === progressDrillKey(filter), select: () => onDrill(filter) },
   }));

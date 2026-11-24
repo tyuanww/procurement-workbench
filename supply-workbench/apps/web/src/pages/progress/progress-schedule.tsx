@@ -1,5 +1,5 @@
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Alert, Button, Empty, Result, Segmented, Select, Skeleton, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Result, Segmented, Select, Skeleton, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
@@ -17,7 +17,7 @@ import {
 } from '../../features/progress/index.js';
 import { taskIdOf, taskParam, type WorkItem } from '../../features/today/index.js';
 import { MetricStrip } from '../../shared/ui/analytics.js';
-import { bg, border, fontSize, radius, space, text } from '../../theme/tokens.js';
+import { fontSize, space, text } from '../../theme/tokens.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import { ProcurementSchedulePanel } from './procurement-schedule-panel.js';
 import { ScheduleList, ScheduleTimeline } from './progress-timeline.js';
@@ -58,14 +58,14 @@ export function ProgressSchedule({ store }: { readonly store: ProcurementStore }
     setParams(next);
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+    <Flex vertical gap={space[3]}>
+      <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} />
+      {load.kind === 'ready' ? <ScheduleKpis items={items} scale={query.scale} /> : null}
+      <ScheduleBody load={load} timeline={timeline} scale={query.scale} onOpen={writeDrawer} onRetry={scheduleLoad.reload} onClear={() => write({ ...query, filters: emptyScheduleFilters() })} />
       <ProcurementSchedulePanel store={store} selected={params.get('scheduleLine')} onSelect={selectOrder}
         search={params.toString()} onTimelineChanged={scheduleLoad.reload} onAnchor={(anchor) => write({ ...query, anchor })} />
-      <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} />
-      <ScheduleKpis items={items} scale={query.scale} />
-      <ScheduleBody load={load} timeline={timeline} scale={query.scale} onOpen={writeDrawer} onRetry={scheduleLoad.reload} onClear={() => write({ ...query, filters: emptyScheduleFilters() })} />
       <TaskDrawer workItemId={drawerId} isOpen={drawerId !== null} onClose={() => writeDrawer(null)} onChanged={scheduleLoad.reload} />
-    </div>
+    </Flex>
   );
 }
 
@@ -99,21 +99,24 @@ function ScheduleFiltersBar(props: {
   const { query, window, today, options, onQuery } = props;
   const filters = query.filters;
   return (
-    <div style={filterBarStyle()}>
-      <Segmented
-        value={query.scale}
-        options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }]}
-        onChange={(value) => onQuery({ ...query, scale: scaleOf(value), anchor: window.from })}
-      />
-      <Button icon={<LeftOutlined />} aria-label={`上一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: -1 }).from })} />
-      <Button icon={<RightOutlined />} aria-label={`下一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: 1 }).from })} />
-      <Typography.Text style={rangeStyle()}>{scheduleWindowLabel({ window, today })}</Typography.Text>
-      <FilterSelect label="负责人" value={filters.ownerUserId} options={options.owners} onChange={(value) => onQuery({ ...query, filters: { ...filters, ownerUserId: value } })} />
-      <FilterSelect label="供应商" value={filters.supplierPartyId} options={options.suppliers} onChange={(value) => onQuery({ ...query, filters: { ...filters, supplierPartyId: value } })} />
-      <FilterSelect label="工厂" value={filters.factoryPartyId} options={options.factories} onChange={(value) => onQuery({ ...query, filters: { ...filters, factoryPartyId: value } })} />
-      <FilterSelect label="状态" value={filters.status} options={[...statusOptions()]} onChange={(value) => onQuery({ ...query, filters: { ...filters, status: statusOf(value) } })} />
-      <Button type="link" onClick={() => onQuery({ ...query, filters: emptyScheduleFilters() })}>清空</Button>
-    </div>
+    <Card size="small">
+      <Flex wrap align="center" gap={space[1]}>
+        <Segmented
+          aria-label="排期刻度"
+          value={query.scale}
+          options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }]}
+          onChange={(value) => onQuery({ ...query, scale: scaleOf(value), anchor: window.from })}
+        />
+        <Button icon={<LeftOutlined />} aria-label={`上一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: -1 }).from })} />
+        <Button icon={<RightOutlined />} aria-label={`下一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: 1 }).from })} />
+        <Typography.Text style={rangeStyle()}>{scheduleWindowLabel({ window, today })}</Typography.Text>
+        <FilterSelect label="负责人" value={filters.ownerUserId} options={options.owners} onChange={(value) => onQuery({ ...query, filters: { ...filters, ownerUserId: value } })} />
+        <FilterSelect label="供应商" value={filters.supplierPartyId} options={options.suppliers} onChange={(value) => onQuery({ ...query, filters: { ...filters, supplierPartyId: value } })} />
+        <FilterSelect label="工厂" value={filters.factoryPartyId} options={options.factories} onChange={(value) => onQuery({ ...query, filters: { ...filters, factoryPartyId: value } })} />
+        <FilterSelect label="状态" value={filters.status} options={[...statusOptions()]} onChange={(value) => onQuery({ ...query, filters: { ...filters, status: statusOf(value) } })} />
+        <Button type="link" onClick={() => onQuery({ ...query, filters: emptyScheduleFilters() })}>清空筛选</Button>
+      </Flex>
+    </Card>
   );
 }
 
@@ -165,10 +168,11 @@ function ScheduleBody(props: {
   const notice = props.load.kind === 'ready' && props.load.notice !== ''
     ? <Alert type="error" showIcon title="总排期没有读出来" description={props.load.notice} />
     : null;
-  if (props.timeline.total === 0) return <EmptySchedule total={props.load.view.total} scale={props.scale} onClear={props.onClear} />;
+  if (props.timeline.total === 0) return <>{notice}<EmptySchedule total={props.load.view.total} scale={props.scale} onClear={props.onClear} /></>;
   return (
     <div>
       {notice}
+      {props.load.isLoading ? <Typography.Paragraph role="status" type="secondary">正在更新排期</Typography.Paragraph> : null}
       <div style={timelineHeadStyle()}>
         <Typography.Text strong>{props.scale === 'week' ? '本周排期' : '本月排期'}</Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{props.timeline.total} 条 · 按负责人分组</Typography.Text>
@@ -199,10 +203,6 @@ function scaleWord(scale: ScheduleScale): string {
 
 function statusOf(value: string | null): ScheduleQuery['filters']['status'] {
   return value === 'planned' || value === 'in_progress' || value === 'blocked' ? value : null;
-}
-
-function filterBarStyle(): CSSProperties {
-  return { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space[1], padding: space[2], background: bg.surface, border: `1px solid ${border}`, borderRadius: radius };
 }
 
 function rangeStyle(): CSSProperties {

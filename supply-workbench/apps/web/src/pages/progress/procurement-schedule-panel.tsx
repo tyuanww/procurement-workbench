@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Select, Skeleton, Space, Typography } from 'antd';
+import { Alert, Button, Card, Select, Skeleton, Space, Typography } from 'antd';
 import { Link } from 'react-router';
 import type { OrderLineDetail, OrderLineRow, ProcurementStore } from '@sw/contracts';
 import type { LocalDate } from '@sw/domain';
@@ -29,23 +29,24 @@ export function ProcurementSchedulePanel(props: Selection) {
   const selected = orders.find((line) => line.id === props.selected);
   return (
     <section aria-label="成品订单排期">
-      <Typography.Title level={2}>成品订单排期</Typography.Title>
-      {lines.load.kind === 'error' ? <Alert type="error" title={lines.load.message} action={<Button size="small" onClick={lines.reload}>重试</Button>} /> : null}
-      <Select
-        aria-label="选择成品订单"
-        allowClear
-        showSearch={{ optionFilterProp: 'label' }}
-        loading={shouldLoadLines && lines.load.kind === 'loading'}
-        value={selected?.id ?? undefined}
-        placeholder="按 OA、品名或 PO 查找"
-        style={{ width: '100%', maxWidth: 680 }}
-        options={orders.map(orderOption)}
-        onOpenChange={(isOpen) => { if (isOpen) setOpenedPicker(true); }}
-        onChange={(id) => props.onSelect(id ?? null)}
-      />
-      {selected === undefined
-        ? props.selected === null || lines.load.kind !== 'ready' ? null : <Alert type="warning" title="所选订单行不在当前店铺范围" />
-        : <ProcurementScheduleDetail key={selected.id} {...props} line={selected} />}
+      <Card size="small" title={<Typography.Title level={2} style={{ margin: 0 }}>成品订单排期</Typography.Title>}>
+        {lines.load.kind === 'error' ? <Alert type="error" title={lines.load.message} action={<Button size="small" onClick={lines.reload}>重试</Button>} /> : null}
+        <Select
+          aria-label="选择成品订单"
+          allowClear
+          showSearch={{ optionFilterProp: 'label' }}
+          loading={shouldLoadLines && lines.load.kind === 'loading'}
+          value={selected?.id ?? undefined}
+          placeholder="按 OA、品名或 PO 查找"
+          style={{ width: '100%', maxWidth: 680 }}
+          options={orders.map(orderOption)}
+          onOpenChange={(isOpen) => { if (isOpen) setOpenedPicker(true); }}
+          onChange={(id) => props.onSelect(id ?? null)}
+        />
+        {selected === undefined
+          ? props.selected === null || lines.load.kind !== 'ready' ? null : <Alert type="warning" title="所选订单行不在当前店铺范围" />
+          : <ProcurementScheduleDetail key={selected.id} {...props} line={selected} />}
+      </Card>
     </section>
   );
 }

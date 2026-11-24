@@ -1,4 +1,4 @@
-import { Flex, Select } from 'antd';
+import { Card, Flex, Select } from 'antd';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { WorkbenchPage } from '../../shared/ui/page.js';
@@ -21,19 +21,25 @@ export function ProgressPage({ view: selectedView }: { readonly view?: ProgressV
   const view = selectedView ?? progressViewOf(params.get('view'));
   const store = progressStoreOf(params.get('store'));
   const isMine = params.get('scope') === 'mine';
+  const scope = (
+    <>
+      <Select
+        aria-label="店铺"
+        value={view === 'development' && store === 'unassigned' ? 'all' : store}
+        options={view === 'development' ? STORE_OPTIONS.filter(({ value }) => value !== 'unassigned') : STORE_OPTIONS}
+        style={{ minWidth: 144 }}
+        onChange={(value) => setParams(withProgressStore(params.toString(), progressStoreOf(value)))}
+      />
+      {view === 'current' ? <OrderScopePicker isMine={isMine} onChange={(value) => setParams(withProgressScope(params.toString(), value === 'mine'))} /> : null}
+    </>
+  );
   return (
     <WorkbenchPage title={viewLabels[view]}>
-      <Flex gap={space[2]} wrap align="center" style={{ marginBottom: space[3] }}>
-        <Select
-          aria-label="店铺"
-          value={view === 'development' && store === 'unassigned' ? 'all' : store}
-          options={view === 'development' ? STORE_OPTIONS.filter(({ value }) => value !== 'unassigned') : STORE_OPTIONS}
-          style={{ minWidth: 144 }}
-          onChange={(value) => setParams(withProgressStore(params.toString(), progressStoreOf(value)))}
-        />
-        {view !== 'current' ? null : <OrderScopePicker isMine={isMine} onChange={(value) => setParams(withProgressScope(params.toString(), value === 'mine'))} />}
-      </Flex>
-      {view === 'current' ? <ProgressCurrent key={JSON.stringify([store, isMine])} store={store} isMine={isMine} /> : null}
+      {view === 'current' ? <ProgressCurrent key={JSON.stringify([store, isMine])} store={store} isMine={isMine} filters={scope} /> : (
+        <Card size="small" style={{ marginBottom: space[3] }}>
+          <Flex gap={space[2]} wrap align="center">{scope}</Flex>
+        </Card>
+      )}
       {view === 'schedule' ? <ProgressSchedule key={store} store={store} /> : null}
       {view === 'development' ? <ProductDevelopmentPanel key={store} store={store === 'unassigned' ? 'all' : store} /> : null}
     </WorkbenchPage>

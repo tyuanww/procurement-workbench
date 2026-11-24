@@ -35,7 +35,8 @@ export function ProgressOaFilter(props: {
       aria-label="OA 需求"
       value={props.value ?? ''}
       options={[{ value: '', label: '全部 OA' }, ...keys.map((key) => ({ value: key, label: key === UNKNOWN_OA ? '未关联 OA' : key }))]}
-      style={{ minWidth: 178, marginBottom: space[2] }}
+      showSearch={{ optionFilterProp: 'label' }}
+      style={{ minWidth: 164, maxWidth: '100%' }}
       onChange={(value) => props.onChange(value === '' ? null : value)}
     />
   );
@@ -136,10 +137,10 @@ export function StoreGapSummary({ lines }: { readonly lines: readonly (OrderLine
   if (summary.count === 0) return null;
   const totals = [...summary.totals].map(([unit, quantity]) => `${amount.format(quantity)} ${unit}`);
   return (
-    <p aria-label="采购事项汇总">
+    <Typography.Paragraph aria-label="采购事项汇总" type="secondary" style={{ marginBlock: space[2] }}>
       采购事项 {summary.count} 条
       {totals.length === 0 ? null : ` · 源表报告差额 ${totals.join('、')}`}
       {summary.pending === 0 ? null : ` · 差额待核对 ${summary.pending} 条`}
-    </p>
+    </Typography.Paragraph>
   );
 }
