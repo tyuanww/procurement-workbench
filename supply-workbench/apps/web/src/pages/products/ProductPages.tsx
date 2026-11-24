@@ -15,7 +15,7 @@ import {
 import { Button, Empty, Flex, Form, Input, Result, Segmented, Skeleton, Typography } from 'antd';
 import { apiGet, apiGetWithSignal } from '../../shared/api/client.js';
 import { useActorRoles, useCan } from '../../shared/actor.js';
-import { canMaintain, groupByFiling } from '../../features/product-archive/index.js';
+import { canMaintain } from '../../features/product-archive/index.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { PageHeader, surfaceStyle, WorkbenchPage } from '../../shared/ui/page.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
@@ -98,33 +98,12 @@ function ProductCatalogResults({ query, view, onClear, list }: { readonly query:
       {!isSearching && canReadImports ? <Button href="/imports">去导入</Button> : null}
     </Empty>
   );
-  const groups = groupByFiling(filingSeeds(list));
   return (
     <>
       <Typography.Paragraph type="secondary">共 {list.page.total} 款产品{items.length < list.page.total ? `，显示前 ${items.length} 款` : ''}</Typography.Paragraph>
-      <FilingHeadings list={list} groups={groups} />
       {view === 'table' ? <ProductTable items={items} /> : <ProductCards items={items} />}
     </>
   );
-}
-
-function filingSeeds(list: ProductList | null) {
-  return (list?.groups ?? []).map((group) => ({ id: group.spuKey ?? group.filingName ?? '未备案', filingName: group.filingName }));
-}
-
-function FilingHeadings(props: { readonly list: ProductList | null; readonly groups: readonly { readonly filingName: string | null }[] }) {
-  return (
-    <>
-      {props.groups.map((group) => {
-        const count = filingCount(props.list, group.filingName);
-        return <Typography.Title level={2} key={group.filingName}>{group.filingName}{count === undefined ? '' : ` · ${count}`}</Typography.Title>;
-      })}
-    </>
-  );
-}
-
-function filingCount(list: ProductList | null, filingName: string | null): number | undefined {
-  return (list?.groups ?? []).find((item) => (item.filingName ?? '未备案') === filingName)?.count;
 }
 
 // eslint-disable-next-line max-lines-per-function

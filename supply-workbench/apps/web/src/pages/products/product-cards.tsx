@@ -1,20 +1,12 @@
 import { PictureOutlined } from '@ant-design/icons';
-import { Card, Flex, Image, Tag, Typography } from 'antd';
+import { Card, Col, Flex, Image, Row, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import type { ProductCard } from '@sw/contracts';
-import { formatQuantity } from '../../shared/ui/format.js';
-import { bg, border, fontSize, radius, space, text } from '../../theme/tokens.js';
-
-export type { ProductCard };
+import { bg, border, fontSize, space, text } from '../../theme/tokens.js';
 
 export type ProductView = 'card' | 'table';
-
-export type CardMetric = {
-  readonly label: string;
-  readonly value: string;
-};
 
 /** 卡片是默认视图，只有显式 view=table 才切到表格。 */
 export function productViewOf(params: { readonly get: (name: string) => string | null }): ProductView {
@@ -25,33 +17,24 @@ export function thumbnailSrc(thumbnail: { readonly fileId: string } | null): str
   return thumbnail === null ? null : `/files/${thumbnail.fileId}`;
 }
 
-/** 卡片上的四个采购指标，缺值走 U+2014，不显示成 0。 */
-export function cardMetrics(item: ProductCard): readonly CardMetric[] {
-  return [
-    { label: '采购中', value: formatQuantity(item.openPurchaseLines.reportedInProgress) },
-    { label: '工厂库存', value: formatQuantity(item.factoryStock.value) },
-    { label: 'BOM', value: formatQuantity(item.bomPartCount) },
-    { label: '联系人', value: formatQuantity(item.contactsAssigned) },
-  ];
-}
-
 export function ProductCards({ items }: { readonly items: readonly ProductCard[] }): ReactNode {
   return (
-    <div style={gridStyle()}>
+    <Row align="top" gutter={[space[3], space[3]]} style={{ marginTop: space[2] }}>
       {items.map((item) => (
-        <CatalogProductLink key={item.id} id={item.id} style={cardLinkStyle()}>
-          <Card
-            hoverable
-            size="small"
-            styles={{ body: { padding: space[2] } }}
-            style={{ height: '100%' }}
-            cover={<ProductCover item={item} />}
-          >
-            <CardBody item={item} />
-          </Card>
-        </CatalogProductLink>
+        <Col key={item.id} xs={24} sm={12} lg={8} xl={6} xxl={4}>
+          <CatalogProductLink id={item.id} style={cardLinkStyle()}>
+            <Card
+              hoverable
+              size="small"
+              styles={{ body: { padding: space[2] } }}
+              cover={<ProductCover item={item} />}
+            >
+              <CardBody item={item} />
+            </Card>
+          </CatalogProductLink>
+        </Col>
       ))}
-    </div>
+    </Row>
   );
 }
 
@@ -62,33 +45,20 @@ export function CatalogProductLink({ id, children, style }: { readonly id: strin
 
 function CardBody({ item }: { readonly item: ProductCard }): ReactNode {
   return (
-    <div style={cardBodyStyle()}>
+    <Flex vertical gap={space[1]} style={{ overflowWrap: 'anywhere' }}>
       <Flex align="flex-start" justify="space-between" gap={space[1]}>
         <Typography.Text strong style={{ fontSize: fontSize.body, lineHeight: '20px' }}>{item.skuName}</Typography.Text>
-        {item.isChannelVariant ? <Tag variant="outlined" style={{ marginInlineEnd: 0 }}>渠道规格</Tag> : null}
+        {item.isChannelVariant ? <Tag variant="outlined" style={{ flexShrink: 0, marginInlineEnd: 0 }}>渠道规格</Tag> : null}
       </Flex>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{item.barcodeRaw}</Typography.Text>
+      <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>备案名 {item.filingName ?? '未备案'}</Typography.Text>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{specText(item)}</Typography.Text>
-      <MetricGrid item={item} />
-    </div>
+    </Flex>
   );
 }
 
 function specText(item: ProductCard): string {
   return `净含量 ${item.netContent ?? '—'} · 箱规 ${item.casePack ?? '—'}`;
-}
-
-function MetricGrid({ item }: { readonly item: ProductCard }): ReactNode {
-  return (
-    <div style={metricGridStyle()}>
-      {cardMetrics(item).map((metric) => (
-        <div key={metric.label} style={metricCellStyle()}>
-          <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{metric.label}</Typography.Text>
-          <Typography.Text style={{ fontSize: fontSize.body, fontVariantNumeric: 'tabular-nums' }}>{metric.value}</Typography.Text>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function ProductCover({ item }: { readonly item: ProductCard }): ReactNode {
@@ -110,27 +80,13 @@ function ProductCover({ item }: { readonly item: ProductCard }): ReactNode {
 function CoverPlaceholder({ item }: { readonly item: ProductCard }): ReactNode {
   return (
     <div role="img" aria-label={`${item.skuName} 无图`} style={placeholderStyle()}>
-      <PictureOutlined style={{ fontSize: fontSize.metric, color: text.tertiary }} />
+      <PictureOutlined aria-hidden style={{ fontSize: fontSize.page }} />
     </div>
   );
 }
 
-function gridStyle(): CSSProperties {
-  return {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-    gap: space[3],
-    marginTop: space[2],
-    alignItems: 'stretch',
-  };
-}
-
 function cardLinkStyle(): CSSProperties {
-  return { display: 'block', height: '100%', minWidth: 0, color: 'inherit', textDecoration: 'none' };
-}
-
-function cardBodyStyle(): CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: space[1], minWidth: 0 };
+  return { display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none' };
 }
 
 function coverImageStyle(): CSSProperties {
@@ -139,27 +95,12 @@ function coverImageStyle(): CSSProperties {
 
 function placeholderStyle(): CSSProperties {
   return {
-    aspectRatio: '4 / 3',
+    minHeight: 48,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     background: bg.page,
     borderBottom: `1px solid ${border}`,
     color: text.tertiary,
-  };
-}
-
-function metricGridStyle(): CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: space[1], marginTop: space[0] };
-}
-
-function metricCellStyle(): CSSProperties {
-  return {
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    padding: `${space[1]}px ${space[2]}px`,
-    background: bg.page,
-    borderRadius: radius,
   };
 }
