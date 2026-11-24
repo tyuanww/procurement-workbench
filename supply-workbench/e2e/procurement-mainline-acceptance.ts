@@ -88,13 +88,15 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
   await warning.waitFor();
   const todayUrl = page.url();
   assert.equal(new URL(todayUrl).searchParams.get('drawer'), 'task:' + toItemId);
-  await drawer.getByRole('link', { name: '在总排期查看此任务', exact: true }).click();
+  const scheduleLink = drawer.getByRole('link', { name: '在总排期查看此任务', exact: true });
+  await scheduleLink.click();
   await page.waitForURL((url) => url.pathname === '/progress' && url.searchParams.get('view') === 'schedule'
     && url.searchParams.get('from') === plannedEnd && url.searchParams.get('drawer') === 'task:' + toItemId);
+  await scheduleLink.waitFor({ state: 'hidden' });
   await warning.waitFor();
-  assert.equal(await drawer.getByRole('link', { name: '在总排期查看此任务', exact: true }).count(), 0);
   await page.goBack();
   await page.waitForURL(todayUrl);
+  await scheduleLink.waitFor();
   await warning.waitFor();
   return { task: successor, predecessor, scheduleAnchor: plannedEnd, restoredTodayContext: true };
 }
