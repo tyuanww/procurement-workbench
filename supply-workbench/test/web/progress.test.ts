@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   arrivalPaint,
-  mergeLoadedNotes,
-  progressNote,
   progressRows,
-  rememberLocalNote,
-  NOTE_READ_ERROR,
   type ProgressLine,
   type ProgressNudge,
   type ProgressRow,
@@ -188,17 +184,5 @@ describe('采购进度行', () => {
     expect(arrivalPaint('missing')).toEqual({ kind: 'missing', reason: 'not_provided' });
     expect(arrivalPaint('dated')).toEqual({ kind: 'status', status: 'confirmed' });
     expect(arrivalPaint('missing')).not.toEqual(arrivalPaint('dated'));
-  });
-
-  it('空白进度说明不提交，有字的说明记成备注', () => {
-    expect(progressNote('  ')).toBeNull();
-    expect(progressNote(' 催工厂回单 ')).toEqual({ kind: 'note', text: '催工厂回单' });
-  });
-
-  it('读回还没结束时，刚保存的说明不会被旧结果盖掉', () => {
-    const local = rememberLocalNote([], { lineId: 'a', generation: 2, text: '催工厂回单' });
-    expect(mergeLoadedNotes({ loaded: {}, local, generation: 2 })).toEqual({ a: '催工厂回单' });
-    expect(mergeLoadedNotes({ loaded: { a: '服务器上的' }, local, generation: 3 })).toEqual({ a: '服务器上的' });
-    expect(NOTE_READ_ERROR).toBe('有的进度说明没有读出来');
   });
 });

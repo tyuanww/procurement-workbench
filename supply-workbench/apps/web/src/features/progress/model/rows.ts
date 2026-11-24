@@ -168,27 +168,3 @@ function byDays(left: ProgressRow, right: ProgressRow): number {
 }
 
 export const NOTE_READ_ERROR = '有的进度说明没有读出来';
-
-export type LocalNote = {
-  readonly lineId: string;
-  readonly generation: number;
-  readonly text: string;
-};
-
-export function mergeLoadedNotes({ loaded, local, generation }: { readonly loaded: Readonly<Record<string, string>>; readonly local: readonly LocalNote[]; readonly generation: number }): Record<string, string> {
-  const merged = { ...loaded };
-  for (const saved of local) {
-    if (saved.generation >= generation) merged[saved.lineId] = saved.text;
-  }
-  return merged;
-}
-
-export function rememberLocalNote(local: readonly LocalNote[], saved: LocalNote): LocalNote[] {
-  return [...local.filter((item) => item.lineId !== saved.lineId), saved];
-}
-
-export function progressNote(text: string): { readonly kind: 'note'; readonly text: string } | null {
-  const trimmed = text.trim();
-  if (trimmed === '') return null;
-  return { kind: 'note', text: trimmed };
-}

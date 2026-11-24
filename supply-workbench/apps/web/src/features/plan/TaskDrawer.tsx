@@ -8,6 +8,7 @@ import {
   ownerText,
   plannedRangeText,
   supplierText,
+  taskParam,
   workItemSourceLabel,
   type WorkItemDetail,
   type WorkItemStatus,
@@ -32,6 +33,7 @@ type DetailLoad =
 export type TaskDrawerProps = {
   readonly workItemId: string | null;
   readonly isOpen: boolean;
+  readonly showScheduleLink?: boolean;
   readonly onClose: () => void;
   readonly onChanged: () => void;
 };
@@ -39,6 +41,9 @@ export type TaskDrawerProps = {
 export function TaskDrawer(props: TaskDrawerProps): ReactNode {
   const data = useTaskDetail({ workItemId: props.workItemId, isOpen: props.isOpen });
   const ready = data.load.kind === 'ready' ? data.load.detail.item : null;
+  const scheduleParams = props.showScheduleLink === true && ready !== null && ready.id === props.workItemId
+    ? new URLSearchParams({ view: 'schedule', from: ready.plannedEnd, drawer: taskParam(ready.id) })
+    : null;
   const change = useTaskStatusChange({
     status: ready === null ? null : ready.status,
     detailId: ready === null ? null : ready.id,
@@ -52,6 +57,7 @@ export function TaskDrawer(props: TaskDrawerProps): ReactNode {
       open={props.isOpen}
       onClose={props.onClose}
       title={drawerTitle(data.load)}
+      extra={scheduleParams === null ? null : <Link to={`/progress?${scheduleParams}`}>在总排期查看此任务</Link>}
       footer={footerOf({ status: ready === null ? null : ready.status, change, onClose: props.onClose })}
     >
       <DrawerBody load={data.load} change={change} onRetry={data.reload} />

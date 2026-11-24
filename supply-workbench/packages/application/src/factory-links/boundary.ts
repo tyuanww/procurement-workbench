@@ -3,8 +3,9 @@ import type { Clock } from '../ports/clock.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { UnitOfWork } from '../ports/unit-of-work.js';
 import type { Actor } from '../shared/actor.js';
+import type { ListResult } from '../shared/page.js';
 import type { NoInput } from '../shared/refs.js';
-import type { FactoryLinkCounts, FactoryLinkQueries, LineFactoryLinkView, RelinkFactoryRowsResult, SetLineFactoryLinkInput, UnmatchedFactoryRowView } from './views.js';
+import type { FactoryDiagnosticScope, FactoryLinkCounts, FactoryLinkQueries, LineFactoryLinkView, RelinkFactoryRowsResult, SetLineFactoryLinkInput, UnmatchedFactoryRowView } from './views.js';
 
 type Write = { readonly uow: UnitOfWork; readonly clock: Clock; readonly ids: IdGenerator };
 
@@ -17,7 +18,12 @@ export type RelinkScheduleCells = (input: NoInput, actor: Actor) => Promise<{ re
 export type GetLineFactoryLinkDeps = { readonly links: FactoryLinkQueries };
 export type GetLineFactoryLink = (input: { readonly orderLineId: string }, actor: Actor) => Promise<LineFactoryLinkView | undefined>;
 export type ListUnmatchedFactoryRowsDeps = { readonly links: FactoryLinkQueries };
-export type ListUnmatchedFactoryRows = (input: { readonly limit?: number | undefined }, actor: Actor) => Promise<{ readonly items: readonly UnmatchedFactoryRowView[] }>;
+export type UnmatchedFactoryRowsInput =
+  | { readonly limit?: number | undefined }
+  | { readonly scope: FactoryDiagnosticScope; readonly page: number; readonly pageSize: number };
+export type ListUnmatchedFactoryRows = (input: UnmatchedFactoryRowsInput, actor: Actor) => Promise<
+  { readonly items: readonly UnmatchedFactoryRowView[] } | ListResult<UnmatchedFactoryRowView>
+>;
 export type GetFactoryLinkCountsDeps = { readonly links: FactoryLinkQueries };
 export type GetFactoryLinkCounts = (input: NoInput, actor: Actor) => Promise<FactoryLinkCounts>;
 export type BackfillSupplierPartiesDeps = Write & { readonly links: FactoryLinkQueries };

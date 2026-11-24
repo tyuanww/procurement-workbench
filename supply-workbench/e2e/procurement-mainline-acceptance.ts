@@ -57,7 +57,58 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   const totalSchedule = page.getByRole('link', { name: '查看总排期', exact: true });
   await totalSchedule.click();
   await page.waitForURL((url) => url.pathname === '/progress' && url.searchParams.get('view') === 'schedule');
-  return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true };
+  const taskContext = await checkScheduleTaskContext(page, origin);
+  return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true, taskContext };
+}
+
+async function checkScheduleTaskContext(page: Page, origin: URL) {
+  const predecessor = '合成排期前置任务';
+  const successor = '合成排期接续任务';
+  const businessDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format();
+  const monday = new Date(businessDay + 'T00:00:00Z');
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - 7);
+  const predecessorStart = monday.toISOString().slice(0, 10);
+  monday.setUTCDate(monday.getUTCDate() + 1);
+  const predecessorEnd = monday.toISOString().slice(0, 10);
+  monday.setUTCDate(monday.getUTCDate() + 1);
+  const plannedEnd = monday.toISOString().slice(0, 10);
+  const fromItemId = await createScheduleTask(page, origin, predecessor, predecessorStart, predecessorEnd);
+  const toItemId = await createScheduleTask(page, origin, successor, predecessorEnd, plannedEnd);
+  const dependency = await page.request.post(new URL('/api/v1/plan/work-item-dependencies', origin).href, { data: { fromItemId, toItemId } });
+  assert.ok(dependency.ok(), '合成排期依赖 HTTP ' + dependency.status());
+  for (const [id, status] of [[fromItemId, 'in_progress'], [fromItemId, 'blocked'], [toItemId, 'in_progress']]) {
+    const response = await page.request.post(new URL(`/api/v1/plan/work-items/${id}/status`, origin).href, { data: { status } });
+    assert.ok(response.ok(), '合成排期状态 HTTP ' + response.status());
+  }
+
+  await page.goto(new URL('/today?group=owner', origin).href);
+  await page.getByRole('button', { name: new RegExp('^' + successor + '\\s') }).press('Enter');
+  const drawer = page.getByRole('dialog', { name: new RegExp(successor) });
+  const warning = drawer.getByText(`${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: false });
+  await warning.waitFor();
+  const todayUrl = page.url();
+  assert.equal(new URL(todayUrl).searchParams.get('drawer'), 'task:' + toItemId);
+  const scheduleLink = drawer.getByRole('link', { name: '在总排期查看此任务', exact: true });
+  await scheduleLink.click();
+  await page.waitForURL((url) => url.pathname === '/progress' && url.searchParams.get('view') === 'schedule'
+    && url.searchParams.get('from') === plannedEnd && url.searchParams.get('drawer') === 'task:' + toItemId);
+  await scheduleLink.waitFor({ state: 'hidden' });
+  await warning.waitFor();
+  await page.goBack();
+  await page.waitForURL(todayUrl);
+  await scheduleLink.waitFor();
+  await warning.waitFor();
+  return { task: successor, predecessor, scheduleAnchor: plannedEnd, restoredTodayContext: true };
+}
+
+async function createScheduleTask(page: Page, origin: URL, title: string, plannedStart: string, plannedEnd: string) {
+  const response = await page.request.post(new URL('/api/v1/plan/work-items', origin).href, {
+    data: { subjectType: 'standalone', kind: 'task', title, plannedStart, plannedEnd },
+  });
+  assert.ok(response.ok(), '合成排期任务 HTTP ' + response.status());
+  const result: unknown = await response.json();
+  assert.ok(typeof result === 'object' && result !== null && 'workItemId' in result && typeof result.workItemId === 'string');
+  return result.workItemId;
 }
 
 export async function checkProductDevelopment({ buyer, reviewer, buyerId, reviewerId, origin, out }: Scenario & {
@@ -206,4 +257,95 @@ async function select(combobox: Locator, page: Page, name: string | RegExp) {
 async function fillDate(input: Locator, date: string) {
   await input.fill(date);
   await input.press('Enter');
+}
+
+export async function checkOrderLineNote({ page, manager, origin, out }: Scenario & { readonly page: Page; readonly manager: Page }) {
+  const progress = new URL(`/progress?store=${store}&drill=stage%3Ano_batch`, origin);
+  await page.goto(progress.href);
+  const current = page.getByRole('region', { name: '当前进度表', exact: true });
+  const row = current.getByRole('row').filter({ has: page.getByRole('link', { name: finishedName, exact: true }) });
+  const product = row.getByRole('link', { name: finishedName, exact: true });
+  const detail = row.getByRole('link', { name: '查看订单行详情', exact: true });
+  await detail.waitFor();
+  const order = new URL(await detail.getAttribute('href') ?? '', origin);
+  const lineId = decodeURIComponent(order.pathname.split('/').at(-1) ?? '');
+  assert.equal(order.searchParams.get('store'), store);
+  const line = await page.request.get(new URL('/api/v1' + order.pathname, origin).href);
+  assert.ok(line.ok());
+  assert.deepEqual((await line.json()).batches, []);
+
+  const oldNote = '旧的订单行备注';
+  const newNote = '合成成品最新备注';
+  const followUps = new URL('/api/v1/follow-ups', origin);
+  const old = await page.request.post(followUps.href, { data: { orderLineId: lineId, kind: 'note', text: oldNote } });
+  assert.ok(old.ok());
+  await page.reload();
+  await row.getByText(oldNote, { exact: true }).waitFor();
+  assert.equal(await current.getByRole('textbox').count(), 0);
+  await detail.click();
+  await page.waitForURL(order.href);
+  const note = page.getByRole('region', { name: '订单行备注', exact: true });
+  await note.getByText(oldNote, { exact: true }).waitFor();
+  const textbox = note.getByRole('textbox', { name: '订单行备注', exact: true });
+  await textbox.fill(newNote);
+  assert.deepEqual(await recordOrderFollowUp(page, note.getByRole('button', { name: '保存备注', exact: true })), {
+    orderLineId: lineId, kind: 'note', text: newNote,
+  });
+  await note.getByText(newNote, { exact: true }).waitFor();
+  await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
+  await page.waitForURL(progress.href);
+  await row.getByText(newNote, { exact: true }).waitFor();
+  assert.equal(await row.getByText(oldNote, { exact: true }).count(), 0);
+
+  await page.setViewportSize({ width: 320, height: 800 });
+  await row.getByRole('button', { name: '展开行', exact: true }).click();
+  await current.getByText(newNote, { exact: true }).scrollIntoViewIfNeeded();
+  assert.equal(await current.getByRole('textbox').count(), 0);
+  await page.screenshot({ path: join(out, 'order-line-note-mobile.png'), animations: 'disabled' });
+  await product.click();
+  await page.waitForURL(order.href);
+  await note.getByText(newNote, { exact: true }).waitFor();
+  await textbox.fill('这条草稿属于成品');
+  const material = page.getByRole('region', { name: '关联采购事项', exact: true }).locator('a[href^="/lines/"]').first();
+  const materialUrl = new URL(await material.getAttribute('href') ?? '', origin);
+  assert.ok(materialUrl.pathname.startsWith('/lines/') && materialUrl.pathname !== order.pathname);
+  const materialId = decodeURIComponent(materialUrl.pathname.split('/').at(-1) ?? '');
+  await material.click();
+  await page.waitForURL(materialUrl.href);
+  await page.getByText('订单行 ' + materialId, { exact: false }).waitFor();
+  await textbox.waitFor();
+  assert.equal(await textbox.inputValue(), '', '切换到物料后不应带入成品订单行的草稿');
+  await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
+  await page.waitForURL(progress.href);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await manager.goto(progress.href);
+  const managerRow = manager.getByRole('region', { name: '当前进度表', exact: true }).getByRole('row').filter({ hasText: finishedName });
+  await managerRow.getByRole('link', { name: finishedName, exact: true }).waitFor();
+  assert.equal(await managerRow.getByText(newNote, { exact: true }).count(), 0);
+  await managerRow.getByRole('link', { name: finishedName, exact: true }).click();
+  await manager.getByText(newNote, { exact: true }).waitFor();
+  await manager.getByText(oldNote, { exact: true }).waitFor();
+  assert.equal(await manager.getByRole('button', { name: '保存备注', exact: true }).count(), 0);
+  const denied = await manager.request.post(followUps.href, { data: { orderLineId: lineId, kind: 'note', text: '管理账号不可写' } });
+  assert.equal(denied.status(), 403);
+
+  await page.goto(new URL('/lines/hz09-line-250?focusBatch=hz09-batch-250', origin).href);
+  const promise = '合成批次工厂承诺';
+  await page.getByRole('textbox', { name: '工厂承诺', exact: true }).fill(promise);
+  assert.deepEqual(await recordOrderFollowUp(page, page.getByRole('button', { name: '记工厂承诺', exact: true })), {
+    orderLineId: 'hz09-line-250', batchId: 'hz09-batch-250', kind: 'promise', text: promise,
+  });
+  await page.getByText(promise, { exact: true }).waitFor();
+  await note.getByText('暂无订单行备注', { exact: true }).waitFor();
+  return { po: finishedPo, initialBatches: 0, oldNote, newNote, mobile: true, restoredFilter: progress.search, isolatedDraft: true, managerWrite: denied.status(), promise };
+}
+
+async function recordOrderFollowUp(page: Page, button: Locator): Promise<unknown> {
+  const [saved] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/follow-ups' && response.request().method() === 'POST'),
+    button.click(),
+  ]);
+  assert.equal(saved.status(), 200);
+  return saved.request().postDataJSON();
 }
