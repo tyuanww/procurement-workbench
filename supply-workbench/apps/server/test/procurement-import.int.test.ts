@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { LineSummarySchema, OrderLineRowSchema, listResponseSchema } from '@sw/contracts';
 import { expect, it } from 'vitest';
 import { loginAs } from './helpers/server.js';
 import { must, openProcurementImport, procurementImportClient } from './helpers/procurement-import.js';
@@ -128,6 +129,7 @@ async function verifyRevisions({ api, original, id, finishedIds }: {
   expect(concurrent.map((item) => item.statusCode)).toEqual([200, 200]);
   const newFinished = await api.lines(`lane=finished&q=${NEW_FINISHED_PO}`);
   expect(newFinished).toMatchObject({ items: [{ lane: 'finished', po: { poRaw: NEW_FINISHED_PO } }] });
+  await verifyOriginalScope({ api, batchId: original.id, materialId: id, finishedIds });
 
   expect((await api.commit(revisionA)).statusCode).toBe(200);
   const replay = await api.upload('old-copy.xlsx', ORIGINAL);
@@ -149,6 +151,35 @@ async function verifyRevisions({ api, original, id, finishedIds }: {
   expect(unchanged.line).toMatchObject({ qtyOrdered: 210000, stage: 'no_batch', cancelledAt: null, missingInLatestImport: false });
   expect(unchanged.followUps).toEqual(component.followUps);
   expect(unchanged.procurement).toEqual(component.procurement);
+}
+
+async function verifyOriginalScope({ api, batchId, materialId, finishedIds }: {
+  readonly api: Awaited<ReturnType<typeof procurementImportClient>>;
+  readonly batchId: string;
+  readonly materialId: string;
+  readonly finishedIds: readonly string[];
+}) {
+  const query = new URLSearchParams({ importBatchId: batchId });
+  const listed = listResponseSchema(OrderLineRowSchema).parse(await api.lines(query.toString()));
+  expect(listed.items.map((line) => line.id)).toEqual(expect.arrayContaining([materialId, ...finishedIds]));
+  const poNumbers = listed.items.map((line) => line.po.poRaw).sort();
+  expect(poNumbers).toEqual([
+    'PO20261117009001', 'PO20261117009002', 'PO20261117009003', 'PO20261117009004', 'PO20261117009005',
+    FIRST_PO, 'PO20261117009109', 'PO20261117009110',
+  ]);
+
+  const headers = { cookie: api.cookie };
+  const summary = await api.app.inject({ url: `/api/v1/lines/summary?${query}`, headers });
+  expect(summary.statusCode, summary.body).toBe(200);
+  expect(LineSummarySchema.parse(summary.json()).total).toBe(listed.items.length);
+
+  query.set('pageSize', '1');
+  query.set('columns', 'po');
+  const exported = await api.app.inject({ url: `/api/v1/lines/export.xlsx?${query}`, headers });
+  expect(exported.statusCode).toBe(200);
+  const book = XLSX.read(exported.rawPayload);
+  const exportedRows: unknown[][] = XLSX.utils.sheet_to_json(book.Sheets['订单行'], { header: 1 });
+  expect(exportedRows.slice(1).map((row) => row[0]).sort()).toEqual(poNumbers);
 }
 
 async function verifyManualAndDuplicate({ api, id }: { readonly api: Awaited<ReturnType<typeof procurementImportClient>>; readonly id: string }) {
