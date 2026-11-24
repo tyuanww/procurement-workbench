@@ -91,7 +91,13 @@ function ImportUploadForm() {
     <>
       <div id="import-file" tabIndex={-1}>
         <SectionGroup title="选择文件" meta="支持 CSV 和 XLSX">
-          <FilePick fileName={detectLoad.kind === 'idle' ? null : detectLoad.fileName} isStarting={isStarting} onFile={selectFile} />
+          <Flex vertical gap={space[2]}>
+            <FilePick fileName={detectLoad.kind === 'idle' ? null : detectLoad.fileName} isStarting={isStarting} onFile={selectFile} />
+            <Flex gap={space[2]} wrap>
+              <Button href="/api/v1/templates/po-master-v1.xlsx">下载采购订单总表模板</Button>
+              <Button href="/api/v1/templates/factory-progress-v1.xlsx">下载代工厂空白模板 v1</Button>
+            </Flex>
+          </Flex>
         </SectionGroup>
       </div>
       <SectionGroup title="解析设置">
@@ -110,8 +116,6 @@ function ImportUploadForm() {
             setError('');
             void start({ detected: detectLoad.value, template: chosen, factoryPartyId, navigate, setError }).finally(() => setStarting(false));
           }}>开始解析</Button>
-          <Button href="/api/v1/templates/po-master-v1.xlsx">下载采购订单总表模板</Button>
-          <Button href="/api/v1/templates/factory-progress-v1.xlsx">下载代工厂空白模板 v1</Button>
         </Flex>
         {error === '' ? null : <Alert type="error" showIcon title={error} />}
         {detected === null ? null : <ImportDetectionDetails candidates={detected.candidates} />}

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Flex, Typography } from 'antd';
 import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
@@ -6,36 +6,17 @@ import { IMPORT_ACTIONS, importActionLabel } from '@sw/domain';
 import { ApiError, apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
-import {
-  continuationOf,
-  groupIssues,
-  issueGroupText,
-  type ImportContinuation,
-  type ImportContinuationInput,
-  type NextStep,
-} from '../../features/imports/index.js';
-import { decisionsWithDateDecision } from '../../features/imports/index.js';
+import { decisionsWithDateDecision, issueGroupText } from '../../features/imports/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
-import { bg, border, space } from '../../theme/tokens.js';
+import { SectionGroup } from '../../shared/ui/section.js';
+import { space } from '../../theme/tokens.js';
 import { ImportBatchBanner, ImportStatusTag } from './import-batch-banner.js';
 import { ImportConflictPortal } from './ImportConflictPortal.js';
+import { commitSummary, ImportCommitPanel, type CommitRequest } from './import-commit-panel.js';
 import { writeImportConflictDrawer } from './import-conflict-drawer-url.js';
 import { ProcurementPreview } from './ProcurementPreview.js';
 import { ConfirmedArrivalPreview } from './ConfirmedArrivalPreview.js';
 import { useImportBatch } from './use-import-batch.js';
-
-export type CommitRequest =
-  | { readonly kind: 'idle' }
-  | { readonly kind: 'pending' }
-  | { readonly kind: 'failed'; readonly message: string };
-
-const commitBar: CSSProperties = {
-  position: 'sticky',
-  bottom: 0,
-  background: bg.surface,
-  borderTop: `1px solid ${border}`,
-  padding: space[2],
-};
 
 export function ImportBatchPage() {
   const { id = '' } = useParams();
@@ -76,7 +57,7 @@ function ImportBatchContent({ id }: { readonly id: string }) {
   );
 }
 
-function ImportBatchReady(props: {
+type ImportBatchReadyProps = {
   readonly id: string;
   readonly back: { readonly pathname: string; readonly search: string };
   readonly search: string;
@@ -88,19 +69,39 @@ function ImportBatchReady(props: {
   readonly reasons: readonly string[];
   readonly setReasons: (value: readonly string[]) => void;
   readonly canImport: boolean;
+};
+
+function ImportBatchReady(props: ImportBatchReadyProps) {
+  const { id, summary } = props;
+  const canReviewAliases = useCanWrite('master.review');
+  const isArrival = summary.template === 'batch-confirmed-arrival-v1';
+  const isReplay = summary.procurementReplayOf !== undefined;
+  const canEdit = props.canImport && summary.status === 'parsed' && !isReplay;
+  return (
+    <WorkbenchPage title="导入批次" browserTitle={`导入批次 · ${summary.file.originalName}`} action={<Link to={props.back}>返回导入中心</Link>}>
+      <Flex vertical gap={space[3]}>
+        <BatchOverview summary={summary} request={props.request} canReviewAliases={canReviewAliases} />
+        {summary.hasProcurementPreview === true ? <ProcurementPreview key={id} id={id} isFinalized={summary.status === 'committed' || summary.status === 'discarded'} /> : null}
+        {isArrival ? <ConfirmedArrivalPreview key={id} id={id} revision={summary.revision} /> : null}
+        <ImportBatchReview {...props} canEdit={canEdit} canReviewAliases={canReviewAliases} />
+      </Flex>
+      {canEdit && !isArrival ? <ImportConflictPortal id={id} summary={summary} setSummary={props.setSummary} /> : null}
+    </WorkbenchPage>
+  );
+}
+
+function BatchOverview({ summary, request, canReviewAliases }: {
+  readonly summary: ImportBatchSummary;
+  readonly request: CommitRequest;
+  readonly canReviewAliases: boolean;
 }) {
   return (
-    <WorkbenchPage title="导入批次" browserTitle={`导入批次 · ${props.summary.file.originalName}`} action={<Link to={props.back}>返回导入中心</Link>}>
-      <Typography.Paragraph strong style={{ overflowWrap: 'anywhere' }}>{props.summary.file.originalName}</Typography.Paragraph>
-      <ImportBatchBanner template={props.summary.template} createdAt={props.summary.createdAt} committedAt={props.summary.committedAt} coverage={props.summary.coverage ?? 'full_snapshot'} />
-      <BatchResult summary={props.summary} />
-      {props.summary.hasProcurementPreview === true ? <ProcurementPreview key={props.id} id={props.id} isFinalized={props.summary.status === 'committed' || props.summary.status === 'discarded'} /> : null}
-      {props.summary.template === 'batch-confirmed-arrival-v1' ? <ConfirmedArrivalPreview key={props.id} id={props.id} revision={props.summary.revision} /> : null}
-      <IssueGroups summary={props.summary} />
-      <ImportBatchWrites {...props} />
-      {props.reasons.length === 0 ? null : <ul>{props.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
-      {props.summary.template === 'batch-confirmed-arrival-v1' ? null : <ImportConflictPortal id={props.id} summary={props.summary} setSummary={props.setSummary} />}
-    </WorkbenchPage>
+    <div>
+      <Typography.Paragraph strong style={{ overflowWrap: 'anywhere' }}>{summary.file.originalName}</Typography.Paragraph>
+      <ImportBatchBanner template={summary.template} createdAt={summary.createdAt} committedAt={summary.committedAt} coverage={summary.coverage ?? 'full_snapshot'} />
+      <BatchResult summary={summary} />
+      {summary.status === 'parsed' || summary.procurementReplayOf !== undefined ? null : <ImportCommitPanel summary={commitSummary(summary, canReviewAliases)} request={request} />}
+    </div>
   );
 }
 
@@ -114,118 +115,57 @@ function BatchResult({ summary }: { readonly summary: ImportBatchSummary }) {
   );
 }
 
-function ImportBatchWrites(props: {
-  readonly id: string;
-  readonly search: string;
-  readonly setSearch: ReturnType<typeof useSearchParams>[1];
+function ImportBatchReview({ canEdit, canReviewAliases, summary, ...props }: ImportBatchReadyProps & {
+  readonly canEdit: boolean;
+  readonly canReviewAliases: boolean;
+}) {
+  const [isDeciding, setDeciding] = useState(false);
+  const isBusy = isDeciding || props.request.kind === 'pending';
+  const hasConflicts = summary.unresolvedConflicts > 0;
+  const save = { id: props.id, revision: summary.revision, setSummary: props.setSummary, setRequest: props.setRequest };
+  return (
+    <>
+      {summary.issueGroups.length === 0 && !hasConflicts ? null : <SectionGroup title="导入问题">
+        <Flex vertical gap={space[2]} align="start">
+          <IssueGroups summary={summary} canEdit={canEdit} isDeciding={isDeciding} isBusy={isBusy} onDecide={() => {
+            setDeciding(true);
+            void decide({ ...save, decisions: summary.decisions, setReasons: props.setReasons }).finally(() => setDeciding(false));
+          }} />
+          {props.reasons.map((reason) => <Alert key={reason} type="error" title={reason} />)}
+          {hasConflicts && summary.template === 'batch-confirmed-arrival-v1' ? <Alert type="warning" title="请核对冲突行，修正或重新导出表格后再上传。" /> : null}
+          {canEdit && hasConflicts && summary.template !== 'batch-confirmed-arrival-v1' ? <Button type="primary" disabled={isBusy}
+            onClick={() => props.setSearch(writeImportConflictDrawer({ search: props.search, isOpen: true }))}>处理冲突（{summary.unresolvedConflicts}）</Button> : null}
+        </Flex>
+      </SectionGroup>}
+      {canEdit ? <SectionGroup title="提交导入">
+        <ImportCommitPanel summary={commitSummary(summary, canReviewAliases)} request={props.request} disabled={isDeciding} onCommit={() => { void commit(save); }} />
+      </SectionGroup> : null}
+    </>
+  );
+}
+
+
+function IssueGroups({ summary, canEdit, isDeciding, isBusy, onDecide }: {
   readonly summary: ImportBatchSummary;
-  readonly request: CommitRequest;
-  readonly setSummary: (value: ImportBatchSummary) => void;
-  readonly setRequest: (value: CommitRequest) => void;
-  readonly setReasons: (value: readonly string[]) => void;
-  readonly canImport: boolean;
+  readonly canEdit: boolean;
+  readonly isDeciding: boolean;
+  readonly isBusy: boolean;
+  readonly onDecide: () => void;
 }) {
-  const canReviewAliases = useCanWrite('master.review');
-  if (!props.canImport || props.summary.procurementReplayOf !== undefined) return null;
-  const isConfirmedArrival = props.summary.template === 'batch-confirmed-arrival-v1';
-  return (
-    <>
-      {isConfirmedArrival ? (
-        props.summary.unresolvedConflicts > 0 ? <Alert type="warning" title="请核对冲突行，修正或重新导出表格后再上传。" /> : null
-      ) : (
-        <>
-          {props.summary.unresolvedConflicts > 0 ? <Button onClick={() => props.setSearch(writeImportConflictDrawer({ search: props.search, isOpen: true }))}>处理冲突（{props.summary.unresolvedConflicts}）</Button> : null}
-          <Button onClick={() => { void decide({ id: props.id, revision: props.summary.revision, decisions: props.summary.decisions, setSummary: props.setSummary, setRequest: props.setRequest, setReasons: props.setReasons }); }}>按文件年份补年</Button>
-        </>
-      )}
-      <div style={commitBar}>
-        <Button danger disabled title="数据回退尚未实现，回滚暂不可用">回滚（暂不可用）</Button>
-        <ImportCommitPanel summary={commitSummary(props.summary, canReviewAliases)} request={props.request} onCommit={() => { void commit({ id: props.id, revision: props.summary.revision, setSummary: props.setSummary, setRequest: props.setRequest }); }} />
-      </div>
-    </>
-  );
-}
-
-
-export function ImportCommitPanel(props: {
-  readonly summary: ImportContinuationInput;
-  readonly request: CommitRequest;
-  readonly onCommit: () => void;
-}) {
-  const continuation = continuationOf(props.summary);
-  const { canReviewAliases, pendingAliases } = props.summary;
-  return (
-    <>
-      <CommitAlert continuation={continuation} request={props.request} />
-      {continuation.kind === 'confirm' ? (
-        <ConfirmGate continuation={continuation} request={props.request} onCommit={props.onCommit} />
+  if (summary.issueGroups.length === 0) return null;
+  const isRecorded = summary.decisions.issueDecisions.DATE_NO_YEAR === 'fill_file_year';
+  return <ul style={{ margin: 0, paddingInlineStart: space[3] }}>{summary.issueGroups.map((group) => (
+    <li key={group.code}>
+      {issueGroupText(group)}
+      {group.code === 'DATE_NO_YEAR' && isRecorded ? <Typography.Text type="secondary"> · 已记录按文件年份补年</Typography.Text> : null}
+      {canEdit && summary.template === 'po-master-v1' && group.code === 'DATE_NO_YEAR' && group.availableDecisions.includes('fill_file_year') && !isRecorded ? (
+        <Flex gap={space[1]} align="center" wrap style={{ marginBlock: space[1] }}>
+          <Button loading={isDeciding} disabled={isBusy} onClick={onDecide}>记录补年选择</Button>
+          <Typography.Text type="secondary">已解析日期以预览为准。</Typography.Text>
+        </Flex>
       ) : null}
-      {continuation.kind === 'committed' && !canReviewAliases && pendingAliases > 0 ? <p>{pendingAliases} 个新主体待审核</p> : null}
-      {continuation.kind === 'committed' ? <StepList steps={continuation.steps} /> : null}
-    </>
-  );
-}
-
-function CommitAlert(props: { readonly continuation: ImportContinuation; readonly request: CommitRequest }) {
-  const message = alertText(props);
-  if (message === undefined) return null;
-  return <Alert type="error" title={message} />;
-}
-
-function alertText(props: { readonly continuation: ImportContinuation; readonly request: CommitRequest }): string | undefined {
-  if (props.request.kind === 'failed') return props.request.message;
-  if (props.continuation.kind === 'blocked') return props.continuation.message;
-  return undefined;
-}
-
-function ConfirmGate(props: {
-  readonly continuation: Extract<ImportContinuation, { readonly kind: 'confirm' }>;
-  readonly request: CommitRequest;
-  readonly onCommit: () => void;
-}) {
-  const isPending = props.request.kind === 'pending';
-  return (
-    <>
-      <Flex justify="space-between" align="center" wrap gap={space[2]}>
-        <Typography.Text aria-live="polite">{props.continuation.enabled ? '可以确认导入' : `还剩 ${props.continuation.remaining} 个冲突`}</Typography.Text>
-        <Button
-          type="primary"
-          loading={isPending}
-          disabled={isPending || !props.continuation.enabled}
-          onClick={props.onCommit}
-        >
-          确认导入
-        </Button>
-      </Flex>
-    </>
-  );
-}
-
-function StepList({ steps }: { readonly steps: readonly NextStep[] }) {
-  return (
-    <ul>
-      {steps.map((step) => (
-        <li key={step.label}><Link to={step.to}>{step.label}</Link></li>
-      ))}
-    </ul>
-  );
-}
-
-function IssueGroups({ summary }: { readonly summary: ImportBatchSummary }) {
-  const groups = groupIssues(summary.issueGroups.map((group) => ({ issues: Array.from({ length: group.count }, () => ({ code: group.code })) })));
-  return <ul>{groups.map((group) => <li key={group.code}>{issueGroupText(group)}</li>)}</ul>;
-}
-
-function commitSummary(summary: ImportBatchSummary, canReviewAliases: boolean): ImportContinuationInput {
-  return {
-    importBatchId: summary.id,
-    template: summary.template,
-    status: summary.status,
-    pendingAliases: summary.stats.pendingAliases,
-    canReviewAliases,
-    unresolvedConflicts: summary.unresolvedConflicts,
-    error: summary.error,
-  };
+    </li>
+  ))}</ul>;
 }
 
 async function decide(input: {

@@ -2,7 +2,7 @@ import { Alert, Button, Drawer, Empty, Flex, Form, Pagination, Radio, Skeleton, 
 import { useId } from 'react';
 import type { ImportRowView } from '@sw/contracts';
 import { allConflictChoices, type ConflictCandidate } from '../../features/imports/index.js';
-import { drawerWide } from '../../theme/tokens.js';
+import { drawerWide, space } from '../../theme/tokens.js';
 import { useCanWrite } from '../../shared/actor.js';
 
 export type ImportConflictDrawerProps = {
@@ -32,7 +32,7 @@ export function ImportConflictDrawer(props: ImportConflictDrawerProps) {
       open={props.open}
       onClose={props.onClose}
       title="处理导入冲突"
-      footer={<ConflictSaveBar rowCount={props.rows.length} page={props.page} total={props.total} isSaving={props.isSaving} isLoading={props.isLoading} canSave={canSave} onPageChange={props.onPageChange} onSave={props.onSave} />}
+      footer={<ConflictSaveBar rowCount={props.rows.length} page={props.page} total={props.total} isSaving={props.isSaving} isLoading={props.isLoading} canSave={canSave} onPageChange={props.onPageChange} onSave={props.onSave} onClose={props.onClose} />}
     >
       {props.error === '' ? null : <Alert type="error" showIcon title={props.error} style={{ marginBottom: 16 }} />}
       {props.isLoading ? <Skeleton active paragraph={{ rows: 5 }} /> : <ImportConflictDrawerFields rows={props.rows} candidates={props.candidates} choices={props.choices} onChoice={props.onChoice} />}
@@ -49,14 +49,18 @@ export function ConflictSaveBar(props: {
   readonly canSave: boolean;
   readonly onPageChange: (page: number) => void;
   readonly onSave: () => void;
+  readonly onClose?: () => void;
 }) {
   const canImport = useCanWrite('imports.write');
   return (
-    <Flex justify="space-between" align="center" wrap gap={12}>
+    <Flex justify="space-between" align="center" wrap gap={space[2]}>
       <Typography.Text type="secondary">当前页 {props.rowCount} 行，共 {props.total} 行</Typography.Text>
-      <Flex gap={12} align="center" wrap>
+      <Flex gap={space[2]} align="center" wrap>
         <Pagination size="small" current={props.page} total={props.total} pageSize={100} showSizeChanger={false} onChange={props.onPageChange} disabled={props.isSaving || props.isLoading} />
-        {canImport ? <Button type="primary" loading={props.isSaving} disabled={props.isSaving || props.isLoading || !props.canSave} onClick={props.onSave}>保存当前页</Button> : null}
+        <Flex gap={space[1]}>
+          {props.onClose === undefined ? null : <Button onClick={props.onClose}>关闭</Button>}
+          {canImport ? <Button type="primary" loading={props.isSaving} disabled={props.isSaving || props.isLoading || !props.canSave} onClick={props.onSave}>保存当前页</Button> : null}
+        </Flex>
       </Flex>
     </Flex>
   );
