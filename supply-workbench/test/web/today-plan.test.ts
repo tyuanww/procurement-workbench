@@ -223,7 +223,7 @@ describe('今日排期看板', () => {
 
   it('今日没有排期时返回空态文案，指标不造假', () => {
     const board = planBoard({ view: dailyPlan([]), group: 'schedule' });
-    expect(board).toEqual({ kind: 'empty', text: '今天没有到期的排期任务。下一步：导入排期里程碑。' });
+    expect(board).toEqual({ kind: 'empty', text: '今天没有到期的排期任务。' });
     expect(planInsight(dailyPlan([]))).toEqual({ total: 0, urgent: 0, overdue: 0, unassigned: 0 });
     expect(planInsight(dailyPlan([DUE, OVERDUE, UNASSIGNED]))).toEqual({ total: 3, urgent: 1, overdue: 1, unassigned: 1 });
   });

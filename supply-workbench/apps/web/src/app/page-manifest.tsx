@@ -45,9 +45,9 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/parties/:id', nav: null, element: <PartyPage /> },
   { path: '/products', nav: { label: '产品档案' }, gate: 'always', element: <ProductListPage /> },
   { path: '/products/:id', nav: null, element: <ProductDetailPage /> },
-  { path: '/imports', nav: { label: '导入中心' }, gate: 'always', element: <ImportCenter /> },
-  { path: '/imports/:id', nav: null, element: <ImportBatchPage /> },
-  { path: '/master', nav: { label: '主数据' }, gate: 'review', element: <MasterPage /> },
+  { path: '/imports', nav: { label: '导入与审核' }, gate: 'imports', element: <ImportCenter /> },
+  { path: '/imports/:id', nav: null, gate: 'imports', menuParent: '/imports', element: <ImportBatchPage /> },
+  { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <MasterPage /> },
   { path: '/settings', nav: { label: '设置' }, gate: 'admin', element: <SettingsPage /> },
 ];
 

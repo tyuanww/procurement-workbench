@@ -2,7 +2,7 @@ import { Select, Typography } from 'antd';
 import { Link } from 'react-router';
 import type { OrderLineRow, ProcurementStore, StoreProgressMaterial } from '@sw/contracts';
 import { procurementOaReferences } from '@sw/domain';
-import { useCanWrite } from '../../shared/actor.js';
+import { useCan } from '../../shared/actor.js';
 import { space } from '../../theme/tokens.js';
 import { storeLabels } from './store-query.js';
 
@@ -49,7 +49,7 @@ export function scopedLineLink(id: string, { search, store }: { readonly search:
 }
 
 export function StoreOrderDetails({ line, search }: { readonly line: OrderLineRow | undefined; readonly search: string }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   const progress = line?.storeProgress;
   if (line === undefined || progress === undefined) return null;
   return (

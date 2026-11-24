@@ -44,7 +44,7 @@ export type PlanLoad =
 
 export type ViewGroup = DailyPlan['byOwner'][number];
 
-export const PLAN_EMPTY_TEXT = '今天没有到期的排期任务。下一步：导入排期里程碑。';
+export const PLAN_EMPTY_TEXT = '今天没有到期的排期任务。';
 
 const PRIORITY_RANK: Readonly<Record<WorkItem['priority'], number>> = { low: 0, normal: 1, high: 2, urgent: 3 };
 
