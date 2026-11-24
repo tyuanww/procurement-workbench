@@ -256,14 +256,15 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
 }) {
   await manager.goto(new URL(reportPath, origin).href);
   const sidebar = manager.locator('aside');
+  const current = sidebar.locator('[aria-current="page"]');
   const bottlenecks = await sidebarLink(sidebar, '管理看板', '卡点');
   await bottlenecks.click();
   await manager.waitForURL(new URL('/dashboard', origin).href);
-  assert.equal(await bottlenecks.getAttribute('aria-current'), 'page');
+  await bottlenecks.and(current).waitFor();
   const weekly = sidebar.getByRole('link', { name: '周报', exact: true });
   await weekly.click();
   await manager.waitForURL(new URL('/reports', origin).href);
-  assert.equal(await weekly.getAttribute('aria-current'), 'page');
+  await weekly.and(current).waitFor();
   assert.equal(await manager.getByRole('main').getByRole('tab').count(), 0);
   await manager.getByRole('button', { name: '生成全店周报', exact: true }).waitFor();
 
@@ -276,9 +277,8 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
   await lead.setViewportSize({ width: 320, height: 780 });
   await lead.getByRole('button', { name: '打开菜单', exact: true }).click();
   const menu = lead.getByRole('dialog', { name: '导航', exact: true });
-  const phoneReport = menu.getByRole('link', { name: '周报', exact: true });
+  const phoneReport = menu.getByRole('link', { name: '周报', exact: true }).and(menu.locator('[aria-current="page"]'));
   await phoneReport.waitFor();
-  assert.equal(await phoneReport.getAttribute('aria-current'), 'page');
   await lead.goto(new URL(reportPath + '/print', origin).href);
   await lead.getByRole('heading', { name: '管理周会 · 达肤妍', exact: true }).waitFor();
   assert.equal(await lead.getByRole('navigation', { name: '管理视图' }).count(), 0);

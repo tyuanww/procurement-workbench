@@ -141,17 +141,18 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
 async function checkReviewNavigation(page: Page, origin: URL, expectedEntries: number): Promise<void> {
   const sidebar = page.locator('aside');
   const imports = await sidebarLink(sidebar, GROUP_LABEL, IMPORT_LABEL);
+  const selected = sidebar.locator('[aria-current="page"]');
   await imports.click();
   await page.waitForURL(new URL('/imports', origin).href);
   assert.equal(await sidebarEntries(sidebar).count(), expectedEntries);
   const group = sidebarGroup(sidebar, GROUP_LABEL);
   const master = sidebar.getByRole('link', { name: MASTER_LABEL, exact: true });
-  assert.equal(await imports.getAttribute('aria-current'), 'page');
+  await imports.and(selected).waitFor();
   assert.equal(await group.getAttribute('aria-expanded'), 'true');
   await master.click();
   await page.waitForURL(new URL('/master', origin).href);
   await page.getByRole('heading', { name: MASTER_LABEL, exact: true, level: 1 }).waitFor();
-  assert.equal(await master.getAttribute('aria-current'), 'page');
+  await master.and(selected).waitFor();
   assert.equal(await page.getByRole('main').getByRole('tab').count(), 0);
   await imports.click();
   await page.waitForURL(new URL('/imports', origin).href);
