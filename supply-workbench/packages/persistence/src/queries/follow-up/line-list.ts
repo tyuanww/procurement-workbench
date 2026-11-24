@@ -7,7 +7,7 @@ import type { AppDatabase } from '../../client.js';
 import { orderLines, purchaseOrders } from '../../schema/orders.js';
 import { storeFilter } from '../store-progress/scope.js';
 import { storeProgressOf } from '../store-progress/rows.js';
-import { inTransitFactoryWhere } from './line-in-transit.js';
+import { inTransitFactoryWhere, linkedFactoryWhere } from './line-factory-filter.js';
 import { loadRelations, toRow } from './line-row.js';
 
 const PAGE_MAX = 200;
@@ -99,7 +99,10 @@ function countOf(value: unknown): number {
 }
 
 async function whereForRead({ db, query, today }: { readonly db: AppDatabase; readonly query: LinesQuery; readonly today: LocalDate }): Promise<SQL | undefined> {
-  const where = whereOf({ query, today, actorId: actorUserId(query) });
+  const where = and(
+    whereOf({ query, today, actorId: actorUserId(query) }),
+    query.factoryPartyId === undefined ? undefined : linkedFactoryWhere(db, query.factoryPartyId),
+  );
   return query.inTransitFactory === undefined ? where : inTransitFactoryWhere({ db, factory: query.inTransitFactory, where });
 }
 

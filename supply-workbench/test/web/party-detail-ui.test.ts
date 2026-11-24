@@ -20,7 +20,7 @@ it('主体详情直接打开筛选后的跟进台，别名和指标仍可切换'
     await waitFor(() => textOf('h1') === `主体 ${partyName}`);
 
     expect(orderLink('查看供应商订单')).toEqual({ lane: 'all', supplierPartyId: partyId });
-    expect(orderLink('查看代工厂相关订单')).toEqual({ lane: 'all', q: partyName });
+    expect(orderLink('查看代工厂相关订单')).toEqual({ lane: 'all', factoryPartyId: partyId });
 
     const tabs = [...document.querySelectorAll<HTMLElement>('[role="tab"]')];
     expect(tabs.map((tab) => tab.textContent)).toEqual(['别名', '指标']);

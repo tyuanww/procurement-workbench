@@ -9,6 +9,12 @@ import { lineFactoryLinks, orderLines, purchaseOrders } from '../../schema/order
 
 const FACTORY_NAMES: Record<NonNullable<LinesQuery['inTransitFactory']>, string> = { yinong: '宜侬' };
 
+export function linkedFactoryWhere(db: AppDatabase, partyId: string): SQL {
+  const linkedLines = db.select({ id: lineFactoryLinks.orderLineId }).from(lineFactoryLinks)
+    .where(and(eq(lineFactoryLinks.factoryPartyId, partyId), inArray(lineFactoryLinks.status, ['linked', 'manual'])));
+  return inArray(orderLines.id, linkedLines);
+}
+
 export async function inTransitFactoryWhere({ db, factory, where }: {
   readonly db: AppDatabase;
   readonly factory: NonNullable<LinesQuery['inTransitFactory']>;
@@ -18,8 +24,7 @@ export async function inTransitFactoryWhere({ db, factory, where }: {
   if (partyId === undefined) return sql`false`;
   const candidates = await db.select({ id: orderLines.id }).from(orderLines)
     .innerJoin(purchaseOrders, eq(orderLines.purchaseOrderId, purchaseOrders.id))
-    .innerJoin(lineFactoryLinks, eq(lineFactoryLinks.orderLineId, orderLines.id))
-    .where(and(where, isNull(orderLines.cancelledAt), eq(lineFactoryLinks.factoryPartyId, partyId), inArray(lineFactoryLinks.status, ['linked', 'manual'])));
+    .where(and(where, isNull(orderLines.cancelledAt), linkedFactoryWhere(db, partyId)));
   const lineIds = await openInTransitLines(db, candidates.map(({ id }) => id));
   return and(where, inArray(orderLines.id, lineIds));
 }

@@ -53,16 +53,18 @@ describe('跟进台地址和单元格', () => {
   });
 
   it('改阶段或逾期保留采购员，并回到第一页', () => {
-    const search = 'buyer=me&q=宜侬&supplierPartyId=sup-1&page=2&pageSize=50';
+    const search = 'buyer=me&q=宜侬&supplierPartyId=sup-1&factoryPartyId=factory-1&page=2&pageSize=50';
     const staged = addressOf(search, { kind: 'stage', value: 'awaiting_shipment' });
     expect(staged.get('buyer')).toBe('me');
     expect(staged.get('q')).toBe('宜侬');
     expect(staged.get('supplierPartyId')).toBe('sup-1');
+    expect(staged.get('factoryPartyId')).toBe('factory-1');
     expect(staged.has('page')).toBe(false);
     expect(staged.get('stage')).toBe('awaiting_shipment');
     expect(staged.has('stages')).toBe(false);
     const request = queryOf(staged.toString());
     expect(request.get('buyer')).toBe('me');
+    expect(request.get('factoryPartyId')).toBe('factory-1');
     expect(request.get('stages')).toBe('awaiting_shipment');
     expect(request.get('page')).toBe('1');
     expect(request.get('pageSize')).toBe('50');

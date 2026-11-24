@@ -103,6 +103,26 @@ it('没有命中时只返回表头', async () => {
   expect(texts(bytes, '采购单号')).toEqual([]);
 });
 
+it('代工厂筛选按关联订单行取数，列表、汇总和导出一致', async () => {
+  const get = (suffix: string) => app.inject({ method: 'GET', url: `/api/v1/lines${suffix}`, headers: { cookie: buyerCookie } });
+  const filter = 'factoryPartyId=factory-13';
+  const [listed, material, summary, exported, otherFactory] = await Promise.all([
+    get(`?${filter}&pageSize=1`),
+    get(`?${filter}&lane=material`),
+    get(`/summary?${filter}&pageSize=1`),
+    get(`/export.xlsx?${filter}&pageSize=1`),
+    get('?factoryPartyId=sup-b&supplierPartyId=sup-b'),
+  ]);
+  for (const response of [listed, material, summary, exported, otherFactory]) expect(response.statusCode).toBe(200);
+  expect(listed.json()).toMatchObject({ items: [{ id: 'line-a' }], page: { total: 8, pageSize: 1 } });
+  expect(material.json()).toMatchObject({ items: [{ id: 'line-m' }], page: { total: 1 } });
+  expect(summary.json()).toMatchObject({ total: 8 });
+  expect(texts(bytesOf(exported.rawPayload), '采购单号').sort()).toEqual([
+    'PO-A', 'PO-B', 'PO-M', 'PO-closed', 'PO-legacy', 'PO-settled', 'PO-transit', 'PO-voided',
+  ]);
+  expect(otherFactory.json()).toMatchObject({ items: [{ id: 'line-c' }], page: { total: 1 } });
+});
+
 it('宜侬在途按已关联工厂和实物在途量筛选，分页、汇总和导出一致', async () => {
   const get = (suffix: string) => app.inject({ method: 'GET', url: `/api/v1/lines${suffix}`, headers: { cookie: buyerCookie } });
   const filter = 'inTransitFactory=yinong';

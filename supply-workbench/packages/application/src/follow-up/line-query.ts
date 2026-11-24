@@ -1,4 +1,4 @@
-import type { Lane, LineStage, LocalDate, ProcurementStore } from '@sw/domain';
+import type { EntityId, Lane, LineStage, LocalDate, ProcurementStore } from '@sw/domain';
 import type { PageQuery } from '../shared/page.js';
 
 export type BuyerFilter =
@@ -11,6 +11,7 @@ export type LinesQuery = PageQuery & {
   readonly lane?: Lane;
   readonly q?: string;
   readonly supplierPartyId?: string;
+  readonly factoryPartyId?: EntityId;
   readonly inTransitFactory?: 'yinong';
   readonly receiverPartyId?: string;
   readonly buyer?: BuyerFilter;

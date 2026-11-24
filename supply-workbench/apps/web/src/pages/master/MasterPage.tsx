@@ -263,7 +263,6 @@ export function PartyPage() {
   const [detail, setDetail] = useState<PartyDetail | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [tab, setTab] = useState<'aliases' | 'kpis'>('aliases');
-  const partyId = params.id ?? '';
   const load = () => {
     if (params.id === undefined) {
       setLoadState('error');
@@ -279,7 +278,7 @@ export function PartyPage() {
   if (loadState === 'error' || detail === null) return <WorkbenchPage title="主体"><Result status="error" title="主体详情没有读出来" extra={<Button type="primary" onClick={load}>重试</Button>} /></WorkbenchPage>;
   const partyName = detail.party.displayName;
   return (
-    <WorkbenchPage title={`主体 ${partyName}`} action={<PartyOrderLinks partyId={partyId} partyName={partyName} />}>
+    <WorkbenchPage title={`主体 ${partyName}`} action={<PartyOrderLinks partyId={detail.party.id} />}>
       <Tabs
         activeKey={tab}
         onChange={(key) => setTab(key === 'kpis' ? 'kpis' : 'aliases')}
@@ -292,9 +291,9 @@ export function PartyPage() {
   );
 }
 
-function PartyOrderLinks({ partyId, partyName }: { readonly partyId: string; readonly partyName: string }) {
+function PartyOrderLinks({ partyId }: { readonly partyId: string }) {
   const supplierOrders = new URLSearchParams({ lane: 'all', supplierPartyId: partyId });
-  const factoryOrders = new URLSearchParams({ lane: 'all', q: partyName });
+  const factoryOrders = new URLSearchParams({ lane: 'all', factoryPartyId: partyId });
   return (
     <Flex gap="small" justify="flex-end" wrap>
       <Button href={`/lines?${supplierOrders}`}>查看供应商订单</Button>

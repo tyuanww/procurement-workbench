@@ -388,10 +388,13 @@ async function checkPartyOrderNavigation(page: Page) {
   await page.setViewportSize({ width: 320, height: 780 });
   await page.getByRole('link', { name: '查看代工厂相关订单', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/lines'
-    && url.searchParams.get('lane') === 'all' && url.searchParams.get('q') === partyName);
+    && url.searchParams.get('lane') === 'all' && url.searchParams.get('factoryPartyId') === partyId);
   await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await page.getByRole('link', { name: 'HZ09-0251', exact: true }).waitFor();
+  const factoryOrders = await page.getByRole('link', { name: /^HZ09-\d{4}$/ }).allTextContents();
+  assert.deepEqual(factoryOrders, ['HZ09-0251']);
   await page.setViewportSize({ width: 1440, height: 900 });
-  return { supplierPartyId: partyId, supplierOrder: 'HZ09-0250', factorySearch: partyName, phoneWidth: 320 };
+  return { supplierPartyId: partyId, supplierOrder: 'HZ09-0250', factoryPartyId: partyId, factoryOrders, phoneWidth: 320 };
 }
 
 async function checkImportRecovery(page: Page) {
