@@ -1,7 +1,9 @@
-import { Alert, Button, Empty, Flex, Result, Skeleton } from 'antd';
+import { Alert, Button, Empty, Flex, Result, Skeleton, Typography } from 'antd';
+import { businessDay } from '@sw/domain';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
+import { businessTimeZone } from '../../shared/business-time-zone.js';
 import {
   buyerView,
   dashboardQuery,
@@ -15,7 +17,7 @@ import {
   type DashboardView,
 } from '../../features/performance/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
-import { fontSize, space, text } from '../../theme/tokens.js';
+import { space } from '../../theme/tokens.js';
 import { BuyerPanel } from './BuyerPanel.js';
 import { BuyerLoadSummary, SupplierRateChart } from './dashboard-charts.js';
 import { ProjectProgressPanel } from './ProjectProgressPanel.js';
@@ -49,10 +51,11 @@ export function DashboardPage() {
   const [now] = useState(() => new Date());
   const query = dashboardQuery(params.toString(), now);
   const { from, to, lane, stage, bucket, cause, card, page, view } = query;
+  const today = businessDay(now.toISOString(), businessTimeZone());
   const performance = useCallback(() => loadDashboard({ from, to, lane }), [from, to, lane]);
   const stuck = useCallback(
-    () => loadStuck({ from, to, lane, stage, bucket, cause, card, page }),
-    [from, to, lane, stage, bucket, cause, card, page],
+    () => loadStuck({ from: today, to: today, lane, stage, bucket, cause, card, page }),
+    [today, lane, stage, bucket, cause, card, page],
   );
   const performanceBoard = useBoardLoad(performance, view === 'suppliers' || view === 'buyers');
   const stuckBoard = useBoardLoad(stuck, view === 'stuck');
@@ -64,11 +67,11 @@ export function DashboardPage() {
       <Flex vertical gap={space[3]}>
         {view === 'meeting' ? null : <DashboardChrome query={query} onSearch={onSearch} />}
         {view === 'meeting' ? <ManagementMeetingPanel now={now} /> : view === 'stuck' ? (
-          <BoardBody board={stuckBoard.state} onRetry={stuckBoard.reload}>
+          <BoardBody board={stuckBoard.state} onRetry={stuckBoard.reload} keepWhileUpdating>
             {(data, isUpdating) => <StuckPanel data={data} query={query} now={now} onSearch={onSearch} isUpdating={isUpdating} />}
           </BoardBody>
         ) : view === 'project' ? <ProjectBoard key={`${from}:${to}`} from={from} to={to} /> : (
-          <BoardBody board={performanceBoard.state} onRetry={performanceBoard.reload} keepOnError>
+          <BoardBody board={performanceBoard.state} onRetry={performanceBoard.reload}>
             {(loaded) => <ActiveView view={view} loaded={loaded} query={query} />}
           </BoardBody>
         )}
@@ -112,27 +115,14 @@ function boardFailure(error: unknown): string {
   return failure === null ? '看板没有载入' : failureText(failure);
 }
 
-function BoardNotice(props: { readonly board: BoardState<unknown> }) {
-  if (props.board.loaded !== null && props.board.isUpdating) {
-    return (
-      <p role="status" style={{ margin: 0, color: text.secondary, fontSize: fontSize.body }}>
-        数据在更新
-      </p>
-    );
-  }
-  if (props.board.error !== undefined)
-    return <Alert type="error" showIcon title={props.board.error} />;
-  return null;
-}
-
 function BoardBody<T>(props: {
   readonly board: BoardState<T>;
   readonly onRetry: () => void;
   readonly children: (loaded: T, isUpdating: boolean) => ReactNode;
-  readonly keepOnError?: boolean;
+  readonly keepWhileUpdating?: boolean;
 }) {
   const { loaded, error, isUpdating } = props.board;
-  if (error !== undefined && (loaded === null || !props.keepOnError)) {
+  if (error !== undefined) {
     return (
       <Result
         status="error"
@@ -145,9 +135,9 @@ function BoardBody<T>(props: {
       />
     );
   }
-  if (loaded === null) return <Skeleton active paragraph={{ rows: 8 }} />;
+  if (loaded === null || (isUpdating && !props.keepWhileUpdating)) return <Skeleton active paragraph={{ rows: 8 }} />;
   return <>
-    <BoardNotice board={props.board} />
+    {isUpdating ? <Typography.Text type="secondary" role="status">数据在更新</Typography.Text> : null}
     {props.children(loaded, isUpdating)}
   </>;
 }

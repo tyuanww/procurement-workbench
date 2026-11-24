@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { StuckDashboard } from '../../packages/contracts/src/index.js';
 import { localDate } from '../../packages/domain/src/index.js';
 import { DashboardPage } from '../../apps/web/src/pages/dashboard/DashboardPage.js';
@@ -70,6 +70,26 @@ it('同单同品同日的要货批次按序号区分，抽屉链接定位所选�
   const detail = document.querySelector(`${dialog} a`);
   expect(detail?.textContent).toBe('打开订单行');
   expect(detail?.getAttribute('href')).toBe('/lines/line-01?focusBatch=batch-2');
+});
+
+it('手机卡点先显示具体批次，旧链接的报表期间不参与当日快照', async () => {
+  installMatchMedia();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.startsWith('(max-width'), addEventListener: () => undefined, removeEventListener: () => undefined,
+  }));
+  installFetch();
+  page = mount(memoryRouter(element(DashboardPage), '/dashboard?lane=finished&from=2025-01-01&to=2025-02-01'));
+  const request = calls.find(({ url }) => url.startsWith('/api/v1/dashboard/stuck?'));
+  const search = new URLSearchParams(request?.url.split('?')[1]);
+  expect(search.get('from')).not.toBe('2025-01-01');
+  expect(search.get('from')).toBe(search.get('to'));
+  await respond('lane=finished', { ...base, total: 1, items: [{ ...older, poRaw: 'PO-01', batchSeq: 3 }] });
+
+  expect(textOf('thead')).toContain('采购单 / 批次');
+  expect(button('查看卡点明细 PO-01 第 3 批').textContent).toContain('第 3 批');
+  expect(document.querySelector('.ant-collapse [aria-expanded="false"]')?.textContent).toContain('卡点指标与原因筛选');
+  expect(document.querySelector('[aria-label="期间"]')).toBeNull();
+  expect(calls.some(({ url }) => url === '/api/v1/dashboard/bottlenecks?from=2026-10-12&to=2026-10-12')).toBe(true);
 });
 
 async function respond(filter: string, body: StuckDashboard): Promise<void> {

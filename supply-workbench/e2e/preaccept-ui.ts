@@ -192,6 +192,10 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await manager.getByRole('heading', { name: '项目进度', level: 1, exact: true }).waitFor();
   await manager.setViewportSize({ width: 320, height: 780 });
   await manager.goto(stuckUrl.href);
+  await stuckTrigger.waitFor();
+  const firstBatch = await stuckTrigger.boundingBox();
+  assert.ok(firstBatch && firstBatch.y >= 0 && firstBatch.y + firstBatch.height <= 780, '手机首屏应能查看第一批卡点');
+  assert.equal(await manager.getByRole('radiogroup', { name: '期间', exact: true }).count(), 0);
   await stuckTrigger.click();
   await stuck.getByText('等待方', { exact: true }).waitFor();
   await manager.keyboard.press('Escape');

@@ -1,4 +1,4 @@
-import { Card, DatePicker, Flex, Segmented, Select, Tag, Typography } from 'antd';
+import { Card, DatePicker, Flex, Select, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useId, type CSSProperties } from 'react';
 import { useShellViewport } from '../../features/shell/index.js';
@@ -10,6 +10,7 @@ import {
   type DashboardPreset,
   type DashboardQuery,
 } from '../../features/performance/index.js';
+import { ViewSwitch } from '../../shared/ui/view-switch.js';
 import { space } from '../../theme/tokens.js';
 
 type SearchHandler = (patch: DashboardPatch) => void;
@@ -33,14 +34,19 @@ export function DashboardChrome(props: {
   readonly query: DashboardQuery;
   readonly onSearch: SearchHandler;
 }) {
+  const { query, onSearch } = props;
   return (
     <Card size="small">
       <Flex wrap gap={space[2]} align="center">
-        <PeriodChips query={props.query} onSearch={props.onSearch} />
-        {props.query.view === 'project' ? null : <LaneChips lane={props.query.lane} onSearch={props.onSearch} />}
-        <PeriodPicker query={props.query} onSearch={props.onSearch} />
-        <Typography.Text type="secondary">{props.query.from} 至 {props.query.to}</Typography.Text>
-        {props.query.preset === 'custom' ? <Tag>自定义日期</Tag> : null}
+        {query.view === 'stuck' ? null : <>
+          <Typography.Text strong>统计期间</Typography.Text>
+          <PeriodChips query={query} onSearch={onSearch} />
+          <PeriodPicker query={query} onSearch={onSearch} />
+        </>}
+        {query.view === 'project' ? null : <>
+          <Typography.Text strong>线别</Typography.Text>
+          <LaneChips lane={query.lane} onSearch={onSearch} />
+        </>}
       </Flex>
     </Card>
   );
@@ -48,22 +54,23 @@ export function DashboardChrome(props: {
 
 function PeriodChips({ query, onSearch }: { readonly query: DashboardQuery; readonly onSearch: SearchHandler }) {
   const isPhone = useShellViewport().band === 'phone';
-  const options = namedPresetOptions();
+  const named = namedPresetOptions();
+  const options = query.preset === 'custom' ? [...named, { value: 'custom', label: PRESET_LABEL.custom }] : named;
   if (isPhone) {
     return <Select<DashboardPreset>
       aria-label="期间"
       value={query.preset}
-      options={query.preset === 'custom' ? [...options, { value: 'custom', label: PRESET_LABEL.custom }] : options}
+      options={options}
       onChange={(value) => choosePreset(value, onSearch)}
       style={{ minWidth: 120 }}
     />;
   }
-  return <Segmented aria-label="期间" value={query.preset} options={options} onChange={(value) => choosePreset(value, onSearch)} />;
+  return <ViewSwitch aria-label="期间" value={query.preset} options={options} onChange={(value) => choosePreset(value, onSearch)} />;
 }
 
 function LaneChips(props: { readonly lane: DashboardLane; readonly onSearch: SearchHandler }) {
   return (
-    <Segmented
+    <ViewSwitch
       aria-label="线别"
       value={props.lane}
       options={DASHBOARD_LANES.map((lane) => ({ label: LANE_LABEL[lane], value: lane }))}

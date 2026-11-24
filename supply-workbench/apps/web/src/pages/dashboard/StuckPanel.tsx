@@ -1,5 +1,5 @@
-import { Button, Descriptions, Drawer, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
-import { useRef, useState } from 'react';
+import { Button, Collapse, Descriptions, Drawer, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
+import { useRef, useState, type Ref } from 'react';
 import { Link } from 'react-router';
 import type { StuckDashboard, StuckItem } from '@sw/contracts';
 import { batchStatusLabel } from '@sw/domain';
@@ -26,7 +26,7 @@ import {
 import { useShellViewport } from '../../features/shell/index.js';
 import { MetricStrip, StackedBarChart, type MetricItem } from '../../shared/ui/analytics.js';
 import { mobileStuckColumns } from './stuck-mobile.js';
-import { CAUSE_LABEL, CauseFilter } from './cause-filter.js';
+import { CAUSE_LABEL, CauseFilter, SourceLinks } from './cause-filter.js';
 
 type SearchHandler = (patch: DashboardPatch) => void;
 type TextKey = 'stageLabel' | 'name' | 'waiting' | 'owner';
@@ -48,35 +48,60 @@ export function StuckPanel(props: {
   readonly now: Date;
 }) {
   const { data, query, onSearch, isUpdating } = props;
+  const isPhone = useShellViewport().band === 'phone';
   const [selected, setSelected] = useState<{ readonly batchId: string; readonly open: boolean }>();
   const listRef = useRef<HTMLElement>(null);
   const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
   const item = data.items.find((candidate) => candidate.batchId === selected?.batchId);
   const row = stuck.rows.find((candidate) => candidate.batchId === selected?.batchId);
+  const filterList = (patch: DashboardPatch) => {
+    onSearch(patch);
+    listRef.current?.focus();
+  };
+  const filters = <Flex vertical gap={space[2]}>
+    <CardRow kpis={data.kpis} filters={query} onSearch={filterList} />
+    <CauseFilter counts={data.causeCounts} cause={query.cause} onSearch={filterList} />
+  </Flex>;
   return (
     <Flex vertical gap={space[3]}>
-      <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计批次</Typography.Text>
-      <CardRow kpis={data.kpis} filters={query} onSearch={onSearch} />
-      <CauseFilter counts={data.causeCounts} from={query.from} to={query.to} cause={query.cause} onSearch={onSearch} />
-      <section ref={listRef} aria-label="卡点明细" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
-        <Flex vertical gap={space[2]}>
-          <StuckFilter filters={query} onSearch={onSearch} />
-          <Typography.Title level={2} style={{ margin: 0 }}>
-            卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
-          </Typography.Title>
-          {data.total === 0 && !isUpdating ? <Empty description="当前筛选没有卡点" /> : (
-            <StuckTable rows={isUpdating ? [] : stuck.rows} page={data.page} pageSize={data.pageSize}
-              total={data.total} isUpdating={isUpdating} now={props.now} onSearch={onSearch}
-              onOpen={(batch) => setSelected({ batchId: batch.batchId, open: true })} />
-          )}
-        </Flex>
-      </section>
-      <DwellChart dwell={stuck.dwell} onSearch={(patch) => { onSearch(patch); listRef.current?.focus(); }} />
+      <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计开放批次</Typography.Text>
+      {isPhone ? <Collapse size="small" items={[{ key: 'filters', label: '卡点指标与原因筛选', children: filters }]} /> : filters}
+      <StuckList ref={listRef} data={data} query={query} rows={stuck.rows} isUpdating={isUpdating} now={props.now} isPhone={isPhone}
+        onSearch={onSearch} onClear={() => filterList(CLEAR_FILTERS)}
+        onOpen={(batch) => setSelected({ batchId: batch.batchId, open: true })} />
+      <DwellChart dwell={stuck.dwell} onSearch={filterList} />
+      <SourceLinks key={data.asOf} asOf={data.asOf} />
       {item === undefined || row === undefined || selected === undefined ? null :
         <StuckDetails item={item} row={row} now={props.now} isOpen={selected.open}
           onClose={() => setSelected({ ...selected, open: false })} onHidden={() => setSelected(undefined)} />}
     </Flex>
   );
+}
+
+function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch, onClear, onOpen }: {
+  readonly ref: Ref<HTMLElement>;
+  readonly data: StuckDashboard;
+  readonly query: StuckFilters;
+  readonly rows: readonly StuckTableRow[];
+  readonly isUpdating: boolean;
+  readonly now: Date;
+  readonly isPhone: boolean;
+  readonly onSearch: SearchHandler;
+  readonly onClear: () => void;
+  readonly onOpen: (row: StuckTableRow) => void;
+}) {
+  return <section ref={ref} aria-label="卡点明细" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
+    <Flex vertical gap={space[2]}>
+      <Typography.Title level={2} style={{ margin: 0 }}>
+        卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
+      </Typography.Title>
+      <StuckFilter filters={query} onClear={onClear} />
+      {data.total === 0 && !isUpdating ? <Empty description="当前筛选没有卡点" /> : (
+        <StuckTable rows={isUpdating ? [] : rows} page={data.page} pageSize={data.pageSize}
+          total={data.total} isUpdating={isUpdating} now={now} onSearch={onSearch} isPhone={isPhone} onOpen={onOpen} />
+      )}
+    </Flex>
+  </section>;
 }
 
 function CardRow(props: {
@@ -129,12 +154,12 @@ function bucketOf(value: string): StuckBucket | undefined {
   return STUCK_BUCKETS.find((bucket) => bucket === value);
 }
 
-function StuckFilter(props: { readonly filters: StuckFilters; readonly onSearch: SearchHandler }) {
+function StuckFilter(props: { readonly filters: StuckFilters; readonly onClear: () => void }) {
   if (sameFilters(props.filters, CLEAR_FILTERS)) return null;
   return (
     <Flex align="center" wrap gap={space[1]}>
       <Tag>当前筛选 {filterText(props.filters)}</Tag>
-      <Button type="link" onClick={() => props.onSearch(CLEAR_FILTERS)}>显示全部</Button>
+      <Button type="link" onClick={props.onClear}>显示全部</Button>
     </Flex>
   );
 }
@@ -152,12 +177,12 @@ function StuckTable(props: {
   readonly pageSize: number;
   readonly total: number;
   readonly isUpdating: boolean;
+  readonly isPhone: boolean;
   readonly now: Date;
   readonly onSearch: SearchHandler;
   readonly onOpen: (row: StuckTableRow) => void;
 }) {
-  const isPhone = useShellViewport().band === 'phone';
-  const isNarrowPhone = isPhone && window.innerWidth <= 340;
+  const { isPhone } = props;
   return (
     <Table<StuckTableRow>
       size="small"
@@ -172,7 +197,7 @@ function StuckTable(props: {
         onChange: (page) => props.onSearch({ page }),
       }}
       rowKey="batchId"
-      columns={stuckColumns({ now: props.now, isPhone, isNarrowPhone, onOpen: props.onOpen })}
+      columns={stuckColumns({ now: props.now, isPhone, onOpen: props.onOpen })}
       dataSource={[...props.rows]}
       {...(isPhone ? {} : { scroll: { x: 'max-content' as const }, sticky: { offsetHeader: topBar } })}
     />
@@ -180,22 +205,22 @@ function StuckTable(props: {
 }
 
 function stuckColumns(input: {
-  readonly now: Date; readonly isPhone: boolean; readonly isNarrowPhone: boolean; readonly onOpen: (row: StuckTableRow) => void;
+  readonly now: Date; readonly isPhone: boolean; readonly onOpen: (row: StuckTableRow) => void;
 }): TableColumnType<StuckTableRow>[] {
   const openBatch = (row: StuckTableRow) => {
     const batch = row.batchSeq === undefined ? '' : `第 ${row.batchSeq} 批`;
     const label = ['查看卡点明细', row.po === EM_DASH ? row.name : row.po, batch].filter(Boolean).join(' ');
     return (
       <Button type="link" size="small" aria-label={label}
-        style={{ maxWidth: '100%', paddingInline: 0, height: 'auto', minHeight: 24, alignItems: 'start',
-          flexDirection: input.isPhone ? 'column' : 'row', gap: input.isPhone ? 0 : space[0] }}
+        style={{ maxWidth: '100%', paddingInline: 0, height: 'auto', minHeight: input.isPhone ? 44 : 24, alignItems: 'start',
+          justifyContent: 'center', textAlign: 'start', whiteSpace: 'normal', flexDirection: input.isPhone ? 'column' : 'row', gap: input.isPhone ? 0 : space[0] }}
         onClick={() => input.onOpen(row)}>
-        <Typography.Text ellipsis style={{ color: 'inherit', maxWidth: '100%' }}>{row.po === EM_DASH ? '查看' : row.po}</Typography.Text>
+        <Typography.Text style={{ color: 'inherit', maxWidth: '100%', overflowWrap: 'anywhere' }}>{row.po === EM_DASH ? '查看' : row.po}</Typography.Text>
         {batch === '' ? null : <Typography.Text type="secondary" style={{ flexShrink: 0 }}>{batch}</Typography.Text>}
       </Button>
     );
   };
-  if (input.isPhone) return mobileStuckColumns(input.isNarrowPhone, openBatch);
+  if (input.isPhone) return mobileStuckColumns({ now: input.now, openBatch });
   return [
     textColumn('阶段', 'stageLabel'),
     {
