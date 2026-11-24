@@ -17,17 +17,3 @@ export function multiNameChoice(mode: 'same_item' | 'shared_code', displayName: 
   if (mode === 'shared_code') return { mode: 'shared_code' };
   return { mode: 'same_item', displayName };
 }
-
-export const PARTY_TABS = ['aliases', 'orders', 'factory', 'kpis'] as const;
-export type PartyTab = (typeof PARTY_TABS)[number];
-
-const PARTY_TAB_LABELS: { readonly [K in PartyTab]: string } = {
-  aliases: '别名',
-  orders: '订单',
-  factory: '代工厂',
-  kpis: '指标',
-};
-
-export function partyTabLabel(tab: PartyTab): string {
-  return PARTY_TAB_LABELS[tab];
-}

@@ -18,6 +18,7 @@ const OWNED_KEYS: ReadonlySet<string> = new Set([
   'q',
   'buyer',
   'supplierPartyId',
+  'factoryPartyId',
   'inTransitFactory',
   'stage',
   'stages',
@@ -44,6 +45,7 @@ type DeskRecord = {
   readonly q: string | undefined;
   readonly buyer: string | undefined;
   readonly supplierPartyId: string | undefined;
+  readonly factoryPartyId: LinesQuery['factoryPartyId'];
   readonly inTransitFactory: LinesQuery['inTransitFactory'];
   readonly stage: StageSlot;
   readonly isOverdue: boolean;
@@ -115,6 +117,7 @@ function parseDesk(search: string): DeskRecord {
     q: takeField({ raw: params.get('q'), field: textField }),
     buyer: takeField({ raw: params.get('buyer'), field: textField }),
     supplierPartyId: takeField({ raw: params.get('supplierPartyId'), field: textField }),
+    factoryPartyId: takeField({ raw: params.get('factoryPartyId'), field: LinesQuerySchema.shape.factoryPartyId }),
     inTransitFactory: takeField({ raw: params.get('inTransitFactory'), field: LinesQuerySchema.shape.inTransitFactory }),
     stage: stageSlot({ stages: stageTokens(params.get('stages')), single: params.get('stage') }),
     isOverdue: isOverdueAddress({ overdue: params.get('overdue'), overdueOnly: params.get('overdueOnly') }),
@@ -282,6 +285,7 @@ function commonParams(record: DeskRecord): URLSearchParams {
   setText({ next, key: 'q', value: record.q });
   setText({ next, key: 'buyer', value: record.buyer });
   setText({ next, key: 'supplierPartyId', value: record.supplierPartyId });
+  setText({ next, key: 'factoryPartyId', value: record.factoryPartyId });
   setText({ next, key: 'inTransitFactory', value: record.inTransitFactory });
   return next;
 }

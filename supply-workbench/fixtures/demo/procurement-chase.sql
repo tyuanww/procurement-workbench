@@ -12,6 +12,11 @@ select 'hz09-line-' || n, date_trunc('milliseconds', current_timestamp), date_tr
        case n when 502 then '0199f0a0-0000-7000-8000-000000000003' else '0199f0a0-0000-7000-8000-000000000002' end,
        '0199f0a0-0000-7000-8000-000000000010', 'manual', false, 'not_applicable', 'awaiting_shipment', date_trunc('milliseconds', current_timestamp)
 from generate_series(1, 502) as n;
+insert into line_factory_links (id, created_at, updated_at, order_line_id, factory_party_id, status, source, confidence, linked_at)
+values ('hz09-link-1', date_trunc('milliseconds', current_timestamp), date_trunc('milliseconds', current_timestamp),
+        'hz09-line-1', 'hz09-factory-a', 'linked', 'po_master', 'po', date_trunc('milliseconds', current_timestamp)),
+       ('hz09-link-251', date_trunc('milliseconds', current_timestamp), date_trunc('milliseconds', current_timestamp),
+        'hz09-line-251', 'hz09-factory-b', 'manual', 'manual', 'manual', date_trunc('milliseconds', current_timestamp));
 insert into delivery_batches (id, created_at, updated_at, order_line_id, seq, planned_qty, planned_unit, receiver_party_id,
   date_buyer_confirmed, first_confirmed_date, status, status_changed_at, origin)
 select 'hz09-batch-' || n, date_trunc('milliseconds', current_timestamp), date_trunc('milliseconds', current_timestamp), 'hz09-line-' || n, 1,
