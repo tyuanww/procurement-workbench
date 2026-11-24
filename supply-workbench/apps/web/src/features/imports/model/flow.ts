@@ -8,10 +8,11 @@ type DateDecision = 'fill_file_year' | 'keep_null';
 export type NextStep = { readonly to: string; readonly label: string };
 
 export type ImportContinuationInput = {
+  readonly importBatchId: string;
   readonly template: TemplateId;
   readonly status: ImportStatus;
   readonly pendingAliases: number;
-  readonly createdLines: number;
+  readonly canReviewAliases: boolean;
   readonly unresolvedConflicts: number;
   readonly error: string | null;
 };
@@ -39,11 +40,11 @@ export function continuationOf(input: ImportContinuationInput): ImportContinuati
 }
 
 function committedSteps(input: ImportContinuationInput): readonly NextStep[] {
-  return [...aliasStep(input.pendingAliases), ...afterReview(input)];
+  return [...aliasStep(input), ...templateSteps(input)];
 }
 
-function aliasStep(pendingAliases: number): readonly NextStep[] {
-  if (pendingAliases <= 0) return [];
+function aliasStep({ canReviewAliases, pendingAliases }: ImportContinuationInput): readonly NextStep[] {
+  if (!canReviewAliases || pendingAliases <= 0) return [];
   return [{ to: '/master', label: `去审核 ${pendingAliases} 个新主体` }];
 }
 
@@ -52,18 +53,14 @@ const COMMITTED_STEP: Partial<Record<TemplateId, NextStep>> = {
   'product-archive-v1': { to: '/products', label: '去产品档案' },
 };
 
-function afterReview(input: ImportContinuationInput): readonly NextStep[] {
-  if (input.template === 'po-master-v1') return poSteps(input.createdLines);
+function templateSteps(input: ImportContinuationInput): readonly NextStep[] {
+  if (input.template === 'po-master-v1') {
+    const query = new URLSearchParams({ lane: 'all', importBatchId: input.importBatchId });
+    return [{ to: `/lines?${query}`, label: '查看本次导入订单' }];
+  }
   const step = COMMITTED_STEP[input.template];
   if (step === undefined) return [];
   return [step];
-}
-
-function poSteps(createdLines: number): readonly NextStep[] {
-  return [
-    { to: '/lines', label: `去跟进台看 ${createdLines} 行` },
-    { to: '/lines', label: '按总表首批生成待确认批次' },
-  ];
 }
 
 function blockedMessage(input: { readonly status: ImportStatus; readonly error: string | null }): string {
