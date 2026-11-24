@@ -10,7 +10,7 @@ import type { FactoryDiagnosticPageQuery, FactoryLinkCounts, FactoryLinkQueries,
 type Write = { readonly uow: UnitOfWork; readonly clock: Clock; readonly ids: IdGenerator };
 
 export type SetLineFactoryLinkDeps = Write;
-export type SetLineFactoryLink = (input: SetLineFactoryLinkInput, actor: Actor) => Promise<{ readonly orderLineId: string }>;
+export type SetLineFactoryLink = (input: SetLineFactoryLinkInput, actor: Actor) => Promise<LineFactoryLinkView>;
 export type RelinkFactoryRowsDeps = Write & { readonly links: FactoryLinkQueries };
 export type RelinkFactoryRows = (input: { readonly limit?: number | undefined }, actor: Actor) => Promise<RelinkFactoryRowsResult>;
 export type RelinkScheduleCellsDeps = Write & { readonly links: FactoryLinkQueries };

@@ -90,10 +90,13 @@ it('活动上报挂接和在途建单显示同一代工厂，订单筛选、汇�
       expect(stuck.statusCode).toBe(200);
       expect(StuckDashboardSchema.parse(stuck.json()).total).toBe(0);
 
-      const changed = await app.inject({ method: 'PUT', url: `/api/v1/lines/${createdId}/factory-link`, headers: admin, payload: { factoryPartyId: other.id } });
-      expect(changed.statusCode).toBe(200);
+      const changed = await app.inject({ method: 'PUT', url: `/api/v1/lines/${createdId}/factory-link`, headers: reviewer, payload: { factoryPartyId: other.id } });
+      expect(changed.statusCode, changed.body).toBe(200);
       expect(LineFactoryLinkViewSchema.parse(changed.json())).toMatchObject({ factory: reference(other), status: 'manual' });
-      const cancelled = await app.inject({ method: 'PUT', url: '/api/v1/lines/attached/factory-link', headers: admin, payload: { factoryPartyId: null, reason: '撤销工厂关联' } });
+      const readAsReviewer = await app.inject({ url: `/api/v1/lines/${createdId}/factory-link`, headers: reviewer });
+      expect(readAsReviewer.statusCode).toBe(403);
+      expect((await get(`/${createdId}/factory-link`)).json()).toEqual(changed.json());
+      const cancelled = await app.inject({ method: 'PUT', url: '/api/v1/lines/attached/factory-link', headers: reviewer, payload: { factoryPartyId: null, reason: '撤销工厂关联' } });
       expect(cancelled.statusCode).toBe(200);
       expect(LineFactoryLinkViewSchema.parse(cancelled.json())).toMatchObject({ factory: null, status: 'unlinked', source: 'manual' });
       expect((await list(filter)).items).toEqual([]);
