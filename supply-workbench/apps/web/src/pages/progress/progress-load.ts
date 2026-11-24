@@ -1,7 +1,7 @@
-import { LatestNotesSchema, type OrderLineRow, type ProcurementStore, type TodayResponse, type TodoItemView } from '@sw/contracts';
-import { apiSend } from '../../shared/api/client.js';
+import { type OrderLineRow, type ProcurementStore, type TodayResponse, type TodoItemView } from '@sw/contracts';
+import { fetchLatestNotes } from '../../shared/api/catalog.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import { mergeLoadedNotes, NOTE_READ_ERROR, progressMaterialRisks, progressRows, risksForLine, type LocalNote, type ProgressLine, type ProgressMaterialRisk, type ProgressNudge, type ProgressRow } from '../../features/progress/index.js';
+import { NOTE_READ_ERROR, progressMaterialRisks, progressRows, risksForLine, type ProgressLine, type ProgressMaterialRisk, type ProgressNudge, type ProgressRow } from '../../features/progress/index.js';
 import { progressActionSource } from './progress-action-source.js';
 
 export type ProgressData = {
@@ -32,8 +32,8 @@ function readLinePage(page: number, { store, isMine }: { readonly store: Procure
 }
 
 export async function loadProgress(
-  input: { readonly store: ProcurementStore; readonly isMine: boolean; readonly current: number; readonly latest: () => number; readonly local: () => readonly LocalNote[]; readonly setData: (data: ProgressData) => void; readonly setNotes: (notes: Readonly<Record<string, string>>) => void; readonly setError: (message: string) => void },
-) { const { current, latest, local, setData, setNotes, setError } = input;
+  input: { readonly store: ProcurementStore; readonly isMine: boolean; readonly current: number; readonly latest: () => number; readonly setData: (data: ProgressData) => void; readonly setNotes: (notes: Readonly<Record<string, string>>) => void; readonly setError: (message: string) => void },
+) { const { current, latest, setData, setNotes, setError } = input;
   try {
     const [lines, today] = await Promise.all([loadProgressLines(input), read({ name: 'today', scope: 'all' })]);
     if (current !== latest()) return;
@@ -45,7 +45,7 @@ export async function loadProgress(
     setData({ rows, lines: byId, arrivalMemos: today.arrivalMemos, actionNotice: actions.notice });
     const saved = await loadSavedNotes(rows);
     if (current !== latest()) return;
-    setNotes(mergeLoadedNotes({ loaded: saved.notes, local: local(), generation: current }));
+    setNotes(saved.notes);
     setError(saved.failed ? NOTE_READ_ERROR : '');
   } catch (caught) {
     if (current !== latest()) return;
@@ -67,12 +67,7 @@ export function noteBatches(lineIds: readonly string[]): readonly (readonly stri
 async function loadSavedNotes(rows: readonly ProgressRow[]): Promise<{ readonly notes: Record<string, string>; readonly failed: boolean }> {
   if (rows.length === 0) return { notes: {}, failed: false };
   try {
-    const loaded = await Promise.all(noteBatches(rows.map((row) => row.lineId)).map((orderLineIds) => apiSend({
-      path: '/api/v1/follow-ups/latest-notes',
-      method: 'POST',
-      body: { orderLineIds },
-      schema: LatestNotesSchema,
-    })));
+    const loaded = await Promise.all(noteBatches(rows.map((row) => row.lineId)).map(fetchLatestNotes));
     return { notes: Object.fromEntries(loaded.flatMap((item) => item.items).map((item) => [item.orderLineId, item.text])), failed: false };
   } catch {
     return { notes: {}, failed: true };
