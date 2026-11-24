@@ -116,7 +116,7 @@ export function WorkspaceBreadcrumb({ rows }: { readonly rows: readonly NavRow[]
   const group = active?.row.label ?? (canReadSettings && matchPath(SETTINGS_PATH, location.pathname) !== null ? '系统设置' : undefined);
   if (group === undefined) return null;
   const items = active?.destination === undefined ? [{ title: group }] : [{ title: group }, { title: active.destination.label }];
-  return <Breadcrumb aria-label="当前位置" items={items} style={{ marginBottom: space[2] }} />;
+  return <Breadcrumb aria-label="当前位置" items={items} style={{ marginBottom: space[3] }} />;
 }
 
 function navGlyph(path: NavPath): ReactNode {
