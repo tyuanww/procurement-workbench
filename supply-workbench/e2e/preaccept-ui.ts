@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkEmptyProductArchive, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
-import { checkManagementMeeting, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
+import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
 
@@ -106,6 +106,7 @@ async function procurementAcceptance(): Promise<void> {
   await buyer.goto(new URL('/reports', origin).href);
   await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
   result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
+  result.checks.orderLineNote = await checkOrderLineNote({ page: buyer, manager, origin, out });
 
   const { page: reviewer, devtools } = await open('reviewer', '/', '/master');
   await checkImportReviewLink(reviewer, importPath);
@@ -519,11 +520,12 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await source.getByText(workbookName, { exact: false }).waitFor();
   const componentPath = new URL(page.url()).pathname;
   const memo = '合成验收跟进记录';
-  await page.getByRole('textbox', { name: '跟进记录', exact: true }).fill(memo);
-  await page.getByRole('button', { name: '记跟进', exact: true }).click();
-  await page.getByText(memo, { exact: true }).waitFor();
+  const note = page.getByRole('region', { name: '订单行备注', exact: true });
+  await note.getByRole('textbox', { name: '订单行备注', exact: true }).fill(memo);
+  await note.getByRole('button', { name: '保存备注', exact: true }).click();
+  await note.getByText(memo, { exact: true }).waitFor();
   await page.reload();
-  await page.getByText(memo, { exact: true }).waitFor();
+  await note.getByText(memo, { exact: true }).waitFor();
   await page.screenshot({ path: join(out, 'procurement-component.png'), animations: 'disabled' });
 
   await page.goto(new URL('/imports?template=po-master-v1&status=committed', origin).href);
