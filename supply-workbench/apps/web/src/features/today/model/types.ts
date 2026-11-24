@@ -1,4 +1,4 @@
-import type { BatchStatus } from '@sw/domain';
+import type { BatchStatus, WaitingOnKind } from '@sw/domain';
 import type { TodoRow } from './group.js';
 
 export type BoardItem = TodoRow & {
@@ -6,6 +6,7 @@ export type BoardItem = TodoRow & {
   readonly productName: string | null;
   readonly qty: number | null;
   readonly batchStatus: BatchStatus | null;
+  readonly waitingKind?: WaitingOnKind;
   readonly inTransit?: { readonly qty: number; readonly unit: string };
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
@@ -28,7 +29,7 @@ export type RowFace = {
   readonly date: string;
   readonly remaining?: string;
   readonly inTransit?: string;
-  readonly factory?: string;
+  readonly waiting?: string;
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;

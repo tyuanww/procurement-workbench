@@ -117,9 +117,19 @@ function ActionPane(props: TodayScreenProps): ReactNode {
 
 function ActionLinks({ pending, arrivals, page }: { readonly pending: number; readonly arrivals: number; readonly page: TodayScreenProps['actionPage'] }) {
   const chaseCount = page?.paging.chaseCounts?.all;
+  const noteCount = page?.paging.internalNoteCount;
   return <nav className="today-touch" aria-label="今日快捷入口">
     <Flex gap="small" align="center" wrap>
-      <SectionJump id="today-chase" name={chaseCount === undefined ? '要催货' : `要催货 ${chaseCount} 批`} />
+      {page === undefined || chaseCount === undefined ? <SectionJump id="today-chase" name="行动清单" /> : <>
+        <Button size="small" aria-pressed={page.work === 'factory_chase'} onClick={() => {
+          page.onWork('factory_chase');
+          focusSection('today-chase');
+        }}>要催货 {chaseCount} 批</Button>
+        {noteCount === undefined ? null : <Button size="small" aria-pressed={page.work === 'internal_note'} onClick={() => {
+          page.onWork('internal_note');
+          focusSection('today-chase');
+        }}>内部等回单 {noteCount} 批</Button>}
+      </>}
       <SectionJump id="today-pending-batches" name={`待建批次 ${pending} 行`} hasTarget={pending > 0} />
       <SectionJump id="today-arrival-memos" name={`到仓待收 ${arrivals} 批`} hasTarget={arrivals > 0} />
       {page === undefined ? null : <FollowUpLinks page={page} />}

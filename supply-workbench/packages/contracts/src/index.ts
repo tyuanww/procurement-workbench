@@ -181,10 +181,11 @@ export {
   TodayPageResponseSchema,
   TodayQuerySchema,
   TodayResponseSchema,
+  TodayWorkFilterSchema,
   TodoItemSchema,
   TodoItemViewSchema,
 } from './today-views.js';
-export type { SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodoItem, TodoItemView } from './today-views.js';
+export type { SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodayWorkFilter, TodoItem, TodoItemView } from './today-views.js';
 
 export {
   AuditEntryViewSchema,

@@ -1,6 +1,6 @@
-import { Alert, Button, Collapse, Empty, Flex, Spin, Tag, Typography } from 'antd';
-import type { ReactNode } from 'react';
-import { CopyOutlined } from '@ant-design/icons';
+import { Alert, Button, Collapse, Dropdown, Empty, Flex, Spin, Tag, Typography } from 'antd';
+import { useRef, type ReactNode } from 'react';
+import { CopyOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoardGroup, BoardRow, GroupMode, QuickAction, ReasonChip, TodayBoard, TodayInsight, TodayKpiItem } from '../../features/today/index.js';
 import { todayPageKpi } from '../../features/today/index.js';
 import { MetricStrip, type MetricItem, type MetricTone } from '../../shared/ui/analytics.js';
@@ -38,7 +38,7 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
   return (
     <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="行动板待办">
       <Flex vertical gap="small">
-        <Typography.Title level={2} style={{ margin: 0 }}>要催货</Typography.Title>
+        <ActionHeading page={page} />
         <Flex className="today-touch" align="center" gap="small" wrap>
           {page?.sort.kind === 'bulk' ? null : <TodayGrouping label="行动板分组" modes={ACTION_MODES} group={board.group} onGroup={props.onGroup} />}
           {page === undefined ? null : <ActionControls page={page} />}
@@ -48,6 +48,18 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
       </Flex>
     </section>
   );
+}
+
+function ActionHeading({ page }: { readonly page: ActionBoardProps['page'] }) {
+  const work = page?.work;
+  const title = work === 'factory_chase' ? '要催货' : work === 'internal_note' ? '内部等回单' : '行动清单';
+  return <Flex className="today-touch" align="center" gap="small" wrap>
+    <Typography.Title level={2} style={{ margin: 0 }}>{title}</Typography.Title>
+    {page === undefined || work === undefined ? null : <Button size="small" onClick={(event) => {
+      event.currentTarget.closest('section')?.focus({ preventScroll: true });
+      page.onWork();
+    }}>查看全部待办</Button>}
+  </Flex>;
 }
 
 function ActionOptions({ board, insight, page, onToggleReason }: ActionBoardProps) {
@@ -114,7 +126,7 @@ function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly on
 
 function ActionGroups(props: ActionBoardProps): ReactNode {
   if (props.board.body.kind === 'empty') {
-    if (props.page?.sort.kind === 'bulk' || props.board.chips.some((chip) => chip.isSelected)) return <Empty description="当前筛选没有待办" />;
+    if (props.page?.isFiltered === true || props.board.chips.some((chip) => chip.isSelected)) return <Empty description="当前筛选没有待办" />;
     if (props.hasOtherWork) return null;
     return <Empty description={props.board.body.text}><Button href="/lines">去跟进中心</Button></Empty>;
   }
@@ -196,29 +208,56 @@ function TodayRow(props: {
   readonly onOpen: () => void;
   readonly onQuick: (kind: QuickAction['kind']) => void;
 }): ReactNode {
-  const { orderNo, productName } = props.row.face;
-  const batch = props.batchSeq === undefined ? '' : ` · 第 ${props.batchSeq} 批`;
   return (
     <Flex className="today-row" vertical gap="small" style={rowStyle({ isFocused: props.isFocused, isFading: props.isFading })}>
       <FaceBlock face={props.row.face} batchSeq={props.batchSeq} />
-      <Flex className="today-touch" align="center" gap="small" wrap>
-        <Button size="small" onClick={props.onOpen} aria-label={`查看详情 ${orderNo} · ${productName}${batch}`}>查看详情</Button>
-        <RowActions actions={props.row.actions} onQuick={props.onQuick} />
-        {props.copy === null ? null : <Button type="text" size="small" icon={<CopyOutlined aria-hidden />} disabled={props.copy.disabled} onClick={props.copy.run}>{props.copy.label}</Button>}
-      </Flex>
+      <RowActions {...props} />
     </Flex>
   );
 }
 
-function RowActions(props: { readonly actions: readonly QuickAction[]; readonly onQuick: (kind: QuickAction['kind']) => void }): ReactNode {
+function RowActions({ row, batchSeq, copy, onOpen, onQuick }: {
+  readonly row: BoardRow;
+  readonly batchSeq: number | undefined;
+  readonly copy: CopyAction | null;
+  readonly onOpen: () => void;
+  readonly onQuick: (kind: QuickAction['kind']) => void;
+}): ReactNode {
   const canRecord = useCanWrite('records.write');
-  if (!canRecord) return null;
+  const actions = canRecord ? row.actions : [];
+  const preferred = actions[0];
+  const isCopyPrimary = copy !== null && preferred?.kind !== 'date';
+  const primary = isCopyPrimary ? undefined : preferred;
+  const remaining = actions.filter((action) => action !== primary);
+  const { orderNo, productName } = row.face;
+  const batch = batchSeq === undefined ? '' : ` · 第 ${batchSeq} 批`;
+  const identity = `${orderNo} · ${productName}${batch}`;
   return (
-    <>
-      {props.actions.map((action, index) => (
-        <Button key={action.kind} type={index === 0 ? 'default' : 'text'} size="small" icon={actionIcon(action.kind)} onClick={() => props.onQuick(action.kind)}>{action.label}</Button>
-      ))}
-    </>
+    <Flex className="today-touch" align="center" gap="small" wrap>
+      {primary === undefined ? null : <Button type="primary" size="small" icon={actionIcon(primary.kind)} onClick={() => onQuick(primary.kind)}>{primary.label}</Button>}
+      {copy === null ? null : <CopyButton copy={copy} primary={isCopyPrimary} />}
+      <Button type={primary === undefined && !isCopyPrimary ? 'primary' : 'text'} size="small" onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
+      <RowMenu actions={remaining} identity={identity} onQuick={onQuick} />
+    </Flex>
   );
+}
+
+function RowMenu({ actions, identity, onQuick }: {
+  readonly actions: readonly QuickAction[];
+  readonly identity: string;
+  readonly onQuick: (kind: QuickAction['kind']) => void;
+}) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  if (actions.length === 0) return null;
+  return <Dropdown trigger={['click']} autoFocus menu={{ items: actions.map((action) => ({
+    key: action.kind, label: action.label, icon: actionIcon(action.kind),
+    onClick: () => { trigger.current?.focus(); onQuick(action.kind); },
+  })) }}>
+    <Button ref={trigger} type="text" size="small" aria-haspopup="menu" aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
+  </Dropdown>;
+}
+
+function CopyButton({ copy, primary }: { readonly copy: CopyAction; readonly primary: boolean }) {
+  return <Button type={primary ? 'primary' : 'text'} size="small" icon={<CopyOutlined aria-hidden />} disabled={copy.disabled} onClick={copy.run}>{copy.label}</Button>;
 }
 

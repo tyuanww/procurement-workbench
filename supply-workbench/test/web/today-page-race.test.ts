@@ -67,6 +67,46 @@ it('同一采购单上两个同名批次可以分别打开，关闭后保留清�
   }
 });
 
+it('要催货与内部等回单各显示对应批次并保留回到全部待办的入口', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today'));
+  const pending = batchTodo(3);
+  if (pending.batch === null) throw new Error('缺少回单样例批次');
+  const internal: TodoItemView = { ...pending, reasons: ['note_missing'], waitingOn: { kind: 'internal', partyId: null }, batch: { ...pending.batch, status: 'shipped' } };
+  const factories = [batchTodo(1), batchTodo(2)];
+  const result = (items: readonly TodoItemView[]) => {
+    const base = pageBody(items.length);
+    return { ...base, items, paging: { ...base.paging, chaseCounts: { all: 2, filtered: items.filter((item) => item.waitingOn.kind === 'supplier').length }, internalNoteCount: 1 } };
+  };
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) });
+    });
+    expect(document.querySelectorAll('.today-row')).toHaveLength(3);
+    click(button('要催货2批'));
+    await act(() => { fulfill({ urlPart: 'work=factory_chase', status: 200, body: result(factories) }); });
+    expect(document.querySelectorAll('.today-row')).toHaveLength(2);
+    expect(textOf('#today-chase')).toContain('共 2 批待催货');
+    expect(document.activeElement?.id).toBe('today-chase');
+
+    click(button('内部等回单1批'));
+    await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
+    expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
+    expect(textOf('#today-chase')).toContain('共 1 批等回单');
+    click(button('查看全部待办'));
+    await act(() => { fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) }); });
+    expect(document.querySelectorAll('.today-row')).toHaveLength(3);
+    expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
 function batchTodo(seq: number): TodoItemView {
   const id = `batch-${seq}`;
   return {

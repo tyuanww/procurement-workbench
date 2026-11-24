@@ -41,7 +41,11 @@ export function actionsOf(item: BoardItem): readonly QuickAction[] {
   if (item.remaining !== undefined) return item.reasons.includes('missing_date') ? DATE : SHIP;
   if (item.reasons.includes('fulfillment_review')) return [NOTE];
   if (item.batchStatus === null) return reasonActions(item.reasons);
-  return cap(withNote({ actions: listed(item.batchStatus), reasons: item.reasons }));
+  const actions = listed(item.batchStatus);
+  if (item.waitingKind === 'internal' && item.reasons.includes('note_missing')) {
+    return [NOTE, ...actions.filter((action) => action.kind !== 'note')];
+  }
+  return cap(withNote({ actions, reasons: item.reasons }));
 }
 
 function listed(status: BatchStatus): readonly QuickAction[] {
