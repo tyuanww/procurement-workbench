@@ -1,6 +1,6 @@
 import { Badge, Button, Dropdown, Menu, Tag, Tooltip, Typography, type MenuProps } from 'antd';
 import { LogoutOutlined, QuestionCircleOutlined, SettingOutlined, UserOutlined, WarningOutlined } from '@ant-design/icons';
-import { useId, useRef, useState, type CSSProperties } from 'react';
+import { useId, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { Link } from 'react-router';
 import { useCan } from '../shared/actor.js';
 import { SETTINGS_PATH } from '../shared/page-manifest.js';
@@ -46,6 +46,7 @@ export function AccountMenu({ account }: { readonly account: ShellView['account'
   const [logoutError, setLogoutError] = useState('');
   const panelId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const name = account.entries.find((entry) => entry.kind === 'name');
   const label = name === undefined ? '' : name.label;
   const close = () => {
@@ -53,10 +54,15 @@ export function AccountMenu({ account }: { readonly account: ShellView['account'
     trigger.current?.focus();
   };
   return (
-    <div onKeyDown={(event) => {
-      // Let native Tab navigation reach links inside this custom dropdown panel.
-      if (isOpen && event.key === 'Tab') event.stopPropagation();
-    }}>
+    <div
+      onBlur={({ relatedTarget }) => {
+        if (isOpen && !trigger.current?.contains(relatedTarget) && !panel.current?.contains(relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        // Let native Tab navigation reach links inside this custom dropdown panel.
+        if (isOpen && event.key === 'Tab') event.stopPropagation();
+      }}
+    >
       <Dropdown
         trigger={['click']}
         open={isOpen}
@@ -64,7 +70,7 @@ export function AccountMenu({ account }: { readonly account: ShellView['account'
         placement="bottomRight"
         getPopupContainer={(node) => node.closest('header') ?? node.ownerDocument.body}
         popupRender={() => (
-          <AccountPanel id={panelId} entries={account.entries} onClose={close} onFail={() => setLogoutError('退出没有完成')} />
+          <AccountPanel id={panelId} panelRef={panel} entries={account.entries} onClose={close} onFail={() => setLogoutError('退出没有完成')} />
         )}
       >
         <Button ref={trigger} type="text" aria-expanded={isOpen} aria-controls={isOpen ? panelId : undefined}>
@@ -103,9 +109,9 @@ function chipStyle(status: FreshnessChip['status']): { readonly color: string; r
   return { color: statusColor.warning.text, background: statusColor.warning.bg };
 }
 
-function AccountPanel(input: { readonly id: string; readonly entries: readonly AccountEntry[]; readonly onClose: () => void; readonly onFail: () => void }) {
+function AccountPanel(input: { readonly id: string; readonly panelRef: Ref<HTMLDivElement>; readonly entries: readonly AccountEntry[]; readonly onClose: () => void; readonly onFail: () => void }) {
   return (
-    <div id={input.id} style={{ background: bg.surface, padding: space[2], display: 'flex', flexDirection: 'column', gap: space[1] }}>
+    <div ref={input.panelRef} id={input.id} style={{ background: bg.surface, padding: space[2], display: 'flex', flexDirection: 'column', gap: space[1] }}>
       {input.entries.map((entry) => (
         <AccountRow key={entry.key} entry={entry} onClose={input.onClose} onFail={input.onFail} />
       ))}
