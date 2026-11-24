@@ -137,7 +137,10 @@ function conflictRow(): ImportRowView {
 }
 
 function showGenerate(role: Role): string {
-  return roleMarkup({ role, type: ReportListPage, props: null });
+  const react = reactOf();
+  const router = routerOf();
+  const page = react.createElement(router.MemoryRouter, { children: react.createElement(ReportListPage, null) });
+  return markup(ActorRoles, { roles: [role], children: page });
 }
 
 function showFeishu(role: Role): string {
