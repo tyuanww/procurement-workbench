@@ -152,6 +152,16 @@ describe('产品表格渲染', () => {
   });
 });
 
+it('图卡和表格都标出精确条码，保留同批相关结果', () => {
+  const props = { items: [BASE, FULL], exactBarcode: BASE.barcodeRaw };
+  for (const component of [ProductCards, ProductTable]) {
+    const html = markup(h(component, props));
+    expect(html.match(/条码精确匹配/g)).toHaveLength(1);
+    expect(html.indexOf('href="/products/product-1"')).toBeLessThan(html.indexOf('href="/products/product-2"'));
+    expect(html).toContain('href="/products/product-2"');
+  }
+});
+
 function markup(node: unknown): string {
   const html = server.renderToStaticMarkup(react.createElement(router.MemoryRouter, { children: node }));
   if (typeof html !== 'string') throw new Error('没有渲染出 HTML');

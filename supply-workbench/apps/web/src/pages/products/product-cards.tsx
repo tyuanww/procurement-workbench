@@ -1,10 +1,11 @@
 import { PictureOutlined } from '@ant-design/icons';
-import { Card, Col, Flex, Image, Row, Tag, Typography } from 'antd';
+import { Card, Flex, Image, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import type { ProductCard } from '@sw/contracts';
-import { bg, border, fontSize, space, text } from '../../theme/tokens.js';
+import { comparableBarcode } from '@sw/domain';
+import { bg, border, brand, fontSize, space, text } from '../../theme/tokens.js';
 
 export type ProductView = 'card' | 'table';
 
@@ -21,24 +22,17 @@ export function filingNameText(name: string | null): string {
   return name?.trim() || '待补充';
 }
 
-export function ProductCards({ items }: { readonly items: readonly ProductCard[] }): ReactNode {
+export function ProductCards({ items, exactBarcode = '' }: { readonly items: readonly ProductCard[]; readonly exactBarcode?: string }): ReactNode {
   return (
-    <Row align="top" gutter={[space[3], space[3]]} style={{ marginTop: space[2] }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 220px), 1fr))', gap: space[3] }}>
       {items.map((item) => (
-        <Col key={item.id} xs={24} sm={12} lg={8} xl={6} xxl={4}>
-          <CatalogProductLink id={item.id} style={cardLinkStyle()}>
-            <Card
-              hoverable
-              size="small"
-              styles={{ body: { padding: space[2] } }}
-              cover={<ProductCover item={item} />}
-            >
-              <CardBody item={item} />
-            </Card>
-          </CatalogProductLink>
-        </Col>
+        <CatalogProductLink key={item.id} id={item.id} style={cardLinkStyle()}>
+          <Card hoverable size="small" styles={{ body: { padding: space[2] } }} cover={<ProductCover item={item} />}>
+            <CardBody item={item} exactBarcode={exactBarcode} />
+          </Card>
+        </CatalogProductLink>
       ))}
-    </Row>
+    </div>
   );
 }
 
@@ -47,16 +41,26 @@ export function CatalogProductLink({ id, children, style }: { readonly id: strin
   return <Link to={`/products/${encodeURIComponent(id)}`} state={{ catalogSearch: search }} style={style}>{children}</Link>;
 }
 
-function CardBody({ item }: { readonly item: ProductCard }): ReactNode {
+function CardBody({ item, exactBarcode }: { readonly item: ProductCard; readonly exactBarcode: string }): ReactNode {
   return (
     <Flex vertical gap={space[1]} style={{ overflowWrap: 'anywhere' }}>
       <Flex align="flex-start" justify="space-between" gap={space[1]}>
         <Typography.Text strong style={{ fontSize: fontSize.body, lineHeight: '20px' }}>{item.skuName}</Typography.Text>
         {item.isChannelVariant ? <Tag variant="outlined" style={{ flexShrink: 0, marginInlineEnd: 0 }}>渠道规格</Tag> : null}
       </Flex>
-      <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{item.barcodeRaw}</Typography.Text>
+      <ProductBarcode item={item} exactBarcode={exactBarcode} />
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>备案名 {filingNameText(item.filingName)}</Typography.Text>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{specText(item)}</Typography.Text>
+    </Flex>
+  );
+}
+
+export function ProductBarcode({ item, exactBarcode }: { readonly item: ProductCard; readonly exactBarcode: string }): ReactNode {
+  const isExact = exactBarcode !== '' && comparableBarcode(item.barcodeRaw) === comparableBarcode(exactBarcode);
+  return (
+    <Flex align="center" wrap gap={space[1]}>
+      <Typography.Text strong={isExact} style={{ fontSize: fontSize.table, fontVariantNumeric: 'tabular-nums' }}>{item.barcodeRaw}</Typography.Text>
+      {isExact ? <Tag style={{ background: brand[100], color: brand[800], marginInlineEnd: 0 }}>条码精确匹配</Tag> : null}
     </Flex>
   );
 }

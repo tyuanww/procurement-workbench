@@ -104,20 +104,25 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   await page.screenshot({ path: join(out, 'closeout-product-archive.png'), animations: 'disabled' });
   await product.click();
   await page.getByRole('heading', { name: '产品 演示净润洁面乳', exact: true }).waitFor();
-  await page.getByRole('button', { name: /^采\s*购$/ }).click();
+  const tabs = page.getByRole('tablist', { name: '产品详情内容' });
+  await tabs.getByRole('tab', { name: '采购', exact: true }).click();
   await page.getByText('采购 4 行', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '只看本条码', exact: true }).click();
+  await page.getByRole('radio', { name: '全部渠道', exact: true }).press('ArrowRight');
   await page.getByText('采购 2 行', { exact: true }).waitFor();
-  await page.getByRole('button', { name: /^库\s*存$/ }).click();
+  const exact = page.getByRole('radio', { name: '只看本条码', exact: true });
+  assert.ok(await exact.isChecked() && await exact.evaluate((node) => node === document.activeElement));
+  await tabs.getByRole('tab', { name: '库存', exact: true }).click();
+  await page.reload();
+  await page.getByRole('tabpanel', { name: '库存', exact: true }).waitFor();
   await page.getByText('库存 1 行', { exact: true }).waitFor();
   const stock = await page.request.get(new URL('/api/v1/products/ui-demo-cleanser/stock', page.url()).href);
   assert.equal((await stock.json()).factory.total.value, 320);
   const source = await page.request.get(new URL('/api/v1/imports/ui-demo-stock-batch', page.url()).href);
   assert.equal(source.status(), 200);
-  await page.getByRole('button', { name: '组成物料', exact: true }).click();
+  await tabs.getByRole('tab', { name: '组成物料', exact: true }).click();
   await page.getByText('子件 2', { exact: true }).waitFor();
   await page.goto(new URL(cream, page.url()).href);
-  await page.getByRole('button', { name: '组成物料', exact: true }).click();
+  await tabs.getByRole('tab', { name: '组成物料', exact: true }).click();
   await page.getByText('没有 BOM', { exact: true }).waitFor();
 }
 
@@ -142,4 +147,8 @@ async function checkProductSearch(page: Page, origin: URL): Promise<void> {
   await page.getByText('没有符合条件的产品。', { exact: true }).waitFor();
   await page.getByRole('button', { name: '清除搜索', exact: true }).click();
   await page.locator(`a[href="${cleanser}"]`).waitFor();
+  await page.goto(new URL('/products?page=99', origin).href);
+  await page.getByRole('button', { name: '返回第一页' }).press('Enter');
+  await page.locator(`a[href="${cleanser}"]`).waitFor();
+  assert.ok(await page.getByRole('region', { name: '产品查询结果' }).evaluate((node) => document.activeElement === node));
 }
