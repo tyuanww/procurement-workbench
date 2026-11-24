@@ -256,10 +256,14 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   await note.getByText(newNote, { exact: true }).waitFor();
   await textbox.fill('这条草稿属于成品');
   const material = page.getByRole('region', { name: '关联采购事项', exact: true }).locator('a[href^="/lines/"]').first();
+  const materialUrl = new URL(await material.getAttribute('href') ?? '', origin);
+  assert.ok(materialUrl.pathname.startsWith('/lines/') && materialUrl.pathname !== order.pathname);
+  const materialId = decodeURIComponent(materialUrl.pathname.split('/').at(-1) ?? '');
   await material.click();
-  await page.waitForURL((url) => url.pathname.startsWith('/lines/') && url.pathname !== order.pathname);
+  await page.waitForURL(materialUrl.href);
+  await page.getByText('订单行 ' + materialId, { exact: false }).waitFor();
   await textbox.waitFor();
-  assert.equal(await textbox.inputValue(), '');
+  assert.equal(await textbox.inputValue(), '', '切换到物料后不应带入成品订单行的草稿');
   await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
   await page.waitForURL(progress.href);
   await page.setViewportSize({ width: 1440, height: 900 });
