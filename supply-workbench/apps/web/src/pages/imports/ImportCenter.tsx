@@ -9,6 +9,7 @@ import { ImportDetectionDetails, ImportTypeChoices } from './import-type-choice.
 import { useCanWrite } from '../../shared/actor.js';
 import { loadPartyOptions } from '../../features/master-data/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
+import { ImportReviewNav } from '../../shared/ui/import-review-nav.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { space } from '../../theme/tokens.js';
 import { ImportBatchHistory } from './ImportBatchHistory.js';
@@ -29,9 +30,9 @@ export function ImportCenter() {
   const canImport = useCanWrite('imports.write');
   return (
     <WorkbenchPage title="导入中心">
-      {canImport ? <><ImportUploadForm /><ImportBatchHistory /></> : (
-        <Typography.Text type="secondary">采购、审核人和管理员可从这里导入文件和回查批次。</Typography.Text>
-      )}
+      <ImportReviewNav />
+      {canImport ? <ImportUploadForm /> : null}
+      <ImportBatchHistory />
     </WorkbenchPage>
   );
 }

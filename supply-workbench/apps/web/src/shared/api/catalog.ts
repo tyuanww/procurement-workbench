@@ -1,6 +1,7 @@
 import {
   BuyerDrillSchema,
   DailyPlanSchema,
+  LatestNotesSchema,
   LineOwnerOptionsSchema,
   LineSummarySchema,
   LineTimelineSchema,
@@ -26,7 +27,7 @@ import {
   type TodayResponse,
 } from '@sw/contracts';
 import type { z } from 'zod';
-import { apiGetWithSignal } from './client.js';
+import { apiGetWithSignal, apiSend } from './client.js';
 import { throwRead } from './failure.js';
 
 export type LinesPage = ListResponse<OrderLineRow>;
@@ -83,6 +84,15 @@ export function fetchLine(input: { readonly id: string; readonly store?: Procure
 
 export function fetchLineTimeline(id: string, signal: AbortSignal): Promise<LineTimeline> {
   return fetchOwned({ path: `/api/v1/lines/${encodeURIComponent(id)}/timeline`, schema: LineTimelineSchema, signal });
+}
+
+export function fetchLatestNotes(orderLineIds: readonly string[]) {
+  return apiSend({
+    path: '/api/v1/follow-ups/latest-notes',
+    method: 'POST',
+    body: { orderLineIds },
+    schema: LatestNotesSchema,
+  });
 }
 
 export function fetchPlanDaily(date: string, signal: AbortSignal): Promise<PlanDaily> {

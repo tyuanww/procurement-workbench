@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
-import { useCanWrite } from '../../../shared/actor.js';
+import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
+import { fetchLatestNotes } from '../../../shared/api/catalog.js';
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
@@ -57,7 +58,7 @@ function RelatedProcurementLines({ lines, query }: { readonly lines: readonly Re
 type ProcurementSourcesList = NonNullable<OrderLineDetail['procurement']>['sources'];
 
 function ProcurementSources({ sources }: { readonly sources: ProcurementSourcesList }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   return (
     <Collapse items={[{
       key: 'procurement-source',
@@ -95,9 +96,34 @@ function ComponentFields({ line }: { readonly line: OrderLineDetail['line'] }) {
   ]} />;
 }
 
+type LatestNote =
+  | { readonly status: 'loading' | 'failed' }
+  | { readonly status: 'loaded'; readonly text: string | null };
+
+export function OrderLineNote({ lineId, onReload }: { readonly lineId: string; readonly onReload: () => void }) {
+  const [latest, setLatest] = useState<LatestNote>({ status: 'loading' });
+  const [version, setVersion] = useState(0);
+  const refresh = () => setVersion((current) => current + 1);
+  useEffect(() => {
+    let isCurrent = true;
+    void fetchLatestNotes([lineId]).then(({ items }) => {
+      if (isCurrent) setLatest({ status: 'loaded', text: items.find((item) => item.orderLineId === lineId)?.text ?? null });
+    }).catch(() => {
+      if (isCurrent) setLatest({ status: 'failed' });
+    });
+    return () => { isCurrent = false; };
+  }, [lineId, version]);
+  return <section aria-label="订单行备注">
+    <Typography.Title level={2}>订单行备注</Typography.Title>
+    {latest.status === 'failed' ? <Alert type="warning" showIcon title="最新备注没有读出来" action={<Button onClick={refresh}>重试</Button>} /> : null}
+    {latest.status === 'loaded' ? <p role="status" style={{ whiteSpace: 'pre-wrap' }}>{latest.text ?? '暂无订单行备注'}</p> : null}
+    <ProcurementFollowUp lineId={lineId} onReload={() => { refresh(); onReload(); }} />
+  </section>;
+}
+
 export function ProcurementFollowUp({ lineId, batchId, onReload }: { readonly lineId: string; readonly batchId?: string; readonly onReload: () => void }) {
   const [draft, setDraft] = useState('');
-  const label = batchId === undefined ? '跟进记录' : '工厂承诺';
+  const label = batchId === undefined ? '订单行备注' : '工厂承诺';
   const [isSaving, setSaving] = useState(false);
   const [error, setError] = useState('');
   async function submit() {
@@ -118,8 +144,8 @@ export function ProcurementFollowUp({ lineId, batchId, onReload }: { readonly li
   return (
     <>
       <Form layout="inline" onFinish={() => { void submit(); }}>
-        <Input aria-label={label} placeholder={batchId === undefined ? '填写跟进记录' : '例如周五发 5,000 件'} value={draft} disabled={isSaving} onChange={(event) => setDraft(event.target.value)} style={{ maxWidth: 420 }} />
-        <Button htmlType="submit" disabled={draft.trim() === ''} loading={isSaving}>{batchId === undefined ? '记跟进' : '记工厂承诺'}</Button>
+        <Input aria-label={label} placeholder={batchId === undefined ? '填写订单行备注' : '例如周五发 5,000 件'} value={draft} disabled={isSaving} onChange={(event) => setDraft(event.target.value)} style={{ maxWidth: 420 }} />
+        <Button htmlType="submit" disabled={draft.trim() === ''} loading={isSaving}>{batchId === undefined ? '保存备注' : '记工厂承诺'}</Button>
       </Form>
       {error === '' ? null : <Alert type="error" showIcon title={error} />}
     </>

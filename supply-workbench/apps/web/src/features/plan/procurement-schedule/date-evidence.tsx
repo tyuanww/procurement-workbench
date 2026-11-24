@@ -3,7 +3,7 @@ import { type BatchView, type OrderLineDetail } from '@sw/contracts';
 import { batchStatusLabel, countsInRecordedQuantity } from '@sw/domain';
 import { space } from '../../../theme/tokens.js';
 import { formatDateTime } from '../../../shared/ui/format.js';
-import { useCanWrite } from '../../../shared/actor.js';
+import { useCan } from '../../../shared/actor.js';
 import { Link } from 'react-router';
 
 type Dates = NonNullable<OrderLineDetail['procurementSchedule']>;
@@ -15,7 +15,7 @@ const fieldLabels: Readonly<Record<Observation['field'], string>> = {
 };
 
 export function ProcurementDateEvidence({ schedule, batches }: { readonly schedule: Dates; readonly batches: readonly BatchView[] }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   const dates = [
     ['OA 提报日', schedule.submittedOn],
     ['需求下发日', schedule.releasedOn],

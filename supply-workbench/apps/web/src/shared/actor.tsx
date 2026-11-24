@@ -11,8 +11,10 @@ export function useActorRoles(): readonly Role[] {
   return useContext(ActorRoleContext) ?? [];
 }
 
-export function useCanWrite(action: PermissionAction): boolean {
+export function useCan(action: PermissionAction): boolean {
   const roles = useContext(ActorRoleContext);
   if (roles === null) return false;
   return can({ roles }, action);
 }
+
+export { useCan as useCanWrite };

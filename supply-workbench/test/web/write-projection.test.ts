@@ -18,7 +18,7 @@ const ROLES = ['manager', 'lead', 'buyer', 'reviewer'] as const satisfies readon
 
 const CASES: readonly { readonly marker: string; readonly action: PermissionAction; readonly show: (role: Role) => string }[] = [
   { marker: '按总表生成批次', action: 'lines.write', show: showBulk },
-  { marker: '记下进度', action: 'records.write', show: showNote },
+  { marker: '已向工厂催单', action: 'records.write', show: showNote },
   { marker: '登记发货', action: 'records.write', show: showShip },
   { marker: '标记完成', action: 'records.write', show: showTask },
   { marker: '取消任务', action: 'records.write', show: showTask },
@@ -58,14 +58,11 @@ function showBulk(role: Role): string {
 }
 
 function showNote(role: Role): string {
-  return roleMarkup({ role, type: ProgressNote, props: {
-    lineId: 'line-1',
-    saved: '',
-    draft: '',
-    onDraft: () => undefined,
-    onSaved: () => undefined,
-    onError: () => undefined,
-  } });
+  const react = reactOf();
+  const router = routerOf();
+  const note = react.createElement(ProgressNote, { href: '/lines/line-1', saved: '已向工厂催单' });
+  const page = react.createElement(router.MemoryRouter, { children: note });
+  return markup(ActorRoles, { roles: [role], children: page });
 }
 
 function showShip(role: Role): string {

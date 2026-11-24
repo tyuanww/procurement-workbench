@@ -16,7 +16,7 @@ import {
 
 const NOW = '2026-10-18T00:00:00.000Z';
 const HIDDEN = ['/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,产品档案,导入中心,主数据,设置';
+const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,产品档案,导入与审核,设置';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;
@@ -94,33 +94,33 @@ describe('首页和主数据角标', () => {
   it('审核人只靠多品名也能进主数据，角标是合计', () => {
     const view = home(['reviewer'], counts([0, 0, 0, 2]));
     expect(view.home).toBe('/master');
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'count', value: 2 });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'count', value: 2 });
   });
 
   it('四个计数相加', () => {
     const view = home(['reviewer'], counts([1, 2, 3, 4]));
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'count', value: 10 });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'count', value: 10 });
   });
 
   it('只有审核人且合计为 0 时回进度，不显示角标', () => {
     const view = home(['reviewer'], counts([0, 0, 0, 0]));
     expect(view.home).toBe('/progress');
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'none' });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'none' });
   });
 
   it('只有审核人且队列未知时回进度，角标是缺失', () => {
     const view = home(['reviewer'], { kind: 'unknown' });
     expect(view.home).toBe('/progress');
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'missing' });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'missing' });
   });
 
   it('审核人兼管理层在未知和空队列时都进看板', () => {
     const unknown = home(['reviewer', 'manager'], { kind: 'unknown' });
     const empty = home(['reviewer', 'manager'], counts([0, 0, 0, 0]));
     expect(unknown.home).toBe('/dashboard');
-    expect(badgeAt(unknown, '/master')).toEqual({ kind: 'missing' });
+    expect(badgeAt(unknown, '/imports')).toEqual({ kind: 'missing' });
     expect(empty.home).toBe('/dashboard');
-    expect(badgeAt(empty, '/master')).toEqual({ kind: 'none' });
+    expect(badgeAt(empty, '/imports')).toEqual({ kind: 'none' });
   });
 
   it('审核人兼负责人在有待审时进主数据', () => {
@@ -130,15 +130,15 @@ describe('首页和主数据角标', () => {
   it('只有管理员时进设置，主数据行没有数字', () => {
     const view = home(['admin'], counts([3, 0, 0, 0]));
     expect(view.home).toBe('/settings');
-    expect(view.nav.map((item) => item.to)).toContain('/master');
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'none' });
+    expect(view.nav.find((item) => item.to === '/imports')?.matchPaths).toEqual(['/imports', '/imports/:id', '/master']);
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'none' });
     expect(view.nav.map((item) => item.label).join(',')).toBe(NAV_LABELS);
   });
 
   it('只有管理员且队列未完成时首页未定，主数据角标仍是 none', () => {
     const view = home(['admin'], { kind: 'pending' });
     expect(view.home).toBeUndefined();
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'none' });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'none' });
   });
 
   it('管理员兼采购落在进度', () => {
@@ -148,7 +148,7 @@ describe('首页和主数据角标', () => {
   it('管理员兼审核人在有待审时进主数据并显示合计', () => {
     const view = home(['admin', 'reviewer'], counts([1, 1, 0, 0]));
     expect(view.home).toBe('/master');
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'count', value: 2 });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'count', value: 2 });
   });
 
   it('单采购进今日，空角色留在进度，日常入口权限各自保留', () => {
@@ -161,7 +161,9 @@ describe('首页和主数据角标', () => {
       const paths = view.nav.map((item) => item.to);
       expect(view.home).toBe(route);
       expect(paths.some((path) => HIDDEN.includes(path))).toBe(false);
-      expect(paths).toContain('/imports');
+      const imports = view.nav.find((item) => item.to === '/imports');
+      expect(imports?.label).toBe(roles.length === 0 ? undefined : '导入中心');
+      expect(paths).toHaveLength(roles.length === 0 ? 4 : 5);
     }
   });
 
@@ -176,6 +178,7 @@ describe('首页和主数据角标', () => {
     expect(view.home).toBe('/reports');
     expect(view.nav.map((item) => item.label)).toContain('管理看板');
     expect(view.nav.map((item) => item.label)).not.toContain('周报');
+    expect(view.nav.map((item) => item.to)).not.toContain('/imports');
   });
 
   it('管理层兼负责人进看板', () => {
@@ -185,7 +188,7 @@ describe('首页和主数据角标', () => {
   it('审核人在队列未完成时首页未定，角标保持 pending', () => {
     const view = home(['reviewer'], { kind: 'pending' });
     expect(view.home).toBeUndefined();
-    expect(badgeAt(view, '/master')).toEqual({ kind: 'pending' });
+    expect(badgeAt(view, '/imports')).toEqual({ kind: 'pending' });
   });
 });
 

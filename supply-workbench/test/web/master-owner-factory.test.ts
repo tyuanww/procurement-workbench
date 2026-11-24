@@ -31,10 +31,9 @@ import {
   FactoryLinkCountsCards,
   linkCountStats,
   loadFactoryLinkCounts,
-  loadUnmatchedFactoryRows,
   relinkFactoryRows,
   relinkResultText,
-  UnmatchedFactoryRows,
+  UnmatchedFactoryRowList,
   unmatchedReasonLabel,
 } from '../../apps/web/src/pages/master/FactoryLinkTab.js';
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
@@ -45,11 +44,12 @@ const PENDING: PendingOwnerView = { id: 'assignment-1', lineId: 'line-1', nameRa
 const COUNTS: FactoryLinkCounts = { linked: 7200, manual: 100, unlinked: 39 };
 const UNMATCHED: UnmatchedFactoryRowView = { rowId: 'row-1', kind: 'shipment', factoryPartyId: 'factory-1', poRaw: 'PO-1', itemCodeRaw: 'ITEM-1', barcodeRaw: null, reason: 'NO_FACTORY_ROW_MATCH', suggestedAction: '补工厂进度行或人工挂接' };
 const RELINK: RelinkFactoryRowsResult = { factoryRows: 7339, factoryLinked: 7200, factoryManual: 100, factoryUnlinked: 39, conflicts: 0, linesLinked: 600, linesUnlinked: 6, byBasis: { po: 7000, item_code: 200, barcode: 100 } };
-it('主数据 tab 与 URL 参数一一对应，默认回到别名审核', () => {
-  expect(MASTER_TABS.map((item) => item.label)).toEqual(['别名审核', '一号多名', '未关联上报', '负责人映射', '工厂关联']);
+it('主数据默认打开别名，旧的未关联上报链接归到工厂关联', () => {
+  expect(MASTER_TABS.map((item) => item.label)).toEqual(['别名审核', '一号多名', '负责人映射', '工厂关联']);
   expect(masterTabOf(null)).toBe('aliases');
   expect(masterTabOf('owner-map')).toBe('owner-map');
   expect(masterTabOf('factory-link')).toBe('factory-link');
+  expect(masterTabOf('unlinked')).toBe('factory-link');
   expect(masterTabOf('nope')).toBe('aliases');
   expect(writeMasterTab('drawer=alias&aliasId=a1', 'factory-link').toString()).toBe('drawer=alias&aliasId=a1&tab=factory-link');
   expect(writeMasterTab('drawer=alias&aliasId=a1&tab=owner-map', 'aliases').toString()).toBe('drawer=alias&aliasId=a1');
@@ -120,43 +120,35 @@ it('指定负责人提交原始名称和用户 id，并把更新条数交给调�
 it('工厂关联读接口失败不伪装成 0，重跑和回填走 POST 空对象', async () => {
   const restoreFailure = mockFetch(() => jsonResponse({}, 500));
   let counts: LoadState<FactoryLinkCounts> = { kind: 'loading' };
-  let unmatched: LoadState<readonly UnmatchedFactoryRowView[]> = { kind: 'loading' };
   await loadFactoryLinkCounts((state) => { counts = state; });
-  await loadUnmatchedFactoryRows((state) => { unmatched = state; });
   restoreFailure();
   expect(counts).toEqual({ kind: 'error', message: '工厂关联概览没有读出来。' });
-  expect(unmatched).toEqual({ kind: 'error', message: '未匹配工厂行没有读出来。' });
 
   const calls: { readonly url: string; readonly body: string }[] = [];
   const restoreOk = mockFetch((url, init) => {
     calls.push({ url, body: String(init?.body) });
-    return url.endsWith('/counts') ? jsonResponse(COUNTS) : url.includes('/unmatched') ? jsonResponse({ items: [UNMATCHED] }) : jsonResponse({ updated: 0 });
+    return jsonResponse(COUNTS);
   });
   let readyCounts: LoadState<FactoryLinkCounts> = { kind: 'loading' };
-  let readyUnmatched: LoadState<readonly UnmatchedFactoryRowView[]> = { kind: 'loading' };
   await loadFactoryLinkCounts((state) => { readyCounts = state; });
-  await loadUnmatchedFactoryRows((state) => { readyUnmatched = state; });
   restoreOk();
   expect(readyCounts).toEqual({ kind: 'ready', value: COUNTS });
-  expect(readyUnmatched).toEqual({ kind: 'ready', value: [UNMATCHED] });
 
-  let relinked: RelinkFactoryRowsResult | undefined;
   const restoreRelink = mockFetch((url, init) => {
     calls.push({ url, body: String(init?.body) });
     return jsonResponse(RELINK);
   });
-  await relinkFactoryRows({ onResult: (result) => { relinked = result; } });
+  const relinked = await relinkFactoryRows();
   restoreRelink();
-  let backfilled = -1;
   const restoreBackfill = mockFetch((url, init) => {
     calls.push({ url, body: String(init?.body) });
     return jsonResponse({ updated: 12 });
   });
-  await backfillSupplierParties({ onResult: (value) => { backfilled = value; } });
+  const backfilled = await backfillSupplierParties();
   restoreBackfill();
   expect(relinked).toEqual(RELINK);
   expect(backfilled).toBe(12);
-  expect(calls.slice(2)).toEqual([
+  expect(calls.slice(1)).toEqual([
     { url: '/api/v1/factory-links/relink', body: '{}' },
     { url: '/api/v1/factory-links/backfill-suppliers', body: '{}' },
   ]);
@@ -243,17 +235,12 @@ it('工厂概览和未匹配行用 antd 卡片与标签展示原因和建议动�
   expect(countsHtml).toContain('7,200');
   expect(countsHtml).toContain('ant-statistic');
 
-  const unmatchedHtml = render(UnmatchedFactoryRows, {
-    state: { kind: 'ready', value: [UNMATCHED] },
-    onRetry: () => undefined,
-  });
+  const unmatchedHtml = render(UnmatchedFactoryRowList, { rows: [UNMATCHED] });
   expect(unmatchedHtml).toContain('成品出货');
   expect(unmatchedHtml).toContain('单号 PO-1');
   expect(unmatchedHtml).toContain('没有匹配到工厂行');
   expect(unmatchedHtml).toContain('补工厂进度行或人工挂接');
 
-  const emptyHtml = render(UnmatchedFactoryRows, { state: { kind: 'ready', value: [] }, onRetry: () => undefined });
-  expect(emptyHtml).toContain('没有未匹配工厂行');
 });
 
 it('工厂操作有确认、加载态和禁用，仍用 antd 按钮', () => {
@@ -265,13 +252,16 @@ it('工厂操作有确认、加载态和禁用，仍用 antd 按钮', () => {
   expect(busy).toContain('ant-btn-loading');
 });
 
-it('主数据页按 URL tab 渲染 P1/P2 两个入口，默认仍可打开别名审核', () => {
+it('主数据页只给工厂关联保留一个入口，旧链接打开当前待处理', () => {
   const all = renderMasterRoute('/master');
-  for (const label of ['别名审核', '一号多名', '未关联上报', '负责人映射', '工厂关联']) expect(all).toContain(label);
+  for (const label of ['别名审核', '一号多名', '负责人映射', '工厂关联']) expect(all).toContain(label);
+  expect(all).not.toContain('未关联上报');
   expect(all).not.toContain('重跑工厂关联');
   const factory = renderMasterRoute('/master?tab=factory-link');
   expect(factory).toContain('重跑工厂关联');
   expect(factory).toContain('回填供应商主体');
+  const legacy = renderMasterRoute('/master?tab=unlinked');
+  expect(legacy).toContain('当前待处理上报');
 });
 
 function render(type: unknown, props: unknown): string {

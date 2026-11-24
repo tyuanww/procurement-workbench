@@ -2,7 +2,6 @@ import {
   AppstoreOutlined,
   CalendarOutlined,
   DashboardOutlined,
-  DatabaseOutlined,
   FieldTimeOutlined,
   ImportOutlined,
   ProfileOutlined,
@@ -57,8 +56,6 @@ function navGlyph(path: NavPath): ReactNode {
       return <AppstoreOutlined />;
     case '/imports':
       return <ImportOutlined />;
-    case '/master':
-      return <DatabaseOutlined />;
     case '/settings':
       return <SettingOutlined />;
     default:

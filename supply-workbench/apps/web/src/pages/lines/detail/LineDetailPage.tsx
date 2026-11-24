@@ -5,14 +5,14 @@ import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type Order
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
 import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits, timelineLineText } from '../../../features/follow-up/index.js';
-import { useCanWrite } from '../../../shared/actor.js';
+import { useCan, useCanWrite } from '../../../shared/actor.js';
 import { formatDateTime } from '../../../shared/ui/format.js';
 import { PageHeader, surfaceStyle } from '../../../shared/ui/page.js';
 import { space } from '../../../theme/tokens.js';
 import { MissingValue, presentRaw } from '../../../shared/ui/widgets.js';
 import { LineRecordDrawer, openRecord } from './RecordSession.js';
 import { BuyerControls } from './buyer-controls.js';
-import { BatchUnitCorrection, ProcurementFollowUp, ProcurementSection } from './procurement.js';
+import { BatchUnitCorrection, OrderLineNote, ProcurementFollowUp, ProcurementSection } from './procurement.js';
 import { FulfillmentRecords, FulfillmentSummary } from './fulfillment.js';
 import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../features/plan/index.js';
 import { ScheduleReports } from './schedule-reports.js';
@@ -98,6 +98,7 @@ function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly d
       <ProcurementSection detail={detail} />
       {detail.procurementSchedule === undefined ? null : <ProcurementScheduleEvidence detail={detail} params={params} />}
       {isComponent ? null : <FactorySummary detail={detail} />}
+      {canRecord ? <OrderLineNote lineId={lineId} onReload={onReload} /> : null}
       <Typography.Title level={2}>批次</Typography.Title>
       {canRecord && canAddBatch(detail.line) ? <Button onClick={() => openRecord({ search: params.toString(), setParams, drawer: 'create', batchId: '' })}>新增批次</Button> : null}
       <ul>{detail.batches.map((batch) => (
@@ -106,7 +107,7 @@ function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly d
         })} lineId={lineId} setMessage={setMessage} onReload={onReload} />
       ))}</ul>
       {canRecord ? <LineRecordDrawer detail={detail} onReload={onReload} /> : null}
-      <DetailTimeline events={events} lineId={lineId} showFollowUp={isComponent && canRecord} onReload={onReload} />
+      <DetailTimeline events={events} />
       {isComponent ? null : <ScheduleReports rows={detail.factoryReports.schedule} ordered={detail.line.qtyOrdered} shipped={detail.line.factoryDeliveredQty.value} received={detail.line.receivedQty} />}
       <Shipments detail={detail} onReload={onReload} setMessage={setMessage} />
     </div>
@@ -177,7 +178,7 @@ function FactorySummary({ detail }: { readonly detail: OrderLineDetail }) {
 }
 
 function ImportedSnapshot({ snapshot }: { readonly snapshot: OrderLineDetail['snapshot'] }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   if (snapshot === null) return <p>暂无导入快照</p>;
   const imported = Object.values(snapshot.fields).map(({ provenance }) => provenance)
     .filter((source) => source.kind === 'import' || source.kind === 'factory_report');
@@ -191,11 +192,10 @@ function ImportedSnapshot({ snapshot }: { readonly snapshot: OrderLineDetail['sn
   </div>;
 }
 
-function DetailTimeline({ events, lineId, showFollowUp, onReload }: { readonly events: readonly TimelineEvent[]; readonly lineId: string; readonly showFollowUp: boolean; readonly onReload: () => void }) {
+function DetailTimeline({ events }: { readonly events: readonly TimelineEvent[] }) {
   return (
     <>
       <Typography.Title level={2}>时间线</Typography.Title>
-      {showFollowUp ? <ProcurementFollowUp lineId={lineId} onReload={onReload} /> : null}
       <ul>{events.map((event) => (
         <li key={event.id}>
           {timelineLineText(event)}

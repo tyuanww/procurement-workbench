@@ -1,4 +1,4 @@
-export type PageGate = 'always' | 'oversight' | 'review' | 'admin';
+export type PageGate = 'always' | 'oversight' | 'imports' | 'review' | 'admin';
 
 export type NavPath =
   | '/progress'
@@ -7,7 +7,6 @@ export type NavPath =
   | '/dashboard'
   | '/products'
   | '/imports'
-  | '/master'
   | '/settings';
 
 export type NavRoute = {
