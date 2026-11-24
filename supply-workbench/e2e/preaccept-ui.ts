@@ -14,6 +14,7 @@ import { checkEmptyProductArchive, checkImportReviewNavigation } from './import-
 import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
+import { checkRedReview } from './red-review-acceptance.ts';
 import { sidebarGroup, sidebarLink } from './sidebar.ts';
 
 const workbook = new URL('../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
@@ -138,6 +139,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.factoryLinkBoard = await checkFactoryLinkBoard({ reviewer, openAdmin: async () => (await open('admin', '/master?tab=factory-link')).page, origin, out });
   seedDemoFixture(new URL('../fixtures/demo/frontend-closeout.sql', import.meta.url));
   result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
+  result.checks.redReview = await checkRedReview({ page: admin, origin });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
@@ -162,6 +164,15 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   assert.equal(manager.url(), stuckUrl.href);
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
+  await stuckTrigger.click();
+  const orderLine = stuck.getByRole('link', { name: '打开订单行', exact: true });
+  const batchHref = new URL(await orderLine.getAttribute('href') ?? '', origin);
+  assert.match(batchHref.pathname, /^\/lines\/[^/]+$/);
+  assert.ok(batchHref.searchParams.get('focusBatch'));
+  await orderLine.click();
+  await manager.waitForURL(batchHref.href);
+  await manager.getByRole('region', { name: '批次', exact: true }).locator('li:focus').waitFor();
+  await manager.goto(stuckUrl.href);
 
   const sidebar = manager.locator('aside');
   const suppliers = await sidebarLink(sidebar, '管理看板', '供应商表现');
@@ -186,7 +197,7 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
   await manager.setViewportSize({ width: 1440, height: 900 });
-  return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], phoneWidth: 320 };
+  return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], focusedStuckBatch: true, phoneWidth: 320 };
 }
 
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {

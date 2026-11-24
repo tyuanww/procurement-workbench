@@ -274,6 +274,8 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   await detail.waitFor();
   const order = new URL(await detail.getAttribute('href') ?? '', origin);
   const lineId = decodeURIComponent(order.pathname.split('/').at(-1) ?? '');
+  const returnToProgress = new URL(progress.href);
+  returnToProgress.searchParams.set('focusLine', lineId);
   assert.equal(order.searchParams.get('store'), store);
   const line = await page.request.get(new URL('/api/v1' + order.pathname, origin).href);
   assert.ok(line.ok());
@@ -298,8 +300,9 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   });
   await note.getByText(newNote, { exact: true }).waitFor();
   await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
-  await page.waitForURL(progress.href);
+  await page.waitForURL(returnToProgress.href);
   await row.getByText(newNote, { exact: true }).waitFor();
+  await product.and(page.locator('a:focus')).waitFor();
   assert.equal(await row.getByText(oldNote, { exact: true }).count(), 0);
 
   await page.setViewportSize({ width: 320, height: 800 });
@@ -321,7 +324,7 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   await textbox.waitFor();
   assert.equal(await textbox.inputValue(), '', '切换到物料后不应带入成品订单行的草稿');
   await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
-  await page.waitForURL(progress.href);
+  await page.waitForURL(returnToProgress.href);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await manager.goto(progress.href);
