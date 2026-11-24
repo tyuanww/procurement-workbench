@@ -1,5 +1,5 @@
 import { Alert, Button, Collapse, Dropdown, Empty, Flex, Spin, Tag, Typography } from 'antd';
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { CopyOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoardGroup, BoardRow, GroupMode, QuickAction, ReasonChip, TodayBoard, TodayInsight, TodayKpiItem } from '../../features/today/index.js';
 import { todayPageKpi } from '../../features/today/index.js';
@@ -248,12 +248,13 @@ function RowMenu({ actions, identity, onQuick }: {
   readonly onQuick: (kind: QuickAction['kind']) => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
+  const [isOpen, setOpen] = useState(false);
   if (actions.length === 0) return null;
-  return <Dropdown trigger={['click']} autoFocus menu={{ items: actions.map((action) => ({
+  return <Dropdown trigger={['click']} autoFocus open={isOpen} onOpenChange={setOpen} menu={{ items: actions.map((action) => ({
     key: action.kind, label: action.label, icon: actionIcon(action.kind),
     onClick: () => { trigger.current?.focus(); onQuick(action.kind); },
   })) }}>
-    <Button ref={trigger} type="text" size="small" aria-haspopup="menu" aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
+    <Button ref={trigger} type="text" size="small" aria-haspopup="menu" aria-expanded={isOpen} aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
   </Dropdown>;
 }
 
