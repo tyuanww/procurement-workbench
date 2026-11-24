@@ -94,11 +94,15 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
     && url.searchParams.get('from') === plannedEnd && url.searchParams.get('drawer') === 'task:' + toItemId);
   await scheduleLink.waitFor({ state: 'hidden' });
   await warning.waitFor();
+  const taskBar = page.getByRole('button', { name: new RegExp('^' + successor + '\\s'), includeHidden: true });
+  await taskBar.waitFor();
+  const dependencyHint = page.getByText(`依赖冲突 · ${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: true });
+  await dependencyHint.waitFor();
   await page.goBack();
   await page.waitForURL(todayUrl);
   await scheduleLink.waitFor();
   await warning.waitFor();
-  return { task: successor, predecessor, scheduleAnchor: plannedEnd, restoredTodayContext: true };
+  return { task: successor, predecessor, scheduleAnchor: plannedEnd, visibleInTimeline: true, restoredTodayContext: true };
 }
 
 async function createScheduleTask(page: Page, origin: URL, title: string, plannedStart: string, plannedEnd: string) {
