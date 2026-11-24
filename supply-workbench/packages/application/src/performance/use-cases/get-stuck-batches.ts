@@ -124,6 +124,8 @@ function itemOf(batch: KpiBatch, facts: PerformanceFacts): StuckItem[] {
   const orderLineId = label?.orderLineId ?? null;
   return [{
     batchId: batch.id,
+    ...(label === undefined ? {} : { batchSeq: label.seq }),
+    ...(orderLineId === null ? {} : { orderLineId }),
     stage: batch.status,
     daysInStage: days,
     poRaw: label?.poRaw ?? null,

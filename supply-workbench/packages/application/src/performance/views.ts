@@ -12,6 +12,8 @@ export type StuckCauseCounts = Readonly<Record<StuckCause, number>>;
 
 export type StuckItem = {
   readonly batchId: string;
+  readonly batchSeq?: number;
+  readonly orderLineId?: string;
   readonly stage: BatchStatus;
   readonly daysInStage: number;
   readonly poRaw: string | null;

@@ -179,5 +179,5 @@ function labelOf({ row, lines, orders }: { readonly row: typeof deliveryBatches.
   const line = lines.get(row.orderLineId);
   const order = line === undefined ? undefined : orders.get(line.purchaseOrderId);
   if (line === undefined || order === undefined) return [];
-  return [[row.id, { poRaw: order.poRaw, nameRaw: line.nameRaw, orderLineId: line.id }]];
+  return [[row.id, { seq: row.seq, poRaw: order.poRaw, nameRaw: line.nameRaw, orderLineId: line.id }]];
 }

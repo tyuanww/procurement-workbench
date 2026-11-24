@@ -76,7 +76,10 @@ it('卡点通过真实接口筛选全部 201 批，并能翻到最后一页', as
       const last = await getStuck('&lane=finished&page=5');
       expect(first).toMatchObject({ asOf: '2026-10-12', page: 1, pageSize: 50, total: 201 });
       expect(first.items).toHaveLength(50);
-      expect(first.items[0]?.batchId).toBe('older-000');
+      expect(first.items.slice(0, 2)).toMatchObject([
+        { batchId: 'older-000', batchSeq: 10, orderLineId: 'line-1', poRaw: 'PO1', nameRaw: '面膜', dateBuyerConfirmed: '2026-10-20' },
+        { batchId: 'older-001', batchSeq: 11, orderLineId: 'line-1', poRaw: 'PO1', nameRaw: '面膜', dateBuyerConfirmed: '2026-10-20' },
+      ]);
       expect(last.items.map((item) => item.batchId)).toEqual(['zz-latest-pending']);
       expect(last).toMatchObject({ page: 5, total: 201 });
       const middle = await Promise.all([2, 3, 4].map((page) => getStuck(`&lane=finished&page=${page}`)));

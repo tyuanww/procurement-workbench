@@ -2,6 +2,7 @@ import type { KpiFollowUp, KpiInput } from '@sw/domain';
 import type { BuyerLoadDashboard, BuyerLoadQuery, PeriodQuery, StuckDashboard, StuckQuery, SupplierDashboard, SupplierQuery } from '../performance/views.js';
 
 export type BatchLabel = {
+  readonly seq: number;
   readonly poRaw: string | null;
   readonly nameRaw: string | null;
   readonly orderLineId: string | null;

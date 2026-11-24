@@ -1,7 +1,9 @@
 import { Button, Descriptions, Drawer, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
 import { useRef, useState } from 'react';
+import { Link } from 'react-router';
 import type { StuckDashboard, StuckItem } from '@sw/contracts';
 import { batchStatusLabel } from '@sw/domain';
+import { useCan } from '../../shared/actor.js';
 import { formatQuantity, formatTableDate } from '../../shared/ui/format.js';
 import {
   EM_DASH,
@@ -180,12 +182,19 @@ function StuckTable(props: {
 function stuckColumns(input: {
   readonly now: Date; readonly isPhone: boolean; readonly isNarrowPhone: boolean; readonly onOpen: (row: StuckTableRow) => void;
 }): TableColumnType<StuckTableRow>[] {
-  const openBatch = (row: StuckTableRow) => (
-    <Button type="link" size="small" aria-label={`查看卡点明细 ${row.po === EM_DASH ? row.name : row.po}`}
-      style={{ maxWidth: '100%', paddingInline: 0 }} onClick={() => input.onOpen(row)}>
-      <Typography.Text ellipsis style={{ color: 'inherit' }}>{row.po === EM_DASH ? '查看' : row.po}</Typography.Text>
-    </Button>
-  );
+  const openBatch = (row: StuckTableRow) => {
+    const batch = row.batchSeq === undefined ? '' : `第 ${row.batchSeq} 批`;
+    const label = ['查看卡点明细', row.po === EM_DASH ? row.name : row.po, batch].filter(Boolean).join(' ');
+    return (
+      <Button type="link" size="small" aria-label={label}
+        style={{ maxWidth: '100%', paddingInline: 0, height: 'auto', minHeight: 24, alignItems: 'start',
+          flexDirection: input.isPhone ? 'column' : 'row', gap: input.isPhone ? 0 : space[0] }}
+        onClick={() => input.onOpen(row)}>
+        <Typography.Text ellipsis style={{ color: 'inherit', maxWidth: '100%' }}>{row.po === EM_DASH ? '查看' : row.po}</Typography.Text>
+        {batch === '' ? null : <Typography.Text type="secondary" style={{ flexShrink: 0 }}>{batch}</Typography.Text>}
+      </Button>
+    );
+  };
   if (input.isPhone) return mobileStuckColumns(input.isNarrowPhone, openBatch);
   return [
     textColumn('阶段', 'stageLabel'),
@@ -215,18 +224,17 @@ function StuckDetails({ item, row, now, isOpen, onClose, onHidden }: {
   readonly item: StuckItem; readonly row: StuckTableRow; readonly now: Date; readonly isOpen: boolean;
   readonly onClose: () => void; readonly onHidden: () => void;
 }) {
-  const signals = [
-    !item.factoryLinked && CAUSE_LABEL.missing_factory,
-    item.factoryUnlinked && CAUSE_LABEL.factory_demand_unlinked,
-    item.exceptionOpen && CAUSE_LABEL.exception_open,
-    item.supplierAliasPending && CAUSE_LABEL.supplier_pending,
-    item.bomMissing && CAUSE_LABEL.bom_missing,
-  ].filter((label) => label !== false);
+  const canReadLine = useCan('data.read');
+  const lineHref = canReadLine && item.orderLineId !== undefined
+    ? `/lines/${encodeURIComponent(item.orderLineId)}?focusBatch=${encodeURIComponent(item.batchId)}` : undefined;
+  const signals = stuckSignals(item);
   return <Drawer open={isOpen} title="卡点批次明细" size={`min(${drawerWidth}px, 100vw)`} onClose={onClose}
     afterOpenChange={(open) => { if (!open) onHidden(); }}
     focusable={{ trap: true, focusTriggerAfterClose: true }}>
     <Descriptions size="small" column={1} items={[
       { key: 'po', label: '采购单', children: row.po },
+      { key: 'batch', label: '要货批次', children: row.batchSeq === undefined ? row.batchId : `第 ${row.batchSeq} 批` },
+      ...(lineHref === undefined ? [] : [{ key: 'line', label: '订单行', children: <Link to={lineHref}>打开订单行</Link> }]),
       { key: 'name', label: '品名', children: row.name },
       { key: 'stage', label: '阶段', children: `${row.stageLabel} · 停留 ${row.daysInStage} 天` },
       { key: 'waiting', label: '等待方', children: row.waiting },
@@ -235,6 +243,16 @@ function StuckDetails({ item, row, now, isOpen, onClose, onHidden }: {
       { key: 'signals', label: '关联与异常', children: signals.length === 0 ? EM_DASH : signals.map((label) => <Tag key={label}>{label}</Tag>) },
     ]} />
   </Drawer>;
+}
+
+function stuckSignals(item: StuckItem): string[] {
+  return [
+    !item.factoryLinked && CAUSE_LABEL.missing_factory,
+    item.factoryUnlinked && CAUSE_LABEL.factory_demand_unlinked,
+    item.exceptionOpen && CAUSE_LABEL.exception_open,
+    item.supplierAliasPending && CAUSE_LABEL.supplier_pending,
+    item.bomMissing && CAUSE_LABEL.bom_missing,
+  ].filter((label) => label !== false);
 }
 
 function textColumn(title: string, dataIndex: TextKey): TableColumnType<StuckTableRow> {

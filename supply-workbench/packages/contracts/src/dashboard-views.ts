@@ -32,6 +32,8 @@ export const StuckQuerySchema: z.ZodType<StuckQuery> = strictObject({
 
 export const StuckItemSchema: z.ZodType<StuckItem> = strictObject({
   batchId: z.string(),
+  batchSeq: optional(z.int()),
+  orderLineId: optional(z.string().min(1)),
   stage: BatchStatusSchema,
   daysInStage: z.number(),
   poRaw: nullable(z.string()),

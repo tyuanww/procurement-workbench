@@ -37,7 +37,7 @@ function facts(batches: readonly KpiBatch[]): PerformanceFacts {
     followUps: [],
     partyNames: { supplier: '宜侬' },
     buyerNames: { 'buyer-1': '样例采购员' },
-    batchLabels: { late: { poRaw: 'PO1', nameRaw: '面膜', orderLineId: 'line-1' } },
+    batchLabels: { late: { seq: 1, poRaw: 'PO1', nameRaw: '面膜', orderLineId: 'line-1' } },
     linkedFactoryOrderLineIds: new Set<string>(),
     unlinkedFactoryOrderLineIds: new Set<string>(),
     openExceptionOrderLineIds: new Set<string>(),

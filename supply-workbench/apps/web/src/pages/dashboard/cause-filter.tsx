@@ -1,15 +1,21 @@
-import { Button, Tag, Typography } from 'antd';
+import { Alert, Button, Tag, Typography } from 'antd';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { apiGet } from '../../shared/api/client.js';
+import { apiGetWithSignal } from '../../shared/api/client.js';
+import { failureText, readFailureOf } from '../../shared/api/reads.js';
 import { BottleneckSummarySchema, type BottleneckSummary, type StuckCauseCounts } from '@sw/contracts';
 import { BOTTLENECK_CAUSES, type BottleneckCause, type DashboardPatch } from '../../features/performance/index.js';
-import { can } from '@sw/domain';
-import { useActorRoles } from '../../shared/actor.js';
+import { useCan } from '../../shared/actor.js';
 import { formatQuantity } from '../../shared/ui/format.js';
 import { space } from '../../theme/tokens.js';
 
 const groupStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space[1] };
+const BOTTLENECK_SUMMARY_PATH = '/api/v1/dashboard/bottlenecks';
+
+type SourceState =
+  | { readonly kind: 'loading' | 'empty' }
+  | { readonly kind: 'ready'; readonly categories: BottleneckSummary['categories'] }
+  | { readonly kind: 'error'; readonly message: string };
 
 export const CAUSE_LABEL: Record<BottleneckCause, string> = {
   missing_owner: '缺负责人',
@@ -45,36 +51,65 @@ export function CauseFilter(props: {
         ))}
         {props.cause === null ? null : <Button type="link" onClick={() => props.onSearch({ cause: null })}>清除原因</Button>}
       </div>
-      <SourceLinks from={props.from} to={props.to} />
+      <SourceLinks key={`${props.from}:${props.to}`} from={props.from} to={props.to} />
     </div>
   );
 }
 
-function SourceLinks(props: { readonly from: string; readonly to: string }): ReactNode {
-  const canOpenMaster = can({ roles: useActorRoles() }, 'master.review');
-  const [categories, setCategories] = useState<BottleneckSummary['categories']>([]);
+function SourceLinks({ from, to }: { readonly from: string; readonly to: string }): ReactNode {
+  const canOpenMaster = useCan('master.review');
+  const [state, setState] = useState<SourceState>({ kind: 'loading' });
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
-    let isActive = true;
-    void apiGet(`/api/v1/dashboard/bottlenecks?from=${props.from}&to=${props.to}`, BottleneckSummarySchema)
-      .then((value) => { if (isActive) setCategories(value.categories); })
-      .catch(() => { if (isActive) setCategories([]); });
-    return () => { isActive = false; };
-  }, [props.from, props.to]);
-  if (categories.length === 0) return null;
-  const hasMasterSources = categories.some((category) => isMasterHref(category.href));
+    const controller = new AbortController();
+    const params = new URLSearchParams({ from, to });
+    void apiGetWithSignal({
+      path: `${BOTTLENECK_SUMMARY_PATH}?${params}`, schema: BottleneckSummarySchema, signal: controller.signal,
+    }).then(
+      ({ categories }) => {
+        if (controller.signal.aborted) return;
+        setState(categories.length === 0 ? { kind: 'empty' } : { kind: 'ready', categories });
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        const failure = readFailureOf(error);
+        setState({ kind: 'error', message: failure === null ? '请重试。' : failureText(failure) });
+      },
+    );
+    return () => controller.abort();
+  }, [from, to, revision]);
+  const retry = () => {
+    setState({ kind: 'loading' });
+    setRevision((value) => value + 1);
+  };
   return (
-    <div role="group" aria-label="来源汇总" style={{ ...groupStyle, gap: space[2] }}>
-      <Typography.Text strong>来源汇总</Typography.Text>
-      <Typography.Text type="secondary">按各来源当前数据统计</Typography.Text>
-      {categories.map((category) => {
-        const label = `${category.label} ${formatQuantity(category.count)}`;
-        return !canOpenMaster && isMasterHref(category.href)
-          ? <span key={category.key}>{label}</span>
-          : <Link key={category.key} to={category.href}>{label}</Link>;
-      })}
-      {!canOpenMaster && hasMasterSources ? <Typography.Text type="secondary">主数据项由审核人或管理员办理</Typography.Text> : null}
+    <div role="group" aria-label="来源汇总" aria-busy={state.kind === 'loading'} style={{ display: 'grid', gap: space[1] }}>
+      <div style={{ ...groupStyle, gap: space[2] }}>
+        <Typography.Text strong>来源汇总</Typography.Text>
+        <Typography.Text type="secondary">按各来源当前数据统计</Typography.Text>
+        {state.kind === 'loading' ? <Typography.Text type="secondary">正在读取来源汇总…</Typography.Text> : null}
+        {state.kind === 'empty' ? <Typography.Text type="secondary">暂无来源数据</Typography.Text> : null}
+        {state.kind === 'ready' ? <SourceCategories categories={state.categories} canOpenMaster={canOpenMaster} /> : null}
+      </div>
+      {state.kind === 'error' ? <Alert type="error" showIcon title="来源汇总没有读出来" description={state.message}
+        action={<Button size="small" onClick={retry}>重试来源汇总</Button>} /> : null}
     </div>
   );
+}
+
+function SourceCategories({ categories, canOpenMaster }: {
+  readonly categories: BottleneckSummary['categories']; readonly canOpenMaster: boolean;
+}): ReactNode {
+  const hasMasterSources = categories.some((category) => isMasterHref(category.href));
+  return <>
+    {categories.map((category) => {
+      const label = `${category.label} ${formatQuantity(category.count)}`;
+      return !canOpenMaster && isMasterHref(category.href)
+        ? <span key={category.key}>{label}</span>
+        : <Link key={category.key} to={category.href}>{label}</Link>;
+    })}
+    {!canOpenMaster && hasMasterSources ? <Typography.Text type="secondary">主数据项由审核人或管理员办理</Typography.Text> : null}
+  </>;
 }
 
 function isMasterHref(href: string): boolean {
