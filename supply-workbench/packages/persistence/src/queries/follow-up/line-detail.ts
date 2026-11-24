@@ -16,7 +16,8 @@ import { storeFilter } from '../store-progress/scope.js';
 import { storeProgressOf } from '../store-progress/rows.js';
 import { procurementDetail } from './procurement.js';
 import { batchViews } from './batch-view.js';
-import { toRow, loadRelations, activeFactoryBatchIds, type ListWorld } from './line-row.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
+import { toRow, loadRelations, type ListWorld } from './line-row.js';
 import { comboOf, demandOf, isAssociated, scheduleOf, shipmentOf, stockOf, transitOf } from './payloads.js';
 
 const FOLLOW_UP_LIMIT = 50;
@@ -26,12 +27,13 @@ type Read = { readonly db: AppDatabase; readonly clock: Clock; readonly timeZone
 export async function lineDetail(read: Read, { lineId, store }: { readonly lineId: string; readonly store: ProcurementStore | undefined }): Promise<OrderLineDetail> {
   const line = (await read.db.select().from(orderLines).where(and(eq(orderLines.id, lineId), storeFilter({ store, line: orderLines.id, hasMaterialScope: true }))))[0];
   if (line === undefined) throw new NotFoundError('订单行', lineId);
-  const world = await loadRelations(read.db, [line]);
+  const activeIds = await activeFactoryBatchIds(read.db);
+  const world = await loadRelations(read.db, { lines: [line], activeFactoryBatchIds: activeIds });
   const [codes, snapshot, batches, reports, exceptionRows, followRows, procurement, progress, procurementSchedule, pendingBuyerName] = await Promise.all([
     codesOf(read.db, line.itemId),
     snapshotOf({ db: read.db, snapshotId: line.currentSnapshotId, now: read.clock.now() }),
     batchViews(read, lineId),
-    reportsOf(read.db, lineId),
+    reportsOf(read.db, { lineId, activeIds: [...activeIds] }),
     read.db.select().from(exceptions).where(eq(exceptions.orderLineId, lineId)),
     read.db.select().from(followUps).where(eq(followUps.orderLineId, lineId)),
     procurementDetail(read.db, { line, store: store === 'all' ? undefined : store }),
@@ -110,8 +112,7 @@ function fieldOf(value: unknown, provenance: Provenance) {
   return raw === undefined ? { value: value.value, provenance } : { value: value.value, raw, provenance };
 }
 
-async function reportsOf(db: AppDatabase, lineId: string): Promise<OrderLineDetail['factoryReports']> {
-  const activeIds = [...await activeFactoryBatchIds(db)];
+async function reportsOf(db: AppDatabase, { lineId, activeIds }: { readonly lineId: string; readonly activeIds: readonly string[] }): Promise<OrderLineDetail['factoryReports']> {
   const [transit, shipment, stock, schedule, demand, combo] = await Promise.all([
     db.select().from(factoryInTransitRows).where(linkedTo({ lineId, activeIds, table: factoryInTransitRows })),
     db.select().from(factoryShipmentRows).where(linkedTo({ lineId, activeIds, table: factoryShipmentRows })),

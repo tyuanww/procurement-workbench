@@ -5,7 +5,8 @@ import type { AppDatabase } from '../../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { lineFactoryLinks, orderLines, purchaseOrders } from '../../schema/orders.js';
 import { parties, partyAliases } from '../../schema/platform.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
+import { effectiveFactoryLinks, type EffectiveFactoryLink } from './line-association.js';
+import { activeFactoryBatchIds } from './snapshot-scope.js';
 import { listUnlinkedKeys } from '../master-data/unlinked.js';
 
 const STATUSES: readonly LineFactoryLinkStatus[] = ['linked', 'unlinked', 'manual'];
@@ -133,29 +134,8 @@ async function scopedUnmatched(db: AppDatabase, { rows, scope }: {
 }
 
 async function getView(db: AppDatabase, orderLineId: string): Promise<LineFactoryLinkView | undefined> {
-  const links = await db.select().from(lineFactoryLinks).where(eq(lineFactoryLinks.orderLineId, orderLineId));
-  const link = links[0];
-  if (link !== undefined) return viewOf({ row: link, factory: await factoryRef(db, link.factoryPartyId) });
-  return fallbackView(db, orderLineId);
-}
-
-async function fallbackView(db: AppDatabase, orderLineId: string): Promise<LineFactoryLinkView | undefined> {
-  const [shipments, transits, stocks] = await Promise.all([
-    db.select().from(factoryShipmentRows).where(eq(factoryShipmentRows.linkedOrderLineId, orderLineId)),
-    db.select().from(factoryInTransitRows).where(eq(factoryInTransitRows.linkedOrderLineId, orderLineId)),
-    db.select().from(factoryStockRows).where(eq(factoryStockRows.linkedOrderLineId, orderLineId)),
-  ]);
-  const row = shipments[0] ?? transits[0] ?? stocks[0];
-  if (row === undefined) return undefined;
-  return {
-    orderLineId,
-    factory: await factoryRef(db, row.factoryPartyId),
-    status: 'linked',
-    source: 'factory_progress',
-    confidence: 'none',
-    reason: null,
-    linkedAt: new Date(row.updatedAt).toISOString(),
-  };
+  const [link] = await effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db), lineIds: [orderLineId] });
+  return link === undefined ? undefined : viewOf({ row: link, factory: await factoryRef(db, link.factoryPartyId) });
 }
 
 async function countStates(db: AppDatabase): Promise<{ readonly linked: number; readonly manual: number; readonly unlinked: number }> {
@@ -185,7 +165,7 @@ async function factoryRef(db: AppDatabase, partyId: string | null): Promise<{ re
   return row === undefined ? null : { id: row.id, displayName: row.displayName };
 }
 
-function viewOf(input: { readonly row: typeof lineFactoryLinks.$inferSelect; readonly factory: { readonly id: string; readonly displayName: string } | null }): LineFactoryLinkView {
+function viewOf(input: { readonly row: EffectiveFactoryLink; readonly factory: { readonly id: string; readonly displayName: string } | null }): LineFactoryLinkView {
   return {
     orderLineId: input.row.orderLineId,
     factory: input.factory,
