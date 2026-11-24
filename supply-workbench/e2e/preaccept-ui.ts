@@ -577,7 +577,25 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   assert.equal(rows.length, total);
   assert.ok(rows.some((row) => row[0] === componentPo));
   assert.ok(rows.every((row) => row[0] !== 'HZ09-0501'));
-  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length };
+  await checkImportedNoBatchView(page, matchesScope);
+  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true };
+}
+
+async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
+  const noBatch = page.locator('.ant-radio-group').getByText('未建要货', { exact: true });
+  const [list, summary] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
+    noBatch.click(),
+  ]);
+  await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch' && matchesScope(url));
+  for (const response of [list, summary]) assert.ok(response.ok() && matchesScope(new URL(response.url())));
+  const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
+  assert.ok(matchesScope(new URL(await exportLink.getAttribute('href') ?? '', origin)));
+  await page.getByRole('button', { name: '退出视图', exact: true }).click();
+  await page.waitForURL((url) => !url.searchParams.has('view') && matchesScope(url));
+  await page.getByRole('button', { name: '退出本次导入范围', exact: true }).click();
+  await page.waitForURL((url) => !url.searchParams.has('importBatchId'));
 }
 
 async function checkImportReviewLink(page: Page, importPath: string): Promise<void> {
