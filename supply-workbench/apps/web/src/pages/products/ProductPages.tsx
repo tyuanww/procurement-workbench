@@ -14,7 +14,7 @@ import {
 } from '@sw/contracts';
 import { Button, Empty, Result, Segmented, Skeleton, Typography } from 'antd';
 import { apiGet } from '../../shared/api/client.js';
-import { useActorRoles } from '../../shared/actor.js';
+import { useActorRoles, useCan } from '../../shared/actor.js';
 import { canMaintain, groupByFiling } from '../../features/product-archive/index.js';
 import { PageHeader, surfaceStyle, WorkbenchPage } from '../../shared/ui/page.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
@@ -47,6 +47,7 @@ export function ProductListPage() {
 }
 
 function ProductCatalog(props: { readonly state: ProductListLoad; readonly onRetry: () => void; readonly view: 'table' | 'card'; readonly setParams: (params: Record<string, string>) => void }) {
+  const canReadImports = useCan('imports.read');
   if (props.state.kind === 'loading') return <WorkbenchPage title="产品档案"><Skeleton active paragraph={{ rows: 6 }} /></WorkbenchPage>;
   if (props.state.kind === 'error') return <WorkbenchPage title="产品档案"><Result status="error" title="产品列表没有读出来。" subTitle={props.state.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} /></WorkbenchPage>;
   const list = props.state.value;
@@ -55,8 +56,8 @@ function ProductCatalog(props: { readonly state: ProductListLoad; readonly onRet
   return (
     <WorkbenchPage title="产品档案">
       {items.length === 0 ? (
-        <Empty description="还没有产品档案。下一步：去导入产品档案。">
-          <Button href="/imports">去导入</Button>
+        <Empty description="还没有产品档案。">
+          {canReadImports ? <Button href="/imports">去导入</Button> : null}
         </Empty>
       ) : null}
       <Segmented

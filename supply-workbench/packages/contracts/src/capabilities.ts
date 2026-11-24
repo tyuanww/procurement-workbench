@@ -78,7 +78,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     writePermissions: ['imports.write'],
     routePrefixes: ['/api/v1/imports', '/api/v1/templates'],
     webFeature: 'imports',
-    navLabel: '导入中心',
+    navLabel: '导入与审核',
     dependsOn: [],
   },
   {
@@ -114,7 +114,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     writePermissions: ['master.review'],
     routePrefixes: ['/api/v1/master', '/api/v1/parties', '/api/v1/items', '/api/v1/factory-reports'],
     webFeature: 'master-data',
-    navLabel: '主数据',
+    navLabel: null,
     dependsOn: [],
   },
   {

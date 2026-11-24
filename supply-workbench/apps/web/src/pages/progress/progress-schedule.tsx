@@ -7,6 +7,7 @@ import { ScheduleViewSchema, type ProcurementStore } from '@sw/contracts';
 import { localDate, type LocalDate } from '@sw/domain';
 import type { z } from 'zod';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
+import { useCan } from '../../shared/actor.js';
 import { businessToday } from '../../features/follow-up/index.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import {
@@ -180,15 +181,12 @@ function ScheduleBody(props: {
 }
 
 function EmptySchedule(props: { readonly total: number; readonly scale: ScheduleScale; readonly onClear: () => void }): ReactNode {
+  const canReadImports = useCan('imports.read');
   if (props.total === 0) {
-    return <Empty description={emptyText(props.total, props.scale)}><Button href="/imports">去导入排期里程碑</Button></Empty>;
+    const range = props.scale === 'week' ? '本周' : '本月';
+    return <Empty description={`${range}没有排期任务。`}>{canReadImports ? <Button href="/imports">去导入排期里程碑</Button> : null}</Empty>;
   }
-  return <Empty description={emptyText(props.total, props.scale)}><Button onClick={props.onClear}>清空筛选</Button></Empty>;
-}
-
-function emptyText(total: number, scale: ScheduleScale): string {
-  if (total === 0) return `${scale === 'week' ? '本周' : '本月'}没有排期任务。下一步：导入排期里程碑。`;
-  return '筛选后没有任务。下一步：清空筛选。';
+  return <Empty description="筛选后没有任务。下一步：清空筛选。"><Button onClick={props.onClear}>清空筛选</Button></Empty>;
 }
 
 function scaleOf(value: string | number): ScheduleScale {

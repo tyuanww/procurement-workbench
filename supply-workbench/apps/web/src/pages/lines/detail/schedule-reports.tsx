@@ -2,12 +2,12 @@ import { Tag, Typography } from 'antd';
 import { Link } from 'react-router';
 import { linkStatusLabel, scheduleBalance, scheduledDayQty, SCHEDULE_LINK_REVIEW } from '@sw/domain';
 import type { OrderLineDetail } from '@sw/contracts';
-import { useCanWrite } from '../../../shared/actor.js';
+import { useCan } from '../../../shared/actor.js';
 
 type ScheduleRow = OrderLineDetail['factoryReports']['schedule'][number];
 
 export function ScheduleReports(props: { readonly rows: readonly ScheduleRow[]; readonly ordered: number | null; readonly shipped: number | null; readonly received: number | null }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   if (props.rows.length === 0) return null;
   const balance = scheduleBalance({
     ordered: props.ordered,

@@ -6,6 +6,7 @@ import { apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
 import { multiNameChoice, roleChoice } from '../../features/master-data/index.js';
 import { useRefreshReviewQueue } from '../../features/shell/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
+import { ImportReviewNav } from '../../shared/ui/import-review-nav.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { AliasReviewDrawer, type AliasRoles } from './AliasReviewDrawer.js';
 import { FactoryLinkTab } from './FactoryLinkTab.js';
@@ -33,6 +34,7 @@ export function MasterPage() {
   };
   return (
     <WorkbenchPage title="主数据">
+      <ImportReviewNav />
       {message === '' ? null : <Alert type="error" showIcon title={message} />}
       <Tabs
         activeKey={tab}

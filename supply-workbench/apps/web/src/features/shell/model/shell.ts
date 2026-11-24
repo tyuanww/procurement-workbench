@@ -151,13 +151,15 @@ function navRow(input: {
   readonly queue: QueueFacts;
   readonly today: TodayFacts;
 }): NavRow {
-  const { to, label, matchPaths } = input.entry;
+  const { to, matchPaths } = input.entry;
+  const label = to === '/imports' && !can({ roles: input.roles }, 'master.review') ? '导入中心' : input.entry.label;
   return { to, label, matchPaths, badge: badgeOf(input) ?? NO_BADGE };
 }
 
 function allows(input: { readonly gate: PageGate; readonly roles: readonly Role[] }): boolean {
   if (input.gate === 'always') return true;
   if (input.gate === 'oversight') return hasOversight(input.roles);
+  if (input.gate === 'imports') return can({ roles: input.roles }, 'imports.read');
   if (input.gate === 'review') return can({ roles: input.roles }, 'master.review');
   return can({ roles: input.roles }, 'admin');
 }
@@ -169,7 +171,7 @@ function badgeOf(input: {
   readonly today: TodayFacts;
 }): BadgeMark | undefined {
   if (input.entry.to === '/today') return todayMark(input.today);
-  if (input.entry.to === '/master') return reviewMark({ roles: input.roles, queue: input.queue });
+  if (input.entry.to === '/imports') return reviewMark({ roles: input.roles, queue: input.queue });
   return undefined;
 }
 

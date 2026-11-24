@@ -5,7 +5,7 @@ import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type Order
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
 import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits, timelineLineText } from '../../../features/follow-up/index.js';
-import { useCanWrite } from '../../../shared/actor.js';
+import { useCan, useCanWrite } from '../../../shared/actor.js';
 import { formatDateTime } from '../../../shared/ui/format.js';
 import { PageHeader, surfaceStyle } from '../../../shared/ui/page.js';
 import { space } from '../../../theme/tokens.js';
@@ -178,7 +178,7 @@ function FactorySummary({ detail }: { readonly detail: OrderLineDetail }) {
 }
 
 function ImportedSnapshot({ snapshot }: { readonly snapshot: OrderLineDetail['snapshot'] }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   if (snapshot === null) return <p>暂无导入快照</p>;
   const imported = Object.values(snapshot.fields).map(({ provenance }) => provenance)
     .filter((source) => source.kind === 'import' || source.kind === 'factory_report');

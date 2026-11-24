@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { type OrderLineRow, type ProcurementStore } from '@sw/contracts';
 import { arrivalPaint, matchesProgressDrill, progressDrillKey, progressDrillLabel, progressInsights, readProgressDrill, withProgressDrill, type ProgressArrival, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
 import { SectionGroup } from '../../shared/ui/section.js';
+import { useCan } from '../../shared/actor.js';
 import { tablePagination } from '../../shared/ui/pagination.js';
 import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { useShellViewport } from '../../features/shell/index.js';
@@ -148,6 +149,11 @@ type ProgressTableProps = {
   readonly setPageSize: (size: number) => void;
 };
 
+function EmptyProgress({ message }: { readonly message: string | null }) {
+  const canReadImports = useCan('imports.read');
+  return <Empty description={message ?? '所选范围没有进行中的成品订单行。'}>{message === null && canReadImports ? <Button href="/imports">去导入</Button> : null}</Empty>;
+}
+
 function ProgressTable(props: ProgressTableProps) {
   const { lines, notes, now, search } = props;
   const isPhone = useShellViewport().band === 'phone';
@@ -165,7 +171,7 @@ function ProgressTable(props: ProgressTableProps) {
       rowKey="lineId"
       size="small"
       dataSource={[...props.rows]}
-      locale={{ emptyText: props.emptyMessage === null ? <Empty description="所选范围没有进行中的成品订单行。"><Button href="/imports">去导入</Button></Empty> : <Empty description={props.emptyMessage} /> }}
+      locale={{ emptyText: <EmptyProgress message={props.emptyMessage} /> }}
       expandable={{ expandedRowRender: expand }}
       {...(isPhone ? {} : { scroll: { x: 'max-content' as const } })}
       columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineHref, now }) : progressColumns({ lines, lineHref, note, now })}

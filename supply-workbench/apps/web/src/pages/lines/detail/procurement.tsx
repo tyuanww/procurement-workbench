@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
-import { useCanWrite } from '../../../shared/actor.js';
+import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
 
@@ -58,7 +58,7 @@ function RelatedProcurementLines({ lines, query }: { readonly lines: readonly Re
 type ProcurementSourcesList = NonNullable<OrderLineDetail['procurement']>['sources'];
 
 function ProcurementSources({ sources }: { readonly sources: ProcurementSourcesList }) {
-  const canReadImport = useCanWrite('imports.write');
+  const canReadImport = useCan('imports.read');
   return (
     <Collapse items={[{
       key: 'procurement-source',
