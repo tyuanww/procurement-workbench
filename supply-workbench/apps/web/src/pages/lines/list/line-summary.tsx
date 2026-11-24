@@ -1,8 +1,11 @@
+import { DownOutlined } from '@ant-design/icons';
+import { Alert, Button, Flex, Typography } from 'antd';
 import { lineStageText, type LineStage } from '@sw/domain';
 import type { LineSummary } from '@sw/contracts';
-import type { ReactNode } from 'react';
+import { useId, useState } from 'react';
 import { MetricStrip, StackedBarChart, type MetricTone } from '../../../shared/ui/analytics.js';
-import { SectionGroup } from '../../../shared/ui/section.js';
+import { space } from '../../../theme/tokens.js';
+import { useLineSummary } from './use-line-summary.js';
 
 const STAGE_TONE: Record<LineStage, MetricTone> = {
   no_batch: 'neutral',
@@ -14,25 +17,64 @@ const STAGE_TONE: Record<LineStage, MetricTone> = {
   cancelled: 'neutral',
 };
 
-export function LineSummaryStrip(input: { readonly summary: LineSummary }): ReactNode {
+export function LineResultSummary({ query, reload, total }: {
+  readonly query: string;
+  readonly reload: number;
+  readonly total: number | null;
+}) {
+  const result = useLineSummary({ query, reload });
+  const [openQuery, setOpenQuery] = useState<string | null>(null);
+  if (openQuery !== null && openQuery !== query) setOpenQuery(null);
+  const isOpen = openQuery === query;
+  const summaryId = useId();
   return (
-    <SectionGroup title="筛选结果概览" meta={`${input.summary.total} 行`}>
+    <>
+      <Flex align="center" gap={space[2]} style={{ minHeight: 32, marginBlock: space[1] }}>
+        <Typography.Text type="secondary" role="status">{total === null ? '' : `共 ${total} 行`}</Typography.Text>
+        <Button
+          type="text"
+          size="small"
+          aria-expanded={isOpen}
+          aria-controls={summaryId}
+          icon={<DownOutlined aria-hidden style={{ rotate: isOpen ? '180deg' : undefined }} />}
+          iconPlacement="end"
+          onClick={() => setOpenQuery(isOpen ? null : query)}
+        >
+          筛选结果概览
+        </Button>
+      </Flex>
+      <div id={summaryId} hidden={!isOpen}>
+        {isOpen ? <SummaryBody result={result} /> : null}
+      </div>
+    </>
+  );
+}
+
+function SummaryBody({ result }: { readonly result: ReturnType<typeof useLineSummary> }) {
+  if (result.summary !== null) return <LineSummaryStrip summary={result.summary} />;
+  if (result.error !== '') return <Alert type="error" showIcon title="订单汇总没有读出来" description={result.error} />;
+  return <p role="status">正在读取订单汇总…</p>;
+}
+
+function LineSummaryStrip({ summary }: { readonly summary: LineSummary }) {
+  return (
+    <div style={{ marginBlockEnd: space[2] }}>
       <MetricStrip
         ariaLabel="跟进中心筛选结果指标"
         items={[
-          { key: 'total', label: '订单行', value: input.summary.total, tone: 'neutral' },
-          { key: 'overdue', label: '逾期', value: input.summary.overdue, tone: 'danger', hint: '按确认到货日' },
-          { key: 'due', label: '今日应到', value: input.summary.dueToday, tone: 'warning' },
-          { key: 'missing', label: '缺确认日期', value: input.summary.missingDate, tone: 'attention' },
+          { key: 'total', label: '订单行', value: summary.total, tone: 'neutral' },
+          { key: 'overdue', label: '逾期', value: summary.overdue, tone: 'danger', hint: '按确认到货日' },
+          { key: 'due', label: '今日应到', value: summary.dueToday, tone: 'warning' },
+          { key: 'missing', label: '缺确认日期', value: summary.missingDate, tone: 'attention' },
         ]}
       />
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: space[3] }}>
         <StackedBarChart
           ariaLabel="订单行阶段分布"
           rows={[{
             key: 'total',
             label: '阶段',
-            segments: input.summary.stages.map((row) => ({
+            segments: summary.stages.map((row) => ({
               key: row.stage,
               label: lineStageText(row.stage),
               value: row.count,
@@ -41,6 +83,6 @@ export function LineSummaryStrip(input: { readonly summary: LineSummary }): Reac
           }]}
         />
       </div>
-    </SectionGroup>
+    </div>
   );
 }

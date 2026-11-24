@@ -648,7 +648,7 @@ async function checkImportOrderScope(page: Page, importPath: string) {
 }
 
 async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
-  const noBatch = page.locator('.ant-radio-group').getByText('未建要货', { exact: true });
+  const noBatch = page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true });
   const [list, summary] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),

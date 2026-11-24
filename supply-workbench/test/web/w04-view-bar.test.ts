@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { presetViews, readDesk } from '../../apps/web/src/features/follow-up/index.js';
 import { LineTable } from '../../apps/web/src/pages/lines/list/LineListPage.js';
@@ -11,10 +10,10 @@ const COLUMNS = readDesk('lane=finished').columns;
 const SMALL = 'small';
 
 describe('跟进台视图条', () => {
-  it('视图是 Radio.Group 按钮，右侧有列、密度和导出', async () => {
+  it('常用视图和密度各有可识别的切换组，右侧有列和导出', () => {
     const html = render(LineViewBar, viewBarProps({}));
-    expect(html).toContain('ant-radio-group');
-    expect(html).toContain('ant-radio-button-wrapper');
+    expect(html).toContain('role="radiogroup" aria-label="常用视图"');
+    expect(html).toContain('role="radiogroup" aria-label="列表密度"');
     expect(html).toContain('我的逾期');
     expect(html).toContain('未建要货');
     expect(html).toContain('宜侬在途');
@@ -23,8 +22,6 @@ describe('跟进台视图条', () => {
     expect(html).toContain('>列<');
     expect(html).toContain('紧凑');
     expect(html).toContain('舒适');
-    const source = await readFile(new URL('../../apps/web/src/pages/lines/list/view-bar.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('optionType="button"');
   });
 });
 

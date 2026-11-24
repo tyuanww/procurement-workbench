@@ -64,7 +64,7 @@ function PreviewFooter({ lineId, search, onClose }: Pick<FollowUpPreviewDrawerPr
   return (
     <Flex align="center" justify="flex-end" gap={12} wrap>
       <LineDetailLink href={`/lines/${encodeURIComponent(lineId)}`} search={search}>打开订单行详情</LineDetailLink>
-      <Button type="primary" onClick={onClose}>关闭</Button>
+      <Button onClick={onClose}>关闭</Button>
     </Flex>
   );
 }

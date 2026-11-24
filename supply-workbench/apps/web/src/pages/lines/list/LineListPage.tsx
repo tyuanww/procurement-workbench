@@ -1,16 +1,16 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router';
-import { Alert, Button, Card, Checkbox, Collapse, Flex, Input, Result, Segmented, Select, Skeleton } from 'antd';
+import { Button, Card, Checkbox, Flex, Input, Result, Select, Skeleton } from 'antd';
 import { loadViews, presetViews, readDesk, writeDesk } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
+import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { LineAlerts, LineBulkBar } from './actions.js';
 import { loadDeskOwners } from './owners.js';
 import { useDeskLoad } from './use-desk-load.js';
 import { LineViewBar, readDensity, readHiddenColumns, type Density, type SavedView } from './view-bar.js';
-import { LineSummaryStrip } from './line-summary.js';
-import { useLineSummary } from './use-line-summary.js';
-import { isSummarySettled, useDeskScrollRestore } from './desk-scroll.js';
+import { LineResultSummary } from './line-summary.js';
+import { useDeskScrollRestore } from './desk-scroll.js';
 import { readFollowUpPreview, writeFollowUpPreview } from './follow-up-preview-url.js';
 import { ArrivalDesk } from './arrival-desk.js';
 import { FollowUpPreviewDrawer } from './FollowUpPreviewDrawer.js';
@@ -40,11 +40,11 @@ export function LineListPage() {
   const refresh = () => setReload((value) => value + 1);
   const rememberPreviewTrigger = usePreviewTrigger(preview !== null);
   useEffect(() => { void loadDeskOwners({ setUsers, setUserId, setOwnerVisible }); }, []);
-  const summary = useLineSummary(request);
   return (
-    <WorkbenchPage title="跟进中心" {...(load.kind === 'ready' ? { secondary: `${load.total} 行` } : {})} action={<ArrivalDesk userId={userId} onMutated={refresh} />}>
+    <WorkbenchPage title="跟进中心" action={<ArrivalDesk userId={userId} onMutated={refresh} />}>
       <LineTop search={search} desk={desk} setParams={setParams} views={viewChoices(userId)} userId={userId} setMessage={setMessage} picked={load.kind === 'ready' ? picked : []} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} onReload={refresh} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys} />
-      <LineExtras summary={summary} skips={skips} setSkips={setSkips} message={message} preview={preview} party={party} search={search} setParams={setParams} isListReady={load.kind === 'ready'} rowCount={load.kind === 'ready' ? load.rows.length : 0} />
+      <LineAlerts skips={skips} setSkips={setSkips} message={message} />
+      <LineResultSummary query={request.query} reload={reload} total={load.kind === 'ready' ? load.total : null} />
       <DeskBody
         load={load}
         desk={desk}
@@ -58,6 +58,7 @@ export function LineListPage() {
         onRetry={refresh}
         now={now}
       />
+      <LinePreviews preview={preview} party={party} search={search} setParams={setParams} />
     </WorkbenchPage>
   );
 }
@@ -84,34 +85,17 @@ function useDeskSelection(request: Parameters<typeof useDeskLoad>[0]) {
   };
 }
 
-function LineExtras(props: {
-  readonly summary: ReturnType<typeof useLineSummary>;
-  readonly skips: readonly string[];
-  readonly setSkips: (value: readonly string[]) => void;
-  readonly message: string;
+function LinePreviews(props: {
   readonly preview: ReturnType<typeof readFollowUpPreview>;
   readonly party: ReturnType<typeof readPartyPreview>;
   readonly search: string;
   readonly setParams: SearchSetter;
-  readonly isListReady: boolean;
-  readonly rowCount: number;
 }) {
-  const isPhone = useShellViewport().band === 'phone';
-  useDeskScrollRestore({ isReady: props.isListReady && isSummarySettled(props.summary), layoutKey: props.rowCount });
   const [lastPreview, setLastPreview] = useState(props.preview);
   if (props.preview !== null && props.preview.lineId !== lastPreview?.lineId) setLastPreview(props.preview);
   const shownPreview = props.preview ?? lastPreview;
   return (
     <>
-      {props.summary.summary === null ? null : isPhone
-        ? <Collapse ghost size="small" items={[{
-          key: 'summary',
-          label: '筛选结果概览',
-          children: <LineSummaryStrip summary={props.summary.summary} />,
-        }]} />
-        : <LineSummaryStrip summary={props.summary.summary} />}
-      {props.summary.error === '' ? null : <Alert type="error" showIcon title="订单汇总没有读出来" description={props.summary.error} />}
-      <LineAlerts skips={props.skips} setSkips={props.setSkips} message={props.message} />
       {shownPreview === null ? null : <FollowUpPreviewDrawer
         key={shownPreview.lineId}
         lineId={shownPreview.lineId}
@@ -146,6 +130,7 @@ function DeskBody(props: {
   readonly onPreviewTrigger: (element: HTMLElement) => void;
   readonly now: Date;
 }) {
+  useDeskScrollRestore({ isReady: props.load.kind === 'ready', layoutKey: props.load.kind === 'ready' ? props.load.rows.length : 0 });
   if (props.load.kind === 'failed') return <DeskError message={props.load.message} onRetry={props.onRetry} />;
   if (props.load.kind === 'pending') return <>
     <p role="status">正在读取订单行…</p>
@@ -224,24 +209,16 @@ function LineFilters(props: { readonly search: string; readonly desk: Desk; read
     <search aria-label="跟进中心筛选">
       <Card size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: 12 } }}>
         <Flex align="center" wrap gap={8}>
-          <Segmented
+          <div style={filterBoxStyle(200)}>
+            <SearchTerm applied={props.desk.q} onSearch={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'text', value } }))} />
+          </div>
+          <ViewSwitch
             aria-label="订单线别"
             value={props.desk.lane}
             options={[{ label: '成品线', value: 'finished' }, { label: '物料线', value: 'material' }, { label: '全部线', value: 'all' }]}
             onChange={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'lane', value } }))}
           />
-          <div style={filterBoxStyle()}>
-            <Input.Search
-              key={props.desk.q}
-              aria-label="搜索单号、品名或编码"
-              placeholder="搜索单号 / 品名 / 编码"
-              defaultValue={props.desk.q}
-              allowClear
-              onSearch={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'text', value } }))}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div style={filterBoxStyle()}>
+          <div style={filterBoxStyle(152)}>
             <StageFilter search={props.search} desk={props.desk} setParams={props.setParams} />
           </div>
           <OverdueFilter search={props.search} isOverdue={props.desk.isOverdue} setParams={props.setParams} />
@@ -250,6 +227,19 @@ function LineFilters(props: { readonly search: string; readonly desk: Desk; read
       </Card>
     </search>
   );
+}
+
+function SearchTerm({ applied, onSearch }: { readonly applied: string; readonly onSearch: (value: string) => void }) {
+  const [draft, setDraft] = useState({ applied, value: applied });
+  if (draft.applied !== applied) setDraft({ applied, value: applied });
+  return <Input.Search
+    aria-label="搜索单号、品名或编码"
+    placeholder="搜索单号 / 品名 / 编码"
+    value={draft.applied === applied ? draft.value : applied}
+    onChange={(event) => setDraft({ applied, value: event.target.value })}
+    onSearch={onSearch}
+    allowClear
+  />;
 }
 
 function ImportScopeAction({ search, setParams }: { readonly search: string; readonly setParams: SearchSetter }) {
@@ -262,8 +252,8 @@ function ImportScopeAction({ search, setParams }: { readonly search: string; rea
   }}>退出本次导入范围</Button>;
 }
 
-function filterBoxStyle(): CSSProperties {
-  return { flex: '1 1 200px', maxWidth: 280, minWidth: 0 };
+function filterBoxStyle(basis: number): CSSProperties {
+  return { flex: `1 1 ${basis}px`, maxWidth: 280, minWidth: 0 };
 }
 
 function StageFilter(props: { readonly search: string; readonly desk: Desk; readonly setParams: SearchSetter }) {

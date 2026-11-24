@@ -27,9 +27,17 @@ async function searchLines(page: Page, id: string): Promise<void> {
 async function checkLineQuery(page: Page, origin: URL): Promise<void> {
   await page.goto(new URL('/lines?q=UI-DEMO-001&pageSize=20', origin).href);
   await order(page, 'UI-DEMO-001').waitFor();
+  const overview = page.getByRole('button', { name: '筛选结果概览', exact: true });
+  const metrics = page.getByRole('group', { name: '跟进中心筛选结果指标' });
+  assert.equal(await overview.getAttribute('aria-expanded'), 'false');
+  assert.equal(await metrics.isVisible(), false);
+  await overview.press('Space');
+  await metrics.waitFor();
   await page.getByRole('checkbox', { name: /勾选订单行.*UI-DEMO-001/ }).check();
   await searchLines(page, 'UI-DEMO-002');
   await order(page, 'UI-DEMO-002').waitFor();
+  assert.equal(await overview.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.getByLabel('搜索单号、品名或编码').evaluate((input) => input === document.activeElement), true);
   await page.getByRole('button', { name: '按总表生成批次', exact: true }).waitFor({ state: 'hidden' });
   await checkLineBulkTarget(page);
 
@@ -94,6 +102,9 @@ async function checkDashboardSourceRetry(page: Page, origin: URL): Promise<void>
 async function checkLinePreviewFocus(page: Page, origin: URL): Promise<void> {
   await page.goto(new URL('/lines?q=UI-DEMO-001', origin).href);
   const row = page.getByRole('row').filter({ has: order(page, 'UI-DEMO-001') });
+  await row.waitFor();
+  const position = await row.boundingBox();
+  assert.ok(position !== null && position.y >= 0 && position.y < 640, '320px 宽度的首屏应看到搜索结果');
   const trigger = row.getByRole('button', { name: /^预\s*览$/ }).first();
   await trigger.press('Enter');
   const dialog = page.getByRole('dialog');
