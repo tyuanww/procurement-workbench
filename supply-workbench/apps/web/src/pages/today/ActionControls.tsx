@@ -23,7 +23,7 @@ export type ActionPageControls = {
 };
 
 export function ActionControls({ page }: { readonly page: ActionPageControls }) {
-  return <Flex className="today-touch" align="center" gap="small" wrap><SortControls page={page} /></Flex>;
+  return <SortControls page={page} />;
 }
 
 export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
@@ -31,14 +31,13 @@ export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
   return (
     <div>
       <Flex className="today-touch" align="center" gap="small" wrap>
-        <Button type="primary" icon={<CopyOutlined aria-hidden />} disabled={page.isCopying || counts?.all === 0} onClick={() => page.onCopyChase({ kind: 'all' })}>
+        <Button icon={<CopyOutlined aria-hidden />} disabled={page.isCopying || counts?.all === 0} onClick={() => page.onCopyChase({ kind: 'all' })}>
           复制全部催单{counts === undefined ? '' : `（${counts.all} 批）`}
         </Button>
         {page.isFiltered ? <Button icon={<CopyOutlined aria-hidden />} disabled={!page.isSettled || page.isCopying || page.paging.factories.length === 0}
           onClick={() => page.onCopyChase({ kind: 'filtered' })}>复制筛选催单{counts === undefined || !page.isSettled ? '' : `（${counts.filtered} 批）`}</Button> : null}
         <FactoryCopy page={page} />
       </Flex>
-      <Typography.Text role="status">{page.copyNotice}</Typography.Text>
     </div>
   );
 }
@@ -88,14 +87,17 @@ function FactoryCopy({ page }: { readonly page: ActionPageControls }) {
 
 export function ActionPagination({ page }: { readonly page: ActionPageControls }) {
   const { paging } = page;
+  if (paging.total <= paging.pageSize) return null;
   return (
-    <Flex align="center" justify="space-between" gap="small" wrap>
-      <Typography.Text role="status">
-        {page.isLoading ? '正在更新行动板…' : page.loadError === '' ? `共 ${paging.total} 条 · 第 ${paging.page} 页` : '行动板更新失败'}
-      </Typography.Text>
-      <nav aria-label="行动板分页">
-        <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total} onChange={page.onPage} size="small" showSizeChanger={false} hideOnSinglePage />
-      </nav>
-    </Flex>
+    <nav aria-label="行动板分页">
+      <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total} onChange={page.onPage} size="small" showSizeChanger={false} />
+    </nav>
   );
+}
+
+export function ActionResult({ page }: { readonly page: ActionPageControls }) {
+  const { paging } = page;
+  return <Typography.Text role="status" type="secondary">
+    {page.isLoading ? '正在更新行动板…' : page.loadError === '' ? `共 ${paging.total} 条待办${paging.total > paging.pageSize ? ` · 第 ${paging.page} 页` : ''}` : '行动板更新失败'}
+  </Typography.Text>;
 }

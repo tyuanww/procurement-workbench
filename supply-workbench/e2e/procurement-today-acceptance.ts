@@ -41,6 +41,7 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.equal(await sampleRows.count(), 1);
   await page.screenshot({ path: join(out, 'procurement-last-page.png'), animations: 'disabled' });
 
+  await page.getByRole('button', { name: /筛选、指标与复制催单/ }).click();
   await page.getByRole('button', { name: /^复制全部催单/ }).click();
   await page.getByRole('status').filter({ hasText: '已复制 501 条催单' }).waitFor();
   const allText = await clipboardText(page);
@@ -90,6 +91,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await memos.getByText(/待收 30,000 件/).waitFor();
   assert.equal(await order('HZ09-0501').count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: /筛选、指标与复制催单/ }).click();
   await page.getByRole('button', { name: /^复制筛选催单/ }).click();
   await page.getByRole('status').filter({ hasText: '已复制 499 条催单' }).waitFor();
   const after = purchaseOrders(await clipboardText(page));
@@ -142,7 +144,7 @@ export async function checkKeyboardReceipt({ page, origin, out }: {
   await row.waitFor();
   await recordKeyboardReceipt(page, { before: 18_000, recv: 18_000, evidence: remaining });
   await page.reload();
-  await page.getByRole('status').filter({ hasText: /共 \d+ 条 · 第 1 页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共 \d+ 条待办/ }).waitFor();
   assert.equal(await batchLink.count(), 0);
   await page.goto(new URL('/lines/hz09-line-501?focusBatch=' + batch, origin).href);
   await page.getByText('未发 0 件 · 待收 0 件 · 实收 30,000 件', { exact: true }).waitFor();

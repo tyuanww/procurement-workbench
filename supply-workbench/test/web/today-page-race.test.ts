@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { expect, it } from 'vitest';
+import type { TodoItemView } from '../../packages/contracts/src/index.js';
 import { TodayPage } from '../../apps/web/src/pages/today/TodayPage.js';
 import { actionQuery } from '../../apps/web/src/pages/today/action-query.js';
 import { handleKey, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
@@ -39,6 +40,44 @@ it('分页定位完成后保留旧抽屉地址，当前结果中没有的抽屉�
   await openOldLink({ target, isPresent: true });
   await openOldLink({ target: 'batch:unavailable', isPresent: false });
 });
+
+it('同一采购单上两个同名批次可以分别打开，关闭后保留清单', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today'));
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: '/api/v1/today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batchTodo(2)] } });
+    });
+    expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
+    click(button('查看详情 PO · 同名样品 · 第 2 批'));
+    await waitFor(() => textOf('[role="dialog"]').includes('第 2 批'));
+    expect(textOf('[role="dialog"]')).not.toContain('第 1 批');
+    expect(new URLSearchParams(textOf('output')).get('drawer')).toBe('batch:batch-2');
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    await waitFor(() => !new URLSearchParams(textOf('output')).has('drawer'));
+    expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
+    expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
+function batchTodo(seq: number): TodoItemView {
+  const id = `batch-${seq}`;
+  return {
+    id: `batch:${id}`, subject: 'batch', reasons: ['missing_date'], severity: 1, ownerUserId: 'buyer-1',
+    waitingOn: { kind: 'supplier', partyId: null }, dueDate: null, overdueDays: null, refs: { orderLineId: 'line', batchId: id },
+    line: { id: 'line', lane: 'finished', poRaw: 'PO', poFormat: 'OTHER', nameRaw: '同名样品', itemCodeRaw: null, barcodeRaw: null, buyerName: null },
+    batch: { id, seq, plannedQty: 10, status: 'awaiting_date', noteStatus: 'missing', dateBuyerConfirmed: null, firstConfirmedDate: null,
+      dateFactoryRequired: null, dateSupplierPromised: null, shippedQty: null, receivedQty: null, lastShippedOn: null },
+    waitingOnParty: null, exception: null,
+  };
+}
 
 async function openOldLink({ target, isPresent }: { readonly target: string; readonly isPresent: boolean }) {
   emptyReads();

@@ -1,6 +1,7 @@
-import { Card, Flex, Segmented, Tag, Typography } from 'antd';
+import { Card, Flex, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import type { GroupMode } from '../../features/today/index.js';
+import { ViewSwitch } from '../../shared/ui/view-switch.js';
 import { space } from '../../theme/tokens.js';
 
 export function TodayGrouping(props: {
@@ -9,7 +10,7 @@ export function TodayGrouping(props: {
   readonly group: GroupMode;
   readonly onGroup: (group: GroupMode) => void;
 }): ReactNode {
-  return <Segmented<GroupMode>
+  return <ViewSwitch<GroupMode>
     aria-label={props.label}
     options={props.modes.map(({ id, label }) => ({ value: id, label }))}
     value={props.group}

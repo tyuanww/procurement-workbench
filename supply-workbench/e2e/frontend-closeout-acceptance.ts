@@ -76,6 +76,7 @@ async function checkActionBoard(page: Page): Promise<void> {
   await page.locator('#today-pending-batches').getByText('UI-DEMO-003', { exact: false }).first().waitFor();
   await page.locator('#today-arrival-memos').getByText('UI-DEMO-004', { exact: false }).first().waitFor();
   assert.equal(await board.getByText('UI-DEMO-005', { exact: false }).count(), 0);
+  await board.getByRole('button', { name: /筛选、指标与复制催单/ }).click();
   assert.equal(await page.getByRole('button', { name: /复制全部催单/ }).isEnabled(), true);
 }
 

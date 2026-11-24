@@ -9,6 +9,7 @@ import { toBoardItem } from './card.js';
 import type { NoteRef, Target } from './TodayForms.js';
 
 export type TodayLoad = {
+  readonly asOf: TodayResponse['asOf'];
   readonly items: readonly BoardItem[];
   readonly targets: Readonly<Record<string, Target>>;
   readonly noteRefs: Readonly<Record<string, NoteRef>>;
@@ -115,12 +116,12 @@ export async function loadToday(query = actionPageSearch(actionQuery('')), signa
     read({ name: 'me', ...(signal === undefined ? {} : { signal }) }).then((me) => me.name, () => ''),
   ]);
   return {
-    ...collect(today.items), pendingBatch: today.pendingBatch ?? [], arrivalMemos: today.arrivalMemos,
+    ...collect(today.items), asOf: today.asOf, pendingBatch: today.pendingBatch ?? [], arrivalMemos: today.arrivalMemos,
     counts: today.counts, paging: today.paging, buyerName,
   };
 }
 
-function collect(items: readonly TodoItemView[]): Omit<TodayLoad, 'buyerName' | 'arrivalMemos' | 'pendingBatch' | 'counts' | 'paging'> {
+function collect(items: readonly TodoItemView[]): Pick<TodayLoad, 'items' | 'targets' | 'noteRefs'> {
   const targets: Record<string, Target> = {};
   const noteRefs: Record<string, NoteRef> = {};
   const rows = items.map((item) => remember({ item, targets, noteRefs }));
@@ -140,6 +141,7 @@ function targetOf(item: TodoItemView): Target | undefined {
   if (item.batch === null || item.line === null) return undefined;
   return {
     batchId: item.batch.id,
+    batchSeq: item.batch.seq,
     lineId: item.line.id,
     plannedQty: item.batch.plannedQty,
     receivedQty: item.batch.receivedQty === null ? 0 : item.batch.receivedQty,
