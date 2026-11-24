@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Empty, Flex, Form, Input, Result, Skeleton, Typography } from 'antd';
 import { FeishuPublishResultSchema, WeeklyReportDetailSchema, WeeklyReportListItemSchema, WeeklyReportSchema, listResponseSchema, type WeeklyReport, type WeeklyReportDetail, type WeeklyReportListItem } from '@sw/contracts';
 import { apiDownload, apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
@@ -82,6 +82,9 @@ function ReportForm({ setItems, setMessage }: {
   readonly setItems: (items: readonly WeeklyReportListItem[]) => void;
   readonly setMessage: (message: UiNotice | null) => void;
 }) {
+  const [params] = useSearchParams();
+  const requestedWeekStart = params.get('weekStart');
+  const initialWeekStart = requestedWeekStart !== null && isMondayIso(requestedWeekStart) ? requestedWeekStart : undefined;
   const [isCreating, setCreating] = useState(false);
   function submit({ weekStart }: { readonly weekStart: string }): void {
     if (isCreating) return;
@@ -91,7 +94,9 @@ function ReportForm({ setItems, setMessage }: {
   return <SectionGroup title="生成周报">
     <Form<{ readonly weekStart: string }>
       {...horizontalFormLayout}
+      key={requestedWeekStart}
       className="settings-form"
+      initialValues={{ weekStart: initialWeekStart }}
       scrollToFirstError={{ focus: true }}
       onFinish={submit}
       style={{ maxWidth: 560 }}

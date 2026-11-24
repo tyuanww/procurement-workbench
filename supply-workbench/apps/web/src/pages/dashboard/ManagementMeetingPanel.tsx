@@ -1,6 +1,6 @@
 import { Alert, Button, DatePicker, Flex, Select, Skeleton, Typography } from 'antd';
 import {
-  MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, WeeklyReportSchema, type ManagementMeeting, type ManagementMeetingStore,
+  MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementMeeting, type ManagementMeetingStore,
 } from '@sw/contracts';
 import { addDays, businessDay, parseLocalDate, weekStart, type LocalDate } from '@sw/domain';
 import dayjs from 'dayjs';
@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { MeetingSections, meetingStoreLabels } from '../../features/reporting/index.js';
 import { useCanWrite } from '../../shared/actor.js';
-import { apiErrorMessage, apiGetWithSignal, apiSend } from '../../shared/api/client.js';
+import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { space } from '../../theme/tokens.js';
 import { MEETING_PATH, MeetingDecisionEditor, type DecisionEditor } from './meeting-decisions.js';
@@ -48,6 +48,7 @@ function MeetingFilters({ selected, update, thisWeek }: {
   readonly update: (patch: Partial<MeetingQuery>) => void;
   readonly thisWeek: LocalDate;
 }) {
+  const reportQuery = new URLSearchParams({ weekStart: selected.weekStart });
   return <Flex gap={space[2]} wrap align="center">
     <Select<ManagementMeetingStore> aria-label="店铺" value={selected.store} options={STORES} onChange={(store) => update({ store })} style={{ minWidth: 140 }} />
     <Button onClick={() => update({ weekStart: addDays(selected.weekStart, -WEEK_DAYS) })}>上周</Button>
@@ -60,7 +61,7 @@ function MeetingFilters({ selected, update, thisWeek }: {
       }}
     />
     <Button disabled={selected.weekStart >= thisWeek} onClick={() => update({ weekStart: addDays(selected.weekStart, WEEK_DAYS) })}>下周</Button>
-    <Button href="/reports">查看历史周报</Button>
+    <Button href={`/reports?${reportQuery}`}>查看周报</Button>
   </Flex>;
 }
 
@@ -83,10 +84,7 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
   if (load.kind === 'error') return <Alert type="error" showIcon title="周会没有读出来" description={load.message} action={<Button onClick={() => setReload((version) => version + 1)}>重试</Button>} />;
   const { meeting } = load;
   return <>
-    <Flex gap={space[2]} wrap align="center" justify="space-between">
-      <Typography.Text>{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
-      {canWrite ? <GenerateReport meeting={meeting} /> : null}
-    </Flex>
+    <Typography.Text>{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
     <MeetingSections meeting={meeting} {...(canWrite ? {
       onRecord: (material) => setEditor({ kind: 'record', material }),
       onComplete: (decision) => setEditor({ kind: 'complete', decision }),
@@ -96,25 +94,4 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
       setReload((version) => version + 1);
     }} />}
   </>;
-}
-
-function GenerateReport({ meeting }: { readonly meeting: ManagementMeeting }) {
-  const [isPending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
-  async function generate() {
-    setPending(true);
-    setError(undefined);
-    try {
-      const report = await apiSend({ path: '/api/v1/reports/weekly', method: 'POST', body: { weekStart: meeting.weekStart }, schema: WeeklyReportSchema });
-      window.location.assign(`/reports/${encodeURIComponent(report.id)}`);
-    } catch (caught: unknown) {
-      setError(apiErrorMessage(caught) ?? '周报没有生成，请重试。');
-    } finally {
-      setPending(false);
-    }
-  }
-  return <Flex gap={space[1]} wrap align="center">
-    {error === undefined ? null : <Alert type="error" showIcon title={error} />}
-    <Button type="primary" loading={isPending} onClick={() => void generate()}>生成全店周报</Button>
-  </Flex>;
 }
