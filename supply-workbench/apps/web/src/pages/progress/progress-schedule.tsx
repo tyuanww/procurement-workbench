@@ -1,5 +1,5 @@
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Alert, Button, Card, Empty, Flex, Result, Segmented, Select, Skeleton, Typography } from 'antd';
+import { Alert, Button, Card, Collapse, Empty, Flex, Result, Segmented, Select, Skeleton, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
@@ -31,6 +31,7 @@ type ScheduleLoad =
 
 export function ProgressSchedule({ store }: { readonly store: ProcurementStore }): ReactNode {
   const [params, setParams] = useSearchParams();
+  const isPhone = useShellViewport().band === 'phone';
   const today = localDate(businessToday());
   const query = readScheduleQuery(params.toString(), today);
   const window = scheduleWindow(query);
@@ -51,22 +52,25 @@ export function ProgressSchedule({ store }: { readonly store: ProcurementStore }
     else next.set('drawer', id.startsWith('task:') ? id : taskParam(id));
     setParams(next);
   };
-  const selectOrder = (id: string | null) => {
-    const next = new URLSearchParams(params);
-    if (id === null) next.delete('scheduleLine');
-    else next.set('scheduleLine', id);
-    setParams(next);
-  };
+  const metrics = load.kind === 'ready' ? <ScheduleKpis items={items} scale={query.scale} /> : null;
   return (
     <Flex vertical gap={space[3]}>
-      <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} />
-      {load.kind === 'ready' ? <ScheduleKpis items={items} scale={query.scale} /> : null}
+      <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} isPhone={isPhone} />
+      {isPhone ? null : metrics}
       <ScheduleBody load={load} timeline={timeline} scale={query.scale} onOpen={writeDrawer} onRetry={scheduleLoad.reload} onClear={() => write({ ...query, filters: emptyScheduleFilters() })} />
-      <ProcurementSchedulePanel store={store} selected={params.get('scheduleLine')} onSelect={selectOrder}
+      {isPhone ? metrics : null}
+      <ProcurementSchedulePanel store={store} selected={params.get('scheduleLine')} onSelect={(id) => setParams(withScheduleLine(params, id))}
         search={params.toString()} onTimelineChanged={scheduleLoad.reload} onAnchor={(anchor) => write({ ...query, anchor })} />
       <TaskDrawer workItemId={drawerId} isOpen={drawerId !== null} onClose={() => writeDrawer(null)} onChanged={scheduleLoad.reload} />
     </Flex>
   );
+}
+
+function withScheduleLine(params: URLSearchParams, id: string | null): URLSearchParams {
+  const next = new URLSearchParams(params);
+  if (id === null) next.delete('scheduleLine');
+  else next.set('scheduleLine', id);
+  return next;
 }
 
 function useScheduleLoad(window: ScheduleWindow, store: ProcurementStore): { readonly load: ScheduleLoad; readonly reload: () => void } {
@@ -95,9 +99,11 @@ function ScheduleFiltersBar(props: {
   readonly today: LocalDate;
   readonly options: ScheduleOptions;
   readonly onQuery: (query: ScheduleQuery) => void;
+  readonly isPhone: boolean;
 }): ReactNode {
-  const { query, window, today, options, onQuery } = props;
-  const filters = query.filters;
+  const { query, window, today, options, onQuery, isPhone } = props;
+  const extra = <ScheduleSecondaryFilters query={query} options={options} onQuery={onQuery} />;
+  const applied = Object.values(query.filters).filter((value) => value !== null).length;
   return (
     <Card size="small">
       <Flex wrap align="center" gap={space[1]}>
@@ -110,14 +116,30 @@ function ScheduleFiltersBar(props: {
         <Button icon={<LeftOutlined />} aria-label={`上一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: -1 }).from })} />
         <Button icon={<RightOutlined />} aria-label={`下一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: 1 }).from })} />
         <Typography.Text style={rangeStyle()}>{scheduleWindowLabel({ window, today })}</Typography.Text>
-        <FilterSelect label="负责人" value={filters.ownerUserId} options={options.owners} onChange={(value) => onQuery({ ...query, filters: { ...filters, ownerUserId: value } })} />
-        <FilterSelect label="供应商" value={filters.supplierPartyId} options={options.suppliers} onChange={(value) => onQuery({ ...query, filters: { ...filters, supplierPartyId: value } })} />
-        <FilterSelect label="工厂" value={filters.factoryPartyId} options={options.factories} onChange={(value) => onQuery({ ...query, filters: { ...filters, factoryPartyId: value } })} />
-        <FilterSelect label="状态" value={filters.status} options={[...statusOptions()]} onChange={(value) => onQuery({ ...query, filters: { ...filters, status: statusOf(value) } })} />
-        <Button type="link" onClick={() => onQuery({ ...query, filters: emptyScheduleFilters() })}>清空筛选</Button>
+        {isPhone ? null : extra}
       </Flex>
+      {isPhone ? <Collapse ghost size="small" items={[{
+        key: 'filters',
+        label: applied === 0 ? '更多筛选' : `更多筛选（${applied}）`,
+        children: <Flex wrap align="center" gap={space[1]}>{extra}</Flex>,
+      }]} /> : null}
     </Card>
   );
+}
+
+function ScheduleSecondaryFilters({ query, options, onQuery }: {
+  readonly query: ScheduleQuery;
+  readonly options: ScheduleOptions;
+  readonly onQuery: (query: ScheduleQuery) => void;
+}) {
+  const filters = query.filters;
+  return <>
+    <FilterSelect label="负责人" value={filters.ownerUserId} options={options.owners} onChange={(value) => onQuery({ ...query, filters: { ...filters, ownerUserId: value } })} />
+    <FilterSelect label="供应商" value={filters.supplierPartyId} options={options.suppliers} onChange={(value) => onQuery({ ...query, filters: { ...filters, supplierPartyId: value } })} />
+    <FilterSelect label="工厂" value={filters.factoryPartyId} options={options.factories} onChange={(value) => onQuery({ ...query, filters: { ...filters, factoryPartyId: value } })} />
+    <FilterSelect label="状态" value={filters.status} options={statusOptions()} onChange={(value) => onQuery({ ...query, filters: { ...filters, status: statusOf(value) } })} />
+    <Button type="link" onClick={() => onQuery({ ...query, filters: emptyScheduleFilters() })}>清空筛选</Button>
+  </>;
 }
 
 function FilterSelect(props: {

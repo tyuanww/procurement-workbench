@@ -28,7 +28,6 @@ export function ProgressBreakdown(input: OverviewInput): ReactNode {
 
 function metricItems({ insight, drill, onDrill }: OverviewInput): MetricItem[] {
   const metrics: readonly { readonly filter: ProgressDrill; readonly value: number; readonly tone: NonNullable<MetricItem['tone']>; readonly label?: string; readonly hint?: string }[] = [
-    { filter: { kind: 'all' }, value: insight.total, tone: 'neutral' },
     { filter: { kind: 'overdue' }, value: insight.overdue, tone: 'danger', hint: '按确认到货日' },
     { filter: { kind: 'stage', stage: 'no_batch' }, value: insight.pendingBatch, tone: 'neutral' },
     { filter: { kind: 'stage', stage: 'awaiting_date' }, value: insight.awaitingDate, tone: 'warning' },

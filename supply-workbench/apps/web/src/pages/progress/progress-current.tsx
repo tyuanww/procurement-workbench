@@ -17,7 +17,7 @@ export { noteBatches, pagesFor } from './progress-load.js';
 import { ProgressBreakdown, ProgressMetrics } from './progress-overview.js';
 import { ProgressNextAction } from './progress-material-risk.js';
 import { matchingOa, ProgressOaFilter, progressOrderRef, scopedLineLink, StoreGapSummary, StoreOrderDetails } from './store-order.js';
-import { storeLabels } from './store-query.js';
+import { progressPagination, resetProgressPagination, storeLabels, withProgressPagination } from './store-query.js';
 
 type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
 
@@ -28,6 +28,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
   const insight = isLoaded && scopedRows.length > 0 ? progressInsights(scopedRows) : null;
   const emptyMessage = currentEmptyMessage(drill, oa);
+  useProgressRowFocus({ tableRef, search: table.search, isLoaded });
   return (
     <>
       <Card size="small" style={{ marginBottom: space[3] }}>
@@ -39,7 +40,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
       {insight === null ? null : <ProgressMetrics insight={insight} drill={drill} onDrill={setDrill} />}
       {isLoaded ? <StoreGapSummary lines={scopedRows.map((row) => data.lines.get(row.lineId))} /> : null}
       <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
-        <SectionGroup title="当前进度" {...(isLoaded ? { meta: `${rows.length} 条` } : {})}>
+        <SectionGroup title="当前进度" {...(isLoaded ? { meta: progressResultCount(rows.length, scopedRows.length) } : {})}>
           {drill.kind === 'all' ? null : <Flex align="center" wrap gap={space[2]} style={{ marginBottom: space[2] }}>
             <Tag>当前筛选 {progressDrillLabel(drill)}</Tag>
             <Button type="link" onClick={() => setDrill({ kind: 'all' })}>清除下钻</Button>
@@ -56,6 +57,25 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
   );
 }
 
+function progressResultCount(shown: number, total: number): string {
+  return shown === total ? `进行中 ${total} 行` : `匹配 ${shown} 行 · 进行中 ${total} 行`;
+}
+
+function useProgressRowFocus({ tableRef, search, isLoaded }: {
+  readonly tableRef: { readonly current: HTMLDivElement | null };
+  readonly search: string;
+  readonly isLoaded: boolean;
+}) {
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(search).get('focusLine');
+    if (!isLoaded || id === null || last.current === search) return;
+    const row = [...(tableRef.current?.querySelectorAll('tr[data-row-key]') ?? [])].find((element) => element.getAttribute('data-row-key') === id);
+    row?.querySelector('a')?.focus();
+    if (row !== undefined) last.current = search;
+  }, [isLoaded, search, tableRef]);
+}
+
 function currentEmptyMessage(drill: ProgressDrill, oa: string | null) {
   if (drill.kind !== 'all') return '当前指标没有匹配的订单行。';
   return oa === null ? null : '这个 OA 没有进行中的成品订单行。';
@@ -70,16 +90,19 @@ function useCurrentFilter() {
   const [params, setParams] = useSearchParams();
   const oa = params.get('oa');
   const drill = readProgressDrill(params.get('drill'));
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const { page, pageSize } = progressPagination(params);
   const tableRef = useRef<HTMLDivElement>(null);
+  const writePage = (nextPage: number, nextSize: number) => setParams(
+    withProgressPagination(params, { page: nextPage, pageSize: nextSize }), { preventScrollReset: true },
+  );
   return {
-    oa, drill, tableRef, page, pageSize, setPage, setPageSize, search: params.toString(),
-    setOa: (value: string | null) => { setPage(1); setParams(oaParams(params, value)); },
+    oa, drill, tableRef, page, pageSize, search: params.toString(),
+    setPage: (value: number) => writePage(value, pageSize),
+    setPageSize: (value: number) => writePage(1, value),
+    setOa: (value: string | null) => setParams(oaParams(resetProgressPagination(params), value)),
     setDrill: (value: ProgressDrill) => {
       const next: ProgressDrill = progressDrillKey(value) === progressDrillKey(drill) ? { kind: 'all' } : value;
-      setPage(1);
-      setParams(withProgressDrill(params, next), { preventScrollReset: true });
+      setParams(withProgressDrill(resetProgressPagination(params), next), { preventScrollReset: true });
       tableRef.current?.focus();
     },
   };
@@ -165,7 +188,7 @@ function ProgressTable(props: ProgressTableProps) {
   const { lines, notes, now, search } = props;
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
-  const lineHref = (lineId: string) => scopedLineLink(lineId, { search, store: lines.get(lineId)?.storeProgress?.store });
+  const lineHref = (lineId: string) => scopedLineLink(lineId, { search, store: lines.get(lineId)?.storeProgress?.store, focusLine: lineId });
   const note = (lineId: string) => <ProgressNote href={lineHref(lineId)} saved={notes[lineId]} />;
   const expand = (row: ProgressRow) => (
     <>
@@ -187,7 +210,7 @@ function ProgressTable(props: ProgressTableProps) {
         pageSize: props.pageSize,
         total: props.rows.length,
         onChange: props.setPage,
-        onSizeChange: (size) => { props.setPageSize(size); props.setPage(1); },
+        onSizeChange: props.setPageSize,
       })}
     />
   );

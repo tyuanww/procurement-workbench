@@ -42,8 +42,13 @@ export function ProgressOaFilter(props: {
   );
 }
 
-export function scopedLineLink(id: string, { search, store }: { readonly search: string; readonly store: ProcurementStore | undefined }): string {
+export function scopedLineLink(id: string, { search, store, focusLine }: {
+  readonly search: string;
+  readonly store: ProcurementStore | undefined;
+  readonly focusLine?: string;
+}): string {
   const fromProgress = new URLSearchParams(search);
+  if (focusLine !== undefined) fromProgress.set('focusLine', focusLine);
   const params = new URLSearchParams({ backToProgress: fromProgress.toString() });
   if (store !== undefined) params.set('store', store);
   return `/lines/${encodeURIComponent(id)}?${params.toString()}`;
@@ -56,7 +61,7 @@ export function StoreOrderDetails({ line, search }: { readonly line: OrderLineRo
   return (
     <section aria-label="成品与关联采购事项">
       <p>
-        <Link to={scopedLineLink(line.id, { search, store: progress.store })}>成品订单行详情</Link>
+        <Link to={scopedLineLink(line.id, { search, store: progress.store, focusLine: line.id })}>成品订单行详情</Link>
         {' · '}{progressOrderRef(line)}{' · '}{storeLabels[progress.store]}
         {' · '}{line.qtyOrdered === null ? '订单数量未填' : `订单数量 ${amount.format(line.qtyOrdered)}`}
       </p>
@@ -70,7 +75,7 @@ export function StoreOrderDetails({ line, search }: { readonly line: OrderLineRo
       <Typography.Text strong>关联采购事项（{progress.materials.length}）</Typography.Text>
       {progress.materials.length === 0 ? null : <ul>{progress.materials.map((entry) => (
         <li key={entry.id}>
-          <Link to={scopedLineLink(entry.id, { search, store: progress.store })}>{[entry.nameRaw, entry.codeRaw, entry.poRaw].filter(Boolean).join(' · ') || '打开采购事项'}</Link>
+          <Link to={scopedLineLink(entry.id, { search, store: progress.store, focusLine: line.id })}>{[entry.nameRaw, entry.codeRaw, entry.poRaw].filter(Boolean).join(' · ') || '打开采购事项'}</Link>
           {' · '}{sourceText(entry.source)}
           {' · '}{materialQuantity(entry)}
           {entry.deliveryProgressRaw === null ? null : ` · 源表交付原文 ${entry.deliveryProgressRaw}`}

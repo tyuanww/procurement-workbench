@@ -1,5 +1,5 @@
 import { CheckOutlined } from '@ant-design/icons';
-import { Button, Card, Progress, Statistic, Typography } from 'antd';
+import { Button, Card, Col, Progress, Row, Statistic, Typography } from 'antd';
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { bg, border, brand, controlBorder, fontSize, radius, space, statusColor, text } from '../../theme/tokens.js';
 import { formatQuantity } from './format.js';
@@ -40,16 +40,20 @@ const labeledBarCss = `.stacked-bar-values{display:grid;grid-template-columns:re
 
 export function MetricStrip(input: { readonly items: readonly MetricItem[]; readonly ariaLabel: string }): ReactNode {
   return (
-    <div role="group" aria-label={input.ariaLabel} style={metricGridStyle()}>
-      {input.items.map((item) => <MetricCard key={item.key} item={item} />)}
-    </div>
+    <Row gutter={[space[2], space[2]]} role="group" aria-label={input.ariaLabel}>
+      {input.items.map((item) => (
+        <Col key={item.key} flex="1 1 min(100%, 162px)" style={{ display: 'flex', minWidth: 0 }}>
+          <MetricCard item={item} />
+        </Col>
+      ))}
+    </Row>
   );
 }
 
 function MetricCard(input: { readonly item: MetricItem }): ReactNode {
   if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} />;
   return (
-    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ borderTop: `2px solid ${toneColor(input.item.tone)}` }}>
+    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ width: '100%', borderTop: `2px solid ${toneColor(input.item.tone)}` }}>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
       <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
       {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
@@ -293,10 +297,6 @@ function rateTone(rate: number): string {
   if (rate >= 0.95) return statusColor.success.text;
   if (rate >= 0.8) return statusColor.warning.text;
   return statusColor.danger.text;
-}
-
-function metricGridStyle(): CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: space[2] };
 }
 
 function metricValueStyle(): CSSProperties {
