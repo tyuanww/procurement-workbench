@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -91,7 +92,7 @@ async function procurementAcceptance(): Promise<void> {
   await checkEmptyProductArchive(manager, origin, false);
   result.checks.productArchiveImportLink = { buyer: true, manager: false };
   await checkImportRecovery(buyer);
-  await checkProcurementImport(buyer);
+  const importPath = await checkProcurementImport(buyer);
   await checkMobileOrders(buyer);
   await checkLineColumns(buyer);
   await checkNavigation(buyer);
@@ -107,6 +108,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
 
   const { page: reviewer, devtools } = await open('reviewer', '/', '/master');
+  await checkImportReviewLink(reviewer, importPath);
   result.checks.storeSchedule = await checkStoreSchedule({ page: buyer, manager, origin, out });
   result.checks.productDevelopment = await checkProductDevelopment({ buyer, reviewer, buyerId: users.buyer, reviewerId: users.reviewer, origin, out });
   const meeting = await checkManagementMeeting({ page: manager, origin, out, materialPo: componentPo });
@@ -489,7 +491,7 @@ async function checkImportRecovery(page: Page) {
   result.checks.importRecovery = { rejectedWorkbooks: malformed.length, replacedWithValidWorkbook: true };
 }
 
-async function checkProcurementImport(page: Page): Promise<void> {
+async function checkProcurementImport(page: Page): Promise<string> {
   await page.getByRole('button', { name: '开始解析', exact: true }).click();
   await page.waitForURL(/\/imports\/[^/]+$/);
   const importPath = new URL(page.url()).pathname;
@@ -503,6 +505,8 @@ async function checkProcurementImport(page: Page): Promise<void> {
 
   await page.getByRole('button', { name: '确认导入', exact: true }).click();
   await page.getByText(/已提交 · 共 \d+ 行/).waitFor();
+  result.checks.importOrderScope = await checkImportOrderScope(page, importPath);
+  await page.goto(new URL(importPath, origin).href);
   await page.reload();
   await page.getByText('采购事项关联', { exact: true }).waitFor();
   await component.getByRole('link', { name: '打开采购事项', exact: true }).click();
@@ -526,6 +530,73 @@ async function checkProcurementImport(page: Page): Promise<void> {
   await page.getByRole('link', { name: workbookName, exact: true }).click();
   await page.waitForURL(`**${importPath}?template=po-master-v1&status=committed`);
   result.checks.procurementImport = { workbookName, importPath, componentPath, componentCode, componentPo, linkedFinished: 3, followUp: memo };
+  return importPath;
+}
+
+async function checkImportOrderScope(page: Page, importPath: string) {
+  const main = page.getByRole('main');
+  await main.getByText(/\d+ 个新主体待审核/u).waitFor();
+  assert.equal(await main.getByRole('link', { name: /去审核/u }).count(), 0);
+  assert.equal(await main.getByRole('link', { name: '按总表首批生成待确认批次', exact: true }).count(), 0);
+  const orderLink = main.getByRole('link', { name: '查看本次导入订单', exact: true });
+  assert.equal(await orderLink.count(), 1);
+
+  const importBatchId = decodeURIComponent(importPath.slice('/imports/'.length));
+  const matchesScope = (url: URL) => url.searchParams.get('importBatchId') === importBatchId;
+  const batchCountBefore = readDeliveryBatchCount();
+  const [list, summary] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
+    orderLink.click(),
+  ]);
+  await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('lane') === 'all' && matchesScope(url));
+  for (const response of [list, summary]) {
+    assert.ok(response.ok() && matchesScope(new URL(response.url())));
+    assert.equal(response.request().method(), 'GET');
+  }
+  const { total } = await summary.json();
+  assert.equal(total, 8);
+  await page.getByRole('link', { name: 'PO20261117009001', exact: true }).waitFor();
+  await page.getByRole('link', { name: componentPo, exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'HZ09-0501', exact: true }).count(), 0);
+  const batchCountAfter = readDeliveryBatchCount();
+  assert.equal(batchCountAfter, batchCountBefore);
+
+  const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
+  const exportUrl = new URL(await exportLink.getAttribute('href') ?? '', origin);
+  assert.ok(matchesScope(exportUrl));
+  const [download] = await Promise.all([page.waitForEvent('download'), exportLink.click()]);
+  const path = join(out, 'procurement-import-lines.xlsx');
+  await download.saveAs(path);
+  const book = xlsx.read(await readFile(path));
+  const rows = xlsx.utils.sheet_to_json<string[]>(book.Sheets['订单行'], { header: 1 }).slice(1);
+  assert.equal(rows.length, total);
+  assert.ok(rows.some((row) => row[0] === componentPo));
+  assert.ok(rows.every((row) => row[0] !== 'HZ09-0501'));
+  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length };
+}
+
+async function checkImportReviewLink(page: Page, importPath: string): Promise<void> {
+  await page.goto(new URL(importPath, origin).href);
+  const link = page.getByRole('main').getByRole('link', { name: /^去审核 \d+ 个新主体$/u });
+  const [queue] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/master/aliases'),
+    link.click(),
+  ]);
+  assert.ok(queue.ok());
+  await page.waitForURL((url) => url.pathname === '/master');
+  result.checks.importReviewLink = { target: '/master', aliasesStatus: queue.status() };
+}
+
+function readDeliveryBatchCount(): number {
+  const { DATABASE_URL: database, PGBIN: pgBin } = process.env;
+  assert.ok(database && /^postgresql:\/\/sw_accept@127\.0\.0\.1:\d+\/sw_accept_[0-9a-f]+$/u.test(database));
+  const executable = process.platform === 'win32' ? 'psql.exe' : 'psql';
+  const output = execFileSync(pgBin === undefined ? executable : join(pgBin, executable), [
+    database, '-X', '-At', '-v', 'ON_ERROR_STOP=1', '-c', 'select count(*) from delivery_batches',
+  ], { encoding: 'utf8' }).trim();
+  assert.match(output, /^\d+$/u);
+  return Number(output);
 }
 
 async function fits(field: Locator) {

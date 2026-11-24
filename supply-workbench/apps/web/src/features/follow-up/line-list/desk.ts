@@ -19,6 +19,7 @@ const OWNED_KEYS: ReadonlySet<string> = new Set([
   'buyer',
   'supplierPartyId',
   'factoryPartyId',
+  'importBatchId',
   'inTransitFactory',
   'stage',
   'stages',
@@ -46,6 +47,7 @@ type DeskRecord = {
   readonly buyer: string | undefined;
   readonly supplierPartyId: string | undefined;
   readonly factoryPartyId: LinesQuery['factoryPartyId'];
+  readonly importBatchId: LinesQuery['importBatchId'];
   readonly inTransitFactory: LinesQuery['inTransitFactory'];
   readonly stage: StageSlot;
   readonly isOverdue: boolean;
@@ -98,7 +100,7 @@ export function readDesk(search: string): DeskRead {
     q: record.q ?? '',
     stage: stageControl(record.stage),
     isOverdue: record.isOverdue,
-    page: pageNumber(record.pageToken),
+    page: Number(record.pageToken ?? 1),
     pageSize: pageSizeOf(record.pageSizeToken),
     columns: columnsOf(lane === 'all' ? DEFAULT_LANE : lane),
     stageChoices: STAGE_CHOICES,
@@ -118,6 +120,7 @@ function parseDesk(search: string): DeskRecord {
     buyer: takeField({ raw: params.get('buyer'), field: textField }),
     supplierPartyId: takeField({ raw: params.get('supplierPartyId'), field: textField }),
     factoryPartyId: takeField({ raw: params.get('factoryPartyId'), field: LinesQuerySchema.shape.factoryPartyId }),
+    importBatchId: takeField({ raw: params.get('importBatchId'), field: textField }),
     inTransitFactory: takeField({ raw: params.get('inTransitFactory'), field: LinesQuerySchema.shape.inTransitFactory }),
     stage: stageSlot({ stages: stageTokens(params.get('stages')), single: params.get('stage') }),
     isOverdue: isOverdueAddress({ overdue: params.get('overdue'), overdueOnly: params.get('overdueOnly') }),
@@ -286,6 +289,7 @@ function commonParams(record: DeskRecord): URLSearchParams {
   setText({ next, key: 'buyer', value: record.buyer });
   setText({ next, key: 'supplierPartyId', value: record.supplierPartyId });
   setText({ next, key: 'factoryPartyId', value: record.factoryPartyId });
+  setText({ next, key: 'importBatchId', value: record.importBatchId });
   setText({ next, key: 'inTransitFactory', value: record.inTransitFactory });
   return next;
 }
@@ -323,13 +327,6 @@ function pageTokenOf(raw: string | null): string | undefined {
   if (!parsed.success) return undefined;
   if (!Number.isSafeInteger(Number(parsed.data))) return undefined;
   return parsed.data;
-}
-
-function pageNumber(token: string | undefined): number {
-  if (token === undefined) return 1;
-  const parsed = Number(token);
-  if (!Number.isSafeInteger(parsed)) return 1;
-  return parsed;
 }
 
 function pageSizeOf(token: string | undefined): number {
