@@ -131,7 +131,7 @@ describe('产品卡片渲染', () => {
   it('没有缩略图时是占位，不出现破图地址', () => {
     const html = markup(h(ProductCards, { items: [BASE] }));
     expect(html).toContain('aria-label="海葡萄面膜 无图"');
-    expect(html).toContain('备案名 未备案');
+    expect(html).toContain('备案名 待补充');
     expect(html).not.toContain('/files/');
     expect(html).toContain('href="/products/product-1"');
   });
@@ -143,6 +143,7 @@ describe('产品表格渲染', () => {
     expect(html).toContain('ant-table');
     expect(html).toContain('href="/products/product-1"');
     expect(html).toContain('href="/products/product-2"');
+    expect(html).toContain('待补充');
     for (const title of ['品名', '条码', '备案名', '净含量', '箱规', '规格']) expect(html).toContain(title);
     for (const label of detailLabels) expect(html).not.toContain(label);
     expect(html).toContain('role="separator"');

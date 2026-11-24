@@ -17,6 +17,10 @@ export function thumbnailSrc(thumbnail: { readonly fileId: string } | null): str
   return thumbnail === null ? null : `/files/${thumbnail.fileId}`;
 }
 
+export function filingNameText(name: string | null): string {
+  return name?.trim() || '待补充';
+}
+
 export function ProductCards({ items }: { readonly items: readonly ProductCard[] }): ReactNode {
   return (
     <Row align="top" gutter={[space[3], space[3]]} style={{ marginTop: space[2] }}>
@@ -51,7 +55,7 @@ function CardBody({ item }: { readonly item: ProductCard }): ReactNode {
         {item.isChannelVariant ? <Tag variant="outlined" style={{ flexShrink: 0, marginInlineEnd: 0 }}>渠道规格</Tag> : null}
       </Flex>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{item.barcodeRaw}</Typography.Text>
-      <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>备案名 {item.filingName ?? '未备案'}</Typography.Text>
+      <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>备案名 {filingNameText(item.filingName)}</Typography.Text>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{specText(item)}</Typography.Text>
     </Flex>
   );

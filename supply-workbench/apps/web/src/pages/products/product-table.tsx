@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { ProductCard } from '@sw/contracts';
 import { useShellViewport } from '../../features/shell/index.js';
 import { border, brand, space } from '../../theme/tokens.js';
-import { CatalogProductLink } from './product-cards.js';
+import { CatalogProductLink, filingNameText } from './product-cards.js';
 
 export type ProductColumnSpec = {
   readonly key: string;
@@ -22,7 +22,7 @@ export const KEYBOARD_RESIZE_STEP = space[3];
 export const PRODUCT_COLUMN_SPECS: readonly ProductColumnSpec[] = [
   { key: 'skuName', title: '品名', width: 240, minWidth: 160, isPhoneHidden: false, cell: (item) => <CatalogProductLink id={item.id}>{item.skuName}</CatalogProductLink> },
   { key: 'barcodeRaw', title: '条码', width: 160, minWidth: 120, isPhoneHidden: false, cell: (item) => item.barcodeRaw },
-  { key: 'filingName', title: '备案名', width: 200, minWidth: 120, isPhoneHidden: true, cell: (item) => item.filingName ?? '未备案' },
+  { key: 'filingName', title: '备案名', width: 200, minWidth: 120, isPhoneHidden: true, cell: (item) => filingNameText(item.filingName) },
   { key: 'netContent', title: '净含量', width: 100, minWidth: 80, isPhoneHidden: true, cell: (item) => item.netContent ?? '—' },
   { key: 'casePack', title: '箱规', width: 100, minWidth: 80, isPhoneHidden: true, cell: (item) => item.casePack ?? '—' },
   { key: 'spec', title: '规格', width: 96, minWidth: MIN_COLUMN_WIDTH, isPhoneHidden: true, cell: (item) => (item.isChannelVariant ? '渠道规格' : '标准规格') },
