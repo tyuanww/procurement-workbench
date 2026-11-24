@@ -31,7 +31,6 @@ export async function listDiagnosticPage(db: AppDatabase, input: FactoryDiagnost
   const rows = unmatchedReports(db, { kind: scope, activeIds: [...await activeFactoryBatchIds(db)] });
   const paged = db.select().from(rows).orderBy(sql`${rows.rowId} collate "C"`, rows.kind)
     .limit(pageSize).offset((page - 1) * pageSize).as('paged');
-  // 一条语句取结果和总数，空页也由计数子查询保留总数。
   const counted = db.select({ total: count().as('total') }).from(rows).as('counted');
   const results = await db.select({ total: counted.total, row: {
     rowId: paged.rowId,
@@ -49,7 +48,6 @@ export async function listDiagnosticPage(db: AppDatabase, input: FactoryDiagnost
 
 function unmatchedReports(db: AppDatabase, scope: Scope) {
   const report = (kind: FactoryReportKind) => unmatchedInTable(db, { kind, scope });
-  // 各表内 ID 唯一，种类保留为联合结果的一部分，跨表相同的 ID 仍是不同上报行。
   return unionAll(
     report('shipment'),
     report('in_transit'),

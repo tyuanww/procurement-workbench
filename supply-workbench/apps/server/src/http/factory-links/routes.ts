@@ -47,9 +47,7 @@ export function registerFactoryLinkRoutes(app: FastifyInstance, api: FactoryLink
   app.put('/api/v1/lines/:id/factory-link', async (req) => {
     const body = parse(SetLineFactoryLinkRequestSchema, req.body ?? {});
     const orderLineId = parse(LineParams, req.params).id;
-    await api.setLine({ orderLineId, ...body }, requireActor(req));
-    const view = await api.getLine({ orderLineId }, requireActor(req));
-    if (view === undefined) throw new HttpError({ code: 'INTERNAL', message: '工厂关联没有写回' });
+    const view = await api.setLine({ orderLineId, ...body }, requireActor(req));
     return wire(LineFactoryLinkViewSchema, view);
   });
 }
