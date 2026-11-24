@@ -1,8 +1,8 @@
 import { Alert, Button, Empty, Result, Skeleton, Table, type TableColumnsType } from 'antd';
-import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from 'react';
-import { useSearchParams } from 'react-router';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { type OrderLineRow, type ProcurementStore } from '@sw/contracts';
-import { arrivalPaint, matchesProgressDrill, progressDrillKey, progressDrillLabel, progressInsights, readProgressDrill, rememberLocalNote, withProgressDrill, type LocalNote, type ProgressArrival, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
+import { arrivalPaint, matchesProgressDrill, progressDrillKey, progressDrillLabel, progressInsights, readProgressDrill, withProgressDrill, type ProgressArrival, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { useCan } from '../../shared/actor.js';
 import { tablePagination } from '../../shared/ui/pagination.js';
@@ -11,7 +11,7 @@ import { useShellViewport } from '../../features/shell/index.js';
 import { ArrivalMemos } from '../../features/today/index.js';
 import { fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import { ProgressNote } from './progress-note.js';
-import { progressArrivalDate, progressMobileColumns, progressMobileDetails, type ProgressMobileInput } from './progress-mobile.js';
+import { progressArrivalDate, progressMobileColumns, progressMobileDetails } from './progress-mobile.js';
 import { loadProgress, type ProgressData } from './progress-load.js';
 export { noteBatches, pagesFor } from './progress-load.js';
 import { ProgressOverview } from './progress-overview.js';
@@ -21,7 +21,7 @@ import { matchingOa, ProgressOaFilter, progressOrderRef, scopedLineLink, StoreGa
 type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
 
 export function ProgressCurrent(scope: ProgressScope) {
-  const { data, error, isLoaded, retry, ...notes } = useCurrentData(scope);
+  const { data, error, isLoaded, notes, now, retry } = useCurrentData(scope);
   const { oa, drill, setOa, setDrill, tableRef, ...table } = useCurrentFilter();
   const scopedRows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
@@ -38,7 +38,7 @@ export function ProgressCurrent(scope: ProgressScope) {
           </div>}
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
-            <ProgressTable {...notes} {...table} rows={rows} lines={data.lines} emptyMessage={emptyMessage} />
+            <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} emptyMessage={emptyMessage} />
           </ProgressBody>
         </SectionGroup>
       </div>
@@ -78,17 +78,15 @@ function useCurrentData({ store, isMine }: ProgressScope) {
   const [isLoaded, setLoaded] = useState(false);
   const [reload, setReload] = useState(0);
   const [notes, setNotes] = useState<Readonly<Record<string, string>>>({});
-  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const generation = useRef(0);
-  const localNotes = useRef<readonly LocalNote[]>([]);
   useEffect(() => {
     const current = ++generation.current;
     setLoaded(false);
-    void loadProgress({ store, isMine, current, latest: () => generation.current, local: () => localNotes.current, setData, setNotes, setError })
+    void loadProgress({ store, isMine, current, latest: () => generation.current, setData, setNotes, setError })
       .finally(() => { if (current === generation.current) setLoaded(true); });
     return () => { generation.current++; };
   }, [reload, store, isMine]);
-  return { data, error, isLoaded, notes, drafts, setDrafts, localNotes, generation, setNotes, setError, now, retry: () => setReload((value) => value + 1) };
+  return { data, error, isLoaded, notes, now, retry: () => setReload((value) => value + 1) };
 }
 
 function memosForOa({ lines, arrivalMemos }: ProgressData, oa: string | null) {
@@ -144,12 +142,6 @@ type ProgressTableProps = {
   readonly search: string;
   readonly emptyMessage: string | null;
   readonly notes: Readonly<Record<string, string>>;
-  readonly drafts: Readonly<Record<string, string>>;
-  readonly setDrafts: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly localNotes: MutableRefObject<readonly LocalNote[]>;
-  readonly generation: MutableRefObject<number>;
-  readonly setNotes: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly setError: (message: string) => void;
   readonly now: Date;
   readonly page: number;
   readonly pageSize: number;
@@ -163,14 +155,15 @@ function EmptyProgress({ message }: { readonly message: string | null }) {
 }
 
 function ProgressTable(props: ProgressTableProps) {
-  const { notes, drafts, setDrafts, localNotes, generation, setNotes, setError } = props;
+  const { lines, notes, now, search } = props;
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
-  const mobileInput = progressMobileInput({ notes, drafts, setDrafts, localNotes, generation, setNotes, setError, now: props.now, isNarrowPhone });
+  const lineHref = (lineId: string) => scopedLineLink(lineId, { search, store: lines.get(lineId)?.storeProgress?.store });
+  const note = (lineId: string) => <ProgressNote href={lineHref(lineId)} saved={notes[lineId]} />;
   const expand = (row: ProgressRow) => (
     <>
-      <StoreOrderDetails line={props.lines.get(row.lineId)} search={props.search} />
-      {isPhone ? progressMobileDetails(row, mobileInput) : null}
+      <StoreOrderDetails line={lines.get(row.lineId)} search={search} />
+      {isPhone ? progressMobileDetails(row, note(row.lineId)) : null}
     </>
   );
   return (
@@ -181,7 +174,7 @@ function ProgressTable(props: ProgressTableProps) {
       locale={{ emptyText: <EmptyProgress message={props.emptyMessage} /> }}
       expandable={{ expandedRowRender: expand }}
       {...(isPhone ? {} : { scroll: { x: 'max-content' as const } })}
-      columns={isPhone ? progressMobileColumns(mobileInput) : progressColumns({ lines: props.lines, search: props.search, notes, drafts, setDrafts, localNotes, generation, setNotes, setError, now: props.now })}
+      columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineHref, now }) : progressColumns({ lines, lineHref, note, now })}
       pagination={tablePagination({
         page: Math.min(props.page, Math.max(1, Math.ceil(props.rows.length / props.pageSize))),
         pageSize: props.pageSize,
@@ -193,83 +186,24 @@ function ProgressTable(props: ProgressTableProps) {
   );
 }
 
-function progressMobileInput(input: {
-  readonly notes: Readonly<Record<string, string>>;
-  readonly drafts: Readonly<Record<string, string>>;
-  readonly setDrafts: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly localNotes: MutableRefObject<readonly LocalNote[]>;
-  readonly generation: MutableRefObject<number>;
-  readonly setNotes: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly setError: (message: string) => void;
-  readonly now: Date;
-  readonly isNarrowPhone: boolean;
-}): ProgressMobileInput {
-  return {
-    notes: input.notes,
-    drafts: input.drafts,
-    setDrafts: input.setDrafts,
-    onSaved: (lineId, text) => {
-      input.localNotes.current = rememberLocalNote(input.localNotes.current, { lineId, generation: input.generation.current, text });
-      input.setNotes((current) => ({ ...current, [lineId]: text }));
-    },
-    setError: input.setError,
-    now: input.now,
-    isNarrowPhone: input.isNarrowPhone,
-  };
-}
-
 function progressColumns(input: {
   readonly lines: ReadonlyMap<string, OrderLineRow>;
-  readonly search: string;
-  readonly notes: Readonly<Record<string, string>>;
-  readonly drafts: Readonly<Record<string, string>>;
-  readonly setDrafts: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly localNotes: MutableRefObject<readonly LocalNote[]>;
-  readonly generation: MutableRefObject<number>;
-  readonly setNotes: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly setError: (message: string) => void;
+  readonly lineHref: (lineId: string) => string;
+  readonly note: (lineId: string) => ReactNode;
   readonly now: Date;
 }): TableColumnsType<ProgressRow> {
-  const { notes, drafts, setDrafts, localNotes, generation, setNotes, setError } = input;
   return [
     { title: 'OA 需求', render: (_value: unknown, row: ProgressRow) => progressOrderRef(input.lines.get(row.lineId)) },
     { title: '单号', dataIndex: 'po' },
-    { title: '品名', dataIndex: 'title', render: (title: string, row: ProgressRow) => <a href={scopedLineLink(row.lineId, { search: input.search, store: input.lines.get(row.lineId)?.storeProgress?.store })}>{title}</a> },
+    { title: '品名', dataIndex: 'title', render: (title: string, row: ProgressRow) => <Link to={input.lineHref(row.lineId)}>{title}</Link> },
     { title: '供应商', dataIndex: 'supplierLabel' },
     { title: '阶段', dataIndex: 'stageLabel' },
     { title: '停留天数', align: 'right', render: (_value: unknown, row: ProgressRow) => <StayDays row={row} /> },
     { title: '确认到货日', render: (_value: unknown, row: ProgressRow) => progressArrivalDate({ arrival: row.arrival, now: input.now }) },
     { title: '状态', render: (_value: unknown, row: ProgressRow) => <ArrivalTag arrival={row.arrival} /> },
     { title: '下一步', render: (_value: unknown, row: ProgressRow) => <ProgressNextAction row={row} /> },
-    noteColumn({ notes, drafts, setDrafts, localNotes, generation, setNotes, setError }),
+    { title: '进度说明', render: (_value: unknown, row: ProgressRow) => input.note(row.lineId) },
   ];
-}
-
-function noteColumn(input: {
-  readonly notes: Readonly<Record<string, string>>;
-  readonly drafts: Readonly<Record<string, string>>;
-  readonly setDrafts: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly localNotes: MutableRefObject<readonly LocalNote[]>;
-  readonly generation: MutableRefObject<number>;
-  readonly setNotes: Dispatch<SetStateAction<Readonly<Record<string, string>>>>;
-  readonly setError: (message: string) => void;
-}) {
-  return {
-    title: '进度说明',
-    render: (_value: unknown, row: ProgressRow) => (
-      <ProgressNote
-        lineId={row.lineId}
-        saved={input.notes[row.lineId] ?? ''}
-        draft={input.drafts[row.lineId] ?? ''}
-        onDraft={(text) => input.setDrafts({ ...input.drafts, [row.lineId]: text })}
-        onSaved={(text) => {
-          input.localNotes.current = rememberLocalNote(input.localNotes.current, { lineId: row.lineId, generation: input.generation.current, text });
-          input.setNotes((current) => ({ ...current, [row.lineId]: text }));
-        }}
-        onError={input.setError}
-      />
-    ),
-  };
 }
 
 const STAY_PAINT: Record<ProgressStay, { readonly fontSize: number; readonly fontWeight: number; readonly color: string }> = {
