@@ -48,7 +48,7 @@ try {
     assert.equal(await tabs.getByRole('tab', { name: '用户', exact: true }).getAttribute('aria-selected'), 'true');
     await tabs.getByRole('tab', { name: '用户', exact: true }).press('ArrowRight');
     await page.keyboard.press('Enter');
-    await page.getByRole('tabpanel', { name: '阈值', exact: true }).waitFor();
+    await page.getByRole('tabpanel', { name: /阈值$/ }).getByRole('heading', { name: '提醒阈值' }).waitFor();
     await page.reload();
     await page.getByRole('tabpanel', { name: '阈值', exact: true }).waitFor();
     await page.goto(origin + '/missing-page-smoke');
