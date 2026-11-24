@@ -197,7 +197,7 @@ function verifyTarget({ loaded, target, arrival, unit, row, candidates }: {
 
 function assertLineConfirmation(confirmed: string | undefined, { lineId, candidates }: { readonly lineId: string; readonly candidates: readonly ArrivalCandidate[] }): void {
   if (confirmed === undefined && candidates.some((candidate) => candidate.lineId === lineId && candidate.needsLineConfirmation)) {
-    invalid('同 PO 同商品有多条候选，请回查订单详情并填写对应的工作台订单行 ID');
+    invalid('同 PO 同商品有多条候选，请回查订单详情并确认所选订单行');
   }
   if (confirmed !== undefined && confirmed !== lineId) invalid('核对的工作台订单行 ID 与所选批次不一致');
 }

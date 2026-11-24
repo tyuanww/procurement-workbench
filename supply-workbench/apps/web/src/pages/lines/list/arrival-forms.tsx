@@ -1,4 +1,4 @@
-import { Button, Card, Flex, Form, Input, InputNumber, Select, Typography, type FormItemProps } from 'antd';
+import { Button, Card, Checkbox, Flex, Form, Input, InputNumber, Select, Typography, type CheckboxChangeEvent, type FormItemProps } from 'antd';
 import { RegisterArrivalSchema, ReviseArrivalSchema, type Arrival, type ArrivalCandidate, type RegisterArrivalInput, type ReviseArrivalInput } from '@sw/contracts';
 import { RECEIPT_CATEGORIES, receiptCategoryLabel } from '@sw/domain';
 import { businessToday } from '../../../features/follow-up/index.js';
@@ -47,6 +47,7 @@ export function AllocateArrivalForm({ arrival, candidates, isSaving, onSubmit, o
     ? [{
       label: `${row.poNumber ?? '无 PO'} · ${arrivalCandidateSource(row)} · 批次 ${row.batch.seq} · 确认到仓 ${row.batch.confirmedOn ?? '—'} · 计划 ${row.batch.plannedQty} ${row.batch.unit ?? ''}`,
       value: row.batch.id,
+      lineId: row.lineId,
       needsLineId: row.needsLineConfirmation,
     }]
     : []);
@@ -73,23 +74,32 @@ export function arrivalCandidateSource({ lineId, source }: ArrivalCandidate): st
   return `${origin}订单行 ${lineId}`;
 }
 
-type BatchOption = { readonly label: string; readonly value: string; readonly needsLineId: boolean };
+type BatchOption = { readonly label: string; readonly value: string; readonly lineId: ArrivalCandidate['lineId']; readonly needsLineId: boolean };
 
 function AllocationFields({ options }: { readonly options: readonly BatchOption[] }) {
+  const form = Form.useFormInstance();
   return <Form.List name="allocations">
       {(fields, { add, remove }) => <Flex vertical gap={12}>
         {fields.map(({ key, name }, index) => <Card key={key} size="small" title={`分配 ${index + 1}`} extra={fields.length > 1 ? <Button type="link" onClick={() => remove(name)}>移除</Button> : null}>
           <Form.Item label="要货批次" name={[name, 'batchId']} rules={required}>
-            <Select options={[...options]} showSearch={{ optionFilterProp: 'label' }} />
+            <Select options={[...options]} showSearch={{ optionFilterProp: 'label' }}
+              onChange={() => form.setFieldValue(['allocations', name, 'targetLineId'], undefined)} />
           </Form.Item>
           <TextField label="凭据上的原 PO 号" name={[name, 'poNumber']} />
           <TextField label="PO 明细行标识" name={[name, 'poLine']} />
           <Form.Item noStyle dependencies={[['allocations', name, 'batchId']]}>
-            {({ getFieldValue }) => options.some((option) => option.value === getFieldValue(['allocations', name, 'batchId']) && option.needsLineId) ? <Form.Item
-              label="已核对的工作台订单行 ID" name={[name, 'targetLineId']} preserve={false} rules={required}
-              extra="打开候选订单详情，按原 PO 明细核对后，复制地址末尾的订单行 ID。无法确认时保留待归单。">
-              <Input />
-            </Form.Item> : null}
+            {({ getFieldValue }) => {
+              const batchId = getFieldValue(['allocations', name, 'batchId']);
+              const selected = options.find((option) => option.value === batchId);
+              if (selected?.needsLineId !== true) return null;
+              return <Form.Item name={[name, 'targetLineId']} preserve={false}
+                getValueProps={(value: unknown) => ({ checked: value === selected.lineId })}
+                getValueFromEvent={({ target }: CheckboxChangeEvent) => target.checked ? selected.lineId : undefined}
+                rules={[{ required: true, message: '请确认已核对所选订单行' }]}
+                extra="打开上方候选详情，与原 PO 明细核对。无法确认时保留待归单。">
+                <Checkbox style={{ minHeight: 44 }}>已按原 PO 明细核对所选订单行</Checkbox>
+              </Form.Item>;
+            }}
           </Form.Item>
           <TextField label="逐行归批依据" name={[name, 'evidence']} maxLength={500} />
           <QuantityField label="本批实收量" name={[name, 'qty']} />
