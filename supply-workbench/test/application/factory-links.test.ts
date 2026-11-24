@@ -98,7 +98,7 @@ it('relink 把多候选记成冲突、无候选记成未关联，并保留手工
   }
 });
 
-it('读路径先读 line_factory_links，没有记录时回退到工厂进度行', async () => {
+it('读路径优先用显式工厂关联，再回退到活动工厂进度行', async () => {
   const fixture = await createPgFixture();
   try {
     await seedBase(fixture);
@@ -147,6 +147,13 @@ async function seedBase(fixture: PgFixture): Promise<void> {
     await tx.parties.save(aParty({ id: entityId('factory-1'), displayName: '宜侬', isSupplier: true, isFactory: true }));
     await tx.users.save(aUser({ id: entityId('admin-1'), name: '管理员', roles: ['admin'] }));
   });
+  await fixture.handle.exec(`insert into import_batches (
+    id, created_at, updated_at, file_id, template, factory_party_id, status,
+    file_meta, stats, decisions, created_by, committed_by, committed_at
+  ) values (
+    'batch-1', '${at}', '${at}', '工厂进度.xlsx', 'factory-progress-v1', 'factory-1', 'committed',
+    '{}', '{}', '{}', 'admin-1', 'admin-1', '${at}'
+  )`);
 }
 
 async function insertShipment(fixture: PgFixture, row: {
