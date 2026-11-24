@@ -34,7 +34,7 @@ type TextKey = 'stageLabel' | 'name' | 'waiting' | 'owner';
 const CLEAR_FILTERS: StuckFilters = { stage: null, bucket: null, cause: null, card: null };
 
 const WAITING_REASON = {
-  supplier_date: '等工厂确认交期',
+  supplier_date: '跟进确认交期',
   supplier_shipment: '等工厂发货',
   internal_note: '等回单',
   internal_review: '待核实物记录',
