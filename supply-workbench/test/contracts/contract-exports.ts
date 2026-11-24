@@ -268,6 +268,8 @@ export const contractExportNames = [
   'TodayResponse',
   'TodayResponseSchema',
   'TodaySort',
+  'TodayWorkFilter',
+  'TodayWorkFilterSchema',
   'UpdateBatchRequest',
   'UpdateBatchRequestSchema',
   'UpdateLineRequest',
