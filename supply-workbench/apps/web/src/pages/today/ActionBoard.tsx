@@ -1,14 +1,14 @@
-import { Button, Empty, Tag, Spin, Alert, Typography } from 'antd';
+import { Button, Empty, Flex, Tag, Spin, Alert, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
-import type { BoardGroup, BoardRow, GroupMode, QuickAction, ReasonChip, ReasonCount, TodayBoard, TodayInsight, TodayKpiItem } from '../../features/today/index.js';
+import type { BoardGroup, BoardRow, GroupMode, QuickAction, ReasonChip, TodayBoard, TodayInsight, TodayKpiItem } from '../../features/today/index.js';
 import { todayPageKpi } from '../../features/today/index.js';
 import { MetricStrip, type MetricItem, type MetricTone } from '../../shared/ui/analytics.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { actionIcon, FaceBlock } from './TodayDrawer.js';
 import { ActionControls, ActionPagination, ChaseControls, type ActionPageControls } from './ActionControls.js';
-import { GroupChips } from './group-chips.js';
-import { chipRowStyle, countStyle, groupStyle, headStyle, rowStyle, titleStyle } from './today-style.js';
+import { TodayGroup, TodayGrouping } from './TodayGroup.js';
+import { rowStyle } from './today-style.js';
 
 const ACTION_MODES: readonly { readonly id: GroupMode; readonly label: string }[] = [
   { id: 'waiting', label: '等待方' },
@@ -37,8 +37,10 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
       {props.page === undefined ? null : <ChaseControls page={props.page} />}
       <ActionMetrics insight={props.insight} />
       <search className="today-touch" aria-label="行动板筛选">
-        {props.page?.sort.kind === 'bulk' ? null : <GroupChips modes={ACTION_MODES} group={props.board.group} onGroup={props.onGroup} />}
-        <ReasonChips chips={props.board.chips} onToggle={props.onToggleReason} />
+        <Flex vertical align="flex-start" gap="small">
+          {props.page?.sort.kind === 'bulk' ? null : <TodayGrouping label="行动板分组" modes={ACTION_MODES} group={props.board.group} onGroup={props.onGroup} />}
+          <ReasonChips chips={props.board.chips} onToggle={props.onToggleReason} />
+        </Flex>
       </search>
       {props.page === undefined ? null : (
         <>
@@ -83,11 +85,11 @@ function kpiTone(key: TodayKpiItem['key']): MetricTone {
 
 function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly onToggle: (code: string) => void }): ReactNode {
   return (
-    <div style={chipRowStyle()}>
+    <Flex align="center" gap="small" wrap>
       {props.chips.map((chip) => (
         <Tag.CheckableTag key={chip.code} checked={chip.isSelected} onChange={() => props.onToggle(chip.code)}>{chip.label} {chip.count}</Tag.CheckableTag>
       ))}
-    </div>
+    </Flex>
   );
 }
 
@@ -137,10 +139,10 @@ function GroupBlock(props: {
   readonly page: ActionBoardProps['page'];
 }): ReactNode {
   return (
-    <div style={groupStyle()}>
-      <GroupHead name={props.group.name} counts={props.group.counts} copy={props.copy} />
+    <TodayGroup name={props.group.name} counts={props.group.counts} action={props.copy === null ? null :
+      <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={props.copy.disabled} onClick={props.copy.run}>{props.copy.label}</Button>}>
       <ActionRows group={props.group} focus={props.focus} fading={props.fading} onOpen={props.onOpen} onQuick={props.onQuick} page={props.page} />
-    </div>
+    </TodayGroup>
   );
 }
 
@@ -162,16 +164,6 @@ function ActionRows(props: {
   );
 }
 
-function GroupHead(props: { readonly name: string; readonly counts: readonly ReasonCount[]; readonly copy: CopyAction | null }): ReactNode {
-  return (
-    <div className="today-touch" style={headStyle()}>
-      <span style={titleStyle()}>{props.name}</span>
-      {props.counts.map((count) => <span key={count.label} style={countStyle()}>{count.label} {count.count}</span>)}
-      {props.copy === null ? null : <Button icon={<CopyOutlined aria-hidden />} disabled={props.copy.disabled} onClick={props.copy.run}>{props.copy.label}</Button>}
-    </div>
-  );
-}
-
 function TodayRow(props: {
   readonly row: BoardRow;
   readonly isFocused: boolean;
@@ -181,14 +173,14 @@ function TodayRow(props: {
   readonly onQuick: (kind: QuickAction['kind']) => void;
 }): ReactNode {
   return (
-    <div className="today-row" style={rowStyle({ isFocused: props.isFocused, isFading: props.isFading })} onClick={props.onOpen}>
+    <Flex className="today-row" vertical gap="small" style={rowStyle({ isFocused: props.isFocused, isFading: props.isFading })}>
       <FaceBlock face={props.row.face} />
-      <div className="today-touch" style={chipRowStyle()} onClick={(event) => event.stopPropagation()}>
+      <Flex className="today-touch" align="center" gap="small" wrap>
         {props.copy === null ? null : <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={props.copy.disabled} onClick={props.copy.run}>{props.copy.label}</Button>}
         <Button size="small" onClick={props.onOpen} aria-label={`查看详情 ${props.row.face.orderNo} · ${props.row.face.productName}`}>查看详情</Button>
         <RowActions actions={props.row.actions} onQuick={props.onQuick} />
-      </div>
-    </div>
+      </Flex>
+    </Flex>
   );
 }
 

@@ -44,7 +44,7 @@ export function handleKey(input: {
     escape(input);
     return;
   }
-  if (isControl(input.event.target)) return;
+  if (isControl(input.event)) return;
   if (input.event.key === 'Enter') {
     if (isCurrentRow(input.rows, input.focus)) input.actions.openDrawer();
     return;
@@ -107,8 +107,9 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
 }
 
-function isControl(target: EventTarget | null): boolean {
+function isControl({ target, key }: KeyPress): boolean {
   if (typeof Element === 'undefined' || !(target instanceof Element)) return false;
   const control = target.closest('button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [tabindex="0"]');
-  return control !== null && !control.classList.contains('today-task-row');
+  if (control === null) return false;
+  return !control.classList.contains('today-task-row') || key === 'Enter' || key === ' ';
 }
