@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { normalizeText, type FactoryReportKind, type LineFactoryLinkSource, type LineFactoryLinkStatus, type LineFactoryMatchBasis } from '@sw/domain';
 import type { FactoryDiagnosticScope, FactoryLinkQueries, FactoryRowMatchRef, LineFactoryLinkView, OrderLineMatchRef, UnmatchedFactoryRowView } from '../../../../application/src/ports/factory-link-views.js';
 import type { AppDatabase } from '../../client.js';
@@ -139,14 +139,13 @@ async function getView(db: AppDatabase, orderLineId: string): Promise<LineFactor
 }
 
 async function countStates(db: AppDatabase): Promise<{ readonly linked: number; readonly manual: number; readonly unlinked: number }> {
-  const [lines, links] = await Promise.all([db.select().from(orderLines), db.select().from(lineFactoryLinks)]);
-  let linked = 0;
-  let manual = 0;
-  for (const link of links) {
-    if (link.status === 'linked') linked += 1;
-    else if (link.status === 'manual') manual += 1;
-  }
-  return { linked, manual, unlinked: Math.max(lines.length - linked - manual, 0) };
+  const links = effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db) }).as('effective_factory_links');
+  const [counts] = await db.select({
+    linked: sql<number>`count(*) filter (where ${links.status} = 'linked')::int`,
+    manual: sql<number>`count(*) filter (where ${links.status} = 'manual')::int`,
+    unlinked: sql<number>`count(*) filter (where ${links.status} is null or ${links.status} = 'unlinked')::int`,
+  }).from(orderLines).leftJoin(links, eq(links.orderLineId, orderLines.id));
+  return counts ?? { linked: 0, manual: 0, unlinked: 0 };
 }
 
 async function listApprovedSupplierAliases(db: AppDatabase): Promise<readonly { readonly normName: string; readonly partyId: string }[]> {

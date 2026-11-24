@@ -93,6 +93,10 @@ it('relink 把多候选记成冲突、无候选记成未关联，并保留手工
     expect(reasons).toContain('FACTORY_LINK_CONFLICT');
     expect(reasons).toContain('NO_CANDIDATE_LINE');
     expect(unmatched.items.find((item) => item.reason === 'FACTORY_LINK_CONFLICT')?.suggestedAction).toContain('人工');
+
+    await makeSetLineFactoryLink(depsOf(fixture))({ orderLineId: 'line-manual', factoryPartyId: null, reason: '人工确认取消' }, admin());
+    await makeRelinkFactoryRows({ ...depsOf(fixture), links: queriesOf(fixture).links })({}, admin());
+    expect(await makeGetLineFactoryLink({ links: queriesOf(fixture).links })({ orderLineId: 'line-manual' }, admin())).toMatchObject({ factory: null, status: 'unlinked', source: 'manual', reason: '人工确认取消' });
   } finally {
     await fixture.handle.close();
   }

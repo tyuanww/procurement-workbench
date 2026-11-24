@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { devAuth } from '@sw/auth';
-import { BottleneckSummarySchema, LineFactoryLinkViewSchema, LineSummarySchema, OrderLineDetailSchema, OrderLineRowSchema, StuckDashboardSchema, listResponseSchema } from '@sw/contracts';
+import { BottleneckSummarySchema, FactoryLinkCountsSchema, LineFactoryLinkViewSchema, LineSummarySchema, OrderLineDetailSchema, OrderLineRowSchema, StuckDashboardSchema, listResponseSchema } from '@sw/contracts';
 import { entityId, orderLineId } from '@sw/domain';
 import { readXlsx } from '@sw/importers';
 import { createDb, migrate, orderLineRepository, partyRepository, purchaseOrderRepository, schema, seed, userDirectory, type AppDatabase } from '@sw/persistence';
@@ -64,6 +64,7 @@ it('活动上报挂接和在途建单显示同一代工厂，订单筛选、汇�
       expect(scoped.items.map(({ id }) => id).sort()).toEqual([createdId, 'attached'].sort());
       expect(scoped.items.map((item) => item.factory)).toEqual([reference(factory), reference(factory)]);
       expect((await list(`${filter}&pageSize=1`)).page).toMatchObject({ total: 2, pageSize: 1 });
+      await expectFactoryCounts({ app, headers: reviewer, counts: { linked: 3, manual: 0, unlinked: 4 } });
 
       for (const id of ['attached', createdId]) {
         const link = await get(`/${id}/factory-link`);
@@ -98,6 +99,8 @@ it('活动上报挂接和在途建单显示同一代工厂，订单筛选、汇�
       expect((await list(filter)).items).toEqual([]);
       expect((await list(`factoryPartyId=${other.id}`)).items.map(({ id }) => id).sort()).toEqual([createdId, 'legacy-current'].sort());
       expect(await missingFactory()).toBe(5);
+      await expectFactoryCounts({ app, headers: reviewer, counts: { linked: 1, manual: 1, unlinked: 5 } });
+      await expectCancellationAfterRelink({ app, headers: admin });
     } finally {
       await app.close();
     }
@@ -106,6 +109,27 @@ it('活动上报挂接和在途建单显示同一代工厂，订单筛选、汇�
     await rm(uploadDir, { recursive: true });
   }
 });
+
+async function expectFactoryCounts({ app, headers, counts }: {
+  readonly app: Awaited<ReturnType<typeof openApp>>;
+  readonly headers: { readonly cookie: string };
+  readonly counts: { readonly linked: number; readonly manual: number; readonly unlinked: number };
+}): Promise<void> {
+  const response = await app.inject({ url: '/api/v1/factory-links/counts', headers });
+  expect(response.statusCode).toBe(200);
+  expect(FactoryLinkCountsSchema.parse(response.json())).toEqual(counts);
+}
+
+async function expectCancellationAfterRelink({ app, headers }: {
+  readonly app: Awaited<ReturnType<typeof openApp>>;
+  readonly headers: { readonly cookie: string };
+}): Promise<void> {
+  const relink = await app.inject({ method: 'POST', url: '/api/v1/factory-links/relink', headers });
+  expect(relink.statusCode).toBe(200);
+  const link = await app.inject({ url: '/api/v1/lines/attached/factory-link', headers });
+  expect(link.statusCode).toBe(200);
+  expect(LineFactoryLinkViewSchema.parse(link.json())).toMatchObject({ factory: null, status: 'unlinked', source: 'manual' });
+}
 
 function expectFactoryExport(bytes: Buffer): void {
   const [sheet] = readXlsx({ bytes, fileName: '订单.xlsx' }).sheets;
