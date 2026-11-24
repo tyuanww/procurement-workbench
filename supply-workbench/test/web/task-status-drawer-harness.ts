@@ -120,7 +120,8 @@ function drawerHandle(input: { readonly react: ReactModule; readonly root: Root;
       return findButton(label)?.disabled ?? null;
     },
     selected() {
-      const text = document.querySelector('.ant-segmented-item-selected')?.textContent?.replace(/\s+/g, '') ?? '';
+      const selected = document.querySelector('input[type="radio"]:checked');
+      const text = selected?.closest('label')?.textContent?.replace(/\s+/g, '') ?? '';
       return text === '' ? null : text;
     },
     tag() {

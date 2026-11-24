@@ -19,54 +19,77 @@ type Store = ProductDevelopmentStore | 'all';
 type Load = { readonly kind: 'loading' } | { readonly kind: 'error'; readonly message: string } |
   { readonly kind: 'ready'; readonly data: ProductDevelopment };
 
-export function ProductDevelopmentPanel({ store }: { readonly store: Store }): ReactNode {
+export function ProductDevelopmentPanel({ store, filters }: { readonly store: Store; readonly filters: ReactNode }): ReactNode {
   const { load, reload } = useDevelopment(store);
-  if (load.kind === 'loading') return <Skeleton active />;
-  if (load.kind === 'error') return <Alert type="error" showIcon title={load.message} action={<Button onClick={reload}>重试</Button>} />;
-  return <DevelopmentWorkspace store={store} data={load.data} reload={reload} />;
+  const [params, setParams] = useSearchParams();
+  const data = load.kind === 'ready' ? load.data : null;
+  const selection = developmentSelection(data?.projects ?? [], params);
+  const show = (projectId: string | null, nodeId: string | null) => setParams((previous) => withSelection(previous, { projectId, nodeId }));
+  const saved = (projectId: string, nodeId: string | null) => { show(projectId, nodeId); reload(); };
+  return <Flex vertical gap={space[3]}>
+    <Card size="small"><Flex wrap align="center" gap={space[2]}>
+      {filters}
+      {data === null ? null : <DevelopmentProjectControls data={data} store={store} projectId={selection.project?.id}
+        onSelect={(id) => show(id, null)} onSaved={(id) => saved(id, null)} />}
+    </Flex></Card>
+    {load.kind === 'loading' ? <Skeleton active /> : null}
+    {load.kind === 'error' ? <Alert type="error" showIcon title={load.message} action={<Button onClick={reload}>重试</Button>} /> : null}
+    {data === null ? null : <DevelopmentWorkspace data={data} {...selection} show={show} saved={saved} reload={reload} />}
+  </Flex>;
 }
 
 function useDevelopment(store: Store) {
-  const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [result, setResult] = useState<{ readonly store: Store; readonly load: Load }>({ store, load: { kind: 'loading' } });
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     void readDevelopment(store, controller.signal).then((data) => {
-      if (!controller.signal.aborted) setLoad({ kind: 'ready', data });
+      if (!controller.signal.aborted) setResult({ store, load: { kind: 'ready', data } });
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setLoad({ kind: 'error', message: apiErrorMessage(error) ?? '读取新品进度失败' });
+      if (!controller.signal.aborted) setResult({ store, load: { kind: 'error', message: apiErrorMessage(error) ?? '读取新品进度失败' } });
     });
     return () => controller.abort();
   }, [revision, store]);
+  const load: Load = result.store === store ? result.load : { kind: 'loading' };
   return { load, reload: () => setRevision((value) => value + 1) };
 }
 
-function DevelopmentWorkspace({ data, store, reload }: { readonly data: ProductDevelopment; readonly store: Store; readonly reload: () => void }): ReactNode {
-  const [params, setParams] = useSearchParams();
-  const { project, node } = developmentSelection(data.projects, params);
-  const show = (projectId: string | null, nodeId: string | null) => setParams((previous) => withSelection(previous, { projectId, nodeId }));
-  const saved = (projectId: string | null, nodeId: string | null) => { show(projectId, nodeId); reload(); };
-  return <Space orientation="vertical" size="large" style={{ display: 'flex' }}>
-    <Card size="small">
-      <Flex wrap align="center" gap={space[2]}>
-        <Select aria-label="新品项目" placeholder="选择新品项目" value={project?.id} style={{ width: 260, maxWidth: '100%' }}
-          showSearch={{ optionFilterProp: 'label' }}
-          options={data.projects.map((value) => ({ value: value.id, label: `${storeLabels[value.store]} · ${value.title}` }))}
-          onChange={(value) => show(value ?? null, null)} />
-        {data.canCreateProject ? <DevelopmentEditModal title="新建新品项目" onSaved={(id) => saved(id, null)}>
-          {(onSaved) => <ProjectForm users={data.users} store={store} saved={onSaved} />}
-        </DevelopmentEditModal> : null}
-      </Flex>
-    </Card>
-    <PendingDevelopment projects={data.projects} onOpen={show} />
+function DevelopmentProjectControls({ data, store, projectId, onSelect, onSaved }: {
+  readonly data: ProductDevelopment;
+  readonly store: Store;
+  readonly projectId: string | undefined;
+  readonly onSelect: (id: string | null) => void;
+  readonly onSaved: (id: string) => void;
+}) {
+  return <>
+    <Select aria-label="新品项目" placeholder="选择新品项目" value={projectId} style={{ width: 260, maxWidth: '100%' }}
+      showSearch={{ optionFilterProp: 'label' }}
+      options={data.projects.map((value) => ({ value: value.id, label: `${storeLabels[value.store]} · ${value.title}` }))}
+      onChange={(value) => onSelect(value ?? null)} />
+    {data.canCreateProject ? <DevelopmentEditModal primary title="新建新品项目" onSaved={onSaved}>
+      {(saved) => <ProjectForm users={data.users} store={store} saved={saved} />}
+    </DevelopmentEditModal> : null}
+  </>;
+}
+
+function DevelopmentWorkspace({ data, project, node, show, saved, reload }: {
+  readonly data: ProductDevelopment;
+  readonly project: ProductDevelopmentProject | undefined;
+  readonly node: ProductDevelopmentNode | undefined;
+  readonly show: (projectId: string | null, nodeId: string | null) => void;
+  readonly saved: (projectId: string, nodeId: string | null) => void;
+  readonly reload: () => void;
+}): ReactNode {
+  return <>
     {project === undefined ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该店铺暂无新品项目" /> :
       <DevelopmentProjectBody key={project.id} project={project} businessDate={data.businessDate} onOpen={(id) => show(project.id, id)}
         extra={project.canManage ? <DevelopmentEditModal primary title="新增开发节点" onSaved={(id) => saved(project.id, id)}>
           {(onSaved) => <NodeForm project={project} users={data.users} businessDate={data.businessDate} saved={onSaved} />}
         </DevelopmentEditModal> : null} />}
+    <PendingDevelopment projects={data.projects} onOpen={show} />
     {node !== undefined && project !== undefined ? <DevelopmentDetail key={node.id} node={node} project={project} users={data.users}
       onClose={() => show(project.id, null)} onChanged={reload} /> : null}
-  </Space>;
+  </>;
 }
 
 function PendingDevelopment({ projects, onOpen }: {
@@ -92,7 +115,7 @@ function DevelopmentProjectBody({ project, businessDate, onOpen, extra }: {
   return <Card title={<Space wrap><span>{project.title}</span><Tag>{storeLabels[project.store]}</Tag></Space>}
     styles={{ title: { whiteSpace: 'normal', overflowWrap: 'anywhere', paddingInlineEnd: space[1] } }}
     extra={extra}>
-    <Space orientation="vertical" style={{ display: 'flex' }} size="large">
+    <Flex vertical gap={space[3]}>
       <Space wrap size="large">
         <Typography.Text>主责产品人员 {project.productLeadName ?? '未知'}</Typography.Text>
         <Typography.Text>已完成 {completed} / {active} 个节点</Typography.Text>
@@ -103,11 +126,11 @@ function DevelopmentProjectBody({ project, businessDate, onOpen, extra }: {
         <Typography.Text type="secondary">{next.plannedEnd}</Typography.Text>
         <ForecastTag node={next} />
       </Flex>}
+      <DevelopmentTimeline project={project} businessDate={businessDate} onOpen={onOpen} />
       {project.nodes.length === 0 ? null : <section aria-label="开发节点列表">
         <DevelopmentNodes rows={project.nodes.map((node) => ({ node, project }))} onOpen={(_projectId, nodeId) => onOpen(nodeId)} />
       </section>}
-      <DevelopmentTimeline project={project} businessDate={businessDate} onOpen={onOpen} />
-    </Space>
+    </Flex>
   </Card>;
 }
 

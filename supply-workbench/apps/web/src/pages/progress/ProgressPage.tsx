@@ -1,4 +1,4 @@
-import { Card, Flex, Select } from 'antd';
+import { Select } from 'antd';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { WorkbenchPage } from '../../shared/ui/page.js';
@@ -6,7 +6,6 @@ import { ProductDevelopmentPanel } from './product-development-panel.js';
 import { ProgressCurrent } from './progress-current.js';
 import { ProgressSchedule } from './progress-schedule.js';
 import { progressStoreOf, storeLabels, withProgressScope, withProgressStore } from './store-query.js';
-import { space } from '../../theme/tokens.js';
 
 export { ArrivalTag, noteBatches, pagesFor } from './progress-current.js';
 
@@ -35,13 +34,9 @@ export function ProgressPage({ view: selectedView }: { readonly view?: ProgressV
   );
   return (
     <WorkbenchPage title={viewLabels[view]}>
-      {view === 'current' ? <ProgressCurrent key={JSON.stringify([store, isMine])} store={store} isMine={isMine} filters={scope} /> : (
-        <Card size="small" style={{ marginBottom: space[3] }}>
-          <Flex gap={space[2]} wrap align="center">{scope}</Flex>
-        </Card>
-      )}
-      {view === 'schedule' ? <ProgressSchedule key={store} store={store} /> : null}
-      {view === 'development' ? <ProductDevelopmentPanel key={store} store={store === 'unassigned' ? 'all' : store} /> : null}
+      {view === 'current' ? <ProgressCurrent store={store} isMine={isMine} filters={scope} /> : null}
+      {view === 'schedule' ? <ProgressSchedule store={store} filters={scope} /> : null}
+      {view === 'development' ? <ProductDevelopmentPanel store={store === 'unassigned' ? 'all' : store} filters={scope} /> : null}
     </WorkbenchPage>
   );
 }

@@ -20,6 +20,7 @@ import { matchingOa, ProgressOaFilter, progressOrderRef, scopedLineLink, StoreGa
 import { progressPagination, resetProgressPagination, storeLabels, withProgressPagination } from './store-query.js';
 
 type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
+const emptyProgress: ProgressData = { rows: [], lines: new Map(), arrivalMemos: [], actionNotice: '' };
 
 export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonly filters: ReactNode }) {
   const { data, error, isLoaded, notes, now, retry } = useCurrentData(scope);
@@ -38,12 +39,11 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
         </Flex>
       </Card>
       {insight === null ? null : <ProgressMetrics insight={insight} drill={drill} onDrill={setDrill} />}
-      {isLoaded ? <StoreGapSummary lines={scopedRows.map((row) => data.lines.get(row.lineId))} /> : null}
       <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
         <SectionGroup title="当前进度" {...(isLoaded ? { meta: progressResultCount(rows.length, scopedRows.length) } : {})}>
           {drill.kind === 'all' ? null : <Flex align="center" wrap gap={space[2]} style={{ marginBottom: space[2] }}>
             <Tag>当前筛选 {progressDrillLabel(drill)}</Tag>
-            <Button type="link" onClick={() => setDrill({ kind: 'all' })}>清除下钻</Button>
+            <Button onClick={() => setDrill({ kind: 'all' })}>清除下钻</Button>
           </Flex>}
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
@@ -51,6 +51,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
           </ProgressBody>
         </SectionGroup>
       </div>
+      {isLoaded ? <StoreGapSummary lines={scopedRows.map((row) => data.lines.get(row.lineId))} /> : null}
       {insight === null ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
       {isLoaded ? <ArrivalMemos memos={memosForOa(data, oa)} /> : null}
     </>
@@ -109,21 +110,29 @@ function useCurrentFilter() {
 }
 
 function useCurrentData({ store, isMine }: ProgressScope) {
-  const [data, setData] = useState<ProgressData>({ rows: [], lines: new Map(), arrivalMemos: [], actionNotice: '' });
+  const [data, setData] = useState(emptyProgress);
   const [error, setError] = useState('');
   const [now] = useState(() => new Date());
-  const [isLoaded, setLoaded] = useState(false);
+  const [loadedScope, setLoadedScope] = useState<ProgressScope | null>(null);
   const [reload, setReload] = useState(0);
   const [notes, setNotes] = useState<Readonly<Record<string, string>>>({});
   const generation = useRef(0);
+  const requestedScope = useRef<ProgressScope>({ store, isMine });
   useEffect(() => {
     const current = ++generation.current;
-    setLoaded(false);
+    setLoadedScope(null);
+    if (store !== requestedScope.current.store || isMine !== requestedScope.current.isMine) {
+      requestedScope.current = { store, isMine };
+      setData(emptyProgress);
+      setNotes({});
+      setError('');
+    }
     void loadProgress({ store, isMine, current, latest: () => generation.current, setData, setNotes, setError })
-      .finally(() => { if (current === generation.current) setLoaded(true); });
+      .finally(() => { if (current === generation.current) setLoadedScope({ store, isMine }); });
     return () => { generation.current++; };
   }, [reload, store, isMine]);
-  return { data, error, isLoaded, notes, now, retry: () => setReload((value) => value + 1) };
+  const isLoaded = loadedScope?.store === store && loadedScope.isMine === isMine;
+  return { data: isLoaded ? data : emptyProgress, error, isLoaded, notes, now, retry: () => setReload((value) => value + 1) };
 }
 
 function memosForOa({ lines, arrivalMemos }: ProgressData, oa: string | null) {
