@@ -1,4 +1,4 @@
-import { Button, Empty, Input, Space, Typography } from 'antd';
+import { Button, Empty, Form, Input, Space, Typography } from 'antd';
 import { useId, useState } from 'react';
 import { FactoryReportRowViewSchema, OrderLineDetailSchema, type FactoryReportRowView } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
@@ -27,14 +27,12 @@ export function UnlinkedRows({ revision, ...actions }: RowActionState & { readon
   const canCreate = useCanWrite('records.write');
   const controls = (
     <Space wrap align="start" style={{ marginBottom: space[3] }}>
-      <Space orientation="vertical" size={space[1]}>
-        <label htmlFor={`${id}-filter`}>筛选本页表名或行号</label>
+      <Form.Item label="筛选本页表名或行号" htmlFor={`${id}-filter`} colon={false} style={{ margin: 0 }}>
         <Input id={`${id}-filter`} value={query} onChange={(event) => setQuery(event.target.value)} allowClear />
-      </Space>
-      {canLink ? <Space orientation="vertical" size={space[1]}>
-        <label htmlFor={`${id}-line`}>订单行编号</label>
+      </Form.Item>
+      {canLink ? <Form.Item label="订单行编号" htmlFor={`${id}-line`} colon={false} style={{ margin: 0 }}>
         <Input id={`${id}-line`} value={lineId} onChange={(event) => setLineId(event.target.value)} />
-      </Space> : null}
+      </Form.Item> : null}
     </Space>
   );
   const term = query.trim();

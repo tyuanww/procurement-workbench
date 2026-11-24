@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Flex, Typography } from 'antd';
 import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
-import { IMPORT_ACTIONS, importActionLabel, importStatusLabel } from '@sw/domain';
+import { IMPORT_ACTIONS, importActionLabel } from '@sw/domain';
 import { ApiError, apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
@@ -17,7 +17,7 @@ import {
 import { decisionsWithDateDecision } from '../../features/imports/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { bg, border, space } from '../../theme/tokens.js';
-import { ImportBatchBanner } from './import-batch-banner.js';
+import { ImportBatchBanner, ImportStatusTag } from './import-batch-banner.js';
 import { ImportConflictPortal } from './ImportConflictPortal.js';
 import { writeImportConflictDrawer } from './import-conflict-drawer-url.js';
 import { ProcurementPreview } from './ProcurementPreview.js';
@@ -105,12 +105,11 @@ function ImportBatchReady(props: {
 }
 
 function BatchResult({ summary }: { readonly summary: ImportBatchSummary }) {
-  const status = importStatusLabel(summary.status);
   const actions = IMPORT_ACTIONS.filter((action) => summary.stats.byAction[action] > 0)
     .map((action) => `${importActionLabel(action)} ${summary.stats.byAction[action]} 行`);
   return (
     <Typography.Paragraph>
-      {status} · 共 {summary.stats.rows} 行{actions.length === 0 ? '' : ` · ${actions.join(' · ')}`}
+      <ImportStatusTag status={summary.status} /> · 共 {summary.stats.rows} 行{actions.length === 0 ? '' : ` · ${actions.join(' · ')}`}
     </Typography.Paragraph>
   );
 }
@@ -187,8 +186,8 @@ function ConfirmGate(props: {
   const isPending = props.request.kind === 'pending';
   return (
     <>
-      <p>{props.continuation.enabled ? '可以确认导入' : `还剩 ${props.continuation.remaining} 个冲突`}</p>
-      <Flex justify="flex-end">
+      <Flex justify="space-between" align="center" wrap gap={space[2]}>
+        <Typography.Text aria-live="polite">{props.continuation.enabled ? '可以确认导入' : `还剩 ${props.continuation.remaining} 个冲突`}</Typography.Text>
         <Button
           type="primary"
           loading={isPending}

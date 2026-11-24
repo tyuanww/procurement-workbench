@@ -1,4 +1,4 @@
-import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Typography } from 'antd';
+import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { MultiNameViewSchema, PartyAliasViewSchema, PartyDetailSchema, listResponseSchema, type MultiNameView, type PartyAliasView, type PartyDetail } from '@sw/contracts';
@@ -58,17 +58,17 @@ function AliasReviewList(props: { readonly state: LoadState<readonly PartyAliasV
   if (props.state.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
   if (props.state.kind === 'error') return <Result status="error" title="待审核别名没有读出来。" subTitle={props.state.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} />;
   if (props.state.value.length === 0) return <Empty description="没有待审核的别名。下一步：去导入总表。"><Button href="/imports">去导入</Button></Empty>;
-  return <SectionGroup title="待审核别名" meta={`${props.state.value.length} 条`}><div>{props.state.value.map((alias) => <AliasReview key={alias.id} alias={alias} onOpen={() => props.onOpen(alias.id)} />)}</div></SectionGroup>;
-}
-
-function AliasReview({ alias, onOpen }: { readonly alias: PartyAliasView; readonly onOpen: () => void }) {
   return (
-    <SectionRow action={<Button onClick={onOpen}>审核</Button>}>
-      <Space orientation="vertical" size={4}>
-        <Typography.Text strong>{alias.rawName}</Typography.Text>
-        <Typography.Text type="secondary">出现 {alias.seenCount} 次</Typography.Text>
-      </Space>
-    </SectionRow>
+    <SectionGroup title="待审核别名" meta={`${props.state.value.length} 条`}>
+      <Table<PartyAliasView>
+        size="small" rowKey="id" pagination={false} dataSource={props.state.value}
+        columns={[
+          { title: '来源原名', dataIndex: 'rawName', key: 'name', render: (name: string) => <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>{name}</Typography.Text> },
+          { title: '次数', dataIndex: 'seenCount', key: 'count', align: 'right', width: 60 },
+          { title: '操作', key: 'action', width: 76, render: (_, alias) => <Button size="small" aria-label={`审核 ${alias.rawName}`} onClick={() => props.onOpen(alias.id)}>审核</Button> },
+        ]}
+      />
+    </SectionGroup>
   );
 }
 
@@ -158,8 +158,8 @@ function MultiNameReview({ refresh }: { readonly refresh: () => Promise<void> })
         </Space>}>
           <Space orientation="vertical" size={4}>
             <Typography.Text strong>{row.codeRaw}</Typography.Text>
-            <Typography.Text type="secondary">{row.names.map((item) => item.nameRaw).join(' / ')}</Typography.Text>
-            <Input value={names[row.codeId] ?? ''} onChange={(event) => setNames((current) => ({ ...current, [row.codeId]: event.target.value }))} placeholder="统一名称" style={{ width: 200 }} />
+            <Flex wrap gap={4}>{row.names.map((item) => <Tag key={item.nameRaw} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', marginInlineEnd: 0 }}>{item.nameRaw}</Tag>)}</Flex>
+            <Input aria-label={`统一名称 ${row.codeRaw}`} value={names[row.codeId] ?? ''} onChange={(event) => setNames((current) => ({ ...current, [row.codeId]: event.target.value }))} placeholder="统一名称" style={{ width: 'min(200px, 100%)' }} />
           </Space>
         </SectionRow>;
       })}

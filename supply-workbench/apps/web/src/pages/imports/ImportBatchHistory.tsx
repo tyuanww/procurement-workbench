@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Alert, Button, Flex, Select, Skeleton, Typography } from 'antd';
+import { Alert, Button, Empty, Flex, Form, Select, Skeleton, Typography } from 'antd';
 import { ImportBatchListItemSchema, listResponseSchema, type ImportBatchListItem } from '@sw/contracts';
 import { IMPORT_STATUSES, TEMPLATE_IDS, importStatusLabel, templateIdLabel } from '@sw/domain';
 import { apiGetWithSignal } from '../../shared/api/client.js';
@@ -9,6 +9,7 @@ import { formatDateTime } from '../../shared/ui/format.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { space } from '../../theme/tokens.js';
 import { ImportPagination } from './ImportPagination.js';
+import { ImportStatusTag } from './import-batch-banner.js';
 
 const PAGE_SIZE = 10;
 const schema = listResponseSchema(ImportBatchListItemSchema);
@@ -32,19 +33,18 @@ export function ImportBatchHistory() {
   return (
     <SectionGroup title="导入批次历史" meta="按导入时间从新到旧">
       <search aria-label="导入批次历史筛选">
-        <Flex wrap gap={space[2]} style={{ marginBottom: space[2] }}>
-          <Flex align="center" gap={space[1]}>
-            <label htmlFor="history-template">筛选导入模板</label>
+        <Flex wrap align="end" gap={space[2]} style={{ marginBottom: space[2] }}>
+          <Form.Item label="筛选导入模板" htmlFor="history-template" colon={false} style={{ margin: 0 }}>
             <Select id="history-template" virtual={false} value={template} options={templateOptions} style={{ minWidth: 144 }}
               onChange={(value) => update({ template: value, page: null })}
             />
-          </Flex>
-          <Flex align="center" gap={space[1]}>
-            <label htmlFor="history-status">筛选批次状态</label>
+          </Form.Item>
+          <Form.Item label="筛选批次状态" htmlFor="history-status" colon={false} style={{ margin: 0 }}>
             <Select id="history-status" virtual={false} value={status} options={statusOptions} style={{ minWidth: 112 }}
               onChange={(value) => update({ status: value, page: null })}
             />
-          </Flex>
+          </Form.Item>
+          {template === '' && status === '' ? null : <Button onClick={() => update({ template: null, status: null, page: null })}>清除筛选</Button>}
         </Flex>
       </search>
       <HistoryResults key={`${template}/${status}`} query={query.toString()} historySearch={historySearch}
@@ -93,19 +93,24 @@ function HistoryRows({ load, historySearch, onRetry }: {
   if (load.kind === 'failed') return (
     <Alert type="error" title="导入批次历史没有读出来。" action={<Button onClick={onRetry}>重试</Button>} />
   );
-  if (load.items.length === 0) return <Typography.Text type="secondary">没有符合条件的导入批次。</Typography.Text>;
-  return load.items.map((item) => <HistoryRow key={item.id} item={item} historySearch={historySearch} />);
+  if (load.items.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有符合条件的导入批次。" />;
+  return (
+    <>
+      <Typography.Text type="secondary">共 {load.total} 个批次</Typography.Text>
+      {load.items.map((item) => <HistoryRow key={item.id} item={item} historySearch={historySearch} />)}
+    </>
+  );
 }
 
 function HistoryRow({ item, historySearch }: { readonly item: ImportBatchListItem; readonly historySearch: string }) {
   const created = formatDateTime(item.createdAt) ?? '—';
   const committed = formatDateTime(item.committedAt);
   return (
-    <SectionRow>
+    <SectionRow action={<ImportStatusTag status={item.status} />}>
       <Flex vertical gap={space[1]}>
         <Link style={{ overflowWrap: 'anywhere' }} to={{ pathname: `/imports/${encodeURIComponent(item.id)}`, search: historySearch }}>{item.originalName}</Link>
         <Typography.Text type="secondary">
-          {templateIdLabel(item.template)} · {importStatusLabel(item.status)}
+          {templateIdLabel(item.template)}
           {item.factoryParty === null ? '' : ` · ${item.factoryParty.displayName}`}
         </Typography.Text>
         <Typography.Text type="secondary">

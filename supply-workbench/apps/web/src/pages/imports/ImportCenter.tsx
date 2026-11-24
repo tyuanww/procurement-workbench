@@ -136,8 +136,12 @@ function FilePick(props: { readonly fileName: string | null; readonly isStarting
       showUploadList={false}
       beforeUpload={(file) => { props.onFile(file); return false; }}
     >
-      <p className="ant-upload-text" style={{ overflowWrap: 'anywhere' }}>{props.fileName ?? '点击选择文件或拖到这里'}</p>
-      {props.fileName === null ? null : <p className="ant-upload-hint">点击或拖入其他文件可更换</p>}
+      <Flex vertical align="center" gap={space[1]}>
+        <Button disabled={props.isStarting} onKeyDown={(event) => event.stopPropagation()}>
+          {props.fileName === null ? '选择文件' : '更换文件'}
+        </Button>
+        <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>{props.fileName ?? '也可以把文件拖到这里'}</Typography.Text>
+      </Flex>
     </Upload.Dragger>
   );
 }

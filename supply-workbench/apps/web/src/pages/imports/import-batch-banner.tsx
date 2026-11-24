@@ -1,7 +1,14 @@
 import { Tag, Typography } from 'antd';
-import { templateIdLabel, type TemplateId } from '@sw/domain';
+import { importStatusLabel, templateIdLabel, type ImportStatus, type TemplateId } from '@sw/domain';
 import { formatDateTime } from '../../shared/ui/format.js';
 import { statusColor } from '../../theme/tokens.js';
+
+const importStatusTone = { parsed: 'info', committed: 'success', discarded: 'neutral', failed: 'danger' } satisfies Record<ImportStatus, keyof typeof statusColor>;
+
+export function ImportStatusTag({ status }: { readonly status: ImportStatus }) {
+  const tone = statusColor[importStatusTone[status]];
+  return <Tag style={{ color: tone.text, background: tone.bg, borderColor: tone.border, marginInlineEnd: 0 }}>{importStatusLabel(status)}</Tag>;
+}
 
 export function ImportBatchBanner(props: {
   readonly template: TemplateId;

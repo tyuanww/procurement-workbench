@@ -1,8 +1,9 @@
-import { Alert, Button, Checkbox, Drawer, Flex, Form, Select, Typography } from 'antd';
+import { Alert, Button, Checkbox, Descriptions, Drawer, Flex, Form, Select, Typography } from 'antd';
+import { useId } from 'react';
 import type { PartyAliasView } from '@sw/contracts';
 import { linkNeedsConfirm } from '../../features/master-data/index.js';
 import { horizontalFormLayout } from '../../shared/ui/form.js';
-import { drawerWide } from '../../theme/tokens.js';
+import { drawerWide, space } from '../../theme/tokens.js';
 
 export type AliasRoles = {
   readonly isSupplier: boolean;
@@ -43,17 +44,17 @@ export function AliasReviewDrawer(props: AliasReviewDrawerProps) {
 }
 
 export function AliasReviewFields(props: AliasReviewDrawerProps) {
+  const partyId = useId();
   const target = props.alias.similar.find((item) => item.partyId === props.partyId);
   const isBlocked = target !== undefined && linkNeedsConfirm({ rawName: props.alias.rawName, partyName: target.displayName, confirmed: props.confirmed });
   return (
     <>
       {props.error === '' ? null : <Alert type="error" showIcon title={props.error} style={{ marginBottom: 16 }} />}
+      <AliasSource alias={props.alias} />
       <Form {...horizontalFormLayout}>
-        <Form.Item label="原文"><Typography.Text strong>{props.alias.rawName}</Typography.Text></Form.Item>
-        <Form.Item label="出现次数"><Typography.Text>{props.alias.seenCount}</Typography.Text></Form.Item>
-        <Form.Item label="关联到已有主体">
+        <Form.Item label="关联到已有主体" htmlFor={partyId} colon={false}>
           <Select
-            aria-label="关联到已有主体"
+            id={partyId}
             value={props.partyId}
             options={[{ value: '', label: '新建' }, ...props.alias.similar.map((item) => ({ value: item.partyId, label: item.displayName }))]}
             onChange={(value) => props.onParty(value)}
@@ -77,5 +78,16 @@ export function AliasReviewFields(props: AliasReviewDrawerProps) {
         ) : null}
       </Form>
     </>
+  );
+}
+
+function AliasSource({ alias }: { readonly alias: PartyAliasView }) {
+  return (
+    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: space[3] }}
+      items={[
+        { key: 'rawName', label: '原文', children: <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>{alias.rawName}</Typography.Text> },
+        { key: 'seenCount', label: '出现次数', children: alias.seenCount },
+      ]}
+    />
   );
 }

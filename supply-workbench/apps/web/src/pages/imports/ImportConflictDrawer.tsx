@@ -1,4 +1,5 @@
-import { Alert, Button, Drawer, Flex, Form, Pagination, Radio, Skeleton, Typography } from 'antd';
+import { Alert, Button, Drawer, Empty, Flex, Form, Pagination, Radio, Skeleton, Typography } from 'antd';
+import { useId } from 'react';
 import type { ImportRowView } from '@sw/contracts';
 import { allConflictChoices, type ConflictCandidate } from '../../features/imports/index.js';
 import { drawerWide } from '../../theme/tokens.js';
@@ -51,9 +52,9 @@ export function ConflictSaveBar(props: {
 }) {
   const canImport = useCanWrite('imports.write');
   return (
-    <Flex justify="space-between" align="center" gap={12}>
+    <Flex justify="space-between" align="center" wrap gap={12}>
       <Typography.Text type="secondary">当前页 {props.rowCount} 行，共 {props.total} 行</Typography.Text>
-      <Flex gap={12} align="center">
+      <Flex gap={12} align="center" wrap>
         <Pagination size="small" current={props.page} total={props.total} pageSize={100} showSizeChanger={false} onChange={props.onPageChange} disabled={props.isSaving || props.isLoading} />
         {canImport ? <Button type="primary" loading={props.isSaving} disabled={props.isSaving || props.isLoading || !props.canSave} onClick={props.onSave}>保存当前页</Button> : null}
       </Flex>
@@ -69,6 +70,7 @@ export function ImportConflictDrawerFields(props: {
 }) {
   const canImport = useCanWrite('imports.write');
   if (!canImport) return null;
+  if (props.rows.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前页没有待处理的冲突。" />;
   return (
     <>
       <Alert type="info" showIcon title="选择现有订单行或新建" style={{ marginBottom: 16 }} />
@@ -85,16 +87,17 @@ function ConflictRow(props: {
   readonly choice: string | undefined;
   readonly onChoice: (rowId: string, choice: string) => void;
 }) {
+  const labelId = useId();
   const issue = props.row.issues[0];
   const options = [
     ...props.candidates.map((candidate) => ({ value: candidate.id, label: candidateLabel(candidate) })),
     { value: 'new', label: '新建' },
   ];
   return (
-    <Form.Item label={`第 ${props.row.rowNo} 行 · ${props.row.sheetName}`}>
+    <Form.Item label={<span id={labelId}>第 {props.row.rowNo} 行 · {props.row.sheetName}</span>}>
       <Typography.Paragraph type="secondary">{issue?.message ?? '这行有多个可能的订单行。'}</Typography.Paragraph>
       {props.candidates.length === 0 ? <Alert type="warning" showIcon title="没有找到现有订单行，可以选择新建。" style={{ marginBottom: 12 }} /> : null}
-      <Radio.Group value={props.choice} options={options} onChange={(event) => props.onChoice(props.row.id, event.target.value)} />
+      <Radio.Group aria-labelledby={labelId} orientation="vertical" value={props.choice} options={options} onChange={(event) => props.onChoice(props.row.id, event.target.value)} />
     </Form.Item>
   );
 }
