@@ -35,7 +35,7 @@ function AppRoot() {
   }, []);
   return (
     <StrictMode>
-      <ConfigProvider theme={antdTheme} locale={zhCN}>
+      <ConfigProvider theme={antdTheme} locale={zhCN} button={{ autoInsertSpace: false }}>
         <AntApp>
           <style>{themePatchCss}</style>
           <BrowserRouter>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Alert, Button, Collapse, Result, Skeleton } from 'antd';
+import { Alert, Button, Result, Skeleton } from 'antd';
 import {
   AuditEntryViewSchema,
   SettingsSchema,
@@ -13,6 +13,7 @@ import {
 import { apiErrorMessage, apiGet, asArray } from '../../shared/api/client.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
+import { ContentTabs } from '../../shared/ui/view-switch.js';
 import { space } from '../../theme/tokens.js';
 import { AuditPanel, ThresholdPanel, UsersPanel } from './SettingsPanels.js';
 import { settingsFormCss } from './settings-form-css.js';
@@ -37,7 +38,7 @@ export function SettingsPage() {
   return (
     <WorkbenchPage title="设置">
       <style>{settingsFormCss()}</style>
-      <SettingsContent message={message} loadState={loadState} onRetry={refresh} users={users} refresh={refresh} setMessage={setMessage} settings={settings} setSettings={setSettings} audit={audit} openId={openId} setOpenId={setOpenId} initialSection={entity === '' ? 'users' : 'audit'} />
+      <SettingsContent message={message} loadState={loadState} onRetry={refresh} users={users} refresh={refresh} setMessage={setMessage} settings={settings} setSettings={setSettings} audit={audit} openId={openId} setOpenId={setOpenId} />
     </WorkbenchPage>
   );
 }
@@ -67,15 +68,23 @@ type SettingsSectionsProps = {
   readonly audit: readonly AuditEntryView[];
   readonly openId: string | null;
   readonly setOpenId: (id: string | null) => void;
-  readonly initialSection: 'users' | 'audit';
 };
 
 function SettingsSections(input: SettingsSectionsProps) {
-  const [expanded, setExpanded] = useState<string[]>([input.initialSection]);
+  const [params, setParams] = useSearchParams();
+  const section = params.get('section');
+  const defaultSection = params.get('entity') ? 'audit' : 'users';
+  const activeKey = section === 'users' || section === 'audit' || section === 'settings' ? section : defaultSection;
   return (
-    <Collapse
-      activeKey={expanded}
-      onChange={(keys) => setExpanded(keys.slice(-1))}
+    <ContentTabs
+      aria-label="设置内容"
+      activeKey={activeKey}
+      onChange={(key) => setParams((previous) => {
+        const next = new URLSearchParams(previous);
+        if (key === defaultSection) next.delete('section');
+        else next.set('section', key);
+        return next;
+      })}
       items={[
         {
           key: 'users',
@@ -85,14 +94,9 @@ function SettingsSections(input: SettingsSectionsProps) {
         {
           key: 'settings',
           label: '阈值',
-          children:
-            input.settings === null ? null : (
-              <ThresholdPanel
-                settings={input.settings}
-                onDone={input.setSettings}
-                setMessage={input.setMessage}
-              />
-            ),
+          children: input.settings === null ? null : (
+            <ThresholdPanel settings={input.settings} onDone={input.setSettings} setMessage={input.setMessage} />
+          ),
         },
         {
           key: 'audit',
