@@ -122,6 +122,16 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   const liveMeeting = page.url();
   const weekStart = new URL(liveMeeting).searchParams.get('weekStart');
   assert.ok(weekStart, '周会 URL 应记录当前周期');
+  const reports = page.getByRole('link', { name: '查看周报', exact: true });
+  const weekInput = page.getByLabel('周一', { exact: true });
+  await page.getByRole('button', { name: /^上\s*周$/ }).click();
+  const previousWeek = new URL(page.url()).searchParams.get('weekStart');
+  assert.ok(previousWeek && previousWeek < weekStart);
+  await reports.click();
+  await page.waitForURL((url) => url.pathname === '/reports' && url.searchParams.get('weekStart') === previousWeek);
+  assert.equal(await weekInput.inputValue(), previousWeek);
+  await page.goto(liveMeeting);
+
   const search = page.getByRole('textbox', { name: '搜索采购事项' });
   const material = page.getByRole('row').filter({ hasText: materialPo });
   await material.getByText(/订购 200,000/).waitFor();
@@ -144,8 +154,23 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   const record = page.getByRole('row').filter({ hasText: decision });
   await record.getByText('待完成', { exact: true }).waitFor();
   await record.getByText(criteria, { exact: true }).waitFor();
-  await page.getByRole('button', { name: '生成全店周报', exact: true }).click();
-  await page.waitForURL((url) => /^\/reports\/[^/]+$/.test(url.pathname));
+  const generate = page.getByRole('button', { name: '生成全店周报', exact: true });
+  assert.equal(await generate.count(), 0, '管理周会只保存决定，生成入口归周报');
+  await reports.click();
+  await page.waitForURL((url) => url.pathname === '/reports' && url.searchParams.get('weekStart') === weekStart);
+  await generate.waitFor();
+  assert.equal(await weekInput.inputValue(), weekStart);
+  const generated = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/v1/reports/weekly' && response.request().method() === 'POST');
+  await generate.click();
+  const response = await generated;
+  assert.ok(response.ok(), '所选周的全店周报应成功生成');
+  assert.deepEqual(response.request().postDataJSON(), { weekStart });
+  const report: unknown = await response.json();
+  assert.ok(typeof report === 'object' && report !== null && 'id' in report && typeof report.id === 'string');
+  const reportPath = '/reports/' + encodeURIComponent(report.id);
+  await page.getByRole('link', { name: /^打\s*开$/ }).and(page.locator(`a[href="${reportPath}"]`)).click();
+  await page.waitForURL((url) => url.pathname === reportPath);
   const frozenReport = page.url();
   await record.getByText('待完成', { exact: true }).waitFor();
 
@@ -164,7 +189,7 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   await record.getByText('待完成', { exact: true }).waitFor();
   assert.equal(await record.getByText(evidence, { exact: false }).count(), 0);
   await page.screenshot({ path: join(out, 'procurement-frozen-weekly.png'), animations: 'disabled' });
-  return { store, weekStart, materialPo, ordered: 200_000, sourceReported: 158_000, sourceReportedGap: 42_000, decision, currentCompletion: evidence, frozenReport: new URL(frozenReport).pathname };
+  return { store, weekStart, previousWeek, materialPo, ordered: 200_000, sourceReported: 158_000, sourceReportedGap: 42_000, decision, currentCompletion: evidence, frozenReport: new URL(frozenReport).pathname };
 }
 
 async function seedDevelopment(page: Page, origin: URL, resource: 'projects' | 'nodes', data: object) {
