@@ -11,7 +11,7 @@ export async function checkFrontendCloseout({ page, origin, out }: {
 }) {
   await page.setViewportSize({ width: 1288, height: 911 });
   await page.goto(new URL('/lines', origin).href);
-  await page.getByRole('table').waitFor();
+  await page.getByRole('row').filter({ has: page.getByRole('cell') }).first().waitFor();
   const collapsedIcons = await checkCollapsedIcons(page, out);
 
   await page.setViewportSize({ width: 1440, height: 900 });
