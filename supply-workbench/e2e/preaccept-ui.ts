@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
+import { checkEmptyProductArchive, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
 import { checkManagementMeeting, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
@@ -30,6 +31,7 @@ assert.ok(out, '请设定证据目录 PREACCEPT_OUT');
 const channel = process.env.ACCEPT_BROWSER ?? 'chrome';
 assert.ok(['chrome', 'msedge'].includes(channel));
 const users = {
+  admin: '0199f0a0-0000-7000-8000-000000000001',
   buyer: '0199f0a0-0000-7000-8000-000000000002',
   reviewer: '0199f0a0-0000-7000-8000-000000000004',
   manager: '0199f0a0-0000-7000-8000-000000000005',
@@ -84,6 +86,11 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
+  const { page: manager } = await open('manager', '/', '/dashboard');
+  await manager.getByRole('heading', { name: '管理看板', exact: true }).waitFor();
+  await checkEmptyProductArchive(buyer, origin, true);
+  await checkEmptyProductArchive(manager, origin, false);
+  result.checks.productArchiveImportLink = { buyer: true, manager: false };
   await checkImportRecovery(buyer);
   const importPath = await checkProcurementImport(buyer);
   await checkMobileOrders(buyer);
@@ -98,11 +105,9 @@ async function procurementAcceptance(): Promise<void> {
   await deepBuyer.getByRole('link', { name: componentPo, exact: true }).waitFor();
   await buyer.goto(new URL('/reports', origin).href);
   await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
-  const { page: manager } = await open('manager', '/', '/dashboard');
-  await manager.getByRole('heading', { name: '管理看板', exact: true }).waitFor();
   result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
 
-  const { page: reviewer, devtools } = await open('reviewer', '/progress');
+  const { page: reviewer, devtools } = await open('reviewer', '/', '/master');
   await checkImportReviewLink(reviewer, importPath);
   result.checks.storeSchedule = await checkStoreSchedule({ page: buyer, manager, origin, out });
   result.checks.productDevelopment = await checkProductDevelopment({ buyer, reviewer, buyerId: users.buyer, reviewerId: users.reviewer, origin, out });
@@ -110,17 +115,19 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.managementMeeting = meeting;
   const { page: lead } = await open('lead', '/', '/reports');
   result.checks.managementNavigation = await checkManagementNavigation({ manager, lead, buyer, reviewer, reportPath: meeting.frozenReport });
-  const badge = reviewer.locator('aside').getByRole('link', { name: '主数据', exact: true }).locator('.ant-badge');
+  const badge = reviewer.locator('aside').getByRole('link', { name: '导入与审核', exact: true }).locator('.ant-badge');
   await badge.waitFor();
   const visibleCount = (await badge.innerText()).trim();
   assert.match(visibleCount, /^[1-9]\d*\+?$/);
   await devtools.send('Accessibility.enable');
   const { nodes } = await devtools.send('Accessibility.getFullAXTree');
-  const reviewLink = nodes.find((node) => node.role?.value === 'link' && node.name?.value === '主数据');
+  const reviewLink = nodes.find((node) => node.role?.value === 'link' && node.name?.value === '导入与审核');
   assert.equal(reviewLink?.description?.value, visibleCount);
   const queueReads = result.network.filter((row) => row.path === queuePath);
   assert.ok(queueReads.length > 0 && queueReads.every(({ role, status }) => role === 'reviewer' && status === 200));
-  result.checks.reviewQueue = { accessibleName: '主数据', describedCount: visibleCount, reads: queueReads.length };
+  result.checks.reviewQueue = { home: '/master', accessibleName: '导入与审核', describedCount: visibleCount, reads: queueReads.length };
+  const { page: admin } = await open('admin', '/', '/settings');
+  result.checks.importReviewNavigation = await checkImportReviewNavigation({ admin, buyer, lead, manager, reviewer, origin });
   result.checks.poMasterTemplate = await checkPoMasterTemplate({ page: buyer, origin, out, xlsx });
   result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse });
 }

@@ -1,5 +1,6 @@
 import { Button, Descriptions, Image, Modal, Result, Skeleton, Space, Typography } from 'antd';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import {
   type ProductMaterials,
   type ProductOverview,
@@ -8,6 +9,7 @@ import {
 } from '@sw/contracts';
 import { missingReasonLabel } from '@sw/domain';
 import { imageLabel, materialsCopy, purchaseStageButtons, stockMissingText, templateCells, type TemplateInput } from '../../features/product-archive/index.js';
+import { useCanWrite } from '../../shared/actor.js';
 
 export type ProductCardLoad =
   | { readonly kind: 'idle' }
@@ -153,9 +155,16 @@ function PurchasesPanel(props: {
 }
 
 function StockPanel({ overview, stock }: { readonly overview: ProductOverview | null; readonly stock: ProductStock | null }) {
+  const canReview = useCanWrite('master.review');
   const card = overview?.cards.stock;
   if (card?.kind === 'missing') {
-    return <div id="stock"><p>{stockMissingText(missingReasonLabel(card.reason))}</p><a href="/master">去主数据审核</a></div>;
+    const reason = missingReasonLabel(card.reason);
+    return (
+      <div id="stock">
+        <p>{canReview ? stockMissingText(reason) : `${reason}。`}</p>
+        {canReview ? <Link to="/master">去主数据审核</Link> : null}
+      </div>
+    );
   }
   return <div id="stock"><p>库存 {stock?.factory.rows.length ?? card?.rowCount ?? ''} 行</p></div>;
 }

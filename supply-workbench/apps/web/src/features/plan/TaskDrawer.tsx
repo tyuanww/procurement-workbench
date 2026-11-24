@@ -90,6 +90,7 @@ function DrawerBody(props: { readonly load: DetailLoad; readonly change: TaskSta
 
 function TaskDetail(props: { readonly detail: WorkItemDetail; readonly change: TaskStatusChange }): ReactNode {
   const canRecord = useCanWrite('records.write');
+  const canReview = useCanWrite('master.review');
   const item = props.detail.item;
   const feedback = statusFeedback(props.change.flow);
   return (
@@ -114,7 +115,7 @@ function TaskDetail(props: { readonly detail: WorkItemDetail; readonly change: T
           { key: 'when', label: '计划起止', children: plannedRangeText(item, item.plannedStart) },
           { key: 'owner', label: '负责人', children: ownerText(item) },
           { key: 'supplier', label: '供应商', children: supplierText(item) },
-          { key: 'factory', label: '工厂', children: factoryNode(item) },
+          { key: 'factory', label: '工厂', children: factoryNode(item, canReview) },
           { key: 'source', label: '来源', children: workItemSourceLabel(item.source) },
           { key: 'line', label: '关联订单行', children: lineNode(item) },
         ]}
@@ -128,8 +129,9 @@ function EventHistory(props: { readonly detail: WorkItemDetail }): ReactNode {
   return <WorkItemEventHistory events={props.detail.events} />;
 }
 
-function factoryNode(item: WorkItemDetail['item']): ReactNode {
+function factoryNode(item: WorkItemDetail['item'], canReview: boolean): ReactNode {
   if (item.factoryName !== null) return <span><TaskTagView tag={{ key: 'factory', label: item.factoryName, tone: 'neutral', fill: 'solid' }} /></span>;
+  if (!canReview) return '—';
   return <span>— <Link to="/master">去主数据关联工厂</Link></span>;
 }
 

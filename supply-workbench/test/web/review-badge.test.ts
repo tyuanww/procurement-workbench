@@ -110,8 +110,8 @@ function masterBadge(roles: readonly ['reviewer'] | readonly ['admin'], queue: Q
     now: NOW,
     navRoutes: NAV_ROUTES,
   });
-  const row = view.nav.find((item) => item.to === '/master');
-  if (row === undefined) throw new Error('没有主数据');
+  const row = view.nav.find((item) => item.to === '/imports');
+  if (row === undefined) throw new Error('没有导入与审核');
   return row.badge;
 }
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { GroupMode, PlanBoardGroup, PlanLoad, PlanRow } from '../../features/today/index.js';
 import { brand, fontSize, space, statusColor, text } from '../../theme/tokens.js';
 import { TaskTagView } from '../../features/plan/index.js';
+import { useCan } from '../../shared/actor.js';
 import { GroupChips } from './group-chips.js';
 
 const SCHEDULE_MODES: readonly { readonly id: GroupMode; readonly label: string }[] = [
@@ -36,9 +37,12 @@ export function ScheduleView(props: ScheduleViewProps): ReactNode {
 }
 
 function ScheduleBody(props: { readonly load: PlanLoad; readonly focus: string | null; readonly onOpen: (id: string) => void; readonly onRetry: () => void }): ReactNode {
+  const canReadImports = useCan('imports.read');
   if (props.load.kind === 'idle' || props.load.kind === 'loading') return <Skeleton active paragraph={{ rows: 6 }} />;
   if (props.load.kind === 'error') return <Result status="error" title="排期没有读出来" subTitle={props.load.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} />;
-  if (props.load.board.kind === 'empty') return <Empty description={props.load.board.text}><Button href="/imports">去导入排期里程碑</Button></Empty>;
+  if (props.load.board.kind === 'empty') {
+    return <Empty description={props.load.board.text}>{canReadImports ? <Button href="/imports">去导入排期里程碑</Button> : null}</Empty>;
+  }
   return <>{props.load.board.groups.map((group) => <PlanGroupBlock key={group.key} group={group} focus={props.focus} onOpen={props.onOpen} />)}</>;
 }
 

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { LogoutOutlined, QuestionCircleOutlined, UserOutlined, WarningOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useCan } from '../shared/actor.js';
 import {
   endSession,
   type AccountEntry,
@@ -29,17 +30,15 @@ export function NavBadge({ mark, compact, id }: { readonly mark: BadgeMark; read
 }
 
 export function FreshnessLink({ freshness }: { readonly freshness: ShellView['freshness'] }) {
+  const canReadImports = useCan('imports.read');
   const body =
     freshness.chips.length === 0 ? (
       <span style={{ color: text.secondary }}>{freshness.headline}</span>
     ) : (
       freshness.chips.map((chip) => <FreshnessChipView key={chip.key} chip={chip} />)
     );
-  return (
-    <Link to="/imports" style={freshnessLinkStyle()}>
-      {body}
-    </Link>
-  );
+  const style = freshnessLinkStyle();
+  return canReadImports ? <Link to="/imports" style={style}>{body}</Link> : <div style={style}>{body}</div>;
 }
 
 export function AccountMenu({ account }: { readonly account: ShellView['account'] }) {
