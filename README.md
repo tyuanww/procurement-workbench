@@ -67,6 +67,10 @@ docker compose -p shinemage-demo -f docker/compose.yml up -d app
 | 产品经理 | 管理店铺 | 查看当前进度、总排期与新品开发节点，核对需求日期、承诺与影响产品。 |
 | 管理层 | 管理看板（含周报） | 查订单卡点、采购负荷和供应商表现，在周会记录决定并回查完成情况。 |
 
+### 客户能查什么
+
+现有应用面向内部采购、产品经理、审核和管理岗位。规划中的客户查询有两个入口。消费者按本人订单查交付状态，B 端客户按本企业订单、商品和日期查交付明细。两者共用组件和状态展示规则，客户数据由服务端按身份和可见字段返回。接入来源和权限仍待业务确认。[客户查询与逐页设计](supply-workbench/DESIGN.md#10-面向客户的查询与看板整理)
+
 ## 架构设计
 
 浏览器使用 React 和 Ant Design。一个 Fastify 应用服务提供 Web 页面和 `/api/v1`。应用层编排业务用例，领域层负责规则。PostgreSQL 保存结构化记录，上传文件卷保留原表和附件。
@@ -86,7 +90,8 @@ docker compose -p shinemage-demo -f docker/compose.yml up -d app
 | --- | --- |
 | 启动试用，换端口或查日志 | [本机运行手册](supply-workbench/RUNBOOK.md) |
 | 安装依赖，准备第一次提交 | [贡献指南](CONTRIBUTING.md) |
-| 找页面和交互规范 | [设计规范](supply-workbench/DESIGN.md) |
+| 找各页面的 antd 组件与验收规则 | [内部页面组件与验收](supply-workbench/DESIGN.md#11-内部页面组件与验收) |
+| 找客户查询范围 | [客户查询设计](supply-workbench/DESIGN.md#101-入口按用户要查的对象设计) |
 | 加页面、能力或导入模板 | [扩展生成器](supply-workbench/docs/extension-generator.md) |
 | 选择验证范围或排查 CI | [CI 验证](supply-workbench/docs/ci-verification.md) |
 

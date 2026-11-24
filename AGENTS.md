@@ -11,6 +11,11 @@
 - 新增能力、页面或导入模板前，先用扩展生成器的 `--dry-run` 核对影响。以代码清单为准。[扩展生成器](supply-workbench/docs/extension-generator.md) · [能力清单](supply-workbench/packages/contracts/src/capabilities.ts) · [页面清单](supply-workbench/apps/web/src/app/page-manifest.tsx) · [模板注册表](supply-workbench/packages/importers/src/registry.ts)
 - 页面可见性和 API 授权分别验证。涉及内部需求时，使用有权限的需求与验收资料确认业务口径。
 
+## 页面设计
+
+- 先用同一组合成数据并排评审相关页面。每页写清角色、首屏问题、主操作和下钻对象，再选用待办页、列表页或看板页模板。复用仓库的 React 组件与主题，按锁文件版本用 Ant Design MCP 或 CLI 核对组件。[设计规范](supply-workbench/DESIGN.md#10-面向客户的查询与看板整理)
+- 用用户任务验收首屏、查询、详情返回和窄屏。CI 检查已定规则。新增对外查询须核对服务端身份、对象范围和可见字段，同样检查深链、附件与导出。
+
 ## 验证和数据
 
 - 按改动范围运行工程检查。验证数据库写入时使用一次性测试库。[CI 验证](supply-workbench/docs/ci-verification.md)

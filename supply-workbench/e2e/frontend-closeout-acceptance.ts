@@ -13,6 +13,7 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await page.goto(new URL('/lines', origin).href);
   await page.getByRole('row').filter({ has: page.getByRole('cell') }).first().waitFor();
   const collapsedIcons = await checkCollapsedIcons(page, out);
+  await checkSaveFollowUpView(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(new URL('/today', origin).href);
@@ -23,8 +24,27 @@ export async function checkFrontendCloseout({ page, origin, out }: {
 
   await page.goto(new URL('/products', origin).href);
   await checkProductArchive(page, out);
+  await checkProductSearch(page, origin);
   return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次', '到仓待收'], dailySchedule: ['今日', '逾期', '前置阻塞'],
-    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true } };
+    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true },
+    savedFollowUpView: true };
+}
+
+async function checkSaveFollowUpView(page: Page): Promise<void> {
+  const trigger = page.getByRole('button', { name: '保存当前视图', exact: true });
+  const dialog = page.getByRole('dialog', { name: '保存当前视图', exact: true });
+  const viewName = '合成验收跟进视图';
+  await trigger.press('Enter');
+  await dialog.waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await trigger.click();
+  await dialog.getByRole('textbox', { name: '视图名称', exact: true }).fill(viewName);
+  await dialog.getByRole('button', { name: /^保\s*存$/ }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await page.waitForURL((url) => url.searchParams.get('view') === viewName);
+  await page.reload();
+  await page.getByText(viewName, { exact: true }).first().waitFor();
 }
 
 async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
@@ -98,4 +118,27 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   await page.goto(new URL(cream, page.url()).href);
   await page.getByRole('button', { name: '组成物料', exact: true }).click();
   await page.getByText('没有 BOM', { exact: true }).waitFor();
+}
+
+async function checkProductSearch(page: Page, origin: URL): Promise<void> {
+  const barcode = '2099000000200';
+  await page.goto(new URL('/products?view=table', origin).href);
+  const search = page.getByRole('searchbox', { name: '品名或条码', exact: true }).or(page.getByRole('textbox', { name: '品名或条码', exact: true }));
+  await search.fill(barcode);
+  await search.press('Enter');
+  await page.waitForURL((url) => url.searchParams.get('q') === barcode);
+  await page.reload();
+  await search.waitFor();
+  assert.equal(await search.inputValue(), barcode);
+  const matched = page.locator(`a[href="${cream}"]`);
+  await matched.waitFor();
+  assert.equal(await page.locator(`a[href="${cleanser}"]`).count(), 0);
+  await matched.click();
+  await page.getByText('返回产品档案', { exact: true }).click();
+  await page.waitForURL((url) => url.pathname === '/products' && url.searchParams.get('q') === barcode && url.searchParams.get('view') === 'table');
+  await search.fill('验收不存在的条码');
+  await search.press('Enter');
+  await page.getByText('没有符合条件的产品。', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '清除搜索', exact: true }).click();
+  await page.locator(`a[href="${cleanser}"]`).waitFor();
 }
