@@ -9,7 +9,7 @@ import { comboOf, demandOf, scheduleOf, shipmentOf, stockOf, transitOf } from '.
 
 const OPEN_LINKS = ['unlinked', 'ambiguous'] as const;
 
-type ReportFilter = { readonly factoryPartyId?: string; readonly sheet?: string };
+type ReportFilter = { readonly factoryPartyId?: string; readonly sheet?: string; readonly activeBatchIds?: readonly string[] };
 
 type LinkKind = LinkedFactoryRow['kind'];
 type ReportIdentity = { readonly id: string; readonly kind: LinkKind };
@@ -32,7 +32,7 @@ type ReportTable = {
 };
 
 export async function listUnlinkedKeys(db: AppDatabase, query: ReportFilter): Promise<ReportKey[]> {
-  const activeIds = [...await activeFactoryBatchIds(db)];
+  const activeIds = query.activeBatchIds ?? [...await activeFactoryBatchIds(db)];
   const [transit, shipment, stock, schedule, demand, combo] = await Promise.all([
     db.select({ id: factoryInTransitRows.id, sheetName: factoryInTransitRows.sheetName, rowNo: factoryInTransitRows.rowNo }).from(factoryInTransitRows).where(openWhere({ table: factoryInTransitRows, query, activeIds })),
     db.select({ id: factoryShipmentRows.id, sheetName: factoryShipmentRows.sheetName, rowNo: factoryShipmentRows.rowNo }).from(factoryShipmentRows).where(openWhere({ table: factoryShipmentRows, query, activeIds })),
