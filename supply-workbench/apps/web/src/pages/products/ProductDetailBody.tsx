@@ -11,7 +11,7 @@ import {
   type ProductStock,
 } from '@sw/contracts';
 import { missingReasonLabel } from '@sw/domain';
-import { imageLabel, materialsCopy, purchaseStageButtons, stockMissingText, templateCells, type TemplateInput } from '../../features/product-archive/index.js';
+import { imageLabel, isChannelVariant, materialsCopy, purchaseStageButtons, stockMissingText, templateCells, type TemplateInput } from '../../features/product-archive/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiGetWithSignal } from '../../shared/api/client.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
@@ -19,6 +19,7 @@ import { formatQuantity } from '../../shared/ui/format.js';
 import { ContentTabs, ViewSwitch } from '../../shared/ui/view-switch.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
+import { ProductVariantTag } from './product-cards.js';
 
 type ProductPanelLoad<T> =
   | { readonly kind: 'loading' }
@@ -45,8 +46,20 @@ export function ProductDetailBody({ id, overview, search, patch }: ProductDetail
     </ProductPanel> },
   ];
   const activeKey = items.find(({ key }) => key === search.get('card'))?.key ?? 'archive';
-  return <ContentTabs aria-label="产品详情内容" destroyOnHidden items={items} activeKey={activeKey}
-    onChange={(key) => patch({ card: key === 'archive' ? null : key })} />;
+  return <Flex vertical gap={space[2]}>
+    <ProductPackaging product={overview.product} />
+    <ContentTabs aria-label="产品详情内容" destroyOnHidden items={items} activeKey={activeKey}
+      onChange={(key) => patch({ card: key === 'archive' ? null : key })} />
+  </Flex>;
+}
+
+function ProductPackaging({ product }: { readonly product: ProductOverview['product'] }) {
+  return <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 4 }} items={[
+    { key: 'variant', label: '规格', children: <ProductVariantTag isChannelVariant={isChannelVariant(product.barcodeRaw)} /> },
+    { key: 'barcode', label: '条码', children: product.barcodeRaw },
+    { key: 'content', label: '净含量', children: product.netContent.value ?? '—' },
+    { key: 'case', label: '箱规', children: product.casePack.value ?? '—' },
+  ]} styles={{ content: { overflowWrap: 'anywhere' } }} />;
 }
 
 function ArchivePanel({ overview }: { readonly overview: ProductOverview }) {
@@ -55,18 +68,19 @@ function ArchivePanel({ overview }: { readonly overview: ProductOverview }) {
   return (
     <Flex vertical gap={space[2]}>
       <TemplateTable input={templateOf(overview, visible.length)} />
-      <div><ImageStrip visible={visible} imageIndex={imageIndex} setImageIndex={setImageIndex} /></div>
+      {visible.length === 0 ? null : <div><ImageStrip visible={visible} imageIndex={imageIndex} setImageIndex={setImageIndex} /></div>}
     </Flex>
   );
 }
 
-export function TemplateTable({ input }: { readonly input: TemplateInput }) {
+function TemplateTable({ input }: { readonly input: TemplateInput }) {
   return (
     <Descriptions
       bordered
       size="small"
       column={{ xs: 1, sm: 2 }}
-      items={templateCells(input).map((cell) => ({ key: cell.label, label: cell.label, children: cell.value }))}
+      items={templateCells(input).filter((cell) => cell.label !== '条码')
+        .map((cell) => ({ key: cell.label, label: cell.label, children: cell.value }))}
     />
   );
 }
@@ -79,12 +93,11 @@ function skuTitle(overview: ProductOverview | null): string {
   return overview?.product.skuName.value ?? '待补充';
 }
 
-function templateOf(overview: ProductOverview | null, imageCount: number): TemplateInput {
+function templateOf(overview: ProductOverview, imageCount: number): TemplateInput {
   return {
-    filingName: overview?.product.filingName.value ?? null,
-    skuName: overview?.product.skuName.value ?? null,
-    barcode: overview?.product.barcodeRaw ?? null,
-    image: imageCount === 0 ? null : '已有图片',
+    filingName: overview.product.filingName.value,
+    skuName: overview.product.skuName.value,
+    image: imageCount === 0 ? imageLabel(false) : '已有图片',
     supplier: null,
     cycle: null,
   };
@@ -98,7 +111,7 @@ function ImageStrip(props: {
   const { visible, imageIndex, setImageIndex } = props;
   return (
     <>
-      {visible.length === 0 ? <p>{imageLabel(false)}</p> : <Button onClick={() => setImageIndex(0)}>{imageLabel(true)}</Button>}
+      <Button onClick={() => setImageIndex(0)}>{imageLabel(true)}</Button>
       <Modal
         open={imageIndex !== null && visible[imageIndex] !== undefined}
         title="产品图片"

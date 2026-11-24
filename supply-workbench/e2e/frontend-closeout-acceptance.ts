@@ -25,8 +25,9 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await page.goto(new URL('/products', origin).href);
   await checkProductArchive(page, out);
   await checkProductSearch(page, origin);
+  await checkProductPackagingReturn(page, origin);
   return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次', '到仓待收'], dailySchedule: ['今日', '逾期', '前置阻塞'],
-    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true },
+    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'] },
     savedFollowUpView: true };
 }
 
@@ -151,4 +152,37 @@ async function checkProductSearch(page: Page, origin: URL): Promise<void> {
   await page.getByRole('button', { name: '返回第一页' }).press('Enter');
   await page.locator(`a[href="${cleanser}"]`).waitFor();
   assert.ok(await page.getByRole('region', { name: '产品查询结果' }).evaluate((node) => document.activeElement === node));
+}
+
+async function checkProductPackagingReturn(page: Page, origin: URL): Promise<void> {
+  const barcode = '2099000000101';
+  for (const { width, view } of [{ width: 1440, view: 'card' }, { width: 390, view: 'table' }]) {
+    await page.setViewportSize({ width, height: 900 });
+    const source = new URL(`/products?q=${barcode}&view=${view}`, origin);
+    await page.goto(source.href);
+    const results = page.getByRole('region', { name: '产品查询结果', exact: true });
+    const channel = results.locator(`a[href="${cleanser}-channel"]`);
+    await results.getByText('标准规格', { exact: true }).waitFor();
+    await results.getByText('渠道规格', { exact: true }).waitFor();
+    await results.getByText(/24 件\/箱/).waitFor();
+    await results.getByText(/12 件\/箱/).waitFor();
+    await channel.press('Enter');
+    await page.getByRole('heading', { name: '产品 演示净润洁面乳渠道装', exact: true }).waitFor();
+    for (const text of ['渠道规格', `${barcode}-1`, '100 mL', '12 件/箱']) {
+      await page.getByText(text, { exact: true }).waitFor();
+    }
+    if (view === 'card') {
+      await page.getByRole('tab', { name: '采购', exact: true }).press('Enter');
+      await page.getByRole('link', { name: '返回产品档案', exact: true }).press('Enter');
+    } else {
+      await page.goBack();
+    }
+    await page.waitForURL(source.href);
+    await channel.and(page.locator(':focus')).waitFor();
+    const search = page.getByLabel('品名或条码', { exact: true });
+    assert.equal(await search.inputValue(), barcode);
+    assert.ok(await page.getByRole('radio', { name: view === 'card' ? '卡片' : '表格', exact: true }).isChecked());
+    assert.ok(await page.evaluate((viewportWidth) => document.documentElement.scrollWidth <= viewportWidth, width));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
 }
