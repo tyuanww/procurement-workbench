@@ -41,26 +41,26 @@ describe('视口探针', () => {
 });
 
 describe('壳标记', () => {
-  it('1279 的壳收起侧栏，菜单不用 inline-collapsed', () => {
+  it('1279 的壳让侧栏和分组菜单同时收起', () => {
     installMedia([shellQuery.max1279, shellQuery.atLeast768]);
     const html = inRouter(h(Shell, { view: buyerView() }));
     expect(html).toContain('ant-layout-sider-collapsed');
-    expect(html).not.toContain('ant-menu-inline-collapsed');
+    expect(html).toContain('ant-menu-inline-collapsed');
   });
 
   it('收起的侧栏保留图标并隐藏计数角标', () => {
     const html = inRouter(h(ShellSider, { chrome: sider(true), nav: rows, onToggle: () => undefined }));
     expect(anchor(html, '/progress')).toContain('aria-label="管理店铺"');
     expect(anchor(html, '/lines')).toContain('aria-label="跟进台"');
-    expect(anchor(html, '/progress')).toContain('<svg');
-    expect(anchor(html, '/lines')).toContain('<svg');
+    expect(html).toContain('data-icon="field-time"');
+    expect(html).toContain('data-icon="profile"');
     expect(anchor(html, '/lines')).not.toContain('>7<');
     expect(anchor(html, '/lines')).not.toContain('ant-badge');
     expect(html).toContain(onBrand.solid);
     expect(html).not.toContain('«');
     expect(html).not.toContain('»');
     expect(html).not.toContain('#fff');
-    expect(html).not.toContain('ant-menu-inline-collapsed');
+    expect(html).toContain('ant-menu-inline-collapsed');
     for (const row of rows) expect(html).toContain(`href="${row.to}"`);
   });
 
@@ -112,11 +112,11 @@ describe('壳标记', () => {
 });
 
 describe('页标题', () => {
-  it('进度是壳页面的唯一标题', () => {
+  it('当前进度保留唯一的语义标题，标题行不占版面', () => {
     const html = inRouter(h(ProgressPage, null));
     expect(headingCount(html)).toBe(1);
     expect(html).toContain('shell-page');
-    expect(html).toContain('>管理店铺<');
+    expect(html).toMatch(/<h1[^>]*clip-path:inset\(50%\)[^>]*>当前进度<\/h1>/);
   });
 
   it('登录保留一级标题，不进壳页面', () => {

@@ -15,4 +15,12 @@ export type NavRoute = {
   readonly label: string;
   readonly gate: PageGate;
   readonly matchPaths: readonly string[];
+  readonly destinations?: readonly NavDestination[];
+};
+
+export type NavDestination = {
+  readonly to: string;
+  readonly label: string;
+  readonly gate?: PageGate;
+  readonly aliases?: readonly string[];
 };

@@ -2,12 +2,12 @@
 import { afterEach, expect, it } from 'vitest';
 import { AppRoutes } from '../../apps/web/src/app/routes.js';
 import { entityId } from '../../packages/domain/src/values/ids.js';
-import { act, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
+import { act, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
 import { partyBody } from './party-preview-fixture.js';
 
 afterEach(resetDom);
 
-it('主体详情直接打开筛选后的跟进台，别名和指标仍可切换', async () => {
+it('主体详情可同页检查别名与指标，并打开筛选后的跟进台', async () => {
   const partyId = 'party-supplier';
   const partyName = '宜侬 & 供应链+包装#1';
   installMatchMedia();
@@ -22,16 +22,10 @@ it('主体详情直接打开筛选后的跟进台，别名和指标仍可切换'
     expect(orderLink('查看供应商订单')).toEqual({ lane: 'all', supplierPartyId: partyId });
     expect(orderLink('查看代工厂相关订单')).toEqual({ lane: 'all', factoryPartyId: partyId });
 
-    const tabs = [...document.querySelectorAll<HTMLElement>('[role="tab"]')];
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['别名', '指标']);
-    const [aliases, kpis] = tabs;
-    if (aliases === undefined || kpis === undefined) throw new Error('主体页签没有显示');
-    const activePanel = '[role="tabpanel"][aria-hidden="false"]';
-    expect(textOf(activePanel)).toBe('宜侬原料');
-    click(kpis);
-    expect(textOf(activePanel)).toBe('应到 4 · 准时样本 3 · 近一个月 2026-10-01 至 2026-11-01');
-    click(aliases);
-    expect(textOf(activePanel)).toBe('宜侬原料');
+    expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect([...document.querySelectorAll('main h2')].map((heading) => heading.textContent)).toEqual(['别名', '指标']);
+    expect(textOf('main')).toContain('宜侬原料');
+    expect(textOf('main')).toContain('应到 4 · 准时样本 3 · 近一个月 2026-10-01 至 2026-11-01');
   } finally {
     await act(() => view.unmount());
   }

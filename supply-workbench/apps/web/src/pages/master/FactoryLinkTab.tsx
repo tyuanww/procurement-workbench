@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Flex, Popconfirm, Skeleton, Space, Statistic, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Popconfirm, Skeleton, Space, Statistic, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   FactoryLinkCountsSchema,
@@ -29,8 +29,16 @@ type Scope = 'actionable' | keyof typeof diagnosticReaders;
 type BulkAction = 'relink' | 'schedule' | 'backfill';
 type Action = BulkAction | RowAction;
 
-export function FactoryLinkTab({ refreshReviewQueue }: { readonly refreshReviewQueue: () => Promise<void> }): ReactNode {
-  const [scope, setScope] = useState<Scope>('actionable');
+export function factoryLinkScopeOf(value: string | null): Scope {
+  return value === 'active' || value === 'historical' ? value : 'actionable';
+}
+
+export function FactoryLinkTab({ scope, refreshReviewQueue }: { readonly scope: Scope; readonly refreshReviewQueue: () => Promise<void> }): ReactNode {
+  if (scope !== 'actionable') return <UnmatchedFactoryRows key={scope} scope={scope} />;
+  return <FactoryLinkQueue refreshReviewQueue={refreshReviewQueue} />;
+}
+
+function FactoryLinkQueue({ refreshReviewQueue }: { readonly refreshReviewQueue: () => Promise<void> }): ReactNode {
   const [revision, setRevision] = useState(0);
   const [action, setAction] = useState<Action | null>(null);
   const [notice, setNotice] = useState<TabNotice | null>(null);
@@ -52,14 +60,7 @@ export function FactoryLinkTab({ refreshReviewQueue }: { readonly refreshReviewQ
       <FactoryLinkActions action={action} onRelink={() => run('relink', async () => relinkResultText(await relinkFactoryRows()))}
         onSchedule={() => run('schedule', async () => scheduleRelinkText(await relinkSchedule()))}
         onBackfill={() => run('backfill', async () => backfillResultText(await backfillSupplierParties()))} />
-      <Tabs size="small" activeKey={scope} onChange={(key) => {
-        if (key === 'actionable' || key === 'active' || key === 'historical') setScope(key);
-      }} destroyOnHidden items={[
-        { key: 'actionable', label: '当前待处理', children: <UnlinkedRows revision={revision} busy={action !== null}
-          pending={typeof action === 'object' ? action : null} onAction={run} /> },
-        { key: 'active', label: '当前诊断', children: <UnmatchedFactoryRows key={revision} scope="active" /> },
-        { key: 'historical', label: '历史诊断', children: <UnmatchedFactoryRows key={revision} scope="historical" /> },
-      ]} />
+      <UnlinkedRows revision={revision} busy={action !== null} pending={typeof action === 'object' ? action : null} onAction={run} />
     </Space>
   );
 }

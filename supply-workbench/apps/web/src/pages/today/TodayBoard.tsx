@@ -1,7 +1,7 @@
-import { Button, Flex, Result, Skeleton, Tabs, Typography } from 'antd';
+import { Button, Flex, Result, Skeleton, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import type { TodayResponse } from '@sw/contracts';
-import { ArrivalMemos, groupForView, taskIdOf, todayViewFromKey, todayViewOf, type BoardRow, type GroupMode, type PlanLoad, type QuickAction, type TodayBoard, type TodayInsight, type TodayView } from '../../features/today/index.js';
+import { ArrivalMemos, taskIdOf, todayViewOf, type BoardRow, type GroupMode, type PlanLoad, type QuickAction, type TodayBoard, type TodayInsight } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { OpenForm } from './TodayForms.js';
 import type { ActionPageControls } from './ActionControls.js';
@@ -13,10 +13,6 @@ import { PageHeader } from '../../shared/ui/page.js';
 import { helpStyle, screenStyle, todayMotionCss } from './today-style.js';
 
 const HELP = 'j k 或方向键移动，Enter 打开，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭';
-const VIEW_TABS: readonly { readonly key: TodayView; readonly label: string }[] = [
-  { key: 'action', label: '行动板' },
-  { key: 'schedule', label: '排期' },
-];
 
 export type TodayScreenProps = {
   readonly board: TodayBoard;
@@ -90,22 +86,11 @@ function TodayReady(props: TodayScreenProps): ReactNode {
   return (
     <section style={screenStyle()}>
       <style>{todayMotionCss()}</style>
-      <PageHeader title="今日" />
-      <TodayViewTabs view={view} onGroup={props.onGroup} />
+      <PageHeader title={view === 'schedule' ? '今日排期' : '行动板'} />
       {view === 'schedule' ? <SchedulePane {...props} /> : <ActionPane {...props} />}
       <PageDrawers {...props} />
       <TodayStatus isHelpOpen={props.isHelpOpen} notice={props.notice} focus={props.focus} />
     </section>
-  );
-}
-
-function TodayViewTabs(props: { readonly view: TodayView; readonly onGroup: (group: GroupMode) => void }): ReactNode {
-  return (
-    <Tabs
-      activeKey={props.view}
-      items={VIEW_TABS.map((tab) => ({ key: tab.key, label: tab.label }))}
-      onChange={(key) => props.onGroup(groupForView(todayViewFromKey(key)))}
-    />
   );
 }
 

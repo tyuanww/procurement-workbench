@@ -13,11 +13,11 @@ import {
 } from '../features/shell/index.js';
 import { bg, brand, space, statusColor, text } from '../theme/tokens.js';
 
-export function NavBadge({ mark, compact, id }: { readonly mark: BadgeMark; readonly compact: boolean; readonly id: string }) {
+export function NavBadge({ mark, compact }: { readonly mark: BadgeMark; readonly compact: boolean }) {
   switch (mark.kind) {
     case 'count':
       if (compact) return null;
-      return <Badge id={id} count={mark.value} color={brand[100]} styles={{ indicator: { color: brand[800] } }} />;
+      return <Badge count={mark.value} color={brand[100]} styles={{ indicator: { color: brand[800] } }} />;
     case 'missing':
       return <span style={{ color: brand[100] }}>—</span>;
     case 'none':

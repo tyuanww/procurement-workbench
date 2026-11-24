@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 
 const legacyPath = '/master?tab=unlinked';
-const current = '当前待处理';
-const active = '当前诊断';
-const historical = '历史诊断';
+const current = '工厂待处理';
+const active = '当前关联诊断';
+const historical = '历史关联诊断';
 const reportPath = '/api/v1/factory-reports';
 const factoryPath = '/api/v1/factory-links';
 
@@ -17,12 +17,12 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
   readonly out: string;
 }) {
   seedFactoryRows();
-  const tabs = (name: string) => reviewer.getByRole('tab', { name, exact: true });
-  const currentPanel = reviewer.getByRole('tabpanel', { name: current, exact: true });
+  const linkFor = (name: string) => reviewer.locator('aside').getByRole('link', { name, exact: true });
+  const currentPanel = reviewer.getByRole('main');
   const currentPage1 = await readPage(reviewer, current, 1, async () => { await reviewer.goto(new URL(legacyPath, origin).href); });
   await currentPanel.getByText('共 22 条', { exact: true }).waitFor();
-  assert.equal(await tabs('工厂关联').getAttribute('aria-selected'), 'true');
-  assert.equal(await tabs('未关联上报').count(), 0);
+  assert.equal(await linkFor(current).getAttribute('aria-current'), 'page');
+  assert.equal(await currentPanel.getByRole('tab').count(), 0);
   assert.equal(await currentPanel.getByRole('button', { name: '建成订单行', exact: true }).count(), 0);
 
   const search = currentPanel.getByLabel('筛选本页表名或行号', { exact: true });
@@ -35,12 +35,12 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
   assert.equal(await link.count(), 1);
   assert.equal(await link.isDisabled(), true);
 
-  const activePage1 = await readPage(reviewer, active, 1, () => tabs(active).click());
-  await reviewer.getByRole('tabpanel', { name: active, exact: true }).getByText('共 21 条', { exact: true }).waitFor();
+  const activePage1 = await readPage(reviewer, active, 1, () => linkFor(active).click());
+  await currentPanel.getByText('共 21 条', { exact: true }).waitFor();
   const activePage2 = await goToNextPage(reviewer, active);
   await reviewer.getByText('品号 SC06-CURRENT-21', { exact: false }).waitFor();
-  const historicalPage1 = await readPage(reviewer, historical, 1, () => tabs(historical).click());
-  await reviewer.getByRole('tabpanel', { name: historical, exact: true }).getByText('共 21 条', { exact: true }).waitFor();
+  const historicalPage1 = await readPage(reviewer, historical, 1, () => linkFor(historical).click());
+  await currentPanel.getByText('共 21 条', { exact: true }).waitFor();
   const historicalPage2 = await goToNextPage(reviewer, historical);
   await reviewer.getByText('单号 SC06-HISTORY-21', { exact: false }).waitFor();
   const keys = [...currentPage1, ...currentPage2, ...activePage1, ...activePage2, ...historicalPage1, ...historicalPage2];
@@ -48,7 +48,7 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
   assert.equal(new Set(keys).size, 64, '三个范围中的工厂行只能出现一次');
   await reviewer.screenshot({ path: join(out, 'factory-link-history.png'), animations: 'disabled' });
 
-  await tabs(current).click();
+  await linkFor(current).click();
   await currentPanel.getByText('共 22 条', { exact: true }).waitFor();
   await goToNextPage(reviewer, current);
   await search.fill('121');
@@ -65,7 +65,7 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
   assert.equal(await currentPanel.getByText('SC06 在途 第 121 行', { exact: true }).count(), 0);
 
   const admin = await openAdmin();
-  const adminPanel = admin.getByRole('tabpanel', { name: current, exact: true });
+  const adminPanel = admin.getByRole('main');
   await adminPanel.getByText('共 21 条', { exact: true }).waitFor();
   await adminPanel.getByLabel('筛选本页表名或行号', { exact: true }).fill('120');
   const [created] = await Promise.all([
@@ -89,7 +89,7 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
 }
 
 async function goToNextPage(page: Page, scope: string): Promise<readonly string[]> {
-  const next = page.getByRole('tabpanel', { name: scope, exact: true }).getByTitle('下一页', { exact: true });
+  const next = page.getByRole('main').getByTitle('下一页', { exact: true });
   return readPage(page, scope, 2, () => next.click());
 }
 

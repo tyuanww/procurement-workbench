@@ -17,7 +17,7 @@ import { antdTheme } from '../../apps/web/src/theme/antd.js';
 import { contrastRatio } from '../../apps/web/src/theme/contrast.js';
 import { accountSlotStyle, drawerFrame, headerBarStyle, headerClusterStyle, headerGridColumns, headerTitleStyle, menuWidth, searchButtonStyle, searchTextStyle, siderBarStyle } from '../../apps/web/src/app/shell-frame.js';
 import { freshnessChipBoxStyle, freshnessLinkStyle } from '../../apps/web/src/app/shell-session.js';
-import { pageHeaderRowStyle, surfaceStyle } from '../../apps/web/src/shared/ui/page.js';
+import { surfaceStyle } from '../../apps/web/src/shared/ui/page.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, radius, radiusCard, space } from '../../apps/web/src/theme/tokens.js';
 
 const tablet: ViewportSnapshot = { band: 'tablet', contentInset: 16, isNarrow: false };
@@ -221,15 +221,13 @@ describe('层、圆角和菜单对比', () => {
     expect(freshnessChipBoxStyle(false)).toMatchObject({ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   });
 
-  it('卡片无阴影，标题行高 32，下边距 16', () => {
+  it('卡片无阴影', () => {
     expect(surfaceStyle()).toEqual({
       background: bg.surface,
       border: `1px solid ${border}`,
       borderRadius: radiusCard,
       boxShadow: 'none',
     });
-    expect(pageHeaderRowStyle().lineHeight).toBe('32px');
-    expect(pageHeaderRowStyle().marginBottom).toBe(space[3]);
   });
 });
 

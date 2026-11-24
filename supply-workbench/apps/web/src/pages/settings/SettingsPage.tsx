@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Alert, Button, Result, Skeleton, Tabs } from 'antd';
+import { Alert, Button, Collapse, Result, Skeleton } from 'antd';
 import {
   AuditEntryViewSchema,
   SettingsSchema,
@@ -37,7 +37,7 @@ export function SettingsPage() {
   return (
     <WorkbenchPage title="设置">
       <style>{settingsFormCss()}</style>
-      <SettingsContent message={message} loadState={loadState} onRetry={refresh} users={users} refresh={refresh} setMessage={setMessage} settings={settings} setSettings={setSettings} audit={audit} openId={openId} setOpenId={setOpenId} />
+      <SettingsContent message={message} loadState={loadState} onRetry={refresh} users={users} refresh={refresh} setMessage={setMessage} settings={settings} setSettings={setSettings} audit={audit} openId={openId} setOpenId={setOpenId} initialSection={entity === '' ? 'users' : 'audit'} />
     </WorkbenchPage>
   );
 }
@@ -47,18 +47,18 @@ type SettingsLoadState =
   | { readonly kind: 'ready' }
   | { readonly kind: 'error'; readonly message: string };
 
-function SettingsContent(input: SettingsTabsProps & { readonly message: UiNotice | null; readonly loadState: SettingsLoadState; readonly onRetry: () => void }) {
+function SettingsContent(input: SettingsSectionsProps & { readonly message: UiNotice | null; readonly loadState: SettingsLoadState; readonly onRetry: () => void }) {
   return (
     <>
       {input.message === null ? null : <Alert style={{ marginBottom: space[4] }} type={input.message.kind} showIcon title={input.message.text} />}
       {input.loadState.kind === 'loading' ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
       {input.loadState.kind === 'error' ? <Result status="error" title="设置没有读出来" subTitle={input.loadState.message} extra={<Button type="primary" onClick={input.onRetry}>重试</Button>} /> : null}
-      {input.loadState.kind === 'ready' ? <SettingsTabs {...input} /> : null}
+      {input.loadState.kind === 'ready' ? <SettingsSections {...input} /> : null}
     </>
   );
 }
 
-type SettingsTabsProps = {
+type SettingsSectionsProps = {
   readonly users: readonly UserView[];
   readonly refresh: () => void;
   readonly setMessage: (message: UiNotice | null) => void;
@@ -67,12 +67,15 @@ type SettingsTabsProps = {
   readonly audit: readonly AuditEntryView[];
   readonly openId: string | null;
   readonly setOpenId: (id: string | null) => void;
+  readonly initialSection: 'users' | 'audit';
 };
 
-function SettingsTabs(input: SettingsTabsProps) {
+function SettingsSections(input: SettingsSectionsProps) {
+  const [expanded, setExpanded] = useState<string[]>([input.initialSection]);
   return (
-    <Tabs
-      defaultActiveKey="users"
+    <Collapse
+      activeKey={expanded}
+      onChange={(keys) => setExpanded(keys.slice(-1))}
       items={[
         {
           key: 'users',

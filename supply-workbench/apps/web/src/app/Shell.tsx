@@ -18,6 +18,7 @@ import {
 import { matchesShortcut, searchShortcut, type Shortcut } from '../shared/hooks/shortcuts.js';
 import { bg } from '../theme/tokens.js';
 import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-frame.js';
+import { WorkspaceBreadcrumb } from './shell-nav.js';
 
 export function Shell(props: {
   readonly view: ShellView;
@@ -63,6 +64,7 @@ function ShellColumns(input: {
           menuButton={menuButtonOf(input)}
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
+          <WorkspaceBreadcrumb rows={input.view.nav} />
           <Outlet />
         </Layout.Content>
       </Layout>

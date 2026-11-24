@@ -52,15 +52,18 @@ function ProductCatalog(props: { readonly state: ProductListLoad; readonly onRet
   if (props.state.kind === 'error') return <WorkbenchPage title="产品档案"><Result status="error" title="产品列表没有读出来。" subTitle={props.state.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} /></WorkbenchPage>;
   const list = props.state.value;
   const items = list.items;
+  if (items.length === 0) return (
+    <WorkbenchPage title="产品档案">
+      <Empty description="还没有产品档案。">
+        {canReadImports ? <Button href="/imports">去导入</Button> : null}
+      </Empty>
+    </WorkbenchPage>
+  );
   const groups = groupByFiling(filingSeeds(list));
   return (
     <WorkbenchPage title="产品档案">
-      {items.length === 0 ? (
-        <Empty description="还没有产品档案。">
-          {canReadImports ? <Button href="/imports">去导入</Button> : null}
-        </Empty>
-      ) : null}
       <Segmented
+        aria-label="产品档案显示方式"
         value={props.view}
         options={[{ label: '卡片', value: 'card' }, { label: '表格', value: 'table' }]}
         onChange={(value) => props.setParams({ view: viewOf(value) })}
@@ -135,7 +138,7 @@ export function ProductDetailPage() {
   }, [id, card, scope]);
   return (
     <section style={{ maxWidth: 1440 }}>
-      <PageHeader title={productHeading(overview)} action={overview !== null && canMaintain(roles) ? <Button onClick={() => setParams(writeProductEdit({ search: search.toString(), isOpen: true }))}>编辑</Button> : null} />
+      <PageHeader title={productHeading(overview)} showIdentity action={overview !== null && canMaintain(roles) ? <Button onClick={() => setParams(writeProductEdit({ search: search.toString(), isOpen: true }))}>编辑</Button> : null} />
       {overviewError !== null ? <Result status="error" title="产品详情没有读出来。" subTitle={overviewError} extra={<Button type="primary" onClick={() => {
         setOverviewError(null);
         void apiGet(`/api/v1/products/${encodeURIComponent(id)}`, ProductOverviewSchema)

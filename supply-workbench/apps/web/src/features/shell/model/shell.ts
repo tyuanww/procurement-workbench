@@ -35,6 +35,7 @@ export type NavRow = {
   readonly label: string;
   readonly matchPaths: readonly string[];
   readonly badge: BadgeMark;
+  readonly destinations?: NavRoute['destinations'];
 };
 
 export type AccountEntry = {
@@ -153,7 +154,8 @@ function navRow(input: {
 }): NavRow {
   const { to, matchPaths } = input.entry;
   const label = to === '/imports' && !can({ roles: input.roles }, 'master.review') ? '导入中心' : input.entry.label;
-  return { to, label, matchPaths, badge: badgeOf(input) ?? NO_BADGE };
+  const destinations = input.entry.destinations?.filter((destination) => allows({ gate: destination.gate ?? input.entry.gate, roles: input.roles }));
+  return { to, label, matchPaths, badge: badgeOf(input) ?? NO_BADGE, ...(destinations === undefined || destinations.length < 2 ? {} : { destinations }) };
 }
 
 function allows(input: { readonly gate: PageGate; readonly roles: readonly Role[] }): boolean {

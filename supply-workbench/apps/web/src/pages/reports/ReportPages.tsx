@@ -6,7 +6,6 @@ import { apiDownload, apiErrorMessage, apiGet, apiSend } from '../../shared/api/
 import { feishuButton, printStyle } from '../../features/reporting/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { PageHeader, WorkbenchPage } from '../../shared/ui/page.js';
-import { ManagementViewNav } from '../../shared/ui/management-view-nav.js';
 import { horizontalFormLayout } from '../../shared/ui/form.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
@@ -56,7 +55,6 @@ export function ReportListPage() {
   }
   return (
     <WorkbenchPage title="周报">
-      <ManagementViewNav />
       {body}
     </WorkbenchPage>
   );
@@ -140,7 +138,6 @@ export function ReportDetailPage() {
   useEffect(() => { load(); }, [id]);
   return (
     <WorkbenchPage title="周报详情" browserTitle={report === null ? '周报详情' : `周报 ${report.weekStart}`} maxWidth={1440}>
-      <ManagementViewNav />
       <ReportDetailContent report={report} message={message} isLoaded={isLoaded} load={load} id={id} isConfigured={isConfigured} isPublishing={isPublishing} setPublishing={setPublishing} exporting={exporting} setExporting={setExporting} setMessage={setMessage} />
     </WorkbenchPage>
   );
@@ -217,7 +214,7 @@ export function ReportPrintPage() {
   return (
     <main className="report-print">
       <style>{printStyle()}</style>
-      <PageHeader title="周报" browserTitle={report === null ? '周报打印' : `周报打印 ${report.weekStart}`} />
+      <PageHeader title="周报" showIdentity browserTitle={report === null ? '周报打印' : `周报打印 ${report.weekStart}`} />
       {!isLoaded ? <Skeleton active paragraph={{ rows: 8 }} /> : null}
       {isLoaded && report === null ? <Result status="error" title="周报没有读出来" subTitle={error || '检查登录或网络后重试。'} extra={<Button type="primary" onClick={load}>重试</Button>} /> : null}
       {isLoaded && report !== null ? <><p>全店 · {report.weekStart} 到 {report.weekEnd}</p><ReportSections data={report.data} print /></> : null}

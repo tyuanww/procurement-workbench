@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import { sidebarLink } from './sidebar.ts';
 
 const finishedPo = 'PO20261117009001';
 const finishedName = '测试成品水';
@@ -12,7 +13,7 @@ const otherStoreName = '译龄';
 type Scenario = { readonly origin: URL; readonly out: string };
 
 export async function checkStoreSchedule({ page, manager, origin, out }: Scenario & { readonly page: Page; readonly manager: Page }) {
-  await manager.locator('aside').getByRole('link', { name: '管理店铺', exact: true }).click();
+  await (await sidebarLink(manager.locator('aside'), '管理店铺', '当前进度')).click();
   const current = manager.getByRole('region', { name: '当前进度表', exact: true });
   const finished = current.getByRole('link', { name: finishedName, exact: true });
   await select(manager.getByRole('combobox', { name: '店铺', exact: true }), manager, storeName);
@@ -22,7 +23,7 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   assert.equal(await finished.count(), 0);
 
   await page.goto(new URL('/progress?store=' + store, origin).href);
-  await page.getByRole('tab', { name: '总排期', exact: true }).click();
+  await (await sidebarLink(page.locator('aside'), '管理店铺', '总排期')).click();
   const panel = page.getByRole('region', { name: '成品订单排期' });
   await select(panel.getByRole('combobox', { name: '选择成品订单' }), page, new RegExp(finishedPo));
   const line = panel.getByRole('link', { name: '成品订单行详情', exact: true });
@@ -48,15 +49,15 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await page.getByText('4 条 · 按负责人分组', { exact: true }).waitFor();
   await page.screenshot({ path: join(out, 'procurement-schedule.png'), animations: 'disabled' });
   await page.goto(new URL('/today', origin).href);
-  await page.getByRole('tab', { name: '排期', exact: true }).click();
+  await (await sidebarLink(page.locator('aside'), '今日', '今日排期')).click();
   await page.getByRole('button', { name: /^下单\s/ }).press('Enter');
   const task = page.getByRole('dialog');
   await task.getByText(finishedPo + ' · ' + finishedName, { exact: true }).waitFor();
   await task.getByRole('button', { name: /^关\s*闭$/ }).last().click();
   await task.waitFor({ state: 'hidden' });
-  const totalSchedule = page.getByRole('link', { name: '查看总排期', exact: true });
+  const totalSchedule = await sidebarLink(page.locator('aside'), '管理店铺', '总排期');
   await totalSchedule.click();
-  await page.waitForURL((url) => url.pathname === '/progress' && url.searchParams.get('view') === 'schedule');
+  await page.waitForURL((url) => url.pathname === '/progress/schedule');
   const taskContext = await checkScheduleTaskContext(page, origin);
   return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true, taskContext };
 }
@@ -134,7 +135,7 @@ export async function checkProductDevelopment({ buyer, reviewer, buyerId, review
     plannedStart: '2026-11-19', plannedEnd: required, ownerUserId: reviewerId, buyerUserId: buyerId,
   });
   await buyer.goto(new URL('/progress?store=' + store, origin).href);
-  await buyer.getByRole('tab', { name: '新品开发进度', exact: true }).click();
+  await (await sidebarLink(buyer.locator('aside'), '管理店铺', '新品开发进度')).click();
   const pending = buyer.locator('.ant-card').filter({ has: buyer.getByText('采购待跟进（1）', { exact: true }) });
   await pending.getByRole('button', { name: node, exact: true }).click();
   const detail = buyer.getByRole('dialog', { name: node, exact: true });
@@ -169,7 +170,7 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   readonly materialPo: string;
 }) {
   await page.goto(new URL('/dashboard', origin).href);
-  await page.getByRole('tab', { name: '管理周会', exact: true }).click();
+  await (await sidebarLink(page.locator('aside'), '管理看板', '管理周会')).click();
   await select(page.getByRole('combobox', { name: '店铺', exact: true }), page, otherStoreName);
   await page.getByText('这个店铺没有采购事项。', { exact: true }).waitFor();
   await select(page.getByRole('combobox', { name: '店铺', exact: true }), page, storeName);

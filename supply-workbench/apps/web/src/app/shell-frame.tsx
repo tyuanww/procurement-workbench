@@ -1,11 +1,11 @@
 import { Button, ConfigProvider, Drawer, Layout, Menu, Typography } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
-import { matchPath, useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, fontSize, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
-import { navMenuItems } from './shell-nav.js';
+import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
 import { AccountMenu, FreshnessLink } from './shell-session.js';
 
 export const searchTrackPx = 280;
@@ -198,15 +198,20 @@ function ShellMenu(input: {
   readonly onNavigate: () => void;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const active = navigationSelection(input.rows, location);
+  const selected = active?.destination?.to ?? active?.row.to;
+  const group = active?.row.destinations === undefined ? undefined : groupKey(active.row.to);
   return (
     <Menu
+      key={group ?? 'main'}
       theme="dark"
       mode="inline"
-      inlineCollapsed={false}
-      tooltip={false}
-      selectedKeys={[selectedKey({ pathname: location.pathname, rows: input.rows })]}
+      inlineCollapsed={input.isCollapsed}
+      defaultOpenKeys={group === undefined ? [] : [group]}
+      selectedKeys={selected === undefined ? [] : [selected]}
       style={{ background: brand[800], width: menuWidth({ isCollapsed: input.isCollapsed }) }}
-      items={navMenuItems(input)}
+      items={navMenuItems({ ...input, location, selected, navigate })}
     />
   );
 }
@@ -275,14 +280,6 @@ function SiderLogo({ isCollapsed }: { readonly isCollapsed: boolean }) {
   return (
     <div style={logoStyle(isCollapsed)}>{isCollapsed ? '供' : '供应链'}</div>
   );
-}
-
-function selectedKey(input: { readonly pathname: string; readonly rows: readonly NavRow[] }): string {
-  const matched = input.rows.flatMap((row) => row.matchPaths
-    .filter((path) => matchPath({ path, end: false }, input.pathname) !== null)
-    .map((path) => ({ path, to: row.to })));
-  const best = matched.sort((left, right) => right.path.length - left.path.length)[0];
-  return best?.to ?? input.pathname;
 }
 
 function siderBodyStyle(): CSSProperties {

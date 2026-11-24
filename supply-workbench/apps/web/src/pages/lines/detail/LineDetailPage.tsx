@@ -45,7 +45,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
   return (
     <section style={{ maxWidth: 1440 }}>
       {back === null ? null : <Link to={`/progress?${new URLSearchParams(back).toString()}`}>返回管理店铺</Link>}
-      <PageHeader title={title} browserTitle={browserTitle} />
+      <PageHeader title={title} browserTitle={browserTitle} showIdentity />
       {detail === null ? null : <LineIdentity line={detail.line} />}
       {detail === null && isFailed ? (
         <Result

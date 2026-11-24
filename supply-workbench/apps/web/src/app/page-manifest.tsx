@@ -11,6 +11,7 @@ import { ProgressPage } from '../pages/progress/ProgressPage.js';
 import { ReportDetailPage, ReportListPage, ReportPrintPage } from '../pages/reports/ReportPages.js';
 import { SettingsPage } from '../pages/settings/SettingsPage.js';
 import { TodayPage } from '../pages/today/TodayPage.js';
+import { destinations } from './navigation-destinations.js';
 
 type NavPageEntry = {
   readonly path: NavPath;
@@ -35,6 +36,9 @@ export type PageManifestEntry = NavPageEntry | OtherPageEntry;
 
 export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/progress', nav: { label: '管理店铺' }, gate: 'always', element: <ProgressPage /> },
+  { path: '/progress/current', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="current" /> },
+  { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="schedule" /> },
+  { path: '/progress/development', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="development" /> },
   { path: '/today', nav: { label: '今日' }, gate: 'always', element: <TodayPage /> },
   { path: '/lines', nav: { label: '跟进台' }, gate: 'always', element: <LineListPage /> },
   { path: '/lines/:id', nav: null, element: <LineDetailPage /> },
@@ -57,5 +61,6 @@ export const NAV_ROUTES: readonly NavRoute[] = PAGE_MANIFEST.flatMap((entry) =>
     label: entry.nav.label,
     gate: entry.gate,
     matchPaths: [entry.path, ...PAGE_MANIFEST.filter((page) => page.menuParent === entry.path).map((page) => page.path)],
+    ...(destinations[entry.path] === undefined ? {} : { destinations: destinations[entry.path] }),
   }],
 );

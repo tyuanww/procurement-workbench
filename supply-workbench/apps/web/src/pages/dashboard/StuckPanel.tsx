@@ -1,6 +1,6 @@
-import { Button, Empty, Statistic, Table, Typography, type TableColumnType } from 'antd';
-import type { CSSProperties } from 'react';
-import type { StuckDashboard } from '@sw/contracts';
+import { Button, Descriptions, Drawer, Empty, Statistic, Table, Tag, Typography, type TableColumnType } from 'antd';
+import { useState, type CSSProperties } from 'react';
+import type { StuckDashboard, StuckItem } from '@sw/contracts';
 import { batchStatusLabel } from '@sw/domain';
 import { formatQuantity, formatTableDate } from '../../shared/ui/format.js';
 import {
@@ -18,6 +18,7 @@ import {
   border,
   brand,
   dwellColor,
+  drawerWidth,
   fontSize,
   space,
   statusColor,
@@ -25,11 +26,11 @@ import {
 } from '../../theme/tokens.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { StackedBarChart } from '../../shared/ui/analytics.js';
-import { mobileStuckColumns, mobileStuckRowDetails } from './stuck-mobile.js';
+import { mobileStuckColumns } from './stuck-mobile.js';
 import { CAUSE_LABEL, CauseFilter } from './cause-filter.js';
 
 type SearchHandler = (patch: DashboardPatch) => void;
-type TextKey = 'stageLabel' | 'po' | 'name' | 'waiting' | 'owner' | 'confirmed';
+type TextKey = 'stageLabel' | 'name' | 'waiting' | 'owner';
 
 const CLEAR_FILTERS: StuckFilters = { stage: null, bucket: null, cause: null, card: null };
 
@@ -70,7 +71,10 @@ export function StuckPanel(props: {
   readonly now: Date;
 }) {
   const { data, query, onSearch, isUpdating } = props;
+  const [selected, setSelected] = useState<string>();
   const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
+  const item = data.items.find((candidate) => candidate.batchId === selected);
+  const row = stuck.rows.find((candidate) => candidate.batchId === selected);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
       <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计</Typography.Text>
@@ -85,8 +89,11 @@ export function StuckPanel(props: {
         <Empty description="当前筛选没有卡点" />
       ) : (
         <StuckTable rows={isUpdating ? [] : stuck.rows} page={data.page} pageSize={data.pageSize}
-          total={data.total} isUpdating={isUpdating} now={props.now} onSearch={onSearch} />
+          total={data.total} isUpdating={isUpdating} now={props.now} onSearch={onSearch}
+          onOpen={(batch) => setSelected(batch.batchId)} />
       )}
+      {item === undefined || row === undefined ? null :
+        <StuckDetails item={item} row={row} now={props.now} onClose={() => setSelected(undefined)} />}
     </div>
   );
 }
@@ -192,6 +199,7 @@ function StuckTable(props: {
   readonly isUpdating: boolean;
   readonly now: Date;
   readonly onSearch: SearchHandler;
+  readonly onOpen: (row: StuckTableRow) => void;
 }) {
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
@@ -209,16 +217,23 @@ function StuckTable(props: {
         onChange: (page) => props.onSearch({ page }),
       }}
       rowKey="batchId"
-      columns={stuckColumns({ now: props.now, isPhone, isNarrowPhone })}
+      columns={stuckColumns({ now: props.now, isPhone, isNarrowPhone, onOpen: props.onOpen })}
       dataSource={[...props.rows]}
-      {...(isPhone ? { expandable: { expandedRowRender: (row: StuckTableRow) => mobileStuckRowDetails(row, props.now) } } : {})}
       {...(isPhone ? {} : { scroll: { x: 'max-content' as const } })}
     />
   );
 }
 
-function stuckColumns(input: { readonly now: Date; readonly isPhone: boolean; readonly isNarrowPhone: boolean }): TableColumnType<StuckTableRow>[] {
-  if (input.isPhone) return mobileStuckColumns(input.isNarrowPhone);
+function stuckColumns(input: {
+  readonly now: Date; readonly isPhone: boolean; readonly isNarrowPhone: boolean; readonly onOpen: (row: StuckTableRow) => void;
+}): TableColumnType<StuckTableRow>[] {
+  const openBatch = (row: StuckTableRow) => (
+    <Button type="link" size="small" aria-label={`查看卡点明细 ${row.po === EM_DASH ? row.name : row.po}`}
+      style={{ maxWidth: '100%', paddingInline: 0 }} onClick={() => input.onOpen(row)}>
+      <Typography.Text ellipsis style={{ color: 'inherit' }}>{row.po === EM_DASH ? '查看' : row.po}</Typography.Text>
+    </Button>
+  );
+  if (input.isPhone) return mobileStuckColumns(input.isNarrowPhone, openBatch);
   return [
     textColumn('阶段', 'stageLabel'),
     {
@@ -229,7 +244,7 @@ function stuckColumns(input: { readonly now: Date; readonly isPhone: boolean; re
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
       ),
     },
-    textColumn('单号', 'po'),
+    { title: '单号', render: (_value, row) => openBatch(row) },
     textColumn('品名', 'name'),
     textColumn('等待方', 'waiting'),
     textColumn('负责人', 'owner'),
@@ -241,6 +256,30 @@ function stuckColumns(input: { readonly now: Date; readonly isPhone: boolean; re
       ),
     },
   ];
+}
+
+function StuckDetails({ item, row, now, onClose }: {
+  readonly item: StuckItem; readonly row: StuckTableRow; readonly now: Date; readonly onClose: () => void;
+}) {
+  const signals = [
+    !item.factoryLinked && CAUSE_LABEL.missing_factory,
+    item.factoryUnlinked && CAUSE_LABEL.factory_demand_unlinked,
+    item.exceptionOpen && CAUSE_LABEL.exception_open,
+    item.supplierAliasPending && CAUSE_LABEL.supplier_pending,
+    item.bomMissing && CAUSE_LABEL.bom_missing,
+  ].filter((label) => label !== false);
+  return <Drawer open title="卡点批次明细" size={`min(${drawerWidth}px, 100vw)`} onClose={onClose}
+    focusable={{ trap: true, focusTriggerAfterClose: true }}>
+    <Descriptions size="small" column={1} items={[
+      { key: 'po', label: '采购单', children: row.po },
+      { key: 'name', label: '品名', children: row.name },
+      { key: 'stage', label: '阶段', children: `${row.stageLabel} · 停留 ${row.daysInStage} 天` },
+      { key: 'waiting', label: '等待方', children: row.waiting },
+      { key: 'owner', label: '负责人', children: row.owner },
+      { key: 'confirmed', label: '确认到货', children: row.confirmed === EM_DASH ? EM_DASH : formatTableDate({ iso: row.confirmed, now }) },
+      { key: 'signals', label: '关联与异常', children: signals.length === 0 ? EM_DASH : signals.map((label) => <Tag key={label}>{label}</Tag>) },
+    ]} />
+  </Drawer>;
 }
 
 function textColumn(title: string, dataIndex: TextKey): TableColumnType<StuckTableRow> {

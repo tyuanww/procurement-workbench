@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import { sidebarEntries, sidebarGroup, sidebarLink } from './sidebar.ts';
 
 const GROUP_LABEL = '导入与审核';
 const IMPORT_LABEL = '导入中心';
-const MASTER_LABEL = '主数据';
+const MASTER_LABEL = '别名审核';
 const HISTORY_PATH = '/imports?template=po-master-v1&status=committed';
 const EMPTY_SCHEDULE = '/progress?view=schedule&from=2030-01-01';
 const WORKBOOK = 'po-master-procurement.xlsx';
@@ -53,7 +54,7 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await heading.waitFor();
   assert.equal(await page.locator('aside a[href="/settings"]').count(), 0);
 
-  await page.getByRole('complementary').getByRole('link', { name: '今日', exact: true }).click();
+  await (await sidebarLink(page.getByRole('complementary'), '今日', '行动板')).click();
   await page.waitForURL(new URL('/today', origin).href);
   await trigger.press('Enter');
   await settings.waitFor();
@@ -71,9 +72,9 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await page.getByRole('button', { name: '打开菜单', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: '导航', exact: true });
   await drawer.waitFor();
-  assert.equal(await drawer.getByRole('link').count(), 6);
+  assert.equal(await sidebarEntries(drawer).count(), 6);
   assert.equal(await drawer.locator('a[href="/settings"]').count(), 0);
-  await drawer.getByRole('link', { name: '今日', exact: true }).click();
+  await drawer.getByRole('link', { name: '行动板', exact: true }).click();
   await drawer.waitFor({ state: 'hidden' });
   await trigger.click();
   await settings.click();
@@ -87,15 +88,15 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
 async function checkAccountFocusExit(page: Page, origin: URL) {
   const trigger = page.getByRole('banner').getByRole('button', { name: '管理员', exact: true });
   const settings = page.getByRole('link', { name: SETTINGS_LABEL, exact: true });
-  const dashboard = page.getByRole('main').getByRole('link', { name: '看板', exact: true });
+  const reportDate = page.getByLabel('周一', { exact: true });
   for (const width of [1440, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(new URL('/reports', origin).href);
-    await dashboard.waitFor();
+    await reportDate.waitFor();
     await trigger.press('Enter');
     await settings.waitFor();
     for (const _step of [1, 2, 3]) await page.keyboard.press('Tab');
-    assert.equal(await dashboard.evaluate((link) => link === document.activeElement), true);
+    assert.equal(await reportDate.evaluate((input) => input === document.activeElement), true);
     assert.equal(await trigger.getAttribute('aria-expanded'), 'false', '焦点移到页面时账户菜单应关闭');
     await page.keyboard.press('Tab');
     assert.ok(await page.evaluate(() => document.activeElement?.closest('main')), '继续 Tab 应留在页面内容');
@@ -122,7 +123,7 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
   await page.waitForURL(new URL('/imports', origin).href);
   await page.getByRole('heading', { name: IMPORT_LABEL, exact: true }).waitFor();
   await page.getByRole('button', { name: '开始解析', exact: true }).waitFor();
-  assert.equal(await sidebar.getByRole('link').count(), 5);
+  assert.equal(await sidebarEntries(sidebar).count(), 5);
   assert.equal(await page.getByRole('navigation', { name: GROUP_LABEL }).count(), 0);
   const headerLink = page.getByRole('banner').locator('a[href="/imports"]');
   await headerLink.getByText(/总表/).waitFor();
@@ -139,39 +140,38 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
 
 async function checkReviewNavigation(page: Page, origin: URL, expectedEntries: number): Promise<void> {
   const sidebar = page.locator('aside');
-  await sidebar.getByRole('link', { name: GROUP_LABEL, exact: true }).click();
+  const imports = await sidebarLink(sidebar, GROUP_LABEL, IMPORT_LABEL);
+  await imports.click();
   await page.waitForURL(new URL('/imports', origin).href);
-  assert.equal(await sidebar.getByRole('link').count(), expectedEntries);
-  assert.equal(await sidebar.getByRole('link', { name: MASTER_LABEL, exact: true }).count(), 0);
-  const selected = sidebar.locator('.ant-menu-item-selected').getByRole('link', { name: GROUP_LABEL, exact: true });
-  const group = page.getByRole('navigation', { name: GROUP_LABEL });
-  const imports = group.getByRole('link', { name: IMPORT_LABEL, exact: true });
-  const master = group.getByRole('link', { name: MASTER_LABEL, exact: true });
-  await imports.waitFor();
+  assert.equal(await sidebarEntries(sidebar).count(), expectedEntries);
+  const group = sidebarGroup(sidebar, GROUP_LABEL);
+  const master = sidebar.getByRole('link', { name: MASTER_LABEL, exact: true });
   assert.equal(await imports.getAttribute('aria-current'), 'page');
-  await selected.waitFor();
+  assert.equal(await group.getAttribute('aria-expanded'), 'true');
   await master.click();
   await page.waitForURL(new URL('/master', origin).href);
-  await page.getByRole('tab', { name: '别名审核', exact: true }).waitFor();
+  await page.getByRole('heading', { name: MASTER_LABEL, exact: true, level: 1 }).waitFor();
   assert.equal(await master.getAttribute('aria-current'), 'page');
-  await selected.waitFor();
+  assert.equal(await page.getByRole('main').getByRole('tab').count(), 0);
   await imports.click();
   await page.waitForURL(new URL('/imports', origin).href);
 }
 
 async function checkReviewPhone(page: Page, origin: URL): Promise<void> {
   await page.setViewportSize({ width: 320, height: 780 });
-  await page.getByRole('navigation', { name: GROUP_LABEL }).getByRole('link', { name: MASTER_LABEL, exact: true }).click();
-  await page.waitForURL(new URL('/master', origin).href);
   await page.getByRole('button', { name: '打开菜单', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: '导航', exact: true });
-  await drawer.locator('.ant-menu-item-selected').getByRole('link', { name: GROUP_LABEL, exact: true }).click();
+  await drawer.getByRole('link', { name: MASTER_LABEL, exact: true }).click();
+  await page.waitForURL(new URL('/master', origin).href);
+  await drawer.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: '打开菜单', exact: true }).click();
+  await drawer.getByRole('link', { name: IMPORT_LABEL, exact: true }).click();
   await page.waitForURL(new URL('/imports', origin).href);
   await drawer.waitFor({ state: 'hidden' });
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
-async function checkLegacyBatch(page: Page, legacyBatch: string, origin: URL, sidebarLabel = GROUP_LABEL): Promise<void> {
+async function checkLegacyBatch(page: Page, legacyBatch: string, origin: URL, sidebarLabel = IMPORT_LABEL): Promise<void> {
   const batchUrl = new URL(legacyBatch, origin);
   await page.goto(batchUrl.href);
   const back = page.getByRole('link', { name: '返回导入中心', exact: true });

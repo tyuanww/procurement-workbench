@@ -32,21 +32,20 @@ it.each(['/reports', '/reports/r1', '/reports/r1/print', '/REPORTS/r1/print'])('
 });
 
 it.each([
-  { path: '/dashboard', title: '管理看板', label: '看板', current: 'page' },
-  { path: '/dashboard/', title: '管理看板', label: '看板', current: 'page' },
-  { path: '/reports', title: '周报', label: '周报', current: 'page' },
-  { path: '/reports/', title: '周报', label: '周报', current: 'page' },
-  { path: '/reports/r1', title: '周报详情', label: '周报', current: 'location' },
-])('$path 高亮管理看板，并提供两个管理视图的链接', ({ path, title, label, current }) => {
+  { path: '/dashboard', title: '卡点', label: '卡点' },
+  { path: '/dashboard/', title: '卡点', label: '卡点' },
+  { path: '/dashboard?view=suppliers', title: '供应商表现', label: '供应商表现' },
+  { path: '/reports', title: '周报', label: '周报' },
+  { path: '/reports/', title: '周报', label: '周报' },
+  { path: '/reports/r1', title: '周报详情', label: '周报' },
+])('$path 用面包屑标出当前管理视图', ({ path, title, label }) => {
   const html = render(path, ['lead']);
   expect(html).toContain(`>${title}</h1>`);
   expect(html).not.toContain('这个角色看不到这页。');
-  expect(html).not.toContain('aria-label="周报"');
-  expect(html).toMatch(/<li[^>]*class="[^"]*\bant-menu-item-selected\b[^>]*><[^>]+>\s*<a[^>]*aria-label="管理看板"/);
-  const nav = html.match(/<nav aria-label="管理视图"[^>]*>.*?<\/nav>/)?.[0];
-  expect(nav).toMatch(/<a[^>]*href="\/dashboard"[^>]*>看板<\/a>/);
-  expect(nav).toMatch(/<a[^>]*href="\/reports"[^>]*>周报<\/a>/);
-  expect(nav).toMatch(new RegExp(`<a[^>]*aria-current="${current}"[^>]*>${label}</a>`));
+  const breadcrumb = html.match(/<nav[^>]*aria-label="当前位置"[^>]*>.*?<\/nav>/)?.[0];
+  expect(breadcrumb).toContain('管理看板');
+  expect(breadcrumb).toContain(`>${label}<`);
+  expect(html).not.toContain('aria-label="管理视图"');
 });
 
 it('负责人可查看和打印周报，管理层可生成周报但无设置权限', () => {

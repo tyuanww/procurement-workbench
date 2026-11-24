@@ -1,4 +1,4 @@
-import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Tabs, Typography } from 'antd';
+import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { MultiNameViewSchema, PartyAliasViewSchema, PartyDetailSchema, listResponseSchema, type MultiNameView, type PartyAliasView, type PartyDetail } from '@sw/contracts';
@@ -6,11 +6,10 @@ import { apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
 import { multiNameChoice, roleChoice } from '../../features/master-data/index.js';
 import { useRefreshReviewQueue } from '../../features/shell/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
-import { ImportReviewNav } from '../../shared/ui/import-review-nav.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { AliasReviewDrawer, type AliasRoles } from './AliasReviewDrawer.js';
-import { FactoryLinkTab } from './FactoryLinkTab.js';
-import { MASTER_TABS, masterTabOf, writeMasterTab, type MasterTabKey } from './master-tabs.js';
+import { FactoryLinkTab, factoryLinkScopeOf } from './FactoryLinkTab.js';
+import { MASTER_TABS, masterTabOf, type MasterTabKey } from './master-tabs.js';
 import { OwnerMapTab } from './OwnerMapTab.js';
 import { readPartyAliasDrawer, writePartyAliasDrawer } from './party-alias-drawer-url.js';
 
@@ -21,27 +20,23 @@ type LoadState<T> =
 
 export function MasterPage() {
   const refresh = useRefreshReviewQueue();
-  const [message, setMessage] = useState('');
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const tab = masterTabOf(params.get('tab'));
+  const scope = factoryLinkScopeOf(params.get('scope'));
   const contents: Record<MasterTabKey, ReactNode> = {
     aliases: <AliasReviewQueue refresh={refresh} />,
-    multi: <MultiNameReview refresh={refresh} setMessage={setMessage} />,
+    multi: <MultiNameReview refresh={refresh} />,
     'owner-map': <OwnerMapTab />,
-    'factory-link': <FactoryLinkTab key={params.get('tab') === 'unlinked' ? 'unlinked' : 'factory-link'} refreshReviewQueue={refresh} />,
+    'factory-link': <FactoryLinkTab scope={scope} refreshReviewQueue={refresh} />,
   };
   return (
-    <WorkbenchPage title="主数据">
-      <ImportReviewNav />
-      {message === '' ? null : <Alert type="error" showIcon title={message} />}
-      <Tabs
-        activeKey={tab}
-        onChange={(key) => setParams(writeMasterTab(params.toString(), masterTabOf(key)))}
-        items={MASTER_TABS.map((item) => ({ key: item.key, label: item.label, children: contents[item.key], destroyOnHidden: item.key === 'factory-link' }))}
-      />
+    <WorkbenchPage title={tab === 'factory-link' ? factoryTitles[scope] : MASTER_TABS.find((item) => item.key === tab)?.label ?? '别名审核'}>
+      {contents[tab]}
     </WorkbenchPage>
   );
 }
+
+const factoryTitles = { actionable: '工厂待处理', active: '当前关联诊断', historical: '历史关联诊断' };
 
 function AliasReviewQueue({ refresh }: { readonly refresh: () => Promise<void> }) {
   const [params, setParams] = useSearchParams();
@@ -136,7 +131,8 @@ export async function approveAlias(input: { readonly alias: PartyAliasView; read
   input.onDone();
 }
 
-function MultiNameReview({ refresh, setMessage }: { readonly refresh: () => Promise<void>; readonly setMessage: (message: string) => void }) {
+function MultiNameReview({ refresh }: { readonly refresh: () => Promise<void> }) {
+  const [message, setMessage] = useState('');
   const [state, setState] = useState<LoadState<readonly MultiNameView[]>>({ kind: 'loading' });
   const [names, setNames] = useState<Readonly<Record<string, string>>>({});
   const [pending, setPending] = useState<string | null>(null);
@@ -147,6 +143,7 @@ function MultiNameReview({ refresh, setMessage }: { readonly refresh: () => Prom
   if (state.value.length === 0) return <Empty description="没有一号多名记录。下一步：去导入总表。"><Button href="/imports">去导入</Button></Empty>;
   return (
     <SectionGroup title="一号多名" meta={`${state.value.length} 条`}>
+      {message === '' ? null : <Alert type="error" showIcon title={message} />}
       {state.value.map((row) => {
         const isRowPending = pending === row.codeId;
         return <SectionRow key={row.codeId} action={<Space wrap>
@@ -194,7 +191,6 @@ export function PartyPage() {
   const params = useParams();
   const [detail, setDetail] = useState<PartyDetail | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [tab, setTab] = useState<'aliases' | 'kpis'>('aliases');
   const load = () => {
     if (params.id === undefined) {
       setLoadState('error');
@@ -210,15 +206,9 @@ export function PartyPage() {
   if (loadState === 'error' || detail === null) return <WorkbenchPage title="主体"><Result status="error" title="主体详情没有读出来" extra={<Button type="primary" onClick={load}>重试</Button>} /></WorkbenchPage>;
   const partyName = detail.party.displayName;
   return (
-    <WorkbenchPage title={`主体 ${partyName}`} action={<PartyOrderLinks partyId={detail.party.id} />}>
-      <Tabs
-        activeKey={tab}
-        onChange={(key) => setTab(key === 'kpis' ? 'kpis' : 'aliases')}
-        items={[
-          { key: 'aliases', label: '别名', children: <PartyAliases detail={detail} /> },
-          { key: 'kpis', label: '指标', children: <PartyKpis detail={detail} /> },
-        ]}
-      />
+    <WorkbenchPage title={`主体 ${partyName}`} showIdentity action={<PartyOrderLinks partyId={detail.party.id} />}>
+      <SectionGroup title="别名"><PartyAliases detail={detail} /></SectionGroup>
+      <SectionGroup title="指标"><PartyKpis detail={detail} /></SectionGroup>
     </WorkbenchPage>
   );
 }

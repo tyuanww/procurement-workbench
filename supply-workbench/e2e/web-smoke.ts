@@ -44,7 +44,7 @@ try {
     const header = page.getByRole('banner');
     await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
     assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
-    assert.equal(await page.getByRole('tab', { name: '用户', exact: true }).getAttribute('aria-selected'), 'true');
+    assert.equal(await page.getByRole('button', { name: '用户', exact: true }).getAttribute('aria-expanded'), 'true');
     await page.goto(origin + '/missing-page-smoke');
     await page.getByText('页面不存在', { exact: true }).waitFor();
     assert.equal(await page.getByRole('link', { name: '返回今日' }).getAttribute('href'), '/today');
