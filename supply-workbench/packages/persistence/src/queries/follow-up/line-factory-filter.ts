@@ -6,10 +6,16 @@ import { fulfillmentRecordsByLines } from '../../repositories/delivery-batches.j
 import { lineFactoryLinkRepository } from '../../repositories/line-factory-links.js';
 import { aliasRepository, partyRepository } from '../../repositories/parties.js';
 import { lineFactoryLinks, orderLines, purchaseOrders } from '../../schema/orders.js';
+import { effectiveFactoryLinks } from '../factory-links/line-association.js';
 
 const FACTORY_NAMES: Record<NonNullable<LinesQuery['inTransitFactory']>, string> = { yinong: '宜侬' };
 
-export function linkedFactoryWhere(db: AppDatabase, partyId: string): SQL {
+export function factoryPartyWhere(input: { readonly db: AppDatabase; readonly partyId: string; readonly activeFactoryBatchIds: ReadonlySet<string> }): SQL {
+  const links = effectiveFactoryLinks(input).as('effective_factory_links');
+  return inArray(orderLines.id, input.db.select({ id: links.orderLineId }).from(links).where(eq(links.factoryPartyId, input.partyId)));
+}
+
+function linkedFactoryWhere(db: AppDatabase, partyId: string): SQL {
   const linkedLines = db.select({ id: lineFactoryLinks.orderLineId }).from(lineFactoryLinks)
     .where(and(eq(lineFactoryLinks.factoryPartyId, partyId), inArray(lineFactoryLinks.status, ['linked', 'manual'])));
   return inArray(orderLines.id, linkedLines);

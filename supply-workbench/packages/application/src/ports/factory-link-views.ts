@@ -91,7 +91,7 @@ export interface FactoryLinkQueries {
   /** 只读活动代工厂进度快照里的排产格。不含已退休批次，也不含其它六类工厂行。 */
   listActiveScheduleRefs(): Promise<readonly FactoryRowMatchRef[]>;
   listUnmatched(scope?: FactoryDiagnosticScope): Promise<readonly UnmatchedFactoryRowView[]>;
-  /** 先读 line_factory_links，没有时回退到工厂进度行；都没有返回 undefined。 */
+  /** 已关联或人工取消的订单行记录优先，其次是活动工厂上报，最后是自动未匹配记录。 */
   getView(orderLineId: string): Promise<LineFactoryLinkView | undefined>;
   countStates(): Promise<FactoryLinkCounts>;
   /** 已审批的供应商别名，用于补 purchase_orders.supplier_party_id。 */

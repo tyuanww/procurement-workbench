@@ -1,16 +1,18 @@
 import { countsInRecordedQuantity } from '@sw/domain';
 import type { OrderLineRow } from '@sw/application';
 import { BATCH_STATUSES, LANES, LINE_ORIGINS, LINE_STAGES, PO_FORMATS, daysInStage, localDate, overdueDays, projectLatestImportPresence, withValue, type LocalDate, type User } from '@sw/domain';
-import { eq, inArray } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import type { AppDatabase } from '../../client.js';
 import { userOfRow } from '../../repositories/users.js';
 import { numberOrNull } from '../../mappers/number.js';
-import { exceptions, factoryShipmentRows, importBatches, orderLineSnapshots, orderLines, parties, purchaseOrders, receipts, users } from '../../schema/index.js';
-import { deliveryBatches, lineFactoryLinks } from '../../schema/orders.js';
+import { exceptions, factoryShipmentRows, orderLineSnapshots, orderLines, parties, purchaseOrders, receipts, users } from '../../schema/index.js';
+import { deliveryBatches } from '../../schema/orders.js';
+import { effectiveFactoryLinks, type EffectiveFactoryLink } from '../factory-links/line-association.js';
 import { isRecord, oneOf, sumPresent } from './guards.js';
 
 type Line = typeof orderLines.$inferSelect;
 type Clock = { today(): LocalDate; now(): string };
+type Scope = { readonly lines: readonly Line[]; readonly activeFactoryBatchIds: ReadonlySet<string> };
 
 export type ListWorld = {
   readonly lines: readonly Line[];
@@ -22,46 +24,44 @@ export type ListWorld = {
   readonly exceptions: readonly (typeof exceptions.$inferSelect)[];
   readonly snapshots: readonly (typeof orderLineSnapshots.$inferSelect)[];
   readonly factoryShipments: readonly (typeof factoryShipmentRows.$inferSelect)[];
-  readonly factoryLinks: ReadonlyMap<string, typeof lineFactoryLinks.$inferSelect>;
+  readonly factoryLinks: ReadonlyMap<string, EffectiveFactoryLink>;
   readonly activeFactoryBatchIds: ReadonlySet<string>;
 };
 
-export async function loadRelations(db: AppDatabase, lines: readonly Line[]): Promise<ListWorld> {
-  if (lines.length === 0) return emptyWorld(lines);
-  const fetched = await fetchRelations(db, lines);
-  return assemble(lines, fetched);
+export async function loadRelations(db: AppDatabase, scope: Scope): Promise<ListWorld> {
+  if (scope.lines.length === 0) return emptyWorld(scope.lines);
+  return assemble(scope, await fetchRelations(db, scope));
 }
 
 function emptyWorld(lines: readonly Line[]): ListWorld {
   return { lines, orders: new Map(), parties: new Map(), users: new Map(), batches: [], receipts: [], exceptions: [], snapshots: [], factoryShipments: [], factoryLinks: new Map(), activeFactoryBatchIds: new Set() };
 }
 
-async function fetchRelations(db: AppDatabase, lines: readonly Line[]) {
+async function fetchRelations(db: AppDatabase, { lines, activeFactoryBatchIds }: Scope) {
   const lineIds = lines.map((row) => row.id);
   const orderIds = lines.map((row) => row.purchaseOrderId);
   const snapshotIds = lines.flatMap((row) => row.currentSnapshotId === null ? [] : [row.currentSnapshotId]);
   const buyerIds = lines.flatMap((row) => row.buyerUserId === null ? [] : [row.buyerUserId]);
-  const [orders, batches, exceptionRows, snapshots, shipmentRows, userRows, factoryBatches, factoryLinkRows] = await Promise.all([
+  const [orders, batches, exceptionRows, snapshots, shipmentRows, userRows, factoryLinkRows] = await Promise.all([
     db.select().from(purchaseOrders).where(inArray(purchaseOrders.id, orderIds)),
     db.select().from(deliveryBatches).where(inArray(deliveryBatches.orderLineId, lineIds)),
     db.select().from(exceptions).where(inArray(exceptions.orderLineId, lineIds)),
     snapshotIds.length === 0 ? Promise.resolve([]) : db.select().from(orderLineSnapshots).where(inArray(orderLineSnapshots.id, snapshotIds)),
     db.select().from(factoryShipmentRows).where(inArray(factoryShipmentRows.linkedOrderLineId, lineIds)),
     buyerIds.length === 0 ? Promise.resolve([]) : db.select().from(users).where(inArray(users.id, buyerIds)),
-    db.select(FACTORY_BATCH_COLUMNS).from(importBatches).where(inArray(importBatches.template, ['factory-progress-v1'])),
-    db.select().from(lineFactoryLinks).where(inArray(lineFactoryLinks.orderLineId, lineIds)),
+    effectiveFactoryLinks({ db, activeFactoryBatchIds, lineIds }),
   ]);
   const batchIds = batches.map((row) => row.id);
   const receiptRows = batchIds.length === 0 ? [] : await db.select().from(receipts).where(inArray(receipts.batchId, batchIds));
   const partyRows = await partiesOf({ db, lines, orders, factoryLinks: factoryLinkRows });
-  return { orders, batches, exceptionRows, snapshots, shipmentRows, userRows, factoryBatches, receiptRows, partyRows, factoryLinkRows };
+  return { orders, batches, exceptionRows, snapshots, shipmentRows, userRows, receiptRows, partyRows, factoryLinkRows };
 }
 
 async function partiesOf(input: {
   readonly db: AppDatabase;
   readonly lines: readonly Line[];
   readonly orders: readonly (typeof purchaseOrders.$inferSelect)[];
-  readonly factoryLinks: readonly (typeof lineFactoryLinks.$inferSelect)[];
+  readonly factoryLinks: readonly (EffectiveFactoryLink)[];
 }) {
   const { db, lines, orders } = input;
   const partyIds = [...new Set([
@@ -73,7 +73,7 @@ async function partiesOf(input: {
   return db.select().from(parties).where(inArray(parties.id, partyIds));
 }
 
-function assemble(lines: readonly Line[], fetched: Awaited<ReturnType<typeof fetchRelations>>): ListWorld {
+function assemble({ lines, activeFactoryBatchIds }: Scope, fetched: Awaited<ReturnType<typeof fetchRelations>>): ListWorld {
   return {
     lines,
     orders: new Map(fetched.orders.map((row) => [row.id, row])),
@@ -85,7 +85,7 @@ function assemble(lines: readonly Line[], fetched: Awaited<ReturnType<typeof fet
     snapshots: fetched.snapshots,
     factoryShipments: fetched.shipmentRows,
     factoryLinks: new Map(fetched.factoryLinkRows.map((row) => [row.orderLineId, row])),
-    activeFactoryBatchIds: latestFactoryBatchIds(fetched.factoryBatches),
+    activeFactoryBatchIds,
   };
 }
 
@@ -127,7 +127,7 @@ function supplierOf(order: typeof purchaseOrders.$inferSelect, partiesById: Read
 
 function factoryOf(lineId: string, world: ListWorld): { readonly id: string; readonly displayName: string | null } | null {
   const link = world.factoryLinks.get(lineId);
-  if (link === undefined || link.factoryPartyId === null || !isLinked(link.status)) return null;
+  if (link?.factoryPartyId == null) return null;
   return { id: link.factoryPartyId, displayName: world.parties.get(link.factoryPartyId) ?? null };
 }
 
@@ -155,64 +155,6 @@ function deliveredOf({ lineId, world, at }: { readonly lineId: string; readonly 
   const qty = sumPresent([...unique.values()].map((row) => numberOrNull(row.qty)));
   if (qty === null) return missingDelivered('no_source', at);
   return withValue(qty, { kind: 'factory_report', importBatchId: source.importBatchId, factoryPartyId: source.factoryPartyId, sheet: source.sheetName, rowNo: source.rowNo, at });
-}
-
-const FACTORY_BATCH_COLUMNS = {
-  id: importBatches.id,
-  factoryPartyId: importBatches.factoryPartyId,
-  sourceKey: importBatches.sourceKey,
-  supersededAt: importBatches.supersededAt,
-  status: importBatches.status,
-  committedAt: importBatches.committedAt,
-  createdAt: importBatches.createdAt,
-} as const;
-
-/** 工厂批次的活动快照判定只在这里实现一次：列表、详情、产品档案、未关联队列、搜索共用。 */
-export type FactoryBatchScopeRow = {
-  readonly id: string;
-  readonly factoryPartyId: string | null;
-  readonly sourceKey: string | null;
-  readonly supersededAt: Date | string | null;
-  readonly status: string;
-  readonly committedAt: Date | string | null;
-  readonly createdAt: Date | string;
-};
-
-/** 每个 source 的最新 committed 快照里取唯一一个；给读路径当 inArray 白名单。 */
-export async function activeFactoryBatchIds(db: AppDatabase): Promise<ReadonlySet<string>> {
-  const rows = await db.select(FACTORY_BATCH_COLUMNS).from(importBatches).where(eq(importBatches.template, 'factory-progress-v1'));
-  return latestFactoryBatchIds(rows);
-}
-
-function latestFactoryBatchIds(rows: readonly FactoryBatchScopeRow[]): ReadonlySet<string> {
-  const latest = new Map<string, { readonly id: string; readonly at: number }>();
-  for (const row of rows) {
-    if (!isFactoryBatchCandidate(row)) continue;
-    const at = committedAtOf(row);
-    if (at === null || row.factoryPartyId === null) continue;
-    const key = row.sourceKey === null ? `legacy:${row.factoryPartyId}` : `source:${row.sourceKey}`;
-    const current = latest.get(key);
-    if (isLaterFactoryBatch({ row, at, current })) latest.set(key, { id: row.id, at });
-  }
-  return new Set([...latest.values()].map((row) => row.id));
-}
-
-function isFactoryBatchCandidate(row: { readonly factoryPartyId: string | null; readonly sourceKey: string | null; readonly supersededAt: Date | string | null; readonly status: string; readonly committedAt: Date | string | null }): boolean {
-  return row.factoryPartyId !== null && row.status === 'committed' && row.committedAt !== null && (row.sourceKey === null || (row.supersededAt ?? null) === null);
-}
-
-function committedAtOf(row: { readonly committedAt: Date | string | null; readonly createdAt: Date | string }): number | null {
-  return dateValue(row.committedAt) ?? dateValue(row.createdAt);
-}
-
-function isLaterFactoryBatch(input: { readonly row: { readonly id: string }; readonly at: number; readonly current: { readonly id: string; readonly at: number } | undefined }): boolean {
-  return input.current === undefined || input.at > input.current.at || (input.at === input.current.at && input.row.id > input.current.id);
-}
-
-function dateValue(value: Date | string | null): number | null {
-  if (value === null) return null;
-  const parsed = value instanceof Date ? value.getTime() : Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function missingDelivered(reason: 'no_matching_record' | 'no_source', at: string): OrderLineRow['factoryDeliveredQty'] {

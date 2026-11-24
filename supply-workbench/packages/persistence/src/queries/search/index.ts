@@ -10,7 +10,7 @@ import {
 } from '../../schema/factory.js';
 import { orderLines, purchaseOrders } from '../../schema/orders.js';
 import { parties, partyAliases } from '../../schema/platform.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 
 const GROUP_LIMIT = 5;
 
