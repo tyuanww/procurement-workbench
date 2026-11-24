@@ -16,7 +16,7 @@ import {
 
 const NOW = '2026-10-18T00:00:00.000Z';
 const HIDDEN = ['/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,产品档案,导入与审核,设置';
+const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,产品档案,导入与审核';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;
@@ -315,17 +315,18 @@ describe('新鲜度', () => {
 });
 
 describe('用户菜单', () => {
-  it('姓名、每个角色和退出，没有别的种类', () => {
+  it('管理员兼任其他角色时仍可从账户菜单进入系统设置', () => {
     const entries = viewOf({
       name: '管理员',
       roles: ['admin', 'reviewer'],
       queue: { kind: 'pending' },
     }).account.entries;
-    expect(entries.map((entry) => entry.kind)).toEqual(['name', 'role', 'role', 'logout']);
+    expect(entries.map((entry) => entry.kind)).toEqual(['name', 'role', 'role', 'settings', 'logout']);
     expect(entries.map((entry) => entry.label)).toEqual([
       '管理员',
       roleLabel('admin'),
       roleLabel('reviewer'),
+      '系统设置',
       '退出',
     ]);
   });

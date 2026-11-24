@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { NavPath, NavRoute, PageGate } from '../shared/page-manifest.js';
+import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../shared/page-manifest.js';
 import { DashboardPage } from '../pages/dashboard/DashboardPage.js';
 import { ImportBatchPage } from '../pages/imports/ImportBatchPage.js';
 import { ImportCenter } from '../pages/imports/ImportCenter.js';
@@ -48,7 +48,7 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/imports', nav: { label: '导入与审核' }, gate: 'imports', element: <ImportCenter /> },
   { path: '/imports/:id', nav: null, gate: 'imports', menuParent: '/imports', element: <ImportBatchPage /> },
   { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <MasterPage /> },
-  { path: '/settings', nav: { label: '设置' }, gate: 'admin', element: <SettingsPage /> },
+  { path: SETTINGS_PATH, nav: null, gate: 'admin', element: <SettingsPage /> },
 ];
 
 export const NAV_ROUTES: readonly NavRoute[] = PAGE_MANIFEST.flatMap((entry) =>

@@ -69,7 +69,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     writePermissions: ['admin'],
     routePrefixes: ['/api/v1/me', '/api/v1/meta', '/api/v1/settings', '/api/v1/users', '/api/v1/audit', '/api/v1/health'],
     webFeature: 'platform',
-    navLabel: '设置',
+    navLabel: null,
     dependsOn: [],
   },
   {
