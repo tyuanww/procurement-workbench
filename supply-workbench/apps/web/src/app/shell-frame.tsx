@@ -16,11 +16,6 @@ export function menuWidth(input: { readonly isCollapsed: boolean }): typeof navC
   return navWidth;
 }
 
-export function siderMenuCss(isCollapsed: boolean): string {
-  if (!isCollapsed) return '';
-  return '.shell-sider .ant-menu-item{margin-inline:0!important;padding-inline:6px!important}';
-}
-
 export function onBrandIconColor(): CSSProperties {
   return { color: onBrand.solid };
 }
@@ -136,7 +131,6 @@ export function ShellSider(input: {
       style={siderBarStyle()}
       styles={{ body: siderBodyStyle() }}
     >
-      <style>{siderMenuCss(input.chrome.isCollapsed)}</style>
       <SiderLogo isCollapsed={input.chrome.isCollapsed} />
       <div style={menuRegionStyle()}>
         <ShellMenu rows={input.nav} isCollapsed={input.chrome.isCollapsed} onNavigate={noop} />
@@ -228,7 +222,7 @@ function CollapseButton(input: {
       aria-label={input.name}
       onClick={input.onToggle}
       icon={input.isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-      style={{ ...onBrandIconColor(), width: input.hitPx, height: input.hitPx, flexShrink: 0 }}
+      style={{ ...onBrandIconColor(), width: input.hitPx, height: input.hitPx, flexShrink: 0, alignSelf: input.isCollapsed ? 'center' : 'flex-start' }}
     />
   );
 }
@@ -297,7 +291,8 @@ function logoStyle(isCollapsed: boolean): CSSProperties {
     color: onBrand.solid,
     fontWeight: 600,
     flexShrink: 0,
-    paddingInline: isCollapsed ? space[1] : space[3],
+    paddingInline: isCollapsed ? 0 : space[3],
+    textAlign: isCollapsed ? 'center' : 'start',
   };
 }
 

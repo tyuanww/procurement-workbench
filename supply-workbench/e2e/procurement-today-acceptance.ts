@@ -8,12 +8,16 @@ const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url
 const batch = 'hz09-batch-501';
 
 export function seedChaseSample(): void {
+  seedDemoFixture(sample);
+}
+
+export function seedDemoFixture(fixture: URL): void {
   const { DATABASE_URL: database, PGBIN: pgBin, E2E_ALLOW_MUTATION: allowed } = process.env;
   assert.equal(allowed, '1');
-  assert.ok(database && /^postgresql:\/\/sw_accept@127\.0\.0\.1:\d+\/sw_accept_[0-9a-f]+$/.test(database), '仅在原生验收的临时库建立催货样本');
+  assert.ok(database && /^postgresql:\/\/sw_accept@127\.0\.0\.1:\d+\/sw_accept_[0-9a-f]+$/.test(database), '仅在原生验收的临时库建立合成样本');
   const executable = process.platform === 'win32' ? 'psql.exe' : 'psql';
   execFileSync(pgBin === undefined ? executable : join(pgBin, executable), [
-    database, '-X', '-v', 'ON_ERROR_STOP=1', '-f', fileURLToPath(sample),
+    database, '-X', '-v', 'ON_ERROR_STOP=1', '-f', fileURLToPath(fixture),
   ]);
 }
 

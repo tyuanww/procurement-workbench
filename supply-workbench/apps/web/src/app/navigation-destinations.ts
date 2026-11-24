@@ -16,7 +16,7 @@ export const destinations: Partial<Record<NavPath, readonly NavDestination[]>> =
     { to: '/dashboard?view=buyers', label: '采购负荷' },
     { to: '/dashboard?view=project', label: '项目进度' },
     { to: '/dashboard?view=meeting', label: '管理周会' },
-    { to: '/reports', label: '周报' },
+    { to: '/reports', label: '周报（待开发）' },
   ],
   '/imports': [
     { to: '/imports', label: '导入中心' },

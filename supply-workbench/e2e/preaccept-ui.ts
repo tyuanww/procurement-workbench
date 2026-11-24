@@ -9,10 +9,11 @@ import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
+import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkEmptyProductArchive, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
 import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
-import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
+import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
 import { sidebarGroup, sidebarLink } from './sidebar.ts';
 
 const workbook = new URL('../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
@@ -135,6 +136,8 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.poMasterTemplate = await checkPoMasterTemplate({ page: buyer, origin, out, xlsx });
   result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse });
   result.checks.factoryLinkBoard = await checkFactoryLinkBoard({ reviewer, openAdmin: async () => (await open('admin', '/master?tab=factory-link')).page, origin, out });
+  seedDemoFixture(new URL('../fixtures/demo/frontend-closeout.sql', import.meta.url));
+  result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
@@ -261,7 +264,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
   await bottlenecks.click();
   await manager.waitForURL(new URL('/dashboard', origin).href);
   await bottlenecks.and(current).waitFor();
-  const weekly = sidebar.getByRole('link', { name: '周报', exact: true });
+  const weekly = sidebar.getByRole('link', { name: '周报（待开发）', exact: true });
   await weekly.click();
   await manager.waitForURL(new URL('/reports', origin).href);
   await weekly.and(current).waitFor();
@@ -277,7 +280,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
   await lead.setViewportSize({ width: 320, height: 780 });
   await lead.getByRole('button', { name: '打开菜单', exact: true }).click();
   const menu = lead.getByRole('dialog', { name: '导航', exact: true });
-  const phoneReport = menu.getByRole('link', { name: '周报', exact: true }).and(menu.locator('[aria-current="page"]'));
+  const phoneReport = menu.getByRole('link', { name: '周报（待开发）', exact: true }).and(menu.locator('[aria-current="page"]'));
   await phoneReport.waitFor();
   await lead.goto(new URL(reportPath + '/print', origin).href);
   await lead.getByRole('heading', { name: '管理周会 · 达肤妍', exact: true }).waitFor();

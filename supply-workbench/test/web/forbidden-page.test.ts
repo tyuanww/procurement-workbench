@@ -35,9 +35,9 @@ it.each([
   { path: '/dashboard', title: '卡点', label: '卡点' },
   { path: '/dashboard/', title: '卡点', label: '卡点' },
   { path: '/dashboard?view=suppliers', title: '供应商表现', label: '供应商表现' },
-  { path: '/reports', title: '周报', label: '周报' },
-  { path: '/reports/', title: '周报', label: '周报' },
-  { path: '/reports/r1', title: '周报详情', label: '周报' },
+  { path: '/reports', title: '周报', label: '周报（待开发）' },
+  { path: '/reports/', title: '周报', label: '周报（待开发）' },
+  { path: '/reports/r1', title: '周报详情', label: '周报（待开发）' },
 ])('$path 用面包屑标出当前管理视图', ({ path, title, label }) => {
   const html = render(path, ['lead']);
   expect(html).toContain(`>${title}</h1>`);

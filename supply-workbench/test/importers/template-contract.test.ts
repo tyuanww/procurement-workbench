@@ -20,7 +20,9 @@ it('flow 不再穷尽列出全部模板', () => {
 
 it('已有模板的提交去向保持不变', () => {
   expect(labels(committed({ template: 'po-master-v1', pendingAliases: 0 }))).toEqual(['查看本次导入订单']);
-  expect(labels(committed({ template: 'factory-progress-v1', pendingAliases: 0 }))).toEqual(['去跟进台']);
+  expect(continuationOf(committed({ template: 'factory-progress-v1', pendingAliases: 0 }))).toMatchObject({
+    steps: [{ to: '/lines', label: '去跟进中心' }],
+  });
   expect(labels(committed({ template: 'product-archive-v1', pendingAliases: 2 }))).toEqual(['去审核 2 个新主体', '去产品档案']);
   expect(labels(committed({ template: 'bom-v1', pendingAliases: 0 }))).toEqual([]);
   expect(labels(committed({ template: 'owner-map-v1', pendingAliases: 1 }))).toEqual(['去审核 1 个新主体']);
