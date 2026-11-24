@@ -17,6 +17,7 @@ import {
   type DashboardView,
 } from '../../features/performance/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
+import { ManagementViewNav } from '../../shared/ui/management-view-nav.js';
 import { fontSize, space, text } from '../../theme/tokens.js';
 import { BuyerPanel } from './BuyerPanel.js';
 import { BuyerLoadSummary, SupplierRateChart } from './dashboard-charts.js';
@@ -63,6 +64,7 @@ export function DashboardPage() {
   };
   return (
     <WorkbenchPage title="管理看板">
+      <ManagementViewNav />
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         {query.view === 'meeting' ? null : <DashboardChrome query={query} onSearch={onSearch} />}
         <ViewTabs view={query.view} onSearch={onSearch}>

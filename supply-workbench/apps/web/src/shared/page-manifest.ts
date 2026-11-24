@@ -5,7 +5,6 @@ export type NavPath =
   | '/today'
   | '/lines'
   | '/dashboard'
-  | '/reports'
   | '/products'
   | '/imports'
   | '/master'
@@ -15,4 +14,5 @@ export type NavRoute = {
   readonly to: NavPath;
   readonly label: string;
   readonly gate: PageGate;
+  readonly matchPaths: readonly string[];
 };

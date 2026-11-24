@@ -16,7 +16,7 @@ import {
 
 const NOW = '2026-10-18T00:00:00.000Z';
 const HIDDEN = ['/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,周报,产品档案,导入中心,主数据,设置';
+const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,产品档案,导入中心,主数据,设置';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;
@@ -171,12 +171,11 @@ describe('首页和主数据角标', () => {
     expect(home(['buyer', 'manager'], counts([0, 0, 0, 0])).home).toBe('/dashboard');
   });
 
-  it('负责人进周报，看板和周报都在', () => {
+  it('负责人进周报，侧栏共用管理看板入口', () => {
     const view = home(['lead'], { kind: 'unknown' });
     expect(view.home).toBe('/reports');
-    expect(view.nav.map((item) => item.label)).toEqual(
-      expect.arrayContaining(['管理看板', '周报']),
-    );
+    expect(view.nav.map((item) => item.label)).toContain('管理看板');
+    expect(view.nav.map((item) => item.label)).not.toContain('周报');
   });
 
   it('管理层兼负责人进看板', () => {

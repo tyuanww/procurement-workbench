@@ -19,8 +19,8 @@ const react = requireWeb('react');
 const server = requireWeb('react-dom/server');
 const router = requireWeb('react-router');
 const rows: readonly NavRow[] = [
-  { to: '/progress', label: '管理店铺', badge: { kind: 'none' } },
-  { to: '/lines', label: '跟进台', badge: { kind: 'count', value: 7 } },
+  { to: '/progress', label: '管理店铺', matchPaths: ['/progress'], badge: { kind: 'none' } },
+  { to: '/lines', label: '跟进台', matchPaths: ['/lines'], badge: { kind: 'count', value: 7 } },
 ];
 
 describe('视口探针', () => {
@@ -43,7 +43,7 @@ describe('视口探针', () => {
 describe('壳标记', () => {
   it('1279 的壳收起侧栏，菜单不用 inline-collapsed', () => {
     installMedia([shellQuery.max1279, shellQuery.atLeast768]);
-    const html = inRouter(h(Shell, { view: buyerView(), roles: ['buyer'], navRoutes: NAV_ROUTES }));
+    const html = inRouter(h(Shell, { view: buyerView() }));
     expect(html).toContain('ant-layout-sider-collapsed');
     expect(html).not.toContain('ant-menu-inline-collapsed');
   });
@@ -96,13 +96,13 @@ describe('壳标记', () => {
 
   it('内容区自成层叠上下文，表头再 sticky 也盖不住顶栏', () => {
     installMedia([shellQuery.min1440, shellQuery.atLeast768]);
-    const html = inRouter(h(Shell, { view: buyerView(), roles: ['buyer'], navRoutes: NAV_ROUTES }));
+    const html = inRouter(h(Shell, { view: buyerView() }));
     expect(html).toContain('isolation:isolate');
   });
 
   it('手机只给 44 的菜单按钮，没有常驻侧栏，也不挤产品名', () => {
     installMedia([]);
-    const html = inRouter(h(Shell, { view: buyerView(), roles: ['buyer'], navRoutes: NAV_ROUTES }));
+    const html = inRouter(h(Shell, { view: buyerView() }));
     expect(html).toContain('aria-label="打开菜单"');
     expect(html).toContain('44px');
     expect(html).toContain('grid-template-columns:auto minmax(0, 1fr) auto');

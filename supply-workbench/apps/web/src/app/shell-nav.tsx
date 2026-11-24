@@ -4,7 +4,6 @@ import {
   DashboardOutlined,
   DatabaseOutlined,
   FieldTimeOutlined,
-  FileTextOutlined,
   ImportOutlined,
   ProfileOutlined,
   SettingOutlined,
@@ -54,8 +53,6 @@ function navGlyph(path: NavPath): ReactNode {
       return <ProfileOutlined />;
     case '/dashboard':
       return <DashboardOutlined />;
-    case '/reports':
-      return <FileTextOutlined />;
     case '/products':
       return <AppstoreOutlined />;
     case '/imports':

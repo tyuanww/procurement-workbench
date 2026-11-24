@@ -1,7 +1,7 @@
 import { Button, ConfigProvider, Drawer, Layout, Menu, Typography } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
-import { useLocation } from 'react-router';
+import { matchPath, useLocation } from 'react-router';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, fontSize, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
@@ -278,9 +278,11 @@ function SiderLogo({ isCollapsed }: { readonly isCollapsed: boolean }) {
 }
 
 function selectedKey(input: { readonly pathname: string; readonly rows: readonly NavRow[] }): string {
-  const matched = input.rows.filter((row) => input.pathname === row.to || input.pathname.startsWith(`${row.to}/`));
-  const best = matched.sort((left, right) => right.to.length - left.to.length)[0];
-  return best === undefined ? input.pathname : best.to;
+  const matched = input.rows.flatMap((row) => row.matchPaths
+    .filter((path) => matchPath({ path, end: false }, input.pathname) !== null)
+    .map((path) => ({ path, to: row.to })));
+  const best = matched.sort((left, right) => right.path.length - left.path.length)[0];
+  return best?.to ?? input.pathname;
 }
 
 function siderBodyStyle(): CSSProperties {

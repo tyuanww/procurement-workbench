@@ -33,6 +33,7 @@ export type HomePath = '/master' | '/dashboard' | '/reports' | '/settings' | '/t
 export type NavRow = {
   readonly to: NavPath;
   readonly label: string;
+  readonly matchPaths: readonly string[];
   readonly badge: BadgeMark;
 };
 
@@ -75,11 +76,8 @@ export function todayScope(input: { readonly roles: readonly Role[] }): 'mine' |
 
 export type RouteAccess = 'open' | 'forbidden';
 
-export function routeAccess(input: { readonly roles: readonly Role[]; readonly pathname: string; readonly navRoutes: readonly NavRoute[] }): RouteAccess {
-  const entry = input.navRoutes.find((item) => matchesPath(item.to, input.pathname));
-  if (entry === undefined) return 'open';
-  if (allows({ gate: entry.gate, roles: input.roles })) return 'open';
-  return 'forbidden';
+export function routeAccess(input: { readonly roles: readonly Role[]; readonly gate: PageGate }): RouteAccess {
+  return allows(input) ? 'open' : 'forbidden';
 }
 
 function hasOversight(roles: readonly Role[]): boolean {
@@ -153,9 +151,8 @@ function navRow(input: {
   readonly queue: QueueFacts;
   readonly today: TodayFacts;
 }): NavRow {
-  const badge = badgeOf(input);
-  if (badge === undefined) return row({ to: input.entry.to, label: input.entry.label });
-  return row({ to: input.entry.to, label: input.entry.label, badge });
+  const { to, label, matchPaths } = input.entry;
+  return { to, label, matchPaths, badge: badgeOf(input) ?? NO_BADGE };
 }
 
 function allows(input: { readonly gate: PageGate; readonly roles: readonly Role[] }): boolean {
@@ -163,10 +160,6 @@ function allows(input: { readonly gate: PageGate; readonly roles: readonly Role[
   if (input.gate === 'oversight') return hasOversight(input.roles);
   if (input.gate === 'review') return can({ roles: input.roles }, 'master.review');
   return can({ roles: input.roles }, 'admin');
-}
-
-function matchesPath(to: string, pathname: string): boolean {
-  return pathname === to || pathname.startsWith(`${to}/`);
 }
 
 function badgeOf(input: {
@@ -178,14 +171,6 @@ function badgeOf(input: {
   if (input.entry.to === '/today') return todayMark(input.today);
   if (input.entry.to === '/master') return reviewMark({ roles: input.roles, queue: input.queue });
   return undefined;
-}
-
-function row(input: {
-  readonly to: NavPath;
-  readonly label: string;
-  readonly badge?: BadgeMark;
-}): NavRow {
-  return { to: input.to, label: input.label, badge: input.badge ?? NO_BADGE };
 }
 
 function accountOf(user: Person): ShellView['account'] {
