@@ -5,6 +5,7 @@ import type {
   DeliveryBatchRepository,
 } from '../../../application/src/ports/delivery-batch-repository.js';
 import type { UnitOfWork, UnitOfWorkStores } from '../../../application/src/ports/unit-of-work.js';
+import type { PurchaseOrderRepository } from '../../../application/src/ports/purchase-order-repository.js';
 import type { MemoryBox } from './box.js';
 import { factoryReportRepository } from './factory-reports.js';
 import { idRepository } from './repository.js';
@@ -166,7 +167,7 @@ function duplicateCandidateKey(box: MemoryBox, entity: import('@sw/domain').Orde
   return false;
 }
 
-function purchaseOrderRepository(box: MemoryBox) {
+function purchaseOrderRepository(box: MemoryBox): PurchaseOrderRepository {
   const repo = idRepository(() => box.current.purchaseOrders, '采购单');
   return {
     ...repo,
@@ -176,8 +177,14 @@ function purchaseOrderRepository(box: MemoryBox) {
     async listNoNumber(lane: Lane) {
       return [...box.current.purchaseOrders.values()].filter((row) => row.poRaw === null && row.poFormat === 'NONE' && row.lane === lane);
     },
-    async listMissingSupplier(normName: string) {
-      return [...box.current.purchaseOrders.values()].filter((row) => row.supplierPartyId === null && sameCode(row.supplierRaw, normName));
+    async backfillMissingSupplier({ normName, partyId, at }) {
+      const updated = [];
+      for (const order of box.current.purchaseOrders.values()) {
+        if (order.supplierPartyId !== null || !sameCode(order.supplierRaw, normName)) continue;
+        box.current.purchaseOrders.set(order.id, { ...order, supplierPartyId: partyId, updatedAt: at });
+        updated.push(order.id);
+      }
+      return updated;
     },
   };
 }

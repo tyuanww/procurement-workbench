@@ -4,12 +4,11 @@ import type { FactoryReportRowView, LinkedFactoryRow } from '@sw/application';
 import { NotFoundError } from '@sw/application/errors';
 import type { AppDatabase } from '../../client.js';
 import { factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
+import { actionableFactoryReport } from '../factory-report-actionable.js';
 import { activeFactoryBatchIds } from '../follow-up/line-row.js';
 import { comboOf, demandOf, scheduleOf, shipmentOf, stockOf, transitOf } from '../follow-up/payloads.js';
 
-const OPEN_LINKS = ['unlinked', 'ambiguous'] as const;
-
-type ReportFilter = { readonly factoryPartyId?: string; readonly sheet?: string; readonly activeBatchIds?: readonly string[] };
+type ReportFilter = { readonly factoryPartyId?: string; readonly sheet?: string };
 
 type LinkKind = LinkedFactoryRow['kind'];
 type ReportIdentity = { readonly id: string; readonly kind: LinkKind };
@@ -19,36 +18,22 @@ export type ReportKey = ReportIdentity & {
   readonly rowNo: number;
 };
 
-type LinkTable = {
-  readonly linkStatus: AnyPgColumn;
-  readonly factoryPartyId: AnyPgColumn;
-  readonly sheetName: AnyPgColumn;
-  readonly importBatchId: AnyPgColumn;
-};
-
 type ReportTable = {
   readonly id: AnyPgColumn;
   readonly importBatchId: AnyPgColumn;
 };
 
 export async function listUnlinkedKeys(db: AppDatabase, query: ReportFilter): Promise<ReportKey[]> {
-  const activeIds = query.activeBatchIds ?? [...await activeFactoryBatchIds(db)];
-  const [transit, shipment, stock, schedule, demand, combo] = await Promise.all([
-    db.select({ id: factoryInTransitRows.id, sheetName: factoryInTransitRows.sheetName, rowNo: factoryInTransitRows.rowNo }).from(factoryInTransitRows).where(openWhere({ table: factoryInTransitRows, query, activeIds })),
-    db.select({ id: factoryShipmentRows.id, sheetName: factoryShipmentRows.sheetName, rowNo: factoryShipmentRows.rowNo }).from(factoryShipmentRows).where(openWhere({ table: factoryShipmentRows, query, activeIds })),
-    db.select({ id: factoryStockRows.id, sheetName: factoryStockRows.sheetName, rowNo: factoryStockRows.rowNo }).from(factoryStockRows).where(openWhere({ table: factoryStockRows, query, activeIds })),
-    db.select().from(factoryScheduleCells).where(openWhere({ table: factoryScheduleCells, query, activeIds })),
-    db.select({ id: factoryMaterialDemandRows.id, sheetName: factoryMaterialDemandRows.sheetName, rowNo: factoryMaterialDemandRows.rowNo }).from(factoryMaterialDemandRows).where(openWhere({ table: factoryMaterialDemandRows, query, activeIds })),
-    db.select({ id: factoryPackagingComboRows.id, sheetName: factoryPackagingComboRows.sheetName, rowNo: factoryPackagingComboRows.rowNo }).from(factoryPackagingComboRows).where(openWhere({ table: factoryPackagingComboRows, query, activeIds })),
+  const activeIds = [...await activeFactoryBatchIds(db)];
+  const rows = await Promise.all([
+    reportKeys({ db, query, activeIds, table: factoryInTransitRows, kind: 'in_transit' }),
+    reportKeys({ db, query, activeIds, table: factoryShipmentRows, kind: 'shipment' }),
+    reportKeys({ db, query, activeIds, table: factoryStockRows, kind: 'stock' }),
+    reportKeys({ db, query, activeIds, table: factoryScheduleCells, kind: 'schedule' }),
+    reportKeys({ db, query, activeIds, table: factoryMaterialDemandRows, kind: 'demand' }),
+    reportKeys({ db, query, activeIds, table: factoryPackagingComboRows, kind: 'packaging_combo' }),
   ]);
-  return [
-    ...stamp(transit, 'in_transit'),
-    ...stamp(shipment, 'shipment'),
-    ...stamp(stock, 'stock'),
-    ...schedule.flatMap((row) => scheduleOf(row) === undefined ? [] : stamp([row], 'schedule')),
-    ...stamp(demand, 'demand'),
-    ...stamp(combo, 'packaging_combo'),
-  ].sort(byKey);
+  return rows.flat().sort(byKey);
 }
 
 export async function hydrateUnlinked(db: AppDatabase, keys: readonly ReportKey[]): Promise<FactoryReportRowView[]> {
@@ -68,8 +53,21 @@ export async function linkedReportView(db: AppDatabase, input: LinkedFactoryRow)
   return row;
 }
 
-function stamp(rows: readonly { readonly id: string; readonly sheetName: string; readonly rowNo: number }[], kind: LinkKind): ReportKey[] {
-  return rows.map((row) => ({ id: row.id, sheetName: row.sheetName, rowNo: row.rowNo, kind }));
+async function reportKeys(input: {
+  readonly db: AppDatabase;
+  readonly table: typeof factoryInTransitRows | typeof factoryShipmentRows | typeof factoryStockRows | typeof factoryScheduleCells | typeof factoryMaterialDemandRows | typeof factoryPackagingComboRows;
+  readonly kind: LinkKind;
+  readonly query: ReportFilter;
+  readonly activeIds: readonly string[];
+}): Promise<ReportKey[]> {
+  const { db, table, kind, query, activeIds } = input;
+  const rows = await db.select({ id: table.id, sheetName: table.sheetName, rowNo: table.rowNo }).from(table).where(and(
+    actionableFactoryReport(kind, table.linkStatus),
+    inArray(table.importBatchId, [...activeIds]),
+    query.factoryPartyId === undefined ? undefined : eq(table.factoryPartyId, query.factoryPartyId),
+    query.sheet === undefined ? undefined : eq(table.sheetName, query.sheet),
+  ));
+  return rows.map((row) => ({ ...row, kind }));
 }
 
 async function loadPage(input: { readonly db: AppDatabase; readonly keys: readonly ReportIdentity[]; readonly activeIds?: readonly string[] }) {
@@ -109,16 +107,6 @@ function viewsOf(loaded: Awaited<ReturnType<typeof loadPage>>): FactoryReportRow
 function keptSchedule(row: Parameters<typeof scheduleOf>[0]): NonNullable<ReturnType<typeof scheduleOf>>[] {
   const view = scheduleOf(row);
   return view === undefined ? [] : [view];
-}
-
-function openWhere(input: { readonly table: LinkTable; readonly query: ReportFilter; readonly activeIds: readonly string[] }): SQL | undefined {
-  const { table, query, activeIds } = input;
-  return and(
-    inArray(table.linkStatus, [...OPEN_LINKS]),
-    inArray(table.importBatchId, [...activeIds]),
-    query.factoryPartyId === undefined ? undefined : eq(table.factoryPartyId, query.factoryPartyId),
-    query.sheet === undefined ? undefined : eq(table.sheetName, query.sheet),
-  );
 }
 
 function scopedByIds(input: { readonly table: ReportTable; readonly ids: readonly string[]; readonly activeIds: readonly string[] | undefined }): SQL | undefined {

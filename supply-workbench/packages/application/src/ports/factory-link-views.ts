@@ -1,5 +1,6 @@
 import type { FactoryReportKind, LineFactoryLinkSource, LineFactoryLinkStatus, LineFactoryMatchBasis } from '@sw/domain';
 import type { FactoryRef } from './factory-link-repository.js';
+import type { ListResult } from '../shared/page.js';
 
 export type { FactoryRef };
 
@@ -72,6 +73,7 @@ export type UnmatchedFactoryRowView = {
 };
 
 export type FactoryDiagnosticScope = 'active' | 'historical';
+export type FactoryDiagnosticPageQuery = { readonly scope: FactoryDiagnosticScope; readonly page: number; readonly pageSize: number };
 
 export type FactoryLinkCounts = {
   readonly linked: number;
@@ -90,7 +92,8 @@ export interface FactoryLinkQueries {
   listFactoryRowRefs(): Promise<readonly FactoryRowMatchRef[]>;
   /** 只读活动代工厂进度快照里的排产格。不含已退休批次，也不含其它六类工厂行。 */
   listActiveScheduleRefs(): Promise<readonly FactoryRowMatchRef[]>;
-  listUnmatched(scope?: FactoryDiagnosticScope): Promise<readonly UnmatchedFactoryRowView[]>;
+  listUnmatched(limit: number): Promise<readonly UnmatchedFactoryRowView[]>;
+  listDiagnosticPage(input: FactoryDiagnosticPageQuery): Promise<ListResult<UnmatchedFactoryRowView>>;
   /** 先读 line_factory_links，没有时回退到工厂进度行；都没有返回 undefined。 */
   getView(orderLineId: string): Promise<LineFactoryLinkView | undefined>;
   countStates(): Promise<FactoryLinkCounts>;

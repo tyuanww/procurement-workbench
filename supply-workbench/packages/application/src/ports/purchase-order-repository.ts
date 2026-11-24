@@ -1,4 +1,4 @@
-import type { Lane, PurchaseOrder } from '@sw/domain';
+import type { EntityId, Lane, PurchaseOrder } from '@sw/domain';
 
 export interface PurchaseOrderRepository {
   /** 找不到就抛 NotFoundError。 */
@@ -11,6 +11,6 @@ export interface PurchaseOrderRepository {
   listByPoNorm(poNorm: string): Promise<readonly PurchaseOrder[]>;
   /** 这一条线的无单号采购单。没有就返回空数组。 */
   listNoNumber(lane: Lane): Promise<readonly PurchaseOrder[]>;
-  /** supplierPartyId 为空，且供应商原文规范化后等于 normName。没有就空数组。 */
-  listMissingSupplier(normName: string): Promise<readonly PurchaseOrder[]>;
+  /** 只在 supplierPartyId 为空且供应商原文匹配时回填，返回实际更新的采购单 ID。 */
+  backfillMissingSupplier(input: { readonly normName: string; readonly partyId: EntityId; readonly at: string }): Promise<readonly EntityId[]>;
 }

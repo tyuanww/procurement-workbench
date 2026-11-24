@@ -5,7 +5,7 @@ import type { UnitOfWork } from '../ports/unit-of-work.js';
 import type { Actor } from '../shared/actor.js';
 import type { ListResult } from '../shared/page.js';
 import type { NoInput } from '../shared/refs.js';
-import type { FactoryDiagnosticScope, FactoryLinkCounts, FactoryLinkQueries, LineFactoryLinkView, RelinkFactoryRowsResult, SetLineFactoryLinkInput, UnmatchedFactoryRowView } from './views.js';
+import type { FactoryDiagnosticPageQuery, FactoryLinkCounts, FactoryLinkQueries, LineFactoryLinkView, RelinkFactoryRowsResult, SetLineFactoryLinkInput, UnmatchedFactoryRowView } from './views.js';
 
 type Write = { readonly uow: UnitOfWork; readonly clock: Clock; readonly ids: IdGenerator };
 
@@ -20,7 +20,7 @@ export type GetLineFactoryLink = (input: { readonly orderLineId: string }, actor
 export type ListUnmatchedFactoryRowsDeps = { readonly links: FactoryLinkQueries };
 export type UnmatchedFactoryRowsInput =
   | { readonly limit?: number | undefined }
-  | { readonly scope: FactoryDiagnosticScope; readonly page: number; readonly pageSize: number };
+  | FactoryDiagnosticPageQuery;
 export type ListUnmatchedFactoryRows = (input: UnmatchedFactoryRowsInput, actor: Actor) => Promise<
   { readonly items: readonly UnmatchedFactoryRowView[] } | ListResult<UnmatchedFactoryRowView>
 >;
