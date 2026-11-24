@@ -11,7 +11,8 @@ import { useShellViewport } from '../../features/shell/index.js';
 import { ArrivalMemos } from '../../features/today/index.js';
 import { fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import { ProgressNote } from './progress-note.js';
-import { progressArrivalDate, progressMobileColumns, progressMobileDetails } from './progress-mobile.js';
+import type { StoreBatchFacts } from './progress-batch-facts.js';
+import { progressArrivalDate, progressMobileColumns, progressMobileDetails, StoreBatchQuantities } from './progress-mobile.js';
 import { loadProgress, type ProgressData } from './progress-load.js';
 export { noteBatches, pagesFor } from './progress-load.js';
 import { ProgressBreakdown, ProgressMetrics } from './progress-overview.js';
@@ -20,7 +21,7 @@ import { matchingOa, ProgressOaFilter, progressOrderRef, scopedLineLink, StoreGa
 import { progressPagination, resetProgressPagination, storeLabels, withProgressPagination } from './store-query.js';
 
 type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
-const emptyProgress: ProgressData = { rows: [], lines: new Map(), arrivalMemos: [], actionNotice: '' };
+const emptyProgress: ProgressData = { rows: [], lines: new Map(), batchFacts: new Map(), arrivalMemos: [], actionNotice: '' };
 
 export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonly filters: ReactNode }) {
   const { data, error, isLoaded, notes, now, retry } = useCurrentData(scope);
@@ -47,7 +48,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
           </Flex>}
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
-            <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} emptyMessage={emptyMessage} />
+            <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} />
           </ProgressBody>
         </SectionGroup>
       </div>
@@ -178,6 +179,7 @@ function ProgressBody(props: { readonly rows: readonly ProgressRow[]; readonly e
 type ProgressTableProps = {
   readonly rows: readonly ProgressRow[];
   readonly lines: ReadonlyMap<string, OrderLineRow>;
+  readonly batchFacts: ProgressData['batchFacts'];
   readonly search: string;
   readonly emptyMessage: string | null;
   readonly notes: Readonly<Record<string, string>>;
@@ -197,23 +199,26 @@ function ProgressTable(props: ProgressTableProps) {
   const { lines, notes, now, search } = props;
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
-  const lineHref = (lineId: string) => scopedLineLink(lineId, { search, store: lines.get(lineId)?.storeProgress?.store, focusLine: lineId });
+  const lineOf = (lineId: string) => lines.get(lineId);
+  const lineHref = (lineId: string, focusBatch?: string) => scopedLineLink(lineId, {
+    search, store: lineOf(lineId)?.storeProgress?.store, focusLine: lineId, ...(focusBatch === undefined ? {} : { focusBatch }),
+  });
+  const overdueHref = (row: ProgressRow) => {
+    const due = lineOf(row.lineId)?.nextDue;
+    return row.arrival.kind === 'overdue' && due != null ? lineHref(row.lineId, due.batchId) : undefined;
+  };
   const note = (lineId: string) => <ProgressNote href={lineHref(lineId)} saved={notes[lineId]} />;
-  const expand = (row: ProgressRow) => (
-    <>
-      <StoreOrderDetails line={lines.get(row.lineId)} search={search} />
-      {isPhone ? progressMobileDetails(row, note(row.lineId)) : null}
-    </>
-  );
+  const expand = (row: ProgressRow) => <ProgressExpandedRow row={row} line={lineOf(row.lineId)} facts={props.batchFacts.get(row.lineId)} search={search} note={isPhone ? note(row.lineId) : null} />;
   return (
     <Table
       rowKey="lineId"
       size="small"
       dataSource={[...props.rows]}
       locale={{ emptyText: <EmptyProgress message={props.emptyMessage} /> }}
-      expandable={{ expandedRowRender: expand }}
+      expandable={{ expandedRowRender: expand, ...(isPhone ? { columnWidth: 34 } : {}) }}
       {...(isPhone ? {} : { scroll: { x: 'max-content' as const }, sticky: { offsetHeader: topBar } })}
-      columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineHref, now }) : progressColumns({ lines, lineHref, note, now })}
+      {...(isPhone ? { tableLayout: 'fixed' } : {})}
+      columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineOf, lineHref, overdueHref, now }) : progressColumns({ lines, lineHref, overdueHref, note, now })}
       pagination={tablePagination({
         page: Math.min(props.page, Math.max(1, Math.ceil(props.rows.length / props.pageSize))),
         pageSize: props.pageSize,
@@ -225,9 +230,24 @@ function ProgressTable(props: ProgressTableProps) {
   );
 }
 
+function ProgressExpandedRow({ row, line, facts, search, note }: {
+  readonly row: ProgressRow;
+  readonly line: OrderLineRow | undefined;
+  readonly facts: StoreBatchFacts | undefined;
+  readonly search: string;
+  readonly note: ReactNode;
+}) {
+  return <>
+    {note === null ? null : progressMobileDetails({ row, line, note })}
+    <StoreBatchQuantities facts={facts} />
+    <StoreOrderDetails line={line} search={search} />
+  </>;
+}
+
 function progressColumns(input: {
   readonly lines: ReadonlyMap<string, OrderLineRow>;
   readonly lineHref: (lineId: string) => string;
+  readonly overdueHref: (row: ProgressRow) => string | undefined;
   readonly note: (lineId: string) => ReactNode;
   readonly now: Date;
 }): TableColumnsType<ProgressRow> {
@@ -239,7 +259,7 @@ function progressColumns(input: {
     { title: '供应商', dataIndex: 'supplierLabel' },
     { title: '阶段', dataIndex: 'stageLabel' },
     { title: '停留天数', align: 'right', render: (_value: unknown, row: ProgressRow) => <StayDays row={row} /> },
-    { title: '确认到货日', render: (_value: unknown, row: ProgressRow) => progressArrivalDate({ arrival: row.arrival, now: input.now }) },
+    { title: '批次确认到货日', render: (_value: unknown, row: ProgressRow) => progressArrivalDate({ arrival: row.arrival, now: input.now, href: input.overdueHref(row) }) },
     { title: '状态', render: (_value: unknown, row: ProgressRow) => <ArrivalTag arrival={row.arrival} /> },
     { title: '下一步', render: (_value: unknown, row: ProgressRow) => <ProgressNextAction row={row} /> },
     { title: '进度说明', render: (_value: unknown, row: ProgressRow) => input.note(row.lineId) },

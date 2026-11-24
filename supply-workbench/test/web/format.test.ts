@@ -44,6 +44,7 @@ describe('数量与金额', () => {
     expect(formatQuantity(0)).toBe('0');
     expect(formatQuantity(1234567)).toBe('1,234,567');
     expect(formatQuantity(1.5)).toBe('1.5');
+    expect(formatQuantity(0.0001)).toBe('0.0001');
     expect(formatQuantity(-1200)).toBe('-1,200');
     expect(formatQuantity(null)).toBe('—');
     expect(formatQuantity(Number.NaN)).toBe('—');
