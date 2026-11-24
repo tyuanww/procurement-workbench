@@ -126,6 +126,7 @@ function ImportBatchWrites(props: {
   readonly setReasons: (value: readonly string[]) => void;
   readonly canImport: boolean;
 }) {
+  const canReviewAliases = useCanWrite('master.review');
   if (!props.canImport || props.summary.procurementReplayOf !== undefined) return null;
   const isConfirmedArrival = props.summary.template === 'batch-confirmed-arrival-v1';
   return (
@@ -140,7 +141,7 @@ function ImportBatchWrites(props: {
       )}
       <div style={commitBar}>
         <Button danger disabled title="数据回退尚未实现，回滚暂不可用">回滚（暂不可用）</Button>
-        <ImportCommitPanel summary={commitSummary(props.summary)} request={props.request} onCommit={() => { void commit({ id: props.id, revision: props.summary.revision, setSummary: props.setSummary, setRequest: props.setRequest }); }} />
+        <ImportCommitPanel summary={commitSummary(props.summary, canReviewAliases)} request={props.request} onCommit={() => { void commit({ id: props.id, revision: props.summary.revision, setSummary: props.setSummary, setRequest: props.setRequest }); }} />
       </div>
     </>
   );
@@ -153,12 +154,14 @@ export function ImportCommitPanel(props: {
   readonly onCommit: () => void;
 }) {
   const continuation = continuationOf(props.summary);
+  const { canReviewAliases, pendingAliases } = props.summary;
   return (
     <>
       <CommitAlert continuation={continuation} request={props.request} />
       {continuation.kind === 'confirm' ? (
         <ConfirmGate continuation={continuation} request={props.request} onCommit={props.onCommit} />
       ) : null}
+      {continuation.kind === 'committed' && !canReviewAliases && pendingAliases > 0 ? <p>{pendingAliases} 个新主体待审核</p> : null}
       {continuation.kind === 'committed' ? <StepList steps={continuation.steps} /> : null}
     </>
   );
@@ -214,12 +217,13 @@ function IssueGroups({ summary }: { readonly summary: ImportBatchSummary }) {
   return <ul>{groups.map((group) => <li key={group.code}>{issueGroupText(group)}</li>)}</ul>;
 }
 
-function commitSummary(summary: ImportBatchSummary): ImportContinuationInput {
+function commitSummary(summary: ImportBatchSummary, canReviewAliases: boolean): ImportContinuationInput {
   return {
+    importBatchId: summary.id,
     template: summary.template,
     status: summary.status,
     pendingAliases: summary.stats.pendingAliases,
-    createdLines: summary.stats.byAction.create,
+    canReviewAliases,
     unresolvedConflicts: summary.unresolvedConflicts,
     error: summary.error,
   };

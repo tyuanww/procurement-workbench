@@ -179,7 +179,17 @@ function confirmedOf(query: LinesQuery): SQL | undefined {
 
 function importOf(importBatchId: string | undefined): SQL | undefined {
   if (importBatchId === undefined) return undefined;
-  return sql`exists (select 1 from order_line_snapshots s where s.order_line_id = ${orderLines.id} and s.import_batch_id = ${importBatchId})`;
+  return sql`${orderLines.id} in (
+    select s.order_line_id from order_line_snapshots s where s.import_batch_id = ${importBatchId}
+    union all
+    select r.target_id from import_rows r
+    inner join import_batches b on b.id = r.import_batch_id
+    where r.import_batch_id = ${importBatchId} and b.template = 'po-master-v1' and b.status = 'committed'
+      and r.target_id is not null and r.action <> 'skip'
+    union all
+    select o.material_line_id from procurement_observations o
+    where o.import_batch_id = ${importBatchId} and o.material_line_id is not null
+  )`;
 }
 
 function actorUserId(query: LinesQuery): string | undefined {

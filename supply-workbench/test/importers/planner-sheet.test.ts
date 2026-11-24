@@ -138,7 +138,7 @@ it('flow 和 testkit 清单不出现这个模板 id，其它模板目录也不�
   for (const id of ['po-master-v1', 'factory-progress-v1', 'product-archive-v1', 'bom-v1', 'owner-map-v1']) {
     expect(read(`packages/importers/src/templates/${id}/index.ts`)).not.toContain('planner-sheet-v1');
   }
-  expect(continuationOf({ template: 'planner-sheet-v1', status: 'committed', pendingAliases: 0, createdLines: 4, unresolvedConflicts: 0, error: null })).toEqual({
+  expect(continuationOf({ importBatchId: 'planner-batch', template: 'planner-sheet-v1', status: 'committed', pendingAliases: 0, canReviewAliases: true, unresolvedConflicts: 0, error: null })).toEqual({
     kind: 'committed',
     steps: [],
   });

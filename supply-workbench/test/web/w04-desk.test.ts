@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LineStage, MissingReason } from '../../packages/domain/src/index.js';
 import { OrderLineRowSchema } from '../../packages/contracts/src/index.js';
-import { lineCell, readDesk, writeDesk } from '../../apps/web/src/features/follow-up/index.js';
+import { exportAddress, lineCell, readDesk, writeDesk } from '../../apps/web/src/features/follow-up/index.js';
 
 const NOW = new Date('2026-11-03T00:00:00+08:00');
 
@@ -50,6 +50,22 @@ describe('跟进台地址和单元格', () => {
     expect(queryOf(searched.toString()).has('lane')).toBe(false);
     expect(queryOf(searched.toString()).get('q')).toBe('面膜');
     expect(queryOf(searched.toString()).get('page')).toBe('1');
+  });
+
+  it('本次导入范围贯穿搜索、分页和导出，并保留全部线别', () => {
+    const start = 'lane=all&importBatchId=batch%2Ba%3Db';
+    const filtered = addressOf(start, { kind: 'text', value: '纸盒' });
+    const paged = addressOf(filtered.toString(), { kind: 'page', value: 2 });
+    expect(paged.get('importBatchId')).toBe('batch+a=b');
+    expect(paged.get('lane')).toBe('all');
+    const request = queryOf(paged.toString());
+    expect(request.get('importBatchId')).toBe('batch+a=b');
+    expect(request.get('q')).toBe('纸盒');
+    expect(request.get('page')).toBe('2');
+    expect(request.has('lane')).toBe(false);
+    const exportUrl = new URL(exportAddress({ query: request.toString(), columns: [{ key: 'po' }] }), 'https://example.com');
+    expect(exportUrl.searchParams.get('importBatchId')).toBe('batch+a=b');
+    expect(exportUrl.searchParams.has('lane')).toBe(false);
   });
 
   it('改阶段或逾期保留采购员，并回到第一页', () => {
