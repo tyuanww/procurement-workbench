@@ -171,7 +171,7 @@ describe('今日看板', () => {
   });
 
   it('没有事项时用固定空文案', () => {
-    expect(project({ items: [] }).body).toEqual({ kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进台看看。' });
+    expect(project({ items: [] }).body).toEqual({ kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进中心看看。' });
   });
 
   it('原因参数可切换并保留分组，等待方会删掉 group', () => {

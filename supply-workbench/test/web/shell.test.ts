@@ -16,7 +16,7 @@ import {
 
 const NOW = '2026-10-18T00:00:00.000Z';
 const HIDDEN = ['/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '管理店铺,今日,跟进台,管理看板,产品档案,导入与审核';
+const NAV_LABELS = '今日事项,管理店铺,跟进中心,管理看板,产品档案,导入与审核';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;

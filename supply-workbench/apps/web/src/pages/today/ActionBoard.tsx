@@ -95,7 +95,7 @@ function ActionGroups(props: ActionBoardProps): ReactNode {
   if (props.board.body.kind === 'empty') {
     if (props.page?.sort.kind === 'bulk' || props.board.chips.some((chip) => chip.isSelected)) return <Empty description="当前筛选没有待办" />;
     if (props.hasPendingBatch) return null;
-    return <Empty description={props.board.body.text}><Button href="/lines">去跟进台</Button></Empty>;
+    return <Empty description={props.board.body.text}><Button href="/lines">去跟进中心</Button></Empty>;
   }
   return (
     <>

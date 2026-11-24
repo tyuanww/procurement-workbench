@@ -49,7 +49,7 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await page.getByText('4 条 · 按负责人分组', { exact: true }).waitFor();
   await page.screenshot({ path: join(out, 'procurement-schedule.png'), animations: 'disabled' });
   await page.goto(new URL('/today', origin).href);
-  await (await sidebarLink(page.locator('aside'), '今日', '今日排期')).click();
+  await (await sidebarLink(page.locator('aside'), '今日事项', '今日排期')).click();
   await page.getByRole('button', { name: /^下单\s/ }).press('Enter');
   const task = page.getByRole('dialog');
   await task.getByText(finishedPo + ' · ' + finishedName, { exact: true }).waitFor();

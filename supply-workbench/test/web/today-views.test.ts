@@ -253,7 +253,7 @@ function scheduleProps(): Record<string, unknown> {
 function todayProps(override: Record<string, unknown> = {}): Record<string, unknown> {
   const noop = () => undefined;
   return {
-    board: { group: 'waiting', chips: [{ code: 'missing_date', label: '缺确认日期', count: 3, isSelected: false }], body: { kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进台看看。' } },
+    board: { group: 'waiting', chips: [{ code: 'missing_date', label: '缺确认日期', count: 3, isSelected: false }], body: { kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进中心看看。' } },
     insight: { total: 4, urgent: 1, overdue: 2, missingDate: 3 },
     focus: null,
     fading: null,

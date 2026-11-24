@@ -20,7 +20,7 @@ const server = requireWeb('react-dom/server');
 const router = requireWeb('react-router');
 const rows: readonly NavRow[] = [
   { to: '/progress', label: '管理店铺', matchPaths: ['/progress'], badge: { kind: 'none' } },
-  { to: '/lines', label: '跟进台', matchPaths: ['/lines'], badge: { kind: 'count', value: 7 } },
+  { to: '/lines', label: '跟进中心', matchPaths: ['/lines'], badge: { kind: 'count', value: 7 } },
 ];
 
 describe('视口探针', () => {
@@ -51,7 +51,7 @@ describe('壳标记', () => {
   it('收起的侧栏保留图标并隐藏计数角标', () => {
     const html = inRouter(h(ShellSider, { chrome: sider(true), nav: rows, onToggle: () => undefined }));
     expect(anchor(html, '/progress')).toContain('aria-label="管理店铺"');
-    expect(anchor(html, '/lines')).toContain('aria-label="跟进台"');
+    expect(anchor(html, '/lines')).toContain('aria-label="跟进中心"');
     expect(html).toContain('data-icon="field-time"');
     expect(html).toContain('data-icon="profile"');
     expect(anchor(html, '/lines')).not.toContain('>7<');
@@ -66,7 +66,7 @@ describe('壳标记', () => {
 
   it('展开的侧栏在链接里写出名称', () => {
     const html = inRouter(h(ShellSider, { chrome: sider(false), nav: rows, onToggle: () => undefined }));
-    expect(anchor(html, '/lines')).toContain('跟进台');
+    expect(anchor(html, '/lines')).toContain('跟进中心');
     expect(anchor(html, '/progress')).toContain('管理店铺');
   });
 
@@ -129,7 +129,7 @@ describe('页标题', () => {
     const today = inRouter(h(TodayPage, null));
     const printed = inRouter(h(ReportPrintPage, null));
     expect(headingCount(today)).toBe(1);
-    expect(today).toContain('>今日<');
+    expect(today).toContain('>今日事项<');
     expect(today).not.toContain('shell-page');
     expect(headingCount(printed)).toBe(1);
     expect(printed).toContain('>周报<');
@@ -158,7 +158,7 @@ describe('页标题', () => {
     expect(html).toContain('>订单行<');
   });
 
-  it('跟进台首次进入是骨架，不再锁 480 高', () => {
+  it('跟进中心首次进入是骨架，不再锁 480 高', () => {
     const html = inRouter(h(LineListPage, null));
     expect(html).not.toContain('max-height:480');
     expect(html).toContain('ant-skeleton');

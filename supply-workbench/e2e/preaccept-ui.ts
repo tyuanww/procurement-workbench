@@ -103,7 +103,7 @@ async function procurementAcceptance(): Promise<void> {
 
   const deep = '/lines?lane=material&q=' + componentPo + '#batch';
   const { page: deepBuyer } = await open('buyer', deep);
-  await deepBuyer.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await deepBuyer.getByRole('heading', { name: '跟进中心', exact: true }).waitFor();
   await deepBuyer.getByRole('link', { name: componentPo, exact: true }).waitFor();
   await buyer.goto(new URL('/reports', origin).href);
   await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
@@ -457,7 +457,7 @@ async function downloadLineHeaders(page: Page, link: Locator): Promise<string[]>
 async function checkNavigation(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(new URL('/progress', origin).href);
-  await page.locator('aside').getByRole('link', { name: '跟进台', exact: true }).waitFor();
+  await page.locator('aside').getByRole('link', { name: '跟进中心', exact: true }).waitFor();
   await page.setViewportSize({ width: 320, height: 780 });
   const toggle = page.getByRole('button', { name: '打开菜单', exact: true });
   await toggle.waitFor();
@@ -465,19 +465,19 @@ async function checkNavigation(page: Page) {
   assert.ok(target && target.width >= 44 && target.height >= 44);
   await toggle.press('Enter');
   const navigation = page.getByRole('dialog', { name: '导航', exact: true });
-  const link = navigation.getByRole('link', { name: '跟进台', exact: true });
+  const link = navigation.getByRole('link', { name: '跟进中心', exact: true });
   await link.waitFor();
-  const item = await navigation.getByRole('menuitem', { name: '跟进台', exact: true }).boundingBox();
+  const item = await navigation.getByRole('menuitem', { name: '跟进中心', exact: true }).boundingBox();
   assert.ok(item && item.width >= 44 && item.height >= 44);
   await page.screenshot({ path: join(out, 'mobile-navigation.png'), animations: 'disabled' });
   const hasFocus = () => link.evaluate((node: BrowserElement) => node.ownerDocument.activeElement === node);
   for (let step = 0; step < 24 && !await hasFocus(); step++) await page.keyboard.press('Tab');
-  assert.ok(await hasFocus(), 'Tab 可聚焦手机菜单中的跟进台');
+  assert.ok(await hasFocus(), 'Tab 可聚焦手机菜单中的跟进中心');
   await page.keyboard.press('Enter');
   await page.waitForURL(new URL('/lines', origin).href);
-  await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '跟进中心', exact: true }).waitFor();
   await navigation.waitFor({ state: 'hidden' });
-  result.checks.navigation = { accessibleName: '跟进台', touch: [target.width, target.height], itemTouch: [item.width, item.height], keyboardNavigated: true };
+  result.checks.navigation = { accessibleName: '跟进中心', touch: [target.width, target.height], itemTouch: [item.width, item.height], keyboardNavigated: true };
 }
 
 async function checkPartyOrderNavigation(page: Page) {
@@ -501,7 +501,7 @@ async function checkPartyOrderNavigation(page: Page) {
   await page.getByRole('link', { name: '查看代工厂相关订单', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/lines'
     && url.searchParams.get('lane') === 'all' && url.searchParams.get('factoryPartyId') === partyId);
-  await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '跟进中心', exact: true }).waitFor();
   await page.getByRole('link', { name: 'HZ09-0251', exact: true }).waitFor();
   const factoryOrders = await page.getByRole('link', { name: /^HZ09-\d{4}$/ }).allTextContents();
   assert.deepEqual(factoryOrders, ['HZ09-0251']);

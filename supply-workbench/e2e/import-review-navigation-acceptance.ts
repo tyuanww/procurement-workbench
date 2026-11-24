@@ -54,7 +54,7 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await heading.waitFor();
   assert.equal(await page.locator('aside a[href="/settings"]').count(), 0);
 
-  await (await sidebarLink(page.getByRole('complementary'), '今日', '行动板')).click();
+  await (await sidebarLink(page.getByRole('complementary'), '今日事项', '行动板')).click();
   await page.waitForURL(new URL('/today', origin).href);
   await trigger.press('Enter');
   await settings.waitFor();

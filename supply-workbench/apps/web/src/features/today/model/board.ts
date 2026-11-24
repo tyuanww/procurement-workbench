@@ -7,7 +7,7 @@ import { nudgeOf } from './nudge.js';
 import { resolveGroup } from './query.js';
 import type { BoardGroup, BoardItem, BoardRow, GroupMode, ReasonChip, ReasonCount, TodayBoard } from './types.js';
 
-const EMPTY_TEXT = '今天没有需要处理的事。下一步：去跟进台看看。';
+const EMPTY_TEXT = '今天没有需要处理的事。下一步：去跟进中心看看。';
 
 export function todayBoard(input: {
   readonly items: readonly BoardItem[];

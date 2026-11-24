@@ -47,7 +47,7 @@ try {
     assert.equal(await page.getByRole('button', { name: '用户', exact: true }).getAttribute('aria-expanded'), 'true');
     await page.goto(origin + '/missing-page-smoke');
     await page.getByText('页面不存在', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('link', { name: '返回今日' }).getAttribute('href'), '/today');
+    assert.equal(await page.getByRole('link', { name: '返回今日事项' }).getAttribute('href'), '/today');
     console.log('web smoke passed: admin login, settings, signed-in missing page');
   } finally {
     await browser.close();

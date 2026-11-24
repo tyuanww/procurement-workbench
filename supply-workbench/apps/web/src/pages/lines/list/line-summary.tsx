@@ -18,7 +18,7 @@ export function LineSummaryStrip(input: { readonly summary: LineSummary }): Reac
   return (
     <SectionGroup title="筛选结果概览" meta={`${input.summary.total} 行`}>
       <MetricStrip
-        ariaLabel="跟进台筛选结果指标"
+        ariaLabel="跟进中心筛选结果指标"
         items={[
           { key: 'total', label: '订单行', value: input.summary.total, tone: 'neutral' },
           { key: 'overdue', label: '逾期', value: input.summary.overdue, tone: 'danger', hint: '按确认到货日' },

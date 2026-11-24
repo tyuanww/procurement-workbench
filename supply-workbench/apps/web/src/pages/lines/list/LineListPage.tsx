@@ -45,7 +45,7 @@ export function LineListPage() {
   useEffect(() => { void loadDeskOwners({ setUsers, setUserId, setOwnerVisible }); }, []);
   const summary = useLineSummary(desk.requestQuery);
   return (
-    <WorkbenchPage title="跟进台" {...(load.hasLoaded ? { secondary: `${total} 行` } : {})} action={<ArrivalDesk userId={userId} onMutated={() => setReload((value) => value + 1)} />}>
+    <WorkbenchPage title="跟进中心" {...(load.hasLoaded ? { secondary: `${total} 行` } : {})} action={<ArrivalDesk userId={userId} onMutated={() => setReload((value) => value + 1)} />}>
       <LineTop search={search} desk={desk} setParams={setParams} views={views} userId={userId} setMessage={setMessage} picked={picked} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} gate={listGate.current} setRows={setRows} setTotal={setTotal} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys} />
       <LineExtras summary={summary} skips={skips} setSkips={setSkips} message={message} preview={preview} party={party} search={search} setParams={setParams} isListReady={load.hasLoaded} rowCount={rows.length} />
       <DeskBody

@@ -30,17 +30,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('已登录直接打开未知地址时留下该地址，并给出返回今日', async () => {
+it('已登录直接打开未知地址时留下该地址，并给出返回今日事项', async () => {
   stubFetch();
   mount('/aaa', ['buyer']);
   await textHas('页面不存在');
   expect(pathName()).toBe('/aaa');
   expect(document.body.textContent ?? '').not.toContain('这个角色看不到这页。');
-  expect(linkHref('返回今日')).toBe('/today');
+  expect(linkHref('返回今日事项')).toBe('/today');
   expect(window.location.pathname).not.toBe('/aaa');
 });
 
-it('从今日同文档走到未知地址，再返回今日，地址栏不整页跳转', async () => {
+it('从今日同文档走到未知地址，再返回今日事项，地址栏不整页跳转', async () => {
   stubFetch();
   const assigned = watchAssign();
   mount('/today', ['buyer']);
@@ -49,7 +49,7 @@ it('从今日同文档走到未知地址，再返回今日，地址栏不整页�
   await textHas('页面不存在');
   expect(pathName()).toBe('/aaa');
   expect(window.location.pathname).not.toBe('/aaa');
-  clickLink('返回今日');
+  clickLink('返回今日事项');
   await textHas('今日');
   expect(pathName()).toBe('/today');
   expect(document.body.textContent ?? '').not.toContain('页面不存在');
@@ -68,7 +68,7 @@ it('合法页面和没有权限的页面都不改成页面不存在', () => {
   stubFetch();
   const lines = markup('/lines', ['buyer']);
   expect(lines).not.toContain('页面不存在');
-  expect(lines).toContain('跟进台');
+  expect(lines).toContain('跟进中心');
   const denied = markup('/dashboard', ['buyer']);
   expect(denied).toContain('这个角色看不到这页。');
   expect(denied).not.toContain('页面不存在');

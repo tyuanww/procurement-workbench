@@ -26,14 +26,14 @@ describe('加载、错误和空态', () => {
     expect(text).toContain('返回');
   });
 
-  it('今日空态有一句说明和去跟进台按钮', () => {
+  it('今日空态有一句说明和去跟进中心按钮', () => {
     const html = render(TodayScreen, todayProps());
     expect(html).toContain('ant-empty');
-    expect(html).toContain('去跟进台');
+    expect(html).toContain('去跟进中心');
     expect(html).toContain('href="/lines"');
   });
 
-  it('跟进台、看板、进度首次进入是骨架', () => {
+  it('跟进中心、看板、进度首次进入是骨架', () => {
     expect(inRouter(LineListPage)).toContain('ant-skeleton');
     expect(inRouter(DashboardPage)).toContain('ant-skeleton');
     expect(inRouter(ProgressPage)).toContain('ant-skeleton');
@@ -76,7 +76,7 @@ describe('缺值和状态', () => {
 function todayProps(override: Record<string, unknown> = {}): Record<string, unknown> {
   const noop = () => undefined;
   return {
-    board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有待办。下一步：去跟进台看看。' } },
+    board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有待办。下一步：去跟进中心看看。' } },
     insight: { total: 0, urgent: 0, overdue: 0, missingDate: 0 },
     focus: null,
     fading: null,

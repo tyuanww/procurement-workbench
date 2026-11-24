@@ -58,7 +58,7 @@ export function TodayScreen(props: TodayScreenProps): ReactNode {
 function TodayLoading(): ReactNode {
   return (
     <section style={screenStyle()}>
-      <PageHeader title="今日" />
+      <PageHeader title="今日事项" />
       <Skeleton active paragraph={{ rows: 8 }} />
     </section>
   );
@@ -67,7 +67,7 @@ function TodayLoading(): ReactNode {
 function TodayError(props: TodayScreenProps): ReactNode {
   return (
     <section style={screenStyle()}>
-      <PageHeader title="今日" />
+      <PageHeader title="今日事项" />
       <Result
         status="error"
         title="今日没有读出来"

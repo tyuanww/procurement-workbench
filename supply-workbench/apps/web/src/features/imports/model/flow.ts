@@ -49,7 +49,7 @@ function aliasStep({ canReviewAliases, pendingAliases }: ImportContinuationInput
 }
 
 const COMMITTED_STEP: Partial<Record<TemplateId, NextStep>> = {
-  'factory-progress-v1': { to: '/lines', label: '去跟进台' },
+  'factory-progress-v1': { to: '/lines', label: '去跟进中心' },
   'product-archive-v1': { to: '/products', label: '去产品档案' },
 };
 

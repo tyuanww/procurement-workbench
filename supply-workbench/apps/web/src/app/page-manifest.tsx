@@ -35,12 +35,12 @@ type OtherPageEntry = {
 export type PageManifestEntry = NavPageEntry | OtherPageEntry;
 
 export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
+  { path: '/today', nav: { label: '今日事项' }, gate: 'always', element: <TodayPage /> },
   { path: '/progress', nav: { label: '管理店铺' }, gate: 'always', element: <ProgressPage /> },
   { path: '/progress/current', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="current" /> },
   { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="schedule" /> },
   { path: '/progress/development', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="development" /> },
-  { path: '/today', nav: { label: '今日' }, gate: 'always', element: <TodayPage /> },
-  { path: '/lines', nav: { label: '跟进台' }, gate: 'always', element: <LineListPage /> },
+  { path: '/lines', nav: { label: '跟进中心' }, gate: 'always', element: <LineListPage /> },
   { path: '/lines/:id', nav: null, element: <LineDetailPage /> },
   { path: '/dashboard', nav: { label: '管理看板' }, gate: 'oversight', element: <DashboardPage /> },
   { path: '/reports', nav: null, gate: 'oversight', menuParent: '/dashboard', element: <ReportListPage /> },

@@ -79,8 +79,8 @@ export function actionIcon(kind: QuickAction['kind']): ReactNode {
 }
 
 function drawerTitle(row: BoardRow | null): string {
-  if (row === null) return '今日';
+  if (row === null) return '今日事项';
   if (row.face.productName !== '—') return row.face.productName;
   if (row.face.reason !== '') return row.face.reason;
-  return '今日';
+  return '今日事项';
 }
