@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarGroup, sidebarLink } from './sidebar.ts';
 
@@ -40,7 +41,8 @@ export async function checkImportReviewNavigation({ admin, buyer, lead, manager,
     await checkWithoutSettingsAccess(page, origin, name);
   }
   return {
-    buyerEntries: 5, adminEntries: 6, legacyBatch, reviewPhoneWidth: 320, deniedRoles: ['manager', 'lead'],
+    buyerEntries: 5, adminEntries: 6, legacyBatch, historyFocus: true, keyboardFilePicker: true,
+    reviewPhoneWidth: 320, deniedRoles: ['manager', 'lead'],
     settings: { soleAdminLanding: '/settings', keyboardLink: true, phoneWidth: 320, deniedRoles: settingsDeniedRoles },
   };
 }
@@ -127,6 +129,7 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
   assert.equal(await page.getByRole('navigation', { name: GROUP_LABEL }).count(), 0);
   const headerLink = page.getByRole('banner').locator('a[href="/imports"]');
   await headerLink.getByText(/总表/).waitFor();
+  await checkKeyboardFilePicker(page);
 
   await checkEmptySchedule(page, origin, true);
   await page.goto(new URL(HISTORY_PATH, origin).href);
@@ -134,8 +137,51 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
   await historyLink.waitFor();
   const legacyBatch = await historyLink.getAttribute('href');
   assert.ok(legacyBatch?.startsWith('/imports/'));
+  await checkHistoryReturn(page, origin);
   await checkLegacyBatch(page, legacyBatch, origin, IMPORT_LABEL);
   return legacyBatch;
+}
+
+async function checkKeyboardFilePicker(page: Page): Promise<void> {
+  const upload = page.getByRole('main').getByRole('button', { name: /^选择文件/ });
+  assert.equal(await upload.count(), 1, '只能有一个键盘文件选择入口');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), upload.press('Enter')]);
+  await chooser.setFiles(fileURLToPath(new URL(`../fixtures/synthetic/${WORKBOOK}`, import.meta.url)));
+  await page.getByRole('status').filter({ hasText: `已选文件 ${WORKBOOK}` }).waitFor();
+  await page.getByRole('combobox', { name: '导入类型', exact: true }).waitFor();
+  const replace = page.getByRole('button', { name: '更换文件', exact: true });
+  await replace.focus();
+  await page.keyboard.press('Tab');
+  await page.getByRole('link', { name: '下载采购订单总表模板', exact: true }).and(page.locator(':focus')).waitFor();
+}
+
+async function checkHistoryReturn(page: Page, origin: URL): Promise<void> {
+  const link = page.getByRole('link', { name: WORKBOOK, exact: true });
+  for (const mode of ['link', 'browser']) {
+    await link.press('Enter');
+    await page.getByText(/已提交 · 共 \d+ 行/).waitFor();
+    if (mode === 'link') await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
+    else await page.goBack();
+    await page.waitForURL(new URL(HISTORY_PATH, origin).href);
+    await link.and(page.locator(':focus')).waitFor();
+    await page.getByRole('combobox', { name: '筛选批次状态', exact: true }).waitFor();
+    await page.getByText('已提交', { exact: true }).first().waitFor();
+  }
+}
+
+export async function checkImportFactoryDetail(page: Page, origin: URL) {
+  const source = new URL('/imports?template=factory-progress-v1&status=committed', origin);
+  await page.goto(source.href);
+  const batch = page.getByRole('link', { name: 'ui-demo-stock-file', exact: true });
+  await batch.waitFor();
+  await page.getByText(/代工厂进度 · 演示包装工厂/).waitFor();
+  await batch.press('Enter');
+  await page.getByText('演示包装工厂', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: '提交结果', exact: true }).waitFor();
+  await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
+  await page.waitForURL(source.href);
+  await batch.and(page.locator(':focus')).waitFor();
+  return { factory: '演示包装工厂', status: '已提交', historyFocus: true };
 }
 
 async function checkReviewNavigation(page: Page, origin: URL, expectedEntries: number): Promise<void> {

@@ -4,10 +4,11 @@ import { Alert, Button, Empty, Flex, Form, Select, Skeleton, Typography } from '
 import { ImportBatchListItemSchema, listResponseSchema, type ImportBatchListItem } from '@sw/contracts';
 import { IMPORT_STATUSES, TEMPLATE_IDS, importStatusLabel, templateIdLabel } from '@sw/domain';
 import { apiGetWithSignal } from '../../shared/api/client.js';
+import { useDetailFocusLink, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { formatDateTime } from '../../shared/ui/format.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
-import { space } from '../../theme/tokens.js';
+import { space, topBar } from '../../theme/tokens.js';
 import { ImportPagination } from './ImportPagination.js';
 import { ImportStatusTag } from './import-batch-banner.js';
 
@@ -62,6 +63,7 @@ function HistoryResults(props: {
 }) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  useDetailReturnFocus(load.kind === 'ready' && load.query === props.query);
   useEffect(() => {
     const controller = new AbortController();
     void apiGetWithSignal({ path: `/api/v1/imports?${props.query}`, schema, signal: controller.signal })
@@ -105,10 +107,13 @@ function HistoryRows({ load, historySearch, onRetry }: {
 function HistoryRow({ item, historySearch }: { readonly item: ImportBatchListItem; readonly historySearch: string }) {
   const created = formatDateTime(item.createdAt) ?? '—';
   const committed = formatDateTime(item.committedAt);
+  const detailPath = `/imports/${encodeURIComponent(item.id)}`;
+  const focus = useDetailFocusLink(detailPath);
   return (
     <SectionRow action={<ImportStatusTag status={item.status} />}>
       <Flex vertical gap={space[1]}>
-        <Link style={{ overflowWrap: 'anywhere' }} to={{ pathname: `/imports/${encodeURIComponent(item.id)}`, search: historySearch }}>{item.originalName}</Link>
+        <Link {...focus} style={{ overflowWrap: 'anywhere', scrollMarginBlockStart: topBar + space[2] }}
+          to={{ pathname: detailPath, search: historySearch }}>{item.originalName}</Link>
         <Typography.Text type="secondary">
           {templateIdLabel(item.template)}
           {item.factoryParty === null ? '' : ` · ${item.factoryParty.displayName}`}

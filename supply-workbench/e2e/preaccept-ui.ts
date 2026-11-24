@@ -10,7 +10,7 @@ import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwrigh
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
-import { checkEmptyProductArchive, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
+import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
 import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
@@ -138,6 +138,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse });
   result.checks.factoryLinkBoard = await checkFactoryLinkBoard({ reviewer, openAdmin: async () => (await open('admin', '/master?tab=factory-link')).page, origin, out });
   seedDemoFixture(new URL('../fixtures/demo/frontend-closeout.sql', import.meta.url));
+  result.checks.importFactoryDetail = await checkImportFactoryDetail(admin, origin);
   result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
   result.checks.redReview = await checkRedReview({ page: admin, origin });
 }
