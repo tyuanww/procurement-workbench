@@ -3,6 +3,7 @@ import { Button } from 'antd';
 import type { OrderLineRow } from '@sw/contracts';
 import { lineCell, type LineCell, type LineColumnKey } from '../../../features/follow-up/index.js';
 import { MissingValue, presentRaw } from '../../../shared/ui/widgets.js';
+import { LineDetailLink } from '../detail/desk-navigation.js';
 import { partyPreviewRoleLabel, partyPreviewTarget, type OpenParty } from './party-preview.js';
 
 export const previewButtonStyle = {
@@ -20,9 +21,10 @@ export function renderLineCell(input: {
   readonly now: Date;
   readonly numeric?: boolean;
   readonly touch?: boolean;
+  readonly search?: string;
   readonly onOpenParty?: (opened: OpenParty) => void;
 }): ReactNode {
-  const body = lineCellNode(lineCell({ column: input.column, row: input.row, now: input.now }));
+  const body = lineCellNode(lineCell({ column: input.column, row: input.row, now: input.now }), input.search);
   const shown = input.numeric === true ? <span style={{ fontVariantNumeric: 'tabular-nums' }}>{body}</span> : body;
   if (input.onOpenParty === undefined) return shown;
   const opened = partyPreviewTarget({ column: input.column, row: input.row });
@@ -50,10 +52,10 @@ function PartyPreviewTrigger(props: {
   );
 }
 
-export function lineCellNode(cell: LineCell): ReactNode {
+export function lineCellNode(cell: LineCell, search?: string): ReactNode {
   switch (cell.kind) {
     case 'link':
-      return <a href={cell.href}>{cell.text}</a>;
+      return search === undefined ? <a href={cell.href}>{cell.text}</a> : <LineDetailLink href={cell.href} search={search}>{cell.text}</LineDetailLink>;
     case 'missing':
       return <MissingValue reason={cell.reason} {...presentRaw(cell.raw)} />;
     case 'text':

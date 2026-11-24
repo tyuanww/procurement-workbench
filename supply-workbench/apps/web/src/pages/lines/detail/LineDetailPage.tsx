@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Card, Collapse, Empty, Flex, Input, Result, Select, Skeleton, Space, Tag, Typography } from 'antd';
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
@@ -16,6 +16,7 @@ import { FulfillmentRecords, FulfillmentSummary } from './fulfillment.js';
 import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../features/plan/index.js';
 import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
+import { lineDetailBack, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
 
 const MISSING_PO = '无单号';
 
@@ -28,11 +29,11 @@ export function LineDetailPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
-  const back = params.get('backToProgress');
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
+  const { state } = useLocation();
+  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), state })} />;
 }
 
-function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: string | null }) {
+function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {
   const [detail, setDetail] = useState<OrderLineDetail | null>(null);
   const [events, setEvents] = useState<readonly TimelineEvent[]>([]);
   const [message, setMessage] = useState('');
@@ -43,7 +44,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
   const browserTitle = [title, detail?.line.nameRaw].filter(Boolean).join(' · ');
   return (
     <section style={{ maxWidth: 1440 }}>
-      {back === null ? null : <Link to={`/progress?${new URLSearchParams(back).toString()}`}>返回管理店铺</Link>}
+      {back === null ? null : <Link to={back.to}>{back.label}</Link>}
       <PageHeader title={title} browserTitle={browserTitle} showIdentity />
       {detail === null ? null : <LineIdentity line={detail.line} />}
       {detail === null && isFailed ? (
@@ -57,7 +58,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
           ]}
         />
       ) : (
-        <Card styles={{ body: { padding: space[3] } }}>
+        <>
           {detail === null ? <Skeleton active paragraph={{ rows: 8 }} /> : <LineBody detail={detail} events={events} lineId={lineId} setMessage={setMessage} onReload={load} />}
           {detail === null ? null : <BuyerControls detail={detail} onSaved={(saved) => {
             const { pendingBuyerName: _pendingBuyerName, ...current } = detail;
@@ -66,7 +67,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
             load();
           }} />}
           {message === '' ? null : <Alert style={{ marginTop: 12 }} type="info" showIcon title={message} />}
-        </Card>
+        </>
       )}
     </section>
   );
@@ -108,7 +109,7 @@ function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly d
 }
 
 function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly detail: OrderLineDetail; readonly canRecord: boolean }) {
-  const [params, setParams] = useSearchParams();
+  const { params, setParams } = useLineDetailSearchParams();
   const search = params.toString();
   return (
     <section aria-label="批次">

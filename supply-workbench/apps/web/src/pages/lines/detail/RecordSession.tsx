@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
 import { Button, Drawer, Flex } from 'antd';
 import type { OrderLineDetail } from '@sw/contracts';
 import { ApiError, apiErrorMessage } from '../../../shared/api/client.js';
@@ -22,12 +21,13 @@ import {
 import { loadBatchReceivers } from '../../../features/master-data/index.js';
 import { drawerWidth } from '../../../theme/tokens.js';
 import { writeUrlState } from '../../../shared/hooks/url-state.js';
+import { useLineDetailSearchParams } from './desk-navigation.js';
 
 export function LineRecordDrawer(props: {
   readonly detail: OrderLineDetail;
   readonly onReload: () => void;
 }) {
-  const [params, setParams] = useSearchParams();
+  const { params, setParams } = useLineDetailSearchParams();
   const drawer = params.get('drawer');
   const batchId = params.get('batchId') ?? '';
   const reportId = params.get('reportId') ?? '';

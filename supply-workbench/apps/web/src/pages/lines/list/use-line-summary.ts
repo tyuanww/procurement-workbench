@@ -2,22 +2,26 @@ import { useEffect, useState } from 'react';
 import type { LineSummary } from '@sw/contracts';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
 
-export function useLineSummary(requestQuery: string): { readonly summary: LineSummary | null; readonly error: string } {
-  const [summary, setSummary] = useState<LineSummary | null>(null);
-  const [error, setError] = useState('');
+type SummaryRequest = { readonly query: string; readonly reload: number };
+type SummaryResult = { readonly summary: LineSummary | null; readonly error: string };
+const pending: SummaryResult = { summary: null, error: '' };
+
+export function useLineSummary({ query, reload }: SummaryRequest): SummaryResult {
+  const [attempt, setAttempt] = useState<SummaryRequest & SummaryResult>({ query, reload, ...pending });
+  const isCurrentAttempt = attempt.query === query && attempt.reload === reload;
+  if (!isCurrentAttempt) setAttempt({ query, reload, ...pending });
   useEffect(() => {
-    let isCurrent = true;
-    setSummary(null);
-    setError('');
-    void read({ name: 'linesSummary', query: requestQuery })
-      .then((value) => { if (isCurrent) setSummary(value); })
+    const abort = new AbortController();
+    void read({ name: 'linesSummary', query, signal: abort.signal })
+      .then((summary) => {
+        if (!abort.signal.aborted) setAttempt({ query, reload, summary, error: '' });
+      })
       .catch((caught: unknown) => {
-        if (!isCurrent) return;
+        if (abort.signal.aborted) return;
         const failure = readFailureOf(caught);
-        if (failure === null) return;
-        setError(failureText(failure));
+        if (failure !== null) setAttempt({ query, reload, summary: null, error: failureText(failure) });
       });
-    return () => { isCurrent = false; };
-  }, [requestQuery]);
-  return { summary, error };
+    return () => abort.abort();
+  }, [query, reload]);
+  return isCurrentAttempt ? attempt : pending;
 }

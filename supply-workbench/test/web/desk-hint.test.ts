@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { OrderLineRowSchema, type OrderLineRow } from '../../packages/contracts/src/index.js';
 import { lineCell, readDesk } from '../../apps/web/src/features/follow-up/index.js';
-import { createListGate, hintBatches, loadDeskList } from '../../apps/web/src/pages/lines/list/LineListPage.js';
+import { hintBatches } from '../../apps/web/src/pages/lines/list/actions.js';
+import { read } from '../../apps/web/src/shared/api/reads.js';
 
 const LINE_ID = 'line-1';
 
@@ -11,10 +12,7 @@ it('生成批次后句子还在，默认跟进台的阶段是待确认日期', a
     const desk = blankDesk();
     await hintBatches({
       lineIds: [LINE_ID],
-      query: readDesk('').requestQuery,
-      gate: createListGate(),
-      setRows: desk.setRows,
-      setTotal: desk.setTotal,
+      onReload: () => desk.reload(readDesk('').requestQuery),
       setMessage: desk.setMessage,
       setSkips: desk.setSkips,
     });
@@ -33,10 +31,7 @@ it('未建要货筛掉新建批次的行，句子仍在', async () => {
     const desk = blankDesk();
     await hintBatches({
       lineIds: [LINE_ID],
-      query: readDesk('stage=no_batch').requestQuery,
-      gate: createListGate(),
-      setRows: desk.setRows,
-      setTotal: desk.setTotal,
+      onReload: () => desk.reload(readDesk('stage=no_batch').requestQuery),
       setMessage: desk.setMessage,
       setSkips: desk.setSkips,
     });
@@ -45,44 +40,6 @@ it('未建要货筛掉新建批次的行，句子仍在', async () => {
     expect(desk.rows.map((row) => row.id)).not.toContain(LINE_ID);
   } finally {
     restore();
-  }
-});
-
-it('更早的列表响应不盖住生成批次后的阶段', async () => {
-  const gate = createListGate();
-  let releaseStale: (body: unknown) => void = () => undefined;
-  const previous = globalThis.fetch;
-  globalThis.fetch = async (input) => {
-    const url = requestUrl(input);
-    if (url.includes('/hint-batches')) return jsonBody({ created: 1, skipped: [] });
-    if (url.includes('stale=1')) return new Promise((resolve) => { releaseStale = (body) => resolve(jsonBody(body)); });
-    return jsonBody(pageOf([lineRow('awaiting_date')]));
-  };
-  try {
-    const desk = blankDesk();
-    const stale = loadDeskList({
-      query: 'stale=1',
-      gate,
-      setRows: desk.setRows,
-      setTotal: desk.setTotal,
-    });
-    await hintBatches({
-      lineIds: [LINE_ID],
-      query: readDesk('').requestQuery,
-      gate,
-      setRows: desk.setRows,
-      setTotal: desk.setTotal,
-      setMessage: desk.setMessage,
-      setSkips: desk.setSkips,
-    });
-    expect(desk.message).toBe('新建 1 个批次');
-    expect(stageText(desk.rows[0])).toBe('待确认日期');
-    releaseStale(pageOf([lineRow('no_batch')]));
-    await stale;
-    expect(desk.message).toBe('新建 1 个批次');
-    expect(stageText(desk.rows[0])).toBe('待确认日期');
-  } finally {
-    globalThis.fetch = previous;
   }
 });
 
@@ -106,8 +63,11 @@ function blankDesk() {
     get total() { return state.total; },
     get skips() { return state.skips; },
     setMessage: (message: string) => { state.message = message; },
-    setRows: (rows: readonly OrderLineRow[]) => { state.rows = [...rows]; },
-    setTotal: (total: number) => { state.total = total; },
+    reload: async (query: string) => {
+      const result = await read({ name: 'lines', query });
+      state.rows = [...result.items];
+      state.total = result.page.total;
+    },
     setSkips: (skips: readonly string[]) => { state.skips = skips; },
   };
 }

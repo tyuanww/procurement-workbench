@@ -219,7 +219,7 @@ it('手机同单同名且编码或条码相同的订单行显示完整 ID，勾�
     const root = window.document.createElement('div');
     root.innerHTML = renderTableAt320({
       columns, rows, picked: [], setPicked: () => undefined, page: 1, pageSize: 20, total: rows.length,
-      search: '', setParams: () => undefined, isUpdating: false, density: 'small', hiddenKeys: [], now,
+      search: '', setParams: () => undefined, density: 'small', hiddenKeys: [], now,
     });
     const renderedRows = root.querySelectorAll('tr[data-row-key]');
     expect([...renderedRows].map((row) => row.querySelector('.line-mobile-identifier')?.textContent)).toEqual([

@@ -4,12 +4,12 @@ import type { OrderLineRow } from '@sw/contracts';
 import { parseOrderLineId } from '@sw/domain';
 import { lineTableLayout, readDesk, renderedLineColumns, writeDesk, type LineColumnKey } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
-import { tableLoading, tablePagination } from '../../../shared/ui/pagination.js';
+import { tablePagination } from '../../../shared/ui/pagination.js';
 import { topBar } from '../../../theme/tokens.js';
 import { clearFiltersAddress, type Density } from './view-bar.js';
 import { previewButtonStyle, renderLineCell } from './line-cell.js';
 import { lineMobileColumns, lineMobileDetails, lineMobileIdentifiers, repeatedMobileIdentityIds, type LineMobileInput } from './lines-mobile.js';
-import { openFollowUpPreview } from './follow-up-preview-url.js';
+import { closeFollowUpPreview, openFollowUpPreview } from './follow-up-preview-url.js';
 import type { OpenParty } from './party-preview.js';
 
 type SearchSetter = ReturnType<typeof useSearchParams>[1];
@@ -25,22 +25,22 @@ export type LineTableProps = {
   readonly total: number;
   readonly search: string;
   readonly setParams: SearchSetter;
-  readonly isUpdating: boolean;
   readonly density: Density;
   readonly hiddenKeys: readonly string[];
   readonly now: Date;
   readonly onOpenParty?: (opened: OpenParty) => void;
+  readonly onPreviewTrigger?: ((element: HTMLElement) => void) | undefined;
 };
 
 export function LineTable(props: LineTableProps) {
   const layout = lineTableLayout(useShellViewport());
   const shown = renderedLineColumns({ columns: props.columns, hiddenKeys: props.hiddenKeys, layout });
   const mobileInput = layout === 'desk' ? null : mobileOf({ props, layout, shown });
+  const detailSearch = closeFollowUpPreview(props.search).toString();
   return (
     <Table<OrderLineRow>
       rowKey="id"
       size={props.density}
-      loading={tableLoading(props.isUpdating)}
       dataSource={[...props.rows]}
       rowSelection={lineSelection(props, mobileInput?.repeatedIdentityIds)}
       {...(mobileInput !== null ? {
@@ -58,6 +58,8 @@ export function LineTable(props: LineTableProps) {
           now: props.now,
           numeric: isQtyColumn(column.key),
           search: props.search,
+          detailSearch,
+          onPreviewTrigger: props.onPreviewTrigger,
           setParams: props.setParams,
           ...(props.onOpenParty === undefined ? {} : { onOpenParty: props.onOpenParty }),
         }),
@@ -98,6 +100,7 @@ function mobileOf(input: MobileOfInput): LineMobileInput {
     now: input.props.now,
     search: input.props.search,
     setParams: input.props.setParams,
+    onPreviewTrigger: input.props.onPreviewTrigger,
     ...(input.props.onOpenParty === undefined ? {} : { onOpenParty: input.props.onOpenParty }),
   };
 }
@@ -122,18 +125,24 @@ function lineTableCell(input: {
   readonly now: Date;
   readonly numeric: boolean;
   readonly search: string;
+  readonly detailSearch: string;
   readonly setParams: SearchSetter;
   readonly onOpenParty?: (opened: OpenParty) => void;
+  readonly onPreviewTrigger?: ((element: HTMLElement) => void) | undefined;
 }) {
   const body = renderLineCell({
     column: input.column,
     row: input.row,
     now: input.now,
     numeric: input.numeric,
+    search: input.detailSearch,
     ...(input.onOpenParty === undefined ? {} : { onOpenParty: input.onOpenParty }),
   });
   if (input.column !== 'po') return body;
   const parsed = parseOrderLineId(input.row.id);
   if (!parsed.ok) return body;
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{body}<Button type="link" size="small" style={previewButtonStyle} onClick={() => input.setParams(openFollowUpPreview({ search: input.search, lineId: parsed.value }))}>预览</Button></span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{body}<Button type="link" size="small" style={previewButtonStyle} onClick={(event) => {
+    input.onPreviewTrigger?.(event.currentTarget);
+    input.setParams(openFollowUpPreview({ search: input.search, lineId: parsed.value }), { preventScrollReset: true });
+  }}>预览</Button></span>;
 }

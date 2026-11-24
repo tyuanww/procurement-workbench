@@ -119,10 +119,7 @@ function bulkBarElement(): unknown {
     buyerId: '',
     setBuyerId: () => undefined,
     picked: ['line-1', 'line-2'],
-    query: '',
-    setRows: () => undefined,
-    setTotal: () => undefined,
-    gate: { start: () => 1, isLatest: () => true },
+    onReload: () => undefined,
     setMessage: () => undefined,
     setSkips: () => undefined,
   });

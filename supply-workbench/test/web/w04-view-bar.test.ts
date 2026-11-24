@@ -195,7 +195,6 @@ function tableProps(hiddenKeys: readonly string[], density: string = SMALL): Rec
     total: 0,
     search: '',
     setParams: noop,
-    isUpdating: false,
     density,
     hiddenKeys,
     now: NOW,

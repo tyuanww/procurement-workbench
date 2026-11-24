@@ -1,11 +1,10 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router';
 import { Alert, Button, Card, Checkbox, Collapse, Flex, Input, Result, Segmented, Select, Skeleton } from 'antd';
-import type { OrderLineRow } from '@sw/contracts';
 import { loadViews, presetViews, readDesk, writeDesk } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
-import { LineAlerts, LineBulkBar, createListGate, type ListGate } from './actions.js';
+import { LineAlerts, LineBulkBar } from './actions.js';
 import { loadDeskOwners } from './owners.js';
 import { useDeskLoad } from './use-desk-load.js';
 import { LineViewBar, readDensity, readHiddenColumns, type Density, type SavedView } from './view-bar.js';
@@ -19,20 +18,15 @@ import { LineTable } from './line-table.js';
 import { PartyPreviewDrawer } from './PartyPreviewDrawer.js';
 import { closePartyPreview, openPartyPreview, readPartyPreview } from './party-preview.js';
 
-export { createListGate, hintBatches, loadDeskList } from './actions.js';
-export type { ListGate } from './actions.js';
 export { LineTable, type LineTableProps } from './line-table.js';
 
 type SearchSetter = ReturnType<typeof useSearchParams>[1];
 type Desk = ReturnType<typeof readDesk>;
 export function LineListPage() {
   const [params, setParams] = useSearchParams();
-  const [rows, setRows] = useState<readonly OrderLineRow[]>([]);
-  const [total, setTotal] = useState(0);
   const [users, setUsers] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
   const [isOwnerVisible, setOwnerVisible] = useState(false);
   const [userId, setUserId] = useState('');
-  const [picked, setPicked] = useState<readonly string[]>([]);
   const [buyerId, setBuyerId] = useState('');
   const [skips, setSkips] = useState<readonly string[]>([]);
   const [message, setMessage] = useState('');
@@ -40,18 +34,19 @@ export function LineListPage() {
   const [now] = useState(() => new Date());
   const search = params.toString(); const desk = readDesk(search);
   const preview = readFollowUpPreview(search); const party = readPartyPreview(search); const { density, hiddenKeys } = displayPrefs(search);
-  const views = viewChoices(userId); const listGate = useRef<ListGate>(createListGate());
-  const load = useDeskLoad({ query: desk.requestQuery, gate: listGate.current, setRows, setTotal, reload });
+  const request = { query: desk.requestQuery, reload };
+  const load = useDeskLoad(request);
+  const { picked, setPicked } = useDeskSelection(request);
+  const refresh = () => setReload((value) => value + 1);
+  const rememberPreviewTrigger = usePreviewTrigger(preview !== null);
   useEffect(() => { void loadDeskOwners({ setUsers, setUserId, setOwnerVisible }); }, []);
-  const summary = useLineSummary(desk.requestQuery);
+  const summary = useLineSummary(request);
   return (
-    <WorkbenchPage title="跟进中心" {...(load.hasLoaded ? { secondary: `${total} 行` } : {})} action={<ArrivalDesk userId={userId} onMutated={() => setReload((value) => value + 1)} />}>
-      <LineTop search={search} desk={desk} setParams={setParams} views={views} userId={userId} setMessage={setMessage} picked={picked} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} gate={listGate.current} setRows={setRows} setTotal={setTotal} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys} />
-      <LineExtras summary={summary} skips={skips} setSkips={setSkips} message={message} preview={preview} party={party} search={search} setParams={setParams} isListReady={load.hasLoaded} rowCount={rows.length} />
+    <WorkbenchPage title="跟进中心" {...(load.kind === 'ready' ? { secondary: `${load.total} 行` } : {})} action={<ArrivalDesk userId={userId} onMutated={refresh} />}>
+      <LineTop search={search} desk={desk} setParams={setParams} views={viewChoices(userId)} userId={userId} setMessage={setMessage} picked={load.kind === 'ready' ? picked : []} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} onReload={refresh} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys} />
+      <LineExtras summary={summary} skips={skips} setSkips={setSkips} message={message} preview={preview} party={party} search={search} setParams={setParams} isListReady={load.kind === 'ready'} rowCount={load.kind === 'ready' ? load.rows.length : 0} />
       <DeskBody
         load={load}
-        rows={rows}
-        total={total}
         desk={desk}
         searched={search}
         setParams={setParams}
@@ -59,11 +54,34 @@ export function LineListPage() {
         setPicked={setPicked}
         density={density}
         hiddenKeys={hiddenKeys}
-        onRetry={() => setReload((value) => value + 1)}
+        onPreviewTrigger={rememberPreviewTrigger}
+        onRetry={refresh}
         now={now}
       />
     </WorkbenchPage>
   );
+}
+
+function usePreviewTrigger(isOpen: boolean) {
+  const trigger = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const element = trigger.current;
+    if (isOpen || element === null) return;
+    trigger.current = null;
+    const frame = window.requestAnimationFrame(() => element.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen]);
+  return (element: HTMLElement) => { trigger.current = element; };
+}
+
+function useDeskSelection(request: Parameters<typeof useDeskLoad>[0]) {
+  const [selection, setSelection] = useState<typeof request & { readonly picked: readonly string[] }>({ ...request, picked: [] });
+  const isCurrent = selection.query === request.query && selection.reload === request.reload;
+  if (!isCurrent) setSelection({ ...request, picked: [] });
+  return {
+    picked: isCurrent ? selection.picked : [],
+    setPicked: (picked: readonly string[]) => setSelection({ ...request, picked }),
+  };
 }
 
 function LineExtras(props: {
@@ -80,6 +98,9 @@ function LineExtras(props: {
 }) {
   const isPhone = useShellViewport().band === 'phone';
   useDeskScrollRestore({ isReady: props.isListReady && isSummarySettled(props.summary), layoutKey: props.rowCount });
+  const [lastPreview, setLastPreview] = useState(props.preview);
+  if (props.preview !== null && props.preview.lineId !== lastPreview?.lineId) setLastPreview(props.preview);
+  const shownPreview = props.preview ?? lastPreview;
   return (
     <>
       {props.summary.summary === null ? null : isPhone
@@ -91,7 +112,13 @@ function LineExtras(props: {
         : <LineSummaryStrip summary={props.summary.summary} />}
       {props.summary.error === '' ? null : <Alert type="error" showIcon title="订单汇总没有读出来" description={props.summary.error} />}
       <LineAlerts skips={props.skips} setSkips={props.setSkips} message={props.message} />
-      {previewDrawer({ preview: props.preview, search: props.search, setParams: props.setParams })}
+      {shownPreview === null ? null : <FollowUpPreviewDrawer
+        key={shownPreview.lineId}
+        lineId={shownPreview.lineId}
+        search={shownPreview.preservedSearch}
+        isOpen={props.preview !== null}
+        onClose={() => keepPlace(props.setParams, writeFollowUpPreview({ search: props.search, session: null }))}
+      />}
       {partyDrawer({ party: props.party, search: props.search, setParams: props.setParams })}
     </>
   );
@@ -108,8 +135,6 @@ function viewChoices(userId: string): readonly SavedView[] {
 
 function DeskBody(props: {
   readonly load: ReturnType<typeof useDeskLoad>;
-  readonly rows: readonly OrderLineRow[];
-  readonly total: number;
   readonly desk: Desk;
   readonly searched: string;
   readonly setParams: SearchSetter;
@@ -118,25 +143,29 @@ function DeskBody(props: {
   readonly density: Density;
   readonly hiddenKeys: readonly string[];
   readonly onRetry: () => void;
+  readonly onPreviewTrigger: (element: HTMLElement) => void;
   readonly now: Date;
 }) {
-  if (props.load.loadError !== '' && props.rows.length === 0) return <DeskError message={props.load.loadError} onRetry={props.onRetry} />;
-  if (!props.load.hasLoaded) return <Skeleton active paragraph={{ rows: 10 }} />;
+  if (props.load.kind === 'failed') return <DeskError message={props.load.message} onRetry={props.onRetry} />;
+  if (props.load.kind === 'pending') return <>
+    <p role="status">正在读取订单行…</p>
+    <Skeleton active paragraph={{ rows: 10 }} />
+  </>;
   return (
     <LineTable
       columns={props.desk.columns}
-      rows={props.rows}
+      rows={props.load.rows}
       picked={props.picked}
       setPicked={props.setPicked}
       page={props.desk.page}
       pageSize={props.desk.pageSize}
-      total={props.total}
+      total={props.load.total}
       search={props.searched}
       setParams={props.setParams}
-      isUpdating={props.load.isUpdating}
       density={props.density}
       hiddenKeys={props.hiddenKeys}
       now={props.now}
+      onPreviewTrigger={props.onPreviewTrigger}
       onOpenParty={(opened) => keepPlace(props.setParams, openPartyPreview({ search: props.searched, opened }))}
     />
   );
@@ -147,9 +176,9 @@ function DeskError({ message, onRetry }: { readonly message: string; readonly on
     <Result
       status="error"
       title="订单行没有读出来"
-      subTitle={message}
+      subTitle={<span role="alert">{message}</span>}
       extra={[
-        <Button key="retry" type="primary" onClick={onRetry}>重试</Button>,
+        <Button key="retry" autoInsertSpace={false} type="primary" onClick={onRetry}>重试</Button>,
         <Button key="back" onClick={() => window.history.back()}>返回</Button>,
       ]}
     />
@@ -168,9 +197,7 @@ function LineTop(props: {
   readonly isOwnerVisible: boolean;
   readonly buyerId: string;
   readonly setBuyerId: (id: string) => void;
-  readonly gate: ListGate;
-  readonly setRows: (rows: readonly OrderLineRow[]) => void;
-  readonly setTotal: (total: number) => void;
+  readonly onReload: () => void;
   readonly setSkips: (lines: readonly string[]) => void;
   readonly density: Density;
   readonly hiddenKeys: readonly string[];
@@ -178,12 +205,12 @@ function LineTop(props: {
   const isPhone = useShellViewport().band === 'phone';
   const hasSelection = props.picked.length > 0;
   const views = <LineViewBar search={props.search} query={props.desk.requestQuery} views={props.views} userId={props.userId} columns={props.desk.columns} density={props.density} hiddenKeys={props.hiddenKeys} setMessage={props.setMessage} setParams={props.setParams} />;
-  const bulk = <LineBulkBar users={props.users} isOwnerVisible={props.isOwnerVisible} buyerId={props.buyerId} setBuyerId={props.setBuyerId} picked={props.picked} query={props.desk.requestQuery} gate={props.gate} setRows={props.setRows} setTotal={props.setTotal} setMessage={props.setMessage} setSkips={props.setSkips} />;
+  const bulk = hasSelection ? <LineBulkBar users={props.users} isOwnerVisible={props.isOwnerVisible} buyerId={props.buyerId} setBuyerId={props.setBuyerId} picked={props.picked} onReload={props.onReload} setMessage={props.setMessage} setSkips={props.setSkips} /> : null;
   return <>
     <LineFilters search={props.search} desk={props.desk} setParams={props.setParams} />
     {isPhone ? <div style={{ display: 'grid' }}>
       <div inert={hasSelection} style={actionRowStyle(hasSelection)}>{views}</div>
-      <div inert={!hasSelection} style={actionRowStyle(!hasSelection)}>{bulk}</div>
+      <div style={actionRowStyle(false)}>{bulk}</div>
     </div> : hasSelection ? bulk : views}
   </>;
 }
@@ -265,11 +292,6 @@ function OverdueFilter(props: { readonly search: string; readonly isOverdue: boo
       只看逾期
     </Checkbox>
   );
-}
-
-function previewDrawer(input: { readonly preview: ReturnType<typeof readFollowUpPreview>; readonly search: string; readonly setParams: SearchSetter }) {
-  if (input.preview === null) return null;
-  return <FollowUpPreviewDrawer key={input.preview.lineId} lineId={input.preview.lineId} onClose={() => input.setParams(writeFollowUpPreview({ search: input.search, session: null }))} />;
 }
 
 function partyDrawer(input: { readonly party: ReturnType<typeof readPartyPreview>; readonly search: string; readonly setParams: SearchSetter }) {

@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Divider, Drawer, Empty, Flex, Skeleton, Timeline, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Alert, Button, Descriptions, Divider, Drawer, Empty, Flex, Skeleton, Timeline, Typography } from 'antd';
 import { followUpKindLabel, lineStageLabel, type OrderLineId } from '@sw/domain';
 import type { LineTimeline, OrderLineDetail, TimelineEvent } from '@sw/contracts';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
 import { batchLineText, timelineLineText } from '../../../features/follow-up/index.js';
 import { formatDateTime, formatQuantity } from '../../../shared/ui/format.js';
 import { drawerWide } from '../../../theme/tokens.js';
+import { LineDetailLink } from '../detail/desk-navigation.js';
 
 export type FollowUpPreviewDrawerProps = {
   readonly lineId: OrderLineId;
+  readonly search: string;
+  readonly isOpen: boolean;
   readonly onClose: () => void;
 };
 
@@ -19,42 +22,50 @@ type PreviewState =
 
 export function FollowUpPreviewDrawer(props: FollowUpPreviewDrawerProps) {
   const [state, setState] = useState<PreviewState>({ kind: 'loading' });
-  const requestToken = useRef(0);
   useEffect(() => {
-    const token = requestToken.current + 1;
-    requestToken.current = token;
-    let isActive = true;
+    if (!props.isOpen) return;
     const abort = new AbortController();
     setState({ kind: 'loading' });
     void Promise.all([
       read({ name: 'line', id: props.lineId, signal: abort.signal }),
       read({ name: 'lineTimeline', id: props.lineId, signal: abort.signal }),
     ]).then(([detail, timeline]) => {
-      if (!isActive || abort.signal.aborted || requestToken.current !== token) return;
+      if (abort.signal.aborted) return;
       setState({ kind: 'ready', detail, timeline });
     }).catch((error: unknown) => {
-      if (!isActive || abort.signal.aborted || requestToken.current !== token) return;
+      if (abort.signal.aborted) return;
       const failure = readFailureOf(error);
       if (failure === null) return;
       setState({ kind: 'failed', message: failureText(failure) });
     });
-    return () => { isActive = false; abort.abort(); };
-  }, [props.lineId]);
+    return () => abort.abort();
+  }, [props.lineId, props.isOpen]);
 
   const title = state.kind === 'ready' ? `${state.detail.po.poRaw ?? '无单号'} 预览` : '订单行预览';
   return (
     <Drawer
       placement="right"
-      size={drawerWide}
-      open
+      size={`min(${drawerWide}px, 100vw)`}
+      open={props.isOpen}
+      destroyOnHidden
+      focusable={{ trap: true, focusTriggerAfterClose: false }}
       onClose={props.onClose}
       title={title}
-      footer={<Flex justify="flex-end" gap={12}><Button href={`/lines/${encodeURIComponent(props.lineId)}`}>打开订单行详情</Button><Button type="primary" onClick={props.onClose}>关闭</Button></Flex>}
+      footer={<PreviewFooter {...props} />}
     >
       {state.kind === 'loading' ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
       {state.kind === 'failed' ? <Alert type="error" showIcon title={state.message} /> : null}
       {state.kind === 'ready' ? <FollowUpPreviewFields detail={state.detail} timeline={state.timeline} /> : null}
     </Drawer>
+  );
+}
+
+function PreviewFooter({ lineId, search, onClose }: Pick<FollowUpPreviewDrawerProps, 'lineId' | 'search' | 'onClose'>) {
+  return (
+    <Flex align="center" justify="flex-end" gap={12} wrap>
+      <LineDetailLink href={`/lines/${encodeURIComponent(lineId)}`} search={search}>打开订单行详情</LineDetailLink>
+      <Button type="primary" onClick={onClose}>关闭</Button>
+    </Flex>
   );
 }
 
@@ -107,13 +118,11 @@ function NextArrival({ detail }: { readonly detail: OrderLineDetail }) {
 function BatchSection({ detail }: { readonly detail: OrderLineDetail }) {
   if (detail.batches.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" />;
   return <Flex vertical gap="small">
-    {detail.batches.map((batch) => <Card key={batch.id} size="small" title={batchLineText(batch)}>
-      <Descriptions size="small" column={{ xs: 1, sm: 3 }} items={[
-        { key: 'planned', label: '计划', children: formatQuantity(batch.plannedQty) },
-        { key: 'shipped', label: '已发', children: formatQuantity(batch.shippedQty) },
-        { key: 'received', label: '已收', children: formatQuantity(batch.receivedQty) },
-      ]} />
-    </Card>)}
+    {detail.batches.map((batch) => <Descriptions key={batch.id} title={batchLineText(batch)} size="small" column={{ xs: 1, sm: 3 }} items={[
+      { key: 'planned', label: '计划', children: formatQuantity(batch.plannedQty) },
+      { key: 'shipped', label: '已发', children: formatQuantity(batch.shippedQty) },
+      { key: 'received', label: '已收', children: formatQuantity(batch.receivedQty) },
+    ]} />)}
   </Flex>;
 }
 

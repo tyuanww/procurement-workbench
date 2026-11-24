@@ -4,7 +4,7 @@ import { parseOrderLineId } from '@sw/domain';
 import { type LineColumnKey, type LineColumnView, type LineTableLayout } from '../../../features/follow-up/index.js';
 import { fontSize, space } from '../../../theme/tokens.js';
 import { renderLineCell } from './line-cell.js';
-import { openFollowUpPreview } from './follow-up-preview-url.js';
+import { closeFollowUpPreview, openFollowUpPreview } from './follow-up-preview-url.js';
 import type { OpenParty } from './party-preview.js';
 
 export type LineMobileInput = {
@@ -14,8 +14,9 @@ export type LineMobileInput = {
   readonly layout: Exclude<LineTableLayout, 'desk'>;
   readonly now: Date;
   readonly search: string;
-  readonly setParams: (next: URLSearchParams) => void;
+  readonly setParams: (next: URLSearchParams, options?: { readonly preventScrollReset: boolean }) => void;
   readonly onOpenParty?: (opened: OpenParty) => void;
+  readonly onPreviewTrigger?: ((element: HTMLElement) => void) | undefined;
 };
 
 export function repeatedMobileIdentityIds(rows: readonly OrderLineRow[]): ReadonlySet<string> {
@@ -116,8 +117,11 @@ function MobileLineIdentity({ row, input }: { readonly row: OrderLineRow; readon
   const [identifier, disambiguator] = lineMobileIdentifiers(row, input.repeatedIdentityIds);
   return <div>
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: space[0] }}>
-      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{renderLineCell({ column: 'po', row, now: input.now })}</span>
-      {parsed.ok ? <Button type="link" size="small" autoInsertSpace={false} style={{ paddingInline: space[0] }} onClick={() => input.setParams(openFollowUpPreview({ search: input.search, lineId: parsed.value }))}>预览</Button> : null}
+      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{renderLineCell({ column: 'po', row, now: input.now, search: closeFollowUpPreview(input.search).toString() })}</span>
+      {parsed.ok ? <Button type="link" size="small" autoInsertSpace={false} style={{ paddingInline: space[0] }} onClick={(event) => {
+        input.onPreviewTrigger?.(event.currentTarget);
+        input.setParams(openFollowUpPreview({ search: input.search, lineId: parsed.value }), { preventScrollReset: true });
+      }}>预览</Button> : null}
     </div>
     <div className="line-mobile-name" style={{ overflowWrap: 'break-word' }}>{mobileProductName(row)}</div>
     <Typography.Text className="line-mobile-identifier" type="secondary" style={{ fontSize: fontSize.meta, overflowWrap: 'anywhere' }}>
