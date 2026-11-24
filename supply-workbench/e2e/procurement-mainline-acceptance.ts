@@ -57,7 +57,58 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   const totalSchedule = page.getByRole('link', { name: '查看总排期', exact: true });
   await totalSchedule.click();
   await page.waitForURL((url) => url.pathname === '/progress' && url.searchParams.get('view') === 'schedule');
-  return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true };
+  const taskContext = await checkScheduleTaskContext(page, origin);
+  return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true, taskContext };
+}
+
+async function checkScheduleTaskContext(page: Page, origin: URL) {
+  const predecessor = '合成排期前置任务';
+  const successor = '合成排期接续任务';
+  const businessDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format();
+  const monday = new Date(businessDay + 'T00:00:00Z');
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - 7);
+  const predecessorStart = monday.toISOString().slice(0, 10);
+  monday.setUTCDate(monday.getUTCDate() + 1);
+  const predecessorEnd = monday.toISOString().slice(0, 10);
+  monday.setUTCDate(monday.getUTCDate() + 1);
+  const plannedEnd = monday.toISOString().slice(0, 10);
+  const fromItemId = await createScheduleTask(page, origin, predecessor, predecessorStart, predecessorEnd);
+  const toItemId = await createScheduleTask(page, origin, successor, predecessorEnd, plannedEnd);
+  const dependency = await page.request.post(new URL('/api/v1/plan/work-item-dependencies', origin).href, { data: { fromItemId, toItemId } });
+  assert.ok(dependency.ok(), '合成排期依赖 HTTP ' + dependency.status());
+  for (const [id, status] of [[fromItemId, 'in_progress'], [fromItemId, 'blocked'], [toItemId, 'in_progress']]) {
+    const response = await page.request.post(new URL(`/api/v1/plan/work-items/${id}/status`, origin).href, { data: { status } });
+    assert.ok(response.ok(), '合成排期状态 HTTP ' + response.status());
+  }
+
+  await page.goto(new URL('/today?group=owner', origin).href);
+  await page.getByRole('button', { name: new RegExp('^' + successor + '\\s') }).press('Enter');
+  const drawer = page.getByRole('dialog', { name: new RegExp(successor) });
+  const warning = drawer.getByText(`${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: false });
+  await warning.waitFor();
+  const todayUrl = page.url();
+  assert.equal(new URL(todayUrl).searchParams.get('drawer'), 'task:' + toItemId);
+  const scheduleLink = drawer.getByRole('link', { name: '在总排期查看此任务', exact: true });
+  await scheduleLink.click();
+  await page.waitForURL((url) => url.pathname === '/progress' && url.searchParams.get('view') === 'schedule'
+    && url.searchParams.get('from') === plannedEnd && url.searchParams.get('drawer') === 'task:' + toItemId);
+  await scheduleLink.waitFor({ state: 'hidden' });
+  await warning.waitFor();
+  await page.goBack();
+  await page.waitForURL(todayUrl);
+  await scheduleLink.waitFor();
+  await warning.waitFor();
+  return { task: successor, predecessor, scheduleAnchor: plannedEnd, restoredTodayContext: true };
+}
+
+async function createScheduleTask(page: Page, origin: URL, title: string, plannedStart: string, plannedEnd: string) {
+  const response = await page.request.post(new URL('/api/v1/plan/work-items', origin).href, {
+    data: { subjectType: 'standalone', kind: 'task', title, plannedStart, plannedEnd },
+  });
+  assert.ok(response.ok(), '合成排期任务 HTTP ' + response.status());
+  const result: unknown = await response.json();
+  assert.ok(typeof result === 'object' && result !== null && 'workItemId' in result && typeof result.workItemId === 'string');
+  return result.workItemId;
 }
 
 export async function checkProductDevelopment({ buyer, reviewer, buyerId, reviewerId, origin, out }: Scenario & {

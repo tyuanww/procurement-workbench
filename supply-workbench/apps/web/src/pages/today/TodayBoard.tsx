@@ -205,7 +205,7 @@ function PageDrawers(props: TodayScreenProps): ReactNode {
         onDraft={props.onDraft}
         onSubmit={props.onSubmit}
       />
-      <TaskDrawer workItemId={taskId} isOpen={taskId !== null} onClose={props.onCloseDrawer} onChanged={props.onTaskChanged ?? noop} />
+      <TaskDrawer workItemId={taskId} isOpen={taskId !== null} showScheduleLink onClose={props.onCloseDrawer} onChanged={props.onTaskChanged ?? noop} />
     </>
   );
 }
