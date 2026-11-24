@@ -16,6 +16,7 @@ import {
   orderLineRepository,
   partyRepository,
   placeholderStores,
+  purchaseOrderRepository,
   requireDatabase,
   type AppDatabase,
 } from '@sw/persistence';
@@ -35,6 +36,7 @@ export function composeFactoryLinks(input: { readonly db: AppDatabase; readonly 
     return {
       ...placeholderStores(),
       parties: partyRepository(db),
+      purchaseOrders: purchaseOrderRepository(db),
       orderLines: orderLineRepository(db),
       factoryReports: factoryReportRepository(db),
       factoryLinks: lineFactoryLinkRepository(db),
