@@ -33,6 +33,14 @@ type TextKey = 'stageLabel' | 'name' | 'waiting' | 'owner';
 
 const CLEAR_FILTERS: StuckFilters = { stage: null, bucket: null, cause: null, card: null };
 
+const WAITING_REASON = {
+  supplier_date: '等工厂确认交期',
+  supplier_shipment: '等工厂发货',
+  internal_note: '等回单',
+  internal_review: '待核实物记录',
+  receiver_arrival: '等收货',
+} satisfies Record<NonNullable<StuckItem['waitingOn']['reason']>, string>;
+
 const CARDS = [
   { key: 'overdue', label: '逾期', tone: 'danger', filters: { ...CLEAR_FILTERS, card: 'overdue' } },
   { key: 'awaitingDate', label: '待确认日期', tone: 'warning', filters: { ...CLEAR_FILTERS, stage: 'awaiting_date' } },
@@ -262,12 +270,30 @@ function StuckDetails({ item, row, now, isOpen, onClose, onHidden }: {
       ...(lineHref === undefined ? [] : [{ key: 'line', label: '订单行', children: <Link to={lineHref}>打开订单行</Link> }]),
       { key: 'name', label: '品名', children: row.name },
       { key: 'stage', label: '阶段', children: `${row.stageLabel} · 停留 ${row.daysInStage} 天` },
-      { key: 'waiting', label: '等待方', children: row.waiting },
-      { key: 'owner', label: '负责人', children: row.owner },
+      { key: 'waiting', label: '交付等待方', children: item.waitingOn.reason === undefined ? row.waiting : `${row.waiting}（${WAITING_REASON[item.waitingOn.reason]}）` },
+      { key: 'owner', label: '内部负责人', children: row.owner },
       { key: 'confirmed', label: '确认到货', children: row.confirmed === EM_DASH ? EM_DASH : formatTableDate({ iso: row.confirmed, now }) },
+      { key: 'quantities', label: '批次实物数量', children: <BatchQuantities fulfillment={item.fulfillment} /> },
       { key: 'signals', label: '关联与异常', children: signals.length === 0 ? EM_DASH : signals.map((label) => <Tag key={label}>{label}</Tag>) },
     ]} />
   </Drawer>;
+}
+
+const batchQuantity = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
+
+function BatchQuantities({ fulfillment }: { readonly fulfillment: StuckItem['fulfillment'] }) {
+  const unit = fulfillment?.unit;
+  const quantities = [
+    { label: '未发', value: fulfillment?.unshippedQty },
+    { label: '在途', value: fulfillment?.inTransitQty },
+    { label: '实收', value: fulfillment?.receivedQty },
+  ];
+  return <Flex gap={space[2]} wrap>
+    {quantities.map(({ label, value }) => <span key={label} style={{ fontVariantNumeric: 'tabular-nums' }}>
+      {label} {value == null || unit == null ? EM_DASH : `${batchQuantity.format(value)} ${unit}`}
+    </span>)}
+    {quantities.some(({ value }) => value == null) ? <Typography.Text type="secondary">数量待核</Typography.Text> : null}
+  </Flex>;
 }
 
 function stuckSignals(item: StuckItem): string[] {

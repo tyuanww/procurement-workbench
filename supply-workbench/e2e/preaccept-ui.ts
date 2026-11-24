@@ -160,7 +160,7 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   const stuckTrigger = manager.getByRole('button', { name: /^查看卡点明细 HZ09-/ }).first();
   await stuckTrigger.press('Enter');
   const stuck = manager.getByRole('dialog', { name: '卡点批次明细', exact: true });
-  await stuck.getByText('等待方', { exact: true }).waitFor();
+  await stuck.getByText('交付等待方', { exact: true }).waitFor();
   assert.equal(manager.url(), stuckUrl.href);
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
@@ -197,7 +197,7 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   assert.ok(firstBatch && firstBatch.y >= 0 && firstBatch.y + firstBatch.height <= 780, '手机首屏应能查看第一批卡点');
   assert.equal(await manager.getByRole('radiogroup', { name: '期间', exact: true }).count(), 0);
   await stuckTrigger.click();
-  await stuck.getByText('等待方', { exact: true }).waitFor();
+  await stuck.getByText('交付等待方', { exact: true }).waitFor();
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
   await manager.setViewportSize({ width: 1440, height: 900 });
