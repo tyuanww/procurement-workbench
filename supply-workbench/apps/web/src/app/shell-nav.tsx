@@ -5,7 +5,6 @@ import {
   FieldTimeOutlined,
   ImportOutlined,
   ProfileOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { useId, type ReactNode } from 'react';
@@ -56,8 +55,6 @@ function navGlyph(path: NavPath): ReactNode {
       return <AppstoreOutlined />;
     case '/imports':
       return <ImportOutlined />;
-    case '/settings':
-      return <SettingOutlined />;
     default:
       return missed(path);
   }

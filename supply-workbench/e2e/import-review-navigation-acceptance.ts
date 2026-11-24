@@ -7,6 +7,7 @@ const MASTER_LABEL = '主数据';
 const HISTORY_PATH = '/imports?template=po-master-v1&status=committed';
 const EMPTY_SCHEDULE = '/progress?view=schedule&from=2030-01-01';
 const WORKBOOK = 'po-master-procurement.xlsx';
+const SETTINGS_LABEL = '系统设置';
 
 export async function checkEmptyProductArchive(page: Page, origin: URL, canReadImports: boolean): Promise<void> {
   await page.goto(new URL('/products', origin).href);
@@ -22,15 +23,75 @@ export async function checkImportReviewNavigation({ admin, buyer, lead, manager,
   readonly reviewer: Page;
   readonly origin: URL;
 }) {
+  await checkAdminSettings(admin, origin);
   const legacyBatch = await checkBuyerNavigation(buyer, origin);
-  await checkReviewNavigation(admin, origin, 7);
+  await checkReviewNavigation(admin, origin, 6);
   await checkReviewNavigation(reviewer, origin, 5);
   await checkReviewPhone(reviewer, origin);
   await checkLegacyBatch(admin, legacyBatch, origin);
   await checkLegacyBatch(reviewer, legacyBatch, origin);
   await checkWithoutImportAccess(manager, origin, legacyBatch);
   await checkWithoutImportAccess(lead, origin, legacyBatch);
-  return { buyerEntries: 5, adminEntries: 7, legacyBatch, reviewPhoneWidth: 320, deniedRoles: ['manager', 'lead'] };
+  const settingsDeniedRoles = ['buyer', 'reviewer', 'manager', 'lead'] as const;
+  const accounts = { buyer: [buyer, '采购甲'], reviewer: [reviewer, '审核人甲'], manager: [manager, '管理层甲'], lead: [lead, '负责人甲'] } as const;
+  for (const role of settingsDeniedRoles) {
+    const [page, name] = accounts[role];
+    await checkWithoutSettingsAccess(page, origin, name);
+  }
+  return {
+    buyerEntries: 5, adminEntries: 6, legacyBatch, reviewPhoneWidth: 320, deniedRoles: ['manager', 'lead'],
+    settings: { soleAdminLanding: '/settings', keyboardLink: true, phoneWidth: 320, deniedRoles: settingsDeniedRoles },
+  };
+}
+
+async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
+  const settingsUrl = new URL('/settings', origin).href;
+  const trigger = page.getByRole('banner').getByRole('button', { name: '管理员', exact: true });
+  const settings = page.getByRole('link', { name: SETTINGS_LABEL, exact: true });
+  const heading = page.getByRole('heading', { name: '设置', exact: true });
+  assert.equal(page.url(), settingsUrl);
+  await heading.waitFor();
+  assert.equal(await page.locator('aside a[href="/settings"]').count(), 0);
+
+  await page.getByRole('complementary').getByRole('link', { name: '今日', exact: true }).click();
+  await page.waitForURL(new URL('/today', origin).href);
+  await trigger.press('Enter');
+  await settings.waitFor();
+  assert.equal(await settings.getAttribute('href'), '/settings');
+  await page.keyboard.press('Tab');
+  assert.equal(await settings.evaluate((link) => link === document.activeElement), true);
+  await page.keyboard.press('Enter');
+  await page.waitForURL(settingsUrl);
+  await heading.waitFor();
+  await settings.waitFor({ state: 'hidden' });
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+
+  await page.setViewportSize({ width: 320, height: 780 });
+  await page.goto(new URL('/today', origin).href);
+  await page.getByRole('button', { name: '打开菜单', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: '导航', exact: true });
+  await drawer.waitFor();
+  assert.equal(await drawer.getByRole('link').count(), 6);
+  assert.equal(await drawer.locator('a[href="/settings"]').count(), 0);
+  await drawer.getByRole('link', { name: '今日', exact: true }).click();
+  await drawer.waitFor({ state: 'hidden' });
+  await trigger.click();
+  await settings.click();
+  await page.waitForURL(settingsUrl);
+  await heading.waitFor();
+  await settings.waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+async function checkWithoutSettingsAccess(page: Page, origin: URL, name: string): Promise<void> {
+  await page.goto(new URL('/settings', origin).href);
+  await page.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
+  const trigger = page.getByRole('banner').getByRole('button', { name, exact: true });
+  await trigger.click();
+  await page.getByRole('menuitem', { name: /退出/ }).waitFor();
+  assert.equal(await page.getByRole('link', { name: SETTINGS_LABEL, exact: true }).count(), 0);
+  await page.keyboard.press('Escape');
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
 }
 
 async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {

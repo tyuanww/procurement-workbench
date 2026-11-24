@@ -1,6 +1,6 @@
 import { can, roleLabel, type Role } from '@sw/domain';
 import { freshnessView, type FreshnessChip, type FreshnessFacts } from './freshness.js';
-import type { NavPath, NavRoute, PageGate } from '../../../shared/page-manifest.js';
+import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../../../shared/page-manifest.js';
 
 export type { FreshnessChip, FreshnessFacts, SourceFact } from './freshness.js';
 
@@ -28,7 +28,7 @@ export type BadgeMark =
 
 export type { NavPath } from '../../../shared/page-manifest.js';
 
-export type HomePath = '/master' | '/dashboard' | '/reports' | '/settings' | '/today' | '/progress';
+export type HomePath = '/master' | '/dashboard' | '/reports' | typeof SETTINGS_PATH | '/today' | '/progress';
 
 export type NavRow = {
   readonly to: NavPath;
@@ -39,7 +39,7 @@ export type NavRow = {
 
 export type AccountEntry = {
   readonly key: string;
-  readonly kind: 'name' | 'role' | 'logout';
+  readonly kind: 'name' | 'role' | 'settings' | 'logout';
   readonly label: string;
 };
 
@@ -92,7 +92,7 @@ function homeOf(input: {
   if (input.roles.includes('reviewer') && hasReviewWork(input.queue)) return '/master';
   if (input.roles.includes('manager')) return '/dashboard';
   if (input.roles.includes('lead')) return '/reports';
-  if (isSoleAdmin(input.roles)) return '/settings';
+  if (isSoleAdmin(input.roles)) return SETTINGS_PATH;
   if (input.roles.length === 1 && input.roles[0] === 'buyer') return '/today';
   return '/progress';
 }
@@ -180,6 +180,7 @@ function accountOf(user: Person): ShellView['account'] {
     entries: [
       { key: 'name', kind: 'name', label: user.name },
       ...user.roles.map((role, index) => roleEntry({ role, index })),
+      ...(can(user, 'admin') ? [{ key: 'settings', kind: 'settings', label: '系统设置' } satisfies AccountEntry] : []),
       { key: 'logout', kind: 'logout', label: '退出' },
     ],
   };
