@@ -80,13 +80,7 @@ function SettingsSections(input: SettingsSectionsProps) {
         {
           key: 'users',
           label: '用户',
-          children: (
-            <UsersPanel
-              users={input.users}
-              onRefresh={input.refresh}
-              setMessage={input.setMessage}
-            />
-          ),
+          children: <UsersPanel users={input.users} onRefresh={input.refresh} setMessage={input.setMessage} />,
         },
         {
           key: 'settings',
