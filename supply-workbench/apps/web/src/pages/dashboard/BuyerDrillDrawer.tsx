@@ -57,10 +57,11 @@ const followUp: TableColumnType<DrillItem> = {
 
 function DrillTable({ data }: { readonly data: BuyerDrillView }) {
   const columns: readonly TableColumnType<DrillItem>[] = data.kind === 'overdue' ? [
-    po, product,
+    { ...po, rowScope: 'row' }, product,
     { title: '批次', dataIndex: 'id' },
     { title: '确认到货日', render: (_value: unknown, row) => ('confirmedOn' in row ? row.confirmedOn : null) ?? '—' },
-    followUp,
+    { title: '跟进', render: (_value, row) => row.orderLineId === null ? '—' :
+      <Link to={`/lines/${encodeURIComponent(row.orderLineId)}?focusBatch=${encodeURIComponent(row.id)}`}>打开订单行</Link> },
   ] : [
     po, product,
     { title: '异常', render: (_value: unknown, row) => 'note' in row ? <span style={{ display: 'block', maxWidth: 260, overflowWrap: 'anywhere' }}>{row.note}</span> : '—' },

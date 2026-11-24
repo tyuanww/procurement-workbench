@@ -1,4 +1,4 @@
-import { Button, Card, Drawer, Empty, Flex, Table, Tag, Typography, type TableColumnsType } from 'antd';
+import { Button, Card, Drawer, Empty, Flex, Select, Table, Tag, Typography, type TableColumnsType } from 'antd';
 import { useState, type ReactNode } from 'react';
 import type { ProjectProgress, ProjectProgressGroupView } from '@sw/contracts';
 import { TaskDrawer } from '../../features/plan/index.js';
@@ -8,7 +8,10 @@ import { SectionGroup } from '../../shared/ui/section.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { drawerWide, space, statusColor, text } from '../../theme/tokens.js';
 
-type ProgressRow = ProjectProgressGroupView & { readonly dimension: string };
+const DIMENSIONS = { all: '全部维度', owner: '负责人', supplier: '供应商', factory: '工厂' } as const;
+type Dimension = keyof typeof DIMENSIONS;
+type ProgressRow = ProjectProgressGroupView & { readonly dimension: Exclude<Dimension, 'all'> };
+const dimensionOptions = Object.entries(DIMENSIONS).map(([value, label]) => ({ value, label }));
 type ProgressTask = NonNullable<ProjectProgress['details']>['tasks'][number];
 type Risk = 'overdue' | 'blocked';
 type Selection = { readonly kind: Risk } | { readonly kind: 'group'; readonly key: string };
@@ -19,6 +22,8 @@ const RISK_LABEL = { overdue: '逾期', blocked: '阻塞' } satisfies Record<Ris
 export function ProjectProgressPanel({ project, onChanged }: { readonly project: ProjectProgress; readonly onChanged: () => void }): ReactNode {
   const [selection, setSelection] = useState<Selection | null>(null);
   const groups = rowsOf(project);
+  const [dimension, setDimension] = useState<Dimension>('all');
+  const visibleGroups = dimension === 'all' ? groups : groups.filter((group) => group.dimension === dimension);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
       {project.details === undefined ? null : <Typography.Text type="secondary">
@@ -31,9 +36,14 @@ export function ProjectProgressPanel({ project, onChanged }: { readonly project:
           riskMetric({ project, kind: 'overdue', onSelect: setSelection }),
           riskMetric({ project, kind: 'blocked', onSelect: setSelection }),
         ]} />
-        <SectionGroup title="按负责人、供应商和工厂" meta={`${project.total} 条任务`}>
-          <Table<ProgressRow> rowKey="key" size="small" pagination={false} scroll={{ x: 'max-content' }}
-            dataSource={groups} columns={groupColumns((key) => setSelection({ kind: 'group', key }))} />
+        <SectionGroup title="任务分布" meta={`${project.total} 条任务`}>
+          <Flex vertical gap={space[2]}>
+            <Select<Dimension> aria-label="分组维度" value={dimension} options={dimensionOptions} onChange={setDimension} style={{ width: 160 }} />
+            <Table<ProgressRow> rowKey="key" size="small" scroll={{ x: 'max-content' }}
+              pagination={{ defaultPageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
+              dataSource={visibleGroups} columns={groupColumns((key) => setSelection({ kind: 'group', key }))}
+              locale={{ emptyText: '所选维度没有任务' }} />
+          </Flex>
         </SectionGroup>
       </>}
       <TaskList tasks={tasksOf({ selection, groups, project })} period={`${project.from} 至 ${project.to}`}
@@ -61,18 +71,18 @@ function riskMetric({ project, kind, onSelect }: {
 
 function rowsOf(project: ProjectProgress): ProgressRow[] {
   return [
-    ...project.byOwner.map((row) => ({ ...row, key: `owner:${row.key}`, dimension: '负责人' })),
-    ...project.bySupplier.map((row) => ({ ...row, key: `supplier:${row.key}`, dimension: '供应商' })),
-    ...project.byFactory.map((row) => ({ ...row, key: `factory:${row.key}`, dimension: '工厂' })),
+    ...project.byOwner.map((row) => ({ ...row, key: `owner:${row.key}`, dimension: 'owner' as const })),
+    ...project.bySupplier.map((row) => ({ ...row, key: `supplier:${row.key}`, dimension: 'supplier' as const })),
+    ...project.byFactory.map((row) => ({ ...row, key: `factory:${row.key}`, dimension: 'factory' as const })),
   ];
 }
 
 function groupColumns(onSelect: (key: string) => void): TableColumnsType<ProgressRow> {
   return [
-    { title: '维度', dataIndex: 'dimension', width: 88 },
-    { title: '对象', dataIndex: 'label', render: (value: string, row) => row.itemIds === undefined
+    { title: '维度', dataIndex: 'dimension', width: 88, render: (_, row) => DIMENSIONS[row.dimension] },
+    { title: '对象', dataIndex: 'label', rowScope: 'row', render: (value: string, row) => row.itemIds === undefined
       ? <Typography.Text strong>{value}</Typography.Text>
-      : <Button type="link" aria-label={`查看${row.dimension} ${value}的任务`} style={{ paddingInline: 0 }} onClick={() => onSelect(row.key)}>{value}</Button> },
+      : <Button type="link" aria-label={`查看${DIMENSIONS[row.dimension]} ${value}的任务`} style={{ paddingInline: 0 }} onClick={() => onSelect(row.key)}>{value}</Button> },
     { title: '任务', dataIndex: 'total', align: 'right' },
     { title: '完成', dataIndex: 'done', align: 'right' },
     { title: '逾期', dataIndex: 'overdue', align: 'right', render: (value: number) => <span style={{ color: value === 0 ? text.secondary : statusColor.danger.text }}>{value}</span> },
@@ -93,14 +103,15 @@ function tasksOf({ project, selection, groups }: {
   const group = groups.find((row) => row.key === selection.key);
   if (group?.itemIds === undefined) return null;
   const ids = new Set(group.itemIds);
-  return { title: `${group.dimension} · ${group.label}`, rows: tasks.filter(({ item }) => ids.has(item.id)) };
+  return { title: `${DIMENSIONS[group.dimension]} · ${group.label}`, rows: tasks.filter(({ item }) => ids.has(item.id)) };
 }
 
 function TaskList({ tasks, period, onClose, onChanged }: {
   readonly tasks: Tasks | null; readonly period: string; readonly onClose: () => void; readonly onChanged: () => void;
 }) {
   const [active, setActive] = useState<{ readonly id: string; readonly open: boolean } | null>(null);
-  return <Drawer title={tasks?.title ?? '项目任务'} size={drawerWide} open={tasks !== null} onClose={() => { setActive(null); onClose(); }}>
+  return <Drawer title={tasks?.title ?? '项目任务'} size={`min(${drawerWide}px, 100vw)`} open={tasks !== null}
+    focusable={{ trap: true, focusTriggerAfterClose: true }} onClose={() => { setActive(null); onClose(); }}>
     {tasks === null ? null : <Flex vertical gap="middle">
       <Typography.Text type="secondary">{period} · {tasks.rows.length} 条任务</Typography.Text>
       <Table<ProgressTask> rowKey={({ item }) => item.id} size="small" dataSource={tasks.rows} columns={taskColumns((id) => setActive({ id, open: true }))}

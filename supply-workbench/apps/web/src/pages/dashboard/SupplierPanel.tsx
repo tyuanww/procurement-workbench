@@ -9,7 +9,8 @@ import {
   type SupplierColumnKey,
   type SupplierTableRow,
 } from '../../features/performance/index.js';
-import { fontSize, space, text } from '../../theme/tokens.js';
+import { SectionGroup } from '../../shared/ui/section.js';
+import { fontSize, space, text, topBar } from '../../theme/tokens.js';
 import { SupplierBatchDrawer } from './SupplierTrend.js';
 
 const COLUMN_KEYS: readonly SupplierColumnKey[] = [
@@ -38,19 +39,23 @@ export function SupplierPanel({ rows, from, to, lane }: Pick<DashboardQuery, 'fr
   const [selected, setSelected] = useState<SupplierTableRow>();
   return (
     <>
-      <Table<SupplierTableRow>
-        size="small"
-        pagination={false}
-        rowKey="partyId"
-        columns={[
-          { title: '主体', render: (_value, row) =>
-            <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setSelected(row)}>{row.name}</Button> },
-          ...COLUMN_KEYS.map(kpiColumn),
-          weekColumn(),
-        ]}
-        dataSource={[...rows]}
-        scroll={{ x: 'max-content' }}
-      />
+      <SectionGroup title="交付与延期" meta={`${rows.length} 家主体`}>
+        <Table<SupplierTableRow>
+          size="small"
+          sticky={{ offsetHeader: topBar }}
+          pagination={{ defaultPageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
+          rowKey="partyId"
+          columns={[
+            { title: '主体', fixed: 'left', rowScope: 'row', render: (_value, row) =>
+              <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setSelected(row)}>{row.name}</Button> },
+            ...COLUMN_KEYS.map(kpiColumn),
+            weekColumn(),
+          ]}
+          dataSource={[...rows]}
+          scroll={{ x: 'max-content' }}
+          locale={{ emptyText: '所选范围内暂无已归属的供应商批次' }}
+        />
+      </SectionGroup>
       {selected === undefined ? null : <SupplierBatchDrawer key={JSON.stringify([selected.partyId, from, to, lane])}
         partyId={selected.partyId} name={selected.name} from={from} to={to} lane={lane}
         profile={selected.href} onClose={() => setSelected(undefined)} />}
@@ -75,7 +80,7 @@ function KpiTitle(props: { readonly column: SupplierColumnKey }) {
   return (
     <span>
       {copy.name}
-      <Tooltip title={copy.definition}>
+      <Tooltip title={copy.definition} trigger={['hover', 'focus']}>
         <InfoCircleOutlined
           aria-label={copy.definition}
           tabIndex={0}

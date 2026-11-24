@@ -1,4 +1,4 @@
-import { Alert, Button, Empty, Flex, Result, Skeleton, Typography } from 'antd';
+import { Alert, Button, Empty, Flex, Result, Skeleton } from 'antd';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
@@ -176,10 +176,10 @@ function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly query: 
   if (rows.length === 0 && !hasUnassigned) return <Empty description="这段时间没有供应商数据，可调整周期或线别。" />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <SupplierRateChart inputs={props.loaded.suppliers} />
-      <SupplierTrend suppliers={props.loaded.suppliers} lane={props.query.lane} />
-      {hasUnassigned ? <Typography.Text type="secondary">未归属改期 {unassigned.dateChanges} 条 · 未归属开放异常 {unassigned.openExceptions} 条</Typography.Text> : null}
+      {hasUnassigned ? <Alert type="info" showIcon title={`未归属改期 ${unassigned.dateChanges} 条 · 未归属开放异常 ${unassigned.openExceptions} 条`} /> : null}
       <SupplierPanel rows={rows} from={props.query.from} to={props.query.to} lane={props.query.lane} />
+      <SupplierRateChart inputs={props.loaded.suppliers} />
+      <SupplierTrend key={JSON.stringify([props.query.from, props.query.to, props.query.lane])} suppliers={props.loaded.suppliers} lane={props.query.lane} />
     </div>
   );
 }

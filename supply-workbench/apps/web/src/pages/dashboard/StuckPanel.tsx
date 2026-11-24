@@ -1,5 +1,5 @@
-import { Button, Descriptions, Drawer, Empty, Statistic, Table, Tag, Typography, type TableColumnType } from 'antd';
-import { useState, type CSSProperties } from 'react';
+import { Button, Descriptions, Drawer, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
+import { useRef, useState } from 'react';
 import type { StuckDashboard, StuckItem } from '@sw/contracts';
 import { batchStatusLabel } from '@sw/domain';
 import { formatQuantity, formatTableDate } from '../../shared/ui/format.js';
@@ -15,17 +15,14 @@ import {
   type StuckView,
 } from '../../features/performance/index.js';
 import {
-  border,
-  brand,
   dwellColor,
   drawerWidth,
-  fontSize,
   space,
-  statusColor,
   text,
+  topBar,
 } from '../../theme/tokens.js';
 import { useShellViewport } from '../../features/shell/index.js';
-import { StackedBarChart } from '../../shared/ui/analytics.js';
+import { MetricStrip, StackedBarChart, type MetricItem } from '../../shared/ui/analytics.js';
 import { mobileStuckColumns } from './stuck-mobile.js';
 import { CAUSE_LABEL, CauseFilter } from './cause-filter.js';
 
@@ -35,33 +32,11 @@ type TextKey = 'stageLabel' | 'name' | 'waiting' | 'owner';
 const CLEAR_FILTERS: StuckFilters = { stage: null, bucket: null, cause: null, card: null };
 
 const CARDS = [
-  { key: 'overdue', label: '逾期', filters: { ...CLEAR_FILTERS, card: 'overdue' } },
-  { key: 'awaitingDate', label: '待确认日期', filters: { ...CLEAR_FILTERS, stage: 'awaiting_date' } },
-  { key: 'openBatches', label: '开放批次', filters: CLEAR_FILTERS },
-  { key: 'shippedNotReceived', label: '已发待收', filters: { ...CLEAR_FILTERS, stage: 'shipped' } },
-] satisfies readonly { key: keyof StuckDashboard['kpis']; label: string; filters: StuckFilters }[];
-
-const metricStyle: CSSProperties = {
-  fontSize: fontSize.metric,
-  color: text.primary,
-  fontVariantNumeric: 'tabular-nums',
-};
-const metricBox: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  borderBottom: `1px solid ${border}`,
-  borderRadius: 0,
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'flex-start',
-  height: 'auto',
-  minHeight: 72,
-  lineHeight: 'normal',
-  padding: space[2],
-  minWidth: 140,
-  flex: '1 1 140px',
-  transition: 'background-color 160ms ease-out, border-color 160ms ease-out',
-};
+  { key: 'overdue', label: '逾期', tone: 'danger', filters: { ...CLEAR_FILTERS, card: 'overdue' } },
+  { key: 'awaitingDate', label: '待确认日期', tone: 'warning', filters: { ...CLEAR_FILTERS, stage: 'awaiting_date' } },
+  { key: 'openBatches', label: '开放批次', tone: 'neutral', filters: CLEAR_FILTERS },
+  { key: 'shippedNotReceived', label: '已发待收', tone: 'info', filters: { ...CLEAR_FILTERS, stage: 'shipped' } },
+] satisfies readonly { key: keyof StuckDashboard['kpis']; label: string; tone: MetricItem['tone']; filters: StuckFilters }[];
 
 export function StuckPanel(props: {
   readonly data: StuckDashboard;
@@ -71,30 +46,34 @@ export function StuckPanel(props: {
   readonly now: Date;
 }) {
   const { data, query, onSearch, isUpdating } = props;
-  const [selected, setSelected] = useState<string>();
+  const [selected, setSelected] = useState<{ readonly batchId: string; readonly open: boolean }>();
+  const listRef = useRef<HTMLElement>(null);
   const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
-  const item = data.items.find((candidate) => candidate.batchId === selected);
-  const row = stuck.rows.find((candidate) => candidate.batchId === selected);
+  const item = data.items.find((candidate) => candidate.batchId === selected?.batchId);
+  const row = stuck.rows.find((candidate) => candidate.batchId === selected?.batchId);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计</Typography.Text>
+    <Flex vertical gap={space[3]}>
+      <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计批次</Typography.Text>
       <CardRow kpis={data.kpis} filters={query} onSearch={onSearch} />
       <CauseFilter counts={data.causeCounts} from={query.from} to={query.to} cause={query.cause} onSearch={onSearch} />
-      <DwellChart dwell={stuck.dwell} onSearch={onSearch} />
-      <StuckFilter filters={query} onSearch={onSearch} />
-      <Typography.Title level={2} style={{ margin: 0 }}>
-        卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
-      </Typography.Title>
-      {data.total === 0 && !isUpdating ? (
-        <Empty description="当前筛选没有卡点" />
-      ) : (
-        <StuckTable rows={isUpdating ? [] : stuck.rows} page={data.page} pageSize={data.pageSize}
-          total={data.total} isUpdating={isUpdating} now={props.now} onSearch={onSearch}
-          onOpen={(batch) => setSelected(batch.batchId)} />
-      )}
-      {item === undefined || row === undefined ? null :
-        <StuckDetails item={item} row={row} now={props.now} onClose={() => setSelected(undefined)} />}
-    </div>
+      <section ref={listRef} aria-label="卡点明细" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
+        <Flex vertical gap={space[2]}>
+          <StuckFilter filters={query} onSearch={onSearch} />
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
+          </Typography.Title>
+          {data.total === 0 && !isUpdating ? <Empty description="当前筛选没有卡点" /> : (
+            <StuckTable rows={isUpdating ? [] : stuck.rows} page={data.page} pageSize={data.pageSize}
+              total={data.total} isUpdating={isUpdating} now={props.now} onSearch={onSearch}
+              onOpen={(batch) => setSelected({ batchId: batch.batchId, open: true })} />
+          )}
+        </Flex>
+      </section>
+      <DwellChart dwell={stuck.dwell} onSearch={(patch) => { onSearch(patch); listRef.current?.focus(); }} />
+      {item === undefined || row === undefined || selected === undefined ? null :
+        <StuckDetails item={item} row={row} now={props.now} isOpen={selected.open}
+          onClose={() => setSelected({ ...selected, open: false })} onHidden={() => setSelected(undefined)} />}
+    </Flex>
   );
 }
 
@@ -103,36 +82,10 @@ function CardRow(props: {
   readonly filters: StuckFilters;
   readonly onSearch: SearchHandler;
 }) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2] }}>
-      {CARDS.map((card) => {
-        const isActive = sameFilters(card.filters, props.filters);
-        return (
-          <Button
-            key={card.key}
-            type="text"
-            aria-pressed={isActive}
-            onClick={() => props.onSearch({ ...card.filters, page: 1 })}
-            style={{
-              ...metricBox,
-              textAlign: 'left',
-              cursor: 'pointer',
-              borderTop: metricAccent(card.key),
-              borderBottomColor: isActive ? brand[600] : border,
-            }}
-          >
-            <Statistic title={card.label} value={props.kpis[card.key]} styles={{ content: metricStyle }} />
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
-
-function metricAccent(key: keyof StuckDashboard['kpis']): string {
-  if (key === 'overdue') return `2px solid ${statusColor.danger.border}`;
-  if (key === 'awaitingDate') return `2px solid ${statusColor.warning.border}`;
-  return '2px solid transparent';
+  return <MetricStrip ariaLabel="卡点批次指标" items={CARDS.map(({ key, label, tone, filters }) => ({
+    key, label, tone, value: props.kpis[key],
+    action: { isActive: sameFilters(filters, props.filters), select: () => props.onSearch({ ...filters, page: 1 }) },
+  }))} />;
 }
 
 function sameFilters(left: StuckFilters, right: StuckFilters): boolean {
@@ -177,10 +130,10 @@ function bucketOf(value: string): StuckBucket | undefined {
 function StuckFilter(props: { readonly filters: StuckFilters; readonly onSearch: SearchHandler }) {
   if (sameFilters(props.filters, CLEAR_FILTERS)) return null;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: space[1] }}>
-      <span style={{ color: text.secondary }}>当前筛选 {filterText(props.filters)}</span>
-      <Button type="text" onClick={() => props.onSearch(CLEAR_FILTERS)}>显示全部</Button>
-    </div>
+    <Flex align="center" wrap gap={space[1]}>
+      <Tag>当前筛选 {filterText(props.filters)}</Tag>
+      <Button type="link" onClick={() => props.onSearch(CLEAR_FILTERS)}>显示全部</Button>
+    </Flex>
   );
 }
 
@@ -219,7 +172,7 @@ function StuckTable(props: {
       rowKey="batchId"
       columns={stuckColumns({ now: props.now, isPhone, isNarrowPhone, onOpen: props.onOpen })}
       dataSource={[...props.rows]}
-      {...(isPhone ? {} : { scroll: { x: 'max-content' as const } })}
+      {...(isPhone ? {} : { scroll: { x: 'max-content' as const }, sticky: { offsetHeader: topBar } })}
     />
   );
 }
@@ -244,7 +197,7 @@ function stuckColumns(input: {
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
       ),
     },
-    { title: '单号', render: (_value, row) => openBatch(row) },
+    { title: '单号', rowScope: 'row', render: (_value, row) => openBatch(row) },
     textColumn('品名', 'name'),
     textColumn('等待方', 'waiting'),
     textColumn('负责人', 'owner'),
@@ -258,8 +211,9 @@ function stuckColumns(input: {
   ];
 }
 
-function StuckDetails({ item, row, now, onClose }: {
-  readonly item: StuckItem; readonly row: StuckTableRow; readonly now: Date; readonly onClose: () => void;
+function StuckDetails({ item, row, now, isOpen, onClose, onHidden }: {
+  readonly item: StuckItem; readonly row: StuckTableRow; readonly now: Date; readonly isOpen: boolean;
+  readonly onClose: () => void; readonly onHidden: () => void;
 }) {
   const signals = [
     !item.factoryLinked && CAUSE_LABEL.missing_factory,
@@ -268,7 +222,8 @@ function StuckDetails({ item, row, now, onClose }: {
     item.supplierAliasPending && CAUSE_LABEL.supplier_pending,
     item.bomMissing && CAUSE_LABEL.bom_missing,
   ].filter((label) => label !== false);
-  return <Drawer open title="卡点批次明细" size={`min(${drawerWidth}px, 100vw)`} onClose={onClose}
+  return <Drawer open={isOpen} title="卡点批次明细" size={`min(${drawerWidth}px, 100vw)`} onClose={onClose}
+    afterOpenChange={(open) => { if (!open) onHidden(); }}
     focusable={{ trap: true, focusTriggerAfterClose: true }}>
     <Descriptions size="small" column={1} items={[
       { key: 'po', label: '采购单', children: row.po },

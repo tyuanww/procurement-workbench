@@ -1,6 +1,6 @@
-import { Alert, Button, DatePicker, Flex, Select, Skeleton, Typography } from 'antd';
+import { Alert, Button, Card, DatePicker, Descriptions, Flex, Select, Skeleton, Statistic, Typography } from 'antd';
 import {
-  MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementMeeting, type ManagementMeetingStore,
+  MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementDecision, type ManagementMeeting, type ManagementMeetingStore,
 } from '@sw/contracts';
 import { addDays, businessDay, parseLocalDate, weekStart, type LocalDate } from '@sw/domain';
 import dayjs from 'dayjs';
@@ -49,20 +49,22 @@ function MeetingFilters({ selected, update, thisWeek }: {
   readonly thisWeek: LocalDate;
 }) {
   const reportQuery = new URLSearchParams({ weekStart: selected.weekStart });
-  return <Flex gap={space[2]} wrap align="center">
-    <Select<ManagementMeetingStore> aria-label="店铺" value={selected.store} options={STORES} onChange={(store) => update({ store })} style={{ minWidth: 140 }} />
-    <Button onClick={() => update({ weekStart: addDays(selected.weekStart, -WEEK_DAYS) })}>上周</Button>
-    <DatePicker
-      aria-label="周会日期" value={dayjs(selected.weekStart)} format="YYYY-MM-DD" allowClear={false}
-      disabledDate={(date) => date.format('YYYY-MM-DD') > thisWeek}
-      onChange={(date) => {
-        const parsed = parseLocalDate(date?.format('YYYY-MM-DD') ?? '');
-        if (parsed.ok) update({ weekStart: weekStart(parsed.value) });
-      }}
-    />
-    <Button disabled={selected.weekStart >= thisWeek} onClick={() => update({ weekStart: addDays(selected.weekStart, WEEK_DAYS) })}>下周</Button>
-    <Button href={`/reports?${reportQuery}`}>查看周报</Button>
-  </Flex>;
+  return <Card size="small">
+    <Flex gap={space[2]} wrap align="center">
+      <Select<ManagementMeetingStore> aria-label="店铺" value={selected.store} options={STORES} onChange={(store) => update({ store })} style={{ minWidth: 140 }} />
+      <Button onClick={() => update({ weekStart: addDays(selected.weekStart, -WEEK_DAYS) })}>上周</Button>
+      <DatePicker
+        aria-label="周会日期" value={dayjs(selected.weekStart)} format="YYYY-MM-DD" allowClear={false}
+        disabledDate={(date) => date.format('YYYY-MM-DD') > thisWeek}
+        onChange={(date) => {
+          const parsed = parseLocalDate(date?.format('YYYY-MM-DD') ?? '');
+          if (parsed.ok) update({ weekStart: weekStart(parsed.value) });
+        }}
+      />
+      <Button disabled={selected.weekStart >= thisWeek} onClick={() => update({ weekStart: addDays(selected.weekStart, WEEK_DAYS) })}>下周</Button>
+      <Button href={`/reports?${reportQuery}`}>查看周报</Button>
+    </Flex>
+  </Card>;
 }
 
 function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
@@ -84,7 +86,8 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
   if (load.kind === 'error') return <Alert type="error" showIcon title="周会没有读出来" description={load.message} action={<Button onClick={() => setReload((version) => version + 1)}>重试</Button>} />;
   const { meeting } = load;
   return <>
-    <Typography.Text>{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
+    <Typography.Text type="secondary">{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
+    <OpenDecisionSummary meeting={meeting} {...(canWrite ? { onComplete: (decision: ManagementDecision) => setEditor({ kind: 'complete', decision }) } : {})} />
     <MeetingSections meeting={meeting} {...(canWrite ? {
       onRecord: (material) => setEditor({ kind: 'record', material }),
       onComplete: (decision) => setEditor({ kind: 'complete', decision }),
@@ -94,4 +97,28 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
       setReload((version) => version + 1);
     }} />}
   </>;
+}
+
+function OpenDecisionSummary({ meeting, onComplete }: {
+  readonly meeting: ManagementMeeting;
+  readonly onComplete?: (decision: ManagementDecision) => void;
+}) {
+  if (meeting.decisions.length === 0) return null;
+  const open = meeting.decisions.filter((decision) => decision.completion === null)
+    .sort((left, right) => left.dueDate.localeCompare(right.dueDate));
+  const next = open[0];
+  if (next === undefined) return null;
+  const source = meeting.materials.find((material) => material.materialLineId === next.materialLineId);
+  return <Card size="small">
+    <Flex vertical gap={space[2]}>
+      <Statistic title="待完成周会决定" value={open.length} suffix="条" />
+      <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 3 }} items={[
+        { key: 'decision', label: '最早到期决定', children: next.decision, span: 'filled' },
+        { key: 'owner', label: '负责人', children: next.owner.name },
+        { key: 'due', label: '截止日', children: next.dueDate },
+        { key: 'source', label: '采购事项', children: source?.name ?? next.materialLineId },
+      ]} />
+      {onComplete === undefined ? null : <Button style={{ alignSelf: 'start' }} onClick={() => onComplete(next)}>登记此决定完成</Button>}
+    </Flex>
+  </Card>;
 }

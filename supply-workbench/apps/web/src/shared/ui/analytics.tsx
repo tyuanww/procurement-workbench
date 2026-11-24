@@ -1,5 +1,5 @@
 import { CheckOutlined } from '@ant-design/icons';
-import { Button, Card, Statistic, Typography } from 'antd';
+import { Button, Card, Progress, Statistic, Typography } from 'antd';
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { bg, border, brand, controlBorder, fontSize, radius, space, statusColor, text } from '../../theme/tokens.js';
 import { formatQuantity } from './format.js';
@@ -99,13 +99,12 @@ export function StackedBarChart(input: {
 
 export function RateBars(input: { readonly rows: readonly { readonly key: string; readonly label: string; readonly rate: number; readonly hint?: string }[]; readonly ariaLabel: string }): ReactNode {
   return (
-    <div role="img" aria-label={input.ariaLabel} style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
+    <div role="group" aria-label={input.ariaLabel} style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
       {input.rows.map((row) => (
         <div key={row.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(96px, 180px) minmax(0, 1fr) 52px', gap: space[1], alignItems: 'center' }}>
           <Typography.Text ellipsis={{ tooltip: row.hint }} style={{ fontSize: fontSize.table }}>{row.label}</Typography.Text>
-          <div style={{ height: 12, borderRadius: radius, background: statusColor.neutral.bg, overflow: 'hidden' }}>
-            <div style={{ width: `${Math.max(0, Math.min(1, row.rate)) * 100}%`, height: '100%', background: rateTone(row.rate) }} />
-          </div>
+          <Progress aria-hidden="true" percent={Math.max(0, Math.min(1, row.rate)) * 100} showInfo={false}
+            status="normal" size={['100%', 12]} strokeColor={rateTone(row.rate)} railColor={statusColor.neutral.bg} />
           <Typography.Text style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: fontSize.table }}>{Math.round(row.rate * 100)}%</Typography.Text>
         </div>
       ))}

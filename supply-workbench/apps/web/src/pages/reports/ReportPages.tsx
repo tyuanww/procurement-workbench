@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { Alert, Button, Empty, Flex, Form, Input, Result, Skeleton, Typography } from 'antd';
+import { Alert, Button, Flex, Form, Input, Result, Skeleton, Tag, Typography } from 'antd';
 import { FeishuPublishResultSchema, WeeklyReportDetailSchema, WeeklyReportListItemSchema, WeeklyReportSchema, listResponseSchema, type WeeklyReport, type WeeklyReportDetail, type WeeklyReportListItem } from '@sw/contracts';
 import { apiDownload, apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
 import { feishuButton, printStyle } from '../../features/reporting/index.js';
@@ -8,8 +8,9 @@ import { useCanWrite } from '../../shared/actor.js';
 import { PageHeader, WorkbenchPage } from '../../shared/ui/page.js';
 import { horizontalFormLayout } from '../../shared/ui/form.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
-import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
+import { SectionGroup } from '../../shared/ui/section.js';
 import { space } from '../../theme/tokens.js';
+import { ReportHistory } from './report-history.js';
 import { ReportSections } from './report-sections.js';
 
 const fileSchema = {
@@ -71,9 +72,7 @@ function ReportListBody(props: {
   return (
     <>
       {canGenerate ? <ReportForm setItems={props.setItems} setMessage={props.setMessage} /> : null}
-      <SectionGroup title="已生成周报" {...(items.length === 0 ? {} : { meta: `${items.length} 份` })}>
-        {items.length === 0 ? <Empty description={canGenerate ? '还没有周报。下一步：填写周一后生成。' : '还没有周报。'}>{canGenerate ? <Button onClick={() => document.getElementById(REPORT_WEEK_INPUT_ID)?.focus()}>去填周一</Button> : null}</Empty> : <div>{items.map((item) => <SectionRow key={item.id} action={<Flex gap={space[1]}><Button href={`/reports/${item.id}`}>打开</Button><Button href={`/reports/${item.id}/print`}>打印</Button></Flex>}><Typography.Text>全店 · {item.weekStart} 到 {item.weekEnd}</Typography.Text><br /><Typography.Text type="secondary">{new Date(item.generatedAt).toLocaleString('zh-CN')} · {item.supersededBy === null ? '当前版本' : '历史版本'}</Typography.Text></SectionRow>)}</div>}
-      </SectionGroup>
+      <ReportHistory items={items} {...(canGenerate ? { onFocusWeek: () => document.getElementById(REPORT_WEEK_INPUT_ID)?.focus() } : {})} />
       {message === null ? null : <Alert type={message.kind} showIcon title={message.text} />}
     </>
   );
@@ -163,7 +162,9 @@ function ReportDetailContent(input: {
   return (
     <>
       <SectionGroup title={`${input.report.weekStart} 到 ${input.report.weekEnd}`} meta={`全店 · 逾期 ${input.report.data.overview.overdue.value}`}>
-        <Flex gap={space[1]} wrap>
+        <Flex gap={space[1]} align="center" wrap>
+          {input.report.supersededBy === null ? <Tag color="success">当前版本</Tag> : <Tag>历史版本</Tag>}
+          <Typography.Text type="secondary">生成于 {new Date(input.report.generatedAt).toLocaleString('zh-CN')}</Typography.Text>
           {canExport ? <Button loading={input.exporting === 'xlsx'} disabled={input.exporting !== null} onClick={() => { input.setExporting('xlsx'); void download({ id: input.id, format: 'xlsx', setMessage: input.setMessage }).finally(() => input.setExporting(null)); }}>导出 Excel</Button> : null}
           {canExport ? <Button loading={input.exporting === 'pdf'} disabled={input.exporting !== null} onClick={() => { input.setExporting('pdf'); void download({ id: input.id, format: 'pdf', setMessage: input.setMessage }).finally(() => input.setExporting(null)); }}>导出 PDF</Button> : null}
           {canPublish ? <FeishuPublish configured={input.isConfigured} isPending={input.isPublishing} onPublish={() => { void publish({ id: input.id, configured: input.isConfigured, setMessage: input.setMessage, setPublishing: input.setPublishing }); }} /> : null}
