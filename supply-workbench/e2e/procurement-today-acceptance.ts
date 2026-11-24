@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 
 const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
 const batch = 'hz09-batch-501';
@@ -161,10 +161,7 @@ async function recordKeyboardReceipt(page: Page, { before, recv, evidence }: { r
   await qty.fill(String(recv));
   await dialog.getByLabel('收货日', { exact: true }).fill('2025-02-02');
   await dialog.getByLabel('收货及归批依据', { exact: true }).fill(evidence);
-  const refreshPath = /\/api\/v1\/today\?/;
-  const refreshGate = Promise.withResolvers<void>();
-  const delayRefresh = async (route: Route) => { await refreshGate.promise; await route.continue(); };
-  await page.route(refreshPath, delayRefresh);
+  const resumeToday = await pauseTodayRefresh(page);
   try {
     const saved = page.waitForResponse((response) =>
       new URL(response.url()).pathname === '/api/v1/batches/' + batch + '/receipts'
@@ -173,10 +170,29 @@ async function recordKeyboardReceipt(page: Page, { before, recv, evidence }: { r
     assert.equal((await saved).status(), 200);
     await page.waitForURL((url) => !url.searchParams.has('drawer') && !url.searchParams.has('draft'));
   } finally {
-    refreshGate.resolve();
-    await page.unroute(refreshPath, delayRefresh);
+    await resumeToday();
   }
   await dialog.waitFor({ state: 'hidden' });
+}
+
+async function pauseTodayRefresh(page: Page): Promise<() => Promise<void>> {
+  await page.evaluate(() => {
+    const fetchOriginal = globalThis.fetch;
+    const resume = Promise.withResolvers<void>();
+    window.addEventListener('resume-today-acceptance', () => {
+      globalThis.fetch = fetchOriginal;
+      resume.resolve();
+    }, { once: true });
+    globalThis.fetch = (input, options) => {
+      const send = () => fetchOriginal.call(globalThis, input, options);
+      return typeof input === 'string' && new URL(input, location.href).pathname === '/api/v1/today'
+        ? resume.promise.then(send)
+        : send();
+    };
+  });
+  return async () => {
+    await page.evaluate(() => { window.dispatchEvent(new window.Event('resume-today-acceptance')); });
+  };
 }
 
 async function checkFollowUpReminder({ page, origin, row, out }: {
