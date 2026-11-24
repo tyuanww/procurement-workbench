@@ -13,6 +13,14 @@ type Scope = {
 
 type ReportTable = typeof factoryShipmentRows | typeof factoryInTransitRows | typeof factoryStockRows;
 
+const LINK_PRIORITY = {
+  recordedDecision: 0,
+  shipment: 1,
+  inTransit: 2,
+  stock: 3,
+  automaticUnlinked: 4,
+} as const;
+
 export function effectiveFactoryLinks(scope: Scope) {
   const { db, lineIds } = scope;
   const recorded = db.select({
@@ -24,13 +32,13 @@ export function effectiveFactoryLinks(scope: Scope) {
     reason: lineFactoryLinks.reason,
     linkedAt: lineFactoryLinks.linkedAt,
     id: lineFactoryLinks.id,
-    // 仅自动生成的未关联结果可以让位于活动上报，人工取消优先。
-    priority: sql<number>`case when ${lineFactoryLinks.status} = 'unlinked' and ${lineFactoryLinks.source} <> 'manual' then 4 else 0 end`.as('priority'),
+    priority: sql<number>`case when ${lineFactoryLinks.status} = 'unlinked' and ${lineFactoryLinks.source} <> 'manual'
+      then ${LINK_PRIORITY.automaticUnlinked}::int else ${LINK_PRIORITY.recordedDecision}::int end`.as('priority'),
   }).from(lineFactoryLinks).where(lineIds === undefined ? undefined : inArray(lineFactoryLinks.orderLineId, [...lineIds]));
   const candidates = recorded
-    .unionAll(reportLinks(scope, { table: factoryShipmentRows, priority: 1 }))
-    .unionAll(reportLinks(scope, { table: factoryInTransitRows, priority: 2 }))
-    .unionAll(reportLinks(scope, { table: factoryStockRows, priority: 3 }))
+    .unionAll(reportLinks(scope, { table: factoryShipmentRows, priority: LINK_PRIORITY.shipment }))
+    .unionAll(reportLinks(scope, { table: factoryInTransitRows, priority: LINK_PRIORITY.inTransit }))
+    .unionAll(reportLinks(scope, { table: factoryStockRows, priority: LINK_PRIORITY.stock }))
     .as('factory_link_candidates');
   return db.selectDistinctOn([candidates.orderLineId], {
     orderLineId: candidates.orderLineId,
