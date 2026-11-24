@@ -1,8 +1,10 @@
 import { expect, it } from 'vitest';
+import { makeListUnmatchedFactoryRows } from '../../packages/application/src/factory-links/index.js';
 import { entityId, orderLineId, productId, resolveFactoryStock, type FactoryReportRow, type LinkStatus } from '../../packages/domain/src/index.js';
 import {
   codeLinkRepository,
   createDb,
+  factoryLinkQueries,
   factoryReportRepository,
   followUpQueries,
   importBatchRepository,
@@ -70,6 +72,37 @@ it('未关联队列不列历史快照行，只列活动快照行', async () => {
 
   expect(listed.items.map((item) => item.id)).toEqual(['transit-active']);
   await handle.close();
+});
+
+it('工厂诊断先排除可挂接的活动行，再按快照范围分页', async () => {
+  const handle = await open();
+  try {
+    const reports = factoryReportRepository(handle.db);
+    await reports.save(report({ id: 'same-id', batchId: ACTIVE_BATCH, kind: 'in_transit', sheetName: '在途订单汇总', rowNo: 3, linkStatus: 'unlinked' }));
+    await reports.save(report({ id: 'same-id', batchId: ACTIVE_BATCH, kind: 'schedule', sheetName: '排产计划', rowNo: 4, linkStatus: 'unlinked' }));
+    await reports.save(report({ id: 'history-1', batchId: OLD_BATCH, kind: 'in_transit', sheetName: '在途订单汇总', rowNo: 5, linkStatus: 'unlinked' }));
+    await reports.save(report({ id: 'history-2', batchId: OLD_BATCH, kind: 'in_transit', sheetName: '在途订单汇总', rowNo: 6, linkStatus: 'unlinked' }));
+    const queue = await masterDataQueries(handle.db, new FixedClock(AT)).listUnlinked({});
+    expect(queue.items).toEqual([expect.objectContaining({ id: 'same-id', kind: 'in_transit' })]);
+
+    const unmatched = makeListUnmatchedFactoryRows({ links: factoryLinkQueries(handle.db) });
+    const reviewer = { id: entityId('reviewer-1'), name: '审核人', roles: ['reviewer'] as const };
+    expect(await unmatched({ scope: 'active', page: 1, pageSize: 1 }, reviewer)).toEqual({
+      items: [expect.objectContaining({ rowId: 'same-id', kind: 'schedule' })],
+      page: { page: 1, pageSize: 1, total: 1 },
+    });
+    for (const page of [1, 2]) {
+      expect(await unmatched({ scope: 'historical', page, pageSize: 1 }, reviewer)).toEqual({
+        items: [expect.objectContaining({ rowId: `history-${page}` })],
+        page: { page, pageSize: 1, total: 2 },
+      });
+    }
+    expect(await unmatched({ limit: 500 }, reviewer)).toEqual({
+      items: ['history-1', 'history-2', 'same-id', 'same-id'].map((rowId) => expect.objectContaining({ rowId })),
+    });
+  } finally {
+    await handle.close();
+  }
 });
 
 it('搜索的工厂桥接不把历史快照的单号带出来', async () => {

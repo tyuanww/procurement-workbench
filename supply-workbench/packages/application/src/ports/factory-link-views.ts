@@ -71,6 +71,8 @@ export type UnmatchedFactoryRowView = {
   readonly suggestedAction: string;
 };
 
+export type FactoryDiagnosticScope = 'active' | 'historical';
+
 export type FactoryLinkCounts = {
   readonly linked: number;
   readonly manual: number;
@@ -88,7 +90,7 @@ export interface FactoryLinkQueries {
   listFactoryRowRefs(): Promise<readonly FactoryRowMatchRef[]>;
   /** 只读活动代工厂进度快照里的排产格。不含已退休批次，也不含其它六类工厂行。 */
   listActiveScheduleRefs(): Promise<readonly FactoryRowMatchRef[]>;
-  listUnmatched(): Promise<readonly UnmatchedFactoryRowView[]>;
+  listUnmatched(scope?: FactoryDiagnosticScope): Promise<readonly UnmatchedFactoryRowView[]>;
   /** 先读 line_factory_links，没有时回退到工厂进度行；都没有返回 undefined。 */
   getView(orderLineId: string): Promise<LineFactoryLinkView | undefined>;
   countStates(): Promise<FactoryLinkCounts>;

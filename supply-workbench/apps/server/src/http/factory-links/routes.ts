@@ -11,6 +11,8 @@ import {
   SetLineFactoryLinkRequestSchema,
   SupplierBackfillResultSchema,
   UnmatchedFactoryRowListSchema,
+  UnmatchedFactoryRowViewSchema,
+  listResponseSchema,
 } from '@sw/contracts';
 import { requireActor } from '../app.js';
 import { parse } from '../parse.js';
@@ -19,10 +21,21 @@ import type { FactoryLinkApi } from './api.js';
 
 const LineParams = z.object({ id: EntityIdSchema }).strict();
 const LimitQuery = z.object({ limit: z.coerce.number().int().positive().optional() }).strict();
+const DiagnosticQuery = z.object({
+  scope: z.enum(['active', 'historical']),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+}).strict();
+const UnmatchedQuery = z.union([DiagnosticQuery, LimitQuery]);
+const DiagnosticsPage = listResponseSchema(UnmatchedFactoryRowViewSchema);
 
 export function registerFactoryLinkRoutes(app: FastifyInstance, api: FactoryLinkApi): void {
   app.get('/api/v1/factory-links/counts', async (req) => wire(FactoryLinkCountsSchema, await api.counts({}, requireActor(req))));
-  app.get('/api/v1/factory-links/unmatched', async (req) => wire(UnmatchedFactoryRowListSchema, await api.unmatched(parse(LimitQuery, req.query), requireActor(req))));
+  app.get('/api/v1/factory-links/unmatched', async (req) => {
+    const input = parse(UnmatchedQuery, req.query);
+    const result = await api.unmatched(input, requireActor(req));
+    return 'scope' in input ? wire(DiagnosticsPage, result) : wire(UnmatchedFactoryRowListSchema, result);
+  });
   app.post('/api/v1/factory-links/relink', async (req) => wire(RelinkFactoryRowsResultSchema, await api.relink(parse(RelinkFactoryRowsRequestSchema, req.body ?? {}), requireActor(req))));
   app.post('/api/v1/factory-links/relink-schedule', async (req) => wire(RelinkScheduleCellsResultSchema, await api.relinkSchedule({}, requireActor(req))));
   app.post('/api/v1/factory-links/backfill-suppliers', async (req) => wire(SupplierBackfillResultSchema, await api.backfillSuppliers({}, requireActor(req))));

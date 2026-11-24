@@ -1,67 +1,83 @@
-import { Alert, Button, Card, Empty, Flex, Popconfirm, Skeleton, Space, Statistic, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Popconfirm, Skeleton, Space, Statistic, Tabs, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   FactoryLinkCountsSchema,
   RelinkFactoryRowsResultSchema,
   RelinkScheduleCellsResultSchema,
   SupplierBackfillResultSchema,
-  UnmatchedFactoryRowListSchema,
+  UnmatchedFactoryRowViewSchema,
   type FactoryLinkCounts,
   type RelinkFactoryRowsResult,
   type RelinkScheduleCellsResult,
   type UnmatchedFactoryRowView,
 } from '@sw/contracts';
-import { apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
+import { apiErrorMessage, apiGetWithSignal, apiSend } from '../../shared/api/client.js';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { space, statusColor } from '../../theme/tokens.js';
 import type { LoadState } from './OwnerMapTab.js';
+import { FactoryReadError, FactoryRowsPage, factoryRowsReader } from './FactoryRowsPage.js';
+import { UnlinkedRows, type RowAction } from './UnlinkedFactoryRows.js';
 import type { TabNotice } from './notice.js';
 
-const UNMATCHED_LIMIT = 200;
+const base = '/api/v1/factory-links';
+const diagnosticReaders = {
+  active: factoryRowsReader(`${base}/unmatched?scope=active`, UnmatchedFactoryRowViewSchema),
+  historical: factoryRowsReader(`${base}/unmatched?scope=historical`, UnmatchedFactoryRowViewSchema),
+};
 
-type Action = 'relink' | 'schedule' | 'backfill' | null;
+type Scope = 'actionable' | keyof typeof diagnosticReaders;
+type BulkAction = 'relink' | 'schedule' | 'backfill';
+type Action = BulkAction | RowAction;
 
-export function FactoryLinkTab(): ReactNode {
-  const [counts, setCounts] = useState<LoadState<FactoryLinkCounts>>({ kind: 'loading' });
-  const [unmatched, setUnmatched] = useState<LoadState<readonly UnmatchedFactoryRowView[]>>({ kind: 'loading' });
-  const [action, setAction] = useState<Action>(null);
+export function FactoryLinkTab({ refreshReviewQueue }: { readonly refreshReviewQueue: () => Promise<void> }): ReactNode {
+  const [scope, setScope] = useState<Scope>('actionable');
+  const [revision, setRevision] = useState(0);
+  const [action, setAction] = useState<Action | null>(null);
   const [notice, setNotice] = useState<TabNotice | null>(null);
-  const reload = () => { void loadFactoryLinkCounts(setCounts); void loadUnmatchedFactoryRows(setUnmatched); };
-  useEffect(() => { reload(); }, []);
-  const relink = () => {
-    setAction('relink');
+  const run = (next: Action, write: () => Promise<string>) => {
+    setAction(next);
     setNotice(null);
-    void relinkFactoryRows({ onResult: (result) => {
-      setNotice({ kind: 'success', text: relinkResultText(result) });
-      reload();
-    } }).catch((error: unknown) => {
-      setNotice({ kind: 'error', text: apiErrorMessage(error) ?? '重跑工厂关联没有完成，请稍后重试。' });
-    }).finally(() => setAction(null));
-  };
-  const backfill = () => {
-    setAction('backfill');
-    setNotice(null);
-    void backfillSupplierParties({ onResult: (updated) => {
-      setNotice({ kind: 'success', text: backfillResultText(updated) });
-      reload();
-    } }).catch((error: unknown) => {
-      setNotice({ kind: 'error', text: apiErrorMessage(error) ?? '供应商回填没有完成，请稍后重试。' });
+    void write().then((message) => {
+      setNotice({ kind: 'success', text: message });
+      setRevision((current) => current + 1);
+      void refreshReviewQueue();
+    }).catch((error: unknown) => {
+      setNotice({ kind: 'error', text: apiErrorMessage(error) ?? '操作没有完成，请稍后重试。' });
     }).finally(() => setAction(null));
   };
   return (
     <Space orientation="vertical" size={space[4]} style={{ width: '100%' }}>
       {notice === null ? null : <Alert type={notice.kind} showIcon title={notice.text} />}
-      <FactoryLinkCountsSection state={counts} onRetry={reload} />
-      <FactoryLinkActions action={action} onRelink={relink} onSchedule={() => { void runSchedule({ setAction, setNotice, reload }); }} onBackfill={backfill} />
-      <UnmatchedFactoryRows state={unmatched} onRetry={reload} />
+      <FactoryLinkSummary key={revision} />
+      <FactoryLinkActions action={action} onRelink={() => run('relink', async () => relinkResultText(await relinkFactoryRows()))}
+        onSchedule={() => run('schedule', async () => scheduleRelinkText(await relinkSchedule()))}
+        onBackfill={() => run('backfill', async () => backfillResultText(await backfillSupplierParties()))} />
+      <Tabs size="small" activeKey={scope} onChange={(key) => {
+        if (key === 'actionable' || key === 'active' || key === 'historical') setScope(key);
+      }} destroyOnHidden items={[
+        { key: 'actionable', label: '当前待处理', children: <UnlinkedRows revision={revision} busy={action !== null}
+          pending={typeof action === 'object' ? action : null} onAction={run} /> },
+        { key: 'active', label: '当前诊断', children: <UnmatchedFactoryRows key={revision} scope="active" /> },
+        { key: 'historical', label: '历史诊断', children: <UnmatchedFactoryRows key={revision} scope="historical" /> },
+      ]} />
     </Space>
   );
 }
 
-export function FactoryLinkCountsSection(input: { readonly state: LoadState<FactoryLinkCounts>; readonly onRetry: () => void }): ReactNode {
-  if (input.state.kind === 'loading') return <Skeleton active paragraph={{ rows: 2 }} />;
-  if (input.state.kind === 'error') return <ReadError message={input.state.message} onRetry={input.onRetry} />;
-  return <FactoryLinkCountsCards counts={input.state.value} />;
+function FactoryLinkSummary(): ReactNode {
+  const [state, setState] = useState<LoadState<FactoryLinkCounts>>({ kind: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadFactoryLinkCounts(setState, controller.signal);
+    return () => controller.abort();
+  }, [attempt]);
+  if (state.kind === 'loading') return <Skeleton active paragraph={{ rows: 2 }} />;
+  if (state.kind === 'error') return <FactoryReadError message={state.message} onRetry={() => {
+    setState({ kind: 'loading' });
+    setAttempt((current) => current + 1);
+  }} />;
+  return <FactoryLinkCountsCards counts={state.value} />;
 }
 
 export function FactoryLinkCountsCards({ counts }: { readonly counts: FactoryLinkCounts }): ReactNode {
@@ -75,14 +91,14 @@ export function FactoryLinkCountsCards({ counts }: { readonly counts: FactoryLin
         ))}
       </Flex>
       <Typography.Paragraph type="secondary" style={{ marginTop: space[2], marginBottom: 0 }}>
-        来源：line_factory_links 与工厂进度行的当前关联；未建关联的订单行计入未关联，接口不返回假 0。
+        未建关联的订单行计入未关联。
       </Typography.Paragraph>
     </SectionGroup>
   );
 }
 
 export function FactoryLinkActions(input: {
-  readonly action: Action;
+  readonly action: Action | null;
   readonly onRelink: () => void;
   readonly onSchedule: () => void;
   readonly onBackfill: () => void;
@@ -113,27 +129,21 @@ export function FactoryLinkActions(input: {
           <Button loading={input.action === 'backfill'} disabled={isBusy}>回填供应商主体</Button>
         </Popconfirm>
       </Space>
-      <Typography.Paragraph type="secondary" style={{ marginTop: space[2], marginBottom: 0 }}>
-        两项操作都会写审计。重跑完成后刷新概览和未匹配列表；回填只改采购单供应商主体。
-      </Typography.Paragraph>
     </SectionGroup>
   );
 }
 
-export function UnmatchedFactoryRows(input: {
-  readonly state: LoadState<readonly UnmatchedFactoryRowView[]>;
-  readonly onRetry: () => void;
-}): ReactNode {
-  if (input.state.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
-  if (input.state.kind === 'error') return <ReadError message={input.state.message} onRetry={input.onRetry} />;
-  const rows = input.state.value;
+function UnmatchedFactoryRows({ scope }: { readonly scope: keyof typeof diagnosticReaders }): ReactNode {
+  const title = scope === 'active' ? '当前关联诊断' : '历史关联诊断';
   return (
-    <SectionGroup title="未匹配工厂行" meta={`${rows.length} 条（最多 ${UNMATCHED_LIMIT}）`}>
-      {rows.length === 0
-        ? <Empty description="没有未匹配工厂行。下一步：导入工厂进度文件，或先跑一次工厂关联。" />
-        : <div>{rows.map((row) => <UnmatchedFactoryRow key={row.rowId} row={row} />)}</div>}
-    </SectionGroup>
+    <FactoryRowsPage title={title} read={diagnosticReaders[scope]}>
+      {(rows) => rows.length === 0 ? <Empty description={`没有${title}记录。`} /> : <UnmatchedFactoryRowList rows={rows} />}
+    </FactoryRowsPage>
   );
+}
+
+export function UnmatchedFactoryRowList({ rows }: { readonly rows: readonly UnmatchedFactoryRowView[] }): ReactNode {
+  return <div>{rows.map((row) => <UnmatchedFactoryRow key={`${row.kind}:${row.rowId}`} row={row} />)}</div>;
 }
 
 function UnmatchedFactoryRow({ row }: { readonly row: UnmatchedFactoryRowView }): ReactNode {
@@ -147,15 +157,6 @@ function UnmatchedFactoryRow({ row }: { readonly row: UnmatchedFactoryRowView })
         <Typography.Text type="secondary">原因：{unmatchedReasonLabel(row.reason)} · 工厂行 {row.rowId}</Typography.Text>
       </Space>
     </SectionRow>
-  );
-}
-
-function ReadError(input: { readonly message: string; readonly onRetry: () => void }): ReactNode {
-  return (
-    <Space orientation="vertical" size={space[2]} style={{ width: '100%' }}>
-      <Alert type="error" showIcon title={input.message} />
-      <Button onClick={input.onRetry}>重试</Button>
-    </Space>
   );
 }
 
@@ -213,43 +214,24 @@ export function backfillResultText(updated: number): string {
   return `已回填 ${updated} 条采购单的供应商主体（只补空值，可重复执行）。`;
 }
 
-export async function loadFactoryLinkCounts(setState: (state: LoadState<FactoryLinkCounts>) => void): Promise<void> {
+export async function loadFactoryLinkCounts(setState: (state: LoadState<FactoryLinkCounts>) => void, signal?: AbortSignal): Promise<void> {
   try {
-    setState({ kind: 'ready', value: await apiGet('/api/v1/factory-links/counts', FactoryLinkCountsSchema) });
+    const value = await apiGetWithSignal({ path: `${base}/counts`, schema: FactoryLinkCountsSchema, ...(signal === undefined ? {} : { signal }) });
+    if (signal?.aborted !== true) setState({ kind: 'ready', value });
   } catch {
-    setState({ kind: 'error', message: '工厂关联概览没有读出来。' });
+    if (signal?.aborted !== true) setState({ kind: 'error', message: '工厂关联概览没有读出来。' });
   }
 }
 
-export async function loadUnmatchedFactoryRows(setState: (state: LoadState<readonly UnmatchedFactoryRowView[]>) => void): Promise<void> {
-  try {
-    const listed = await apiGet(`/api/v1/factory-links/unmatched?limit=${UNMATCHED_LIMIT}`, UnmatchedFactoryRowListSchema);
-    setState({ kind: 'ready', value: listed.items });
-  } catch {
-    setState({ kind: 'error', message: '未匹配工厂行没有读出来。' });
-  }
+function relinkSchedule(): Promise<RelinkScheduleCellsResult> {
+  return apiSend({ path: `${base}/relink-schedule`, method: 'POST', body: {}, schema: RelinkScheduleCellsResultSchema });
 }
 
-async function runSchedule(input: { readonly setAction: (action: Action) => void; readonly setNotice: (notice: TabNotice | null) => void; readonly reload: () => void }): Promise<void> {
-  input.setAction('schedule');
-  input.setNotice(null);
-  try {
-    const result = await apiSend({ path: '/api/v1/factory-links/relink-schedule', method: 'POST', body: {}, schema: RelinkScheduleCellsResultSchema });
-    input.setNotice({ kind: 'success', text: scheduleRelinkText(result) });
-    input.reload();
-  } catch (error: unknown) {
-    input.setNotice({ kind: 'error', text: apiErrorMessage(error) ?? '重跑排产关联没有完成，请稍后重试。' });
-  } finally {
-    input.setAction(null);
-  }
+export function relinkFactoryRows(): Promise<RelinkFactoryRowsResult> {
+  return apiSend({ path: `${base}/relink`, method: 'POST', body: {}, schema: RelinkFactoryRowsResultSchema });
 }
 
-export async function relinkFactoryRows(input: { readonly onResult: (result: RelinkFactoryRowsResult) => void }): Promise<void> {
-  const result = await apiSend({ path: '/api/v1/factory-links/relink', method: 'POST', body: {}, schema: RelinkFactoryRowsResultSchema });
-  input.onResult(result);
-}
-
-export async function backfillSupplierParties(input: { readonly onResult: (updated: number) => void }): Promise<void> {
-  const result = await apiSend({ path: '/api/v1/factory-links/backfill-suppliers', method: 'POST', body: {}, schema: SupplierBackfillResultSchema });
-  input.onResult(result.updated);
+export async function backfillSupplierParties(): Promise<number> {
+  const result = await apiSend({ path: `${base}/backfill-suppliers`, method: 'POST', body: {}, schema: SupplierBackfillResultSchema });
+  return result.updated;
 }

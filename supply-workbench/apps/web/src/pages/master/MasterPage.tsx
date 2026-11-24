@@ -1,7 +1,7 @@
 import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Tabs, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { FactoryReportRowViewSchema, MultiNameViewSchema, OrderLineDetailSchema, PartyAliasViewSchema, PartyDetailSchema, listResponseSchema, type FactoryReportRowView, type MultiNameView, type PartyAliasView, type PartyDetail } from '@sw/contracts';
+import { MultiNameViewSchema, PartyAliasViewSchema, PartyDetailSchema, listResponseSchema, type MultiNameView, type PartyAliasView, type PartyDetail } from '@sw/contracts';
 import { apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
 import { multiNameChoice, roleChoice } from '../../features/master-data/index.js';
 import { useRefreshReviewQueue } from '../../features/shell/index.js';
@@ -13,7 +13,6 @@ import { FactoryLinkTab } from './FactoryLinkTab.js';
 import { MASTER_TABS, masterTabOf, writeMasterTab, type MasterTabKey } from './master-tabs.js';
 import { OwnerMapTab } from './OwnerMapTab.js';
 import { readPartyAliasDrawer, writePartyAliasDrawer } from './party-alias-drawer-url.js';
-import { unlinkedRowText } from './unlinked-row-text.js';
 
 type LoadState<T> =
   | { readonly kind: 'loading' }
@@ -28,9 +27,8 @@ export function MasterPage() {
   const contents: Record<MasterTabKey, ReactNode> = {
     aliases: <AliasReviewQueue refresh={refresh} />,
     multi: <MultiNameReview refresh={refresh} setMessage={setMessage} />,
-    unlinked: <UnlinkedRows refresh={refresh} setMessage={setMessage} />,
     'owner-map': <OwnerMapTab />,
-    'factory-link': <FactoryLinkTab />,
+    'factory-link': <FactoryLinkTab key={params.get('tab') === 'unlinked' ? 'unlinked' : 'factory-link'} refreshReviewQueue={refresh} />,
   };
   return (
     <WorkbenchPage title="主数据">
@@ -39,7 +37,7 @@ export function MasterPage() {
       <Tabs
         activeKey={tab}
         onChange={(key) => setParams(writeMasterTab(params.toString(), masterTabOf(key)))}
-        items={MASTER_TABS.map((item) => ({ key: item.key, label: item.label, children: contents[item.key] }))}
+        items={MASTER_TABS.map((item) => ({ key: item.key, label: item.label, children: contents[item.key], destroyOnHidden: item.key === 'factory-link' }))}
       />
     </WorkbenchPage>
   );
@@ -181,55 +179,6 @@ async function loadMultiName(setState: (state: LoadState<readonly MultiNameView[
   }
 }
 
-const UNLINKED_READ_ERROR = '未关联上报没有读出来。';
-
-export async function readUnlinked(): Promise<{ readonly rows: readonly FactoryReportRowView[]; readonly error: string }> {
-  try {
-    const listed = await apiGet('/api/v1/factory-reports/unlinked', listResponseSchema(FactoryReportRowViewSchema));
-    return { rows: listed.items, error: '' };
-  } catch {
-    return { rows: [], error: UNLINKED_READ_ERROR };
-  }
-}
-
-function UnlinkedRows({ refresh, setMessage }: { readonly refresh: () => Promise<void>; readonly setMessage: (message: string) => void }) {
-  const [state, setState] = useState<LoadState<readonly FactoryReportRowView[]>>({ kind: 'loading' });
-  const [q, setQ] = useState('');
-  const [lineId, setLineId] = useState('');
-  const [pending, setPending] = useState<string | null>(null);
-  const load = () => { setState({ kind: 'loading' }); void readUnlinked().then((loaded) => loaded.error === '' ? setState({ kind: 'ready', value: loaded.rows }) : setState({ kind: 'error', message: loaded.error })); };
-  useEffect(() => { load(); }, []);
-  if (state.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
-  if (state.kind === 'error') return <Result status="error" title="未关联上报没有读出来。" subTitle={state.message} extra={<Button type="primary" onClick={load}>重试</Button>} />;
-  const visible = state.value.filter((row) => q === '' || row.sheetName.includes(q) || String(row.rowNo).includes(q));
-  return (
-    <SectionGroup title="未关联上报" meta={`${visible.length} 条`}>
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="搜索表名或行号" style={{ width: 200 }} />
-        <Input value={lineId} onChange={(event) => setLineId(event.target.value)} placeholder="订单行编号" style={{ width: 200 }} />
-      </Space>
-      {visible.length === 0 ? <Empty description="没有未关联上报。下一步：去代工厂进度。"><Button href="/imports">去导入</Button></Empty> : null}
-      {visible.map((row) => {
-        const isRowPending = pending === row.id;
-        return <SectionRow key={row.id} action={<Space wrap>
-          <Button loading={isRowPending} disabled={lineId === '' || tableName(row.kind) === null || pending !== null} onClick={() => {
-            const table = tableName(row.kind);
-            if (table === null) return;
-            setPending(row.id);
-            void linkReport({ table, rowId: row.id, orderLineId: lineId, refresh, setRows: (rows) => setState({ kind: 'ready', value: rows }) }).catch((error: unknown) => { report(setMessage, error); }).finally(() => setPending(null));
-          }}>挂接</Button>
-          {row.kind === 'in_transit' ? <Button loading={isRowPending} disabled={pending !== null} onClick={() => {
-            setPending(row.id);
-            void createLine({ rowId: row.id, refresh }).then(load).catch((error: unknown) => { report(setMessage, error); }).finally(() => setPending(null));
-          }}>建成订单行</Button> : null}
-        </Space>}>
-          <Typography.Text>{unlinkedRowText(row)}</Typography.Text>
-        </SectionRow>;
-      })}
-    </SectionGroup>
-  );
-}
-
 async function resolveName(input: { readonly codeId: string; readonly body: { readonly mode: 'same_item'; readonly displayName: string } | { readonly mode: 'shared_code' }; readonly refresh: () => Promise<void>; readonly setRows: (rows: readonly MultiNameView[]) => void }) {
   await apiSend({ path: `/api/v1/master/multi-name/${encodeURIComponent(input.codeId)}/resolve`, method: 'POST', body: input.body, schema: MultiNameViewSchema });
   await input.refresh();
@@ -237,27 +186,8 @@ async function resolveName(input: { readonly codeId: string; readonly body: { re
   input.setRows(listed.items);
 }
 
-async function linkReport(input: { readonly table: string; readonly rowId: string; readonly orderLineId: string; readonly refresh: () => Promise<void>; readonly setRows: (rows: readonly FactoryReportRowView[]) => void }) {
-  await apiSend({ path: `/api/v1/factory-reports/${input.table}/${encodeURIComponent(input.rowId)}/link`, method: 'POST', body: { orderLineId: input.orderLineId }, schema: FactoryReportRowViewSchema });
-  await input.refresh();
-  const listed = await apiGet('/api/v1/factory-reports/unlinked', listResponseSchema(FactoryReportRowViewSchema));
-  input.setRows(listed.items);
-}
-
-async function createLine(input: { readonly rowId: string; readonly refresh: () => Promise<void> }): Promise<void> {
-  await apiSend({ path: `/api/v1/factory-reports/in-transit/${encodeURIComponent(input.rowId)}/create-line`, method: 'POST', body: {}, schema: OrderLineDetailSchema });
-  await input.refresh();
-}
-
 function report(setMessage: (message: string) => void, error: unknown): void {
   setMessage(apiErrorMessage(error) ?? '操作没有完成，请稍后重试。');
-}
-
-function tableName(kind: FactoryReportRowView['kind']): string | null {
-  if (kind === 'in_transit') return 'in-transit';
-  if (kind === 'packaging_combo') return 'packaging-combo';
-  if (kind === 'customer_supplied') return null;
-  return kind;
 }
 
 export function PartyPage() {
