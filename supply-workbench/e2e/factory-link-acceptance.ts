@@ -78,10 +78,10 @@ export async function checkFactoryLinkBoard({ reviewer, openAdmin, origin, out }
 
   await confirmAction(admin, '重跑排产关联', '确认重跑', 'relink-schedule', /^已重跑排产关联.*排产格 1 条/);
   await confirmAction(admin, '重跑工厂关联', '确认重跑', 'relink', /^已重跑工厂关联/);
-  const backfill = () => confirmAction(admin, '回填供应商主体', '确认回填', 'backfill-suppliers', /^已回填 \d+ 条采购单/);
-  assert.deepEqual(await backfill(), { updated: 1 });
+  const backfill = (updated: number) => confirmAction(admin, '回填供应商主体', '确认回填', 'backfill-suppliers', new RegExp(`^已回填 ${updated} 条采购单`));
+  assert.deepEqual(await backfill(1), { updated: 1 });
   assert.equal(queryAcceptanceDb(`SELECT supplier_party_id FROM purchase_orders WHERE id = 'sc06-backfill-po';`).trim(), 'sc06-supplier');
-  assert.deepEqual(await backfill(), { updated: 0 });
+  assert.deepEqual(await backfill(0), { updated: 0 });
   await adminPanel.getByText('共 20 条', { exact: true }).waitFor();
   await adminPanel.getByLabel('筛选本页表名或行号', { exact: true }).fill('');
   await admin.screenshot({ path: join(out, 'factory-link-board.png'), animations: 'disabled' });
@@ -115,7 +115,7 @@ async function post(page: Page, path: string, trigger: () => Promise<void>) {
 }
 
 async function confirmAction(page: Page, label: string, confirm: string, endpoint: string, notice: RegExp) {
-  await page.getByRole('button', { name: label, exact: true }).click();
+  await page.getByRole('button').filter({ has: page.getByText(label, { exact: true }) }).click();
   const prompt = page.locator('.ant-popconfirm').filter({ has: page.getByText(`确认${label}？`, { exact: true }) });
   const result = await post(page, `${factoryPath}/${endpoint}`, () => prompt.getByRole('button', { name: confirm, exact: true }).click());
   await prompt.waitFor({ state: 'hidden' });
