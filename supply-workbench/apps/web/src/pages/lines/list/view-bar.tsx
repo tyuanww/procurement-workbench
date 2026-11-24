@@ -95,6 +95,7 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   const current = new URLSearchParams(input.search);
   if (input.view.preserveLane === true) copyParam({ from: current, to: next, key: 'lane' });
   else if (!next.has('lane')) next.set('lane', 'all');
+  if (current.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   next.set(VIEW_PARAM, input.view.id);
@@ -105,6 +106,7 @@ export function clearFiltersAddress(search: string): URLSearchParams {
   const next = new URLSearchParams();
   const current = new URLSearchParams(search);
   copyParam({ from: current, to: next, key: 'lane' });
+  copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   return next;
