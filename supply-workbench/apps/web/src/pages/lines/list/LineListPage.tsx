@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router';
-import { Alert, Button, Checkbox, Collapse, Input, Result, Segmented, Select, Skeleton } from 'antd';
+import { Alert, Button, Card, Checkbox, Collapse, Flex, Input, Result, Segmented, Select, Skeleton } from 'antd';
 import type { OrderLineRow } from '@sw/contracts';
 import { loadViews, presetViews, readDesk, writeDesk } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
@@ -194,30 +194,34 @@ function actionRowStyle(isHidden: boolean): CSSProperties {
 
 function LineFilters(props: { readonly search: string; readonly desk: Desk; readonly setParams: SearchSetter }) {
   return (
-    <div style={filterRowStyle()}>
-      <Segmented
-        aria-label="订单线别"
-        value={props.desk.lane}
-        options={[{ label: '成品线', value: 'finished' }, { label: '物料线', value: 'material' }, { label: '全部线', value: 'all' }]}
-        onChange={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'lane', value } }))}
-      />
-      <div style={filterBoxStyle()}>
-        <Input.Search
-          key={props.desk.q}
-          aria-label="搜索单号、品名或编码"
-          placeholder="搜索单号 / 品名 / 编码"
-          defaultValue={props.desk.q}
-          allowClear
-          onSearch={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'text', value } }))}
-          style={{ width: '100%' }}
-        />
-      </div>
-      <div style={filterBoxStyle()}>
-        <StageFilter search={props.search} desk={props.desk} setParams={props.setParams} />
-      </div>
-      <OverdueFilter search={props.search} isOverdue={props.desk.isOverdue} setParams={props.setParams} />
-      <ImportScopeAction search={props.search} setParams={props.setParams} />
-    </div>
+    <search aria-label="跟进中心筛选">
+      <Card size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: 12 } }}>
+        <Flex align="center" wrap gap={8}>
+          <Segmented
+            aria-label="订单线别"
+            value={props.desk.lane}
+            options={[{ label: '成品线', value: 'finished' }, { label: '物料线', value: 'material' }, { label: '全部线', value: 'all' }]}
+            onChange={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'lane', value } }))}
+          />
+          <div style={filterBoxStyle()}>
+            <Input.Search
+              key={props.desk.q}
+              aria-label="搜索单号、品名或编码"
+              placeholder="搜索单号 / 品名 / 编码"
+              defaultValue={props.desk.q}
+              allowClear
+              onSearch={(value) => props.setParams(writeDesk({ search: props.search, change: { kind: 'text', value } }))}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div style={filterBoxStyle()}>
+            <StageFilter search={props.search} desk={props.desk} setParams={props.setParams} />
+          </div>
+          <OverdueFilter search={props.search} isOverdue={props.desk.isOverdue} setParams={props.setParams} />
+          <ImportScopeAction search={props.search} setParams={props.setParams} />
+        </Flex>
+      </Card>
+    </search>
   );
 }
 
@@ -229,10 +233,6 @@ function ImportScopeAction({ search, setParams }: { readonly search: string; rea
     params.delete('page');
     setParams(params);
   }}>退出本次导入范围</Button>;
-}
-
-function filterRowStyle(): CSSProperties {
-  return { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 };
 }
 
 function filterBoxStyle(): CSSProperties {

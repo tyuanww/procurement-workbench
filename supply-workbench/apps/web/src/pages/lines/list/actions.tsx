@@ -107,10 +107,9 @@ export async function hintBatches(input: DeskWriters & {
   }
 }
 
-export function saveCurrent(input: { readonly userId: string; readonly search: string; readonly setMessage: (message: string) => void }): string | undefined {
-  const label = window.prompt('视图名称');
-  if (input.userId === '' || label === null || label.trim() === '') return undefined;
-  const id = label.trim();
+export function saveCurrent(input: { readonly userId: string; readonly search: string; readonly label: string; readonly setMessage: (message: string) => void }): string | undefined {
+  const id = input.label.trim();
+  if (input.userId === '' || id === '') return undefined;
   saveView({ storage: window.localStorage, userId: input.userId, view: { id, label: id, query: input.search } });
   input.setMessage(`已保存视图 ${id}`);
   return id;

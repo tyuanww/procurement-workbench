@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Alert, Button, Collapse, Input, Result, Select, Skeleton, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Collapse, Empty, Flex, Input, Result, Select, Skeleton, Space, Tag, Typography } from 'antd';
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
-import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits, timelineLineText } from '../../../features/follow-up/index.js';
+import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits } from '../../../features/follow-up/index.js';
 import { useCan, useCanWrite } from '../../../shared/actor.js';
-import { formatDateTime } from '../../../shared/ui/format.js';
-import { PageHeader, surfaceStyle } from '../../../shared/ui/page.js';
+import { PageHeader } from '../../../shared/ui/page.js';
 import { space } from '../../../theme/tokens.js';
 import { MissingValue, presentRaw } from '../../../shared/ui/widgets.js';
 import { LineRecordDrawer, openRecord } from './RecordSession.js';
@@ -16,9 +15,9 @@ import { BatchUnitCorrection, OrderLineNote, ProcurementFollowUp, ProcurementSec
 import { FulfillmentRecords, FulfillmentSummary } from './fulfillment.js';
 import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../features/plan/index.js';
 import { ScheduleReports } from './schedule-reports.js';
+import { DetailTimeline } from './DetailTimeline.js';
 
 const MISSING_PO = '无单号';
-const detailCard = { ...surfaceStyle(), padding: space[3] };
 
 export function lineTitle(poRaw: string | null): string {
   if (poRaw === null || poRaw === '') return MISSING_PO;
@@ -58,7 +57,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
           ]}
         />
       ) : (
-        <div style={detailCard}>
+        <Card styles={{ body: { padding: space[3] } }}>
           {detail === null ? <Skeleton active paragraph={{ rows: 8 }} /> : <LineBody detail={detail} events={events} lineId={lineId} setMessage={setMessage} onReload={load} />}
           {detail === null ? null : <BuyerControls detail={detail} onSaved={(saved) => {
             const { pendingBuyerName: _pendingBuyerName, ...current } = detail;
@@ -67,7 +66,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
             load();
           }} />}
           {message === '' ? null : <Alert style={{ marginTop: 12 }} type="info" showIcon title={message} />}
-        </div>
+        </Card>
       )}
     </section>
   );
@@ -89,7 +88,7 @@ type Reload = {
 
 function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly detail: OrderLineDetail; readonly events: readonly TimelineEvent[] } & Reload) {
   const canRecord = useCanWrite('records.write');
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const isComponent = detail.line.origin === 'import_procurement_component';
   return (
     <div>
@@ -99,18 +98,35 @@ function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly d
       {detail.procurementSchedule === undefined ? null : <ProcurementScheduleEvidence detail={detail} params={params} />}
       {isComponent ? null : <FactorySummary detail={detail} />}
       {canRecord ? <OrderLineNote lineId={lineId} onReload={onReload} /> : null}
-      <Typography.Title level={2}>批次</Typography.Title>
-      {canRecord && canAddBatch(detail.line) ? <Button onClick={() => openRecord({ search: params.toString(), setParams, drawer: 'create', batchId: '' })}>新增批次</Button> : null}
-      <ul>{detail.batches.map((batch) => (
-        <BatchDetail key={batch.id} batch={batch} focused={params.get('focusBatch') === batch.id} canRecord={canRecord} hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
-          search: params.toString(), setParams, drawer, batchId: batch.id, ...(reportId === undefined ? {} : { reportId }),
-        })} lineId={lineId} setMessage={setMessage} onReload={onReload} />
-      ))}</ul>
+      <BatchSection detail={detail} canRecord={canRecord} lineId={lineId} setMessage={setMessage} onReload={onReload} />
       {canRecord ? <LineRecordDrawer detail={detail} onReload={onReload} /> : null}
       <DetailTimeline events={events} />
       {isComponent ? null : <ScheduleReports rows={detail.factoryReports.schedule} ordered={detail.line.qtyOrdered} shipped={detail.line.factoryDeliveredQty.value} received={detail.line.receivedQty} />}
       <Shipments detail={detail} onReload={onReload} setMessage={setMessage} />
     </div>
+  );
+}
+
+function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly detail: OrderLineDetail; readonly canRecord: boolean }) {
+  const [params, setParams] = useSearchParams();
+  const search = params.toString();
+  return (
+    <section aria-label="批次">
+      <Flex align="center" justify="space-between" gap={space[2]} wrap style={{ marginBlock: space[2] }}>
+        <Typography.Title level={2} style={{ margin: 0 }}>批次</Typography.Title>
+        {canRecord && canAddBatch(detail.line) ? <Button onClick={() => openRecord({ search, setParams, drawer: 'create', batchId: '' })}>新增批次</Button> : null}
+      </Flex>
+      {detail.batches.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" /> : (
+        <Flex component="ul" role="list" vertical gap={space[2]} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+          {detail.batches.map((batch) => (
+            <BatchDetail {...reload} key={batch.id} batch={batch} focused={params.get('focusBatch') === batch.id} canRecord={canRecord}
+              hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
+                search, setParams, drawer, batchId: batch.id, ...(reportId === undefined ? {} : { reportId }),
+              })} />
+          ))}
+        </Flex>
+      )}
+    </section>
   );
 }
 
@@ -145,19 +161,31 @@ function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen
     row.current.scrollIntoView({ block: 'center' });
   }, [focused]);
   return (
-    <li ref={row} tabIndex={-1}>
-      {batchLineText(batch)}
-      {batch.fulfillment === undefined ? null : <FulfillmentSummary facts={batch.fulfillment} />}
-      {canEdit && batch.fulfillment?.unit === null ? <BatchUnitCorrection batchId={batch.id} onReload={onReload} /> : null}
-      {hasProcurementSchedule ? <ProcurementBatchDates batch={batch} /> : <BatchPromise batch={batch} />}
-      {canEdit ? <ProcurementFollowUp lineId={lineId} batchId={batch.id} onReload={onReload} /> : null}
-      {canEdit ? <BatchDate key={confirmedKey} batch={batch} onReload={onReload} setMessage={setMessage} /> : null}
-      {canRecord ? openBatchActions(batch.status).map((action) => (
-        <Button key={action.kind} onClick={() => onOpen(action.kind)}>{action.label}</Button>
-      )) : null}
-      <FulfillmentRecords batch={batch} canEdit={canEdit} canViewArrival={canRecord} onReload={onReload} onVerify={(reportId) => onOpen('ship', reportId)} />
+    <li ref={row} tabIndex={-1} style={{ minWidth: 0 }}>
+      <Card size="small" title={batchLineText(batch)}>
+        <Flex vertical gap={space[2]}>
+          {batch.fulfillment === undefined ? null : <FulfillmentSummary facts={batch.fulfillment} />}
+          {canEdit && batch.fulfillment?.unit === null ? <BatchUnitCorrection batchId={batch.id} onReload={onReload} /> : null}
+          {hasProcurementSchedule ? <ProcurementBatchDates batch={batch} /> : <BatchPromise batch={batch} />}
+          {canEdit ? <ProcurementFollowUp lineId={lineId} batchId={batch.id} onReload={onReload} /> : null}
+          {canEdit ? <BatchDate key={confirmedKey} batch={batch} onReload={onReload} setMessage={setMessage} /> : null}
+          {canRecord ? <BatchActions status={batch.status} onOpen={onOpen} /> : null}
+          <FulfillmentRecords batch={batch} canEdit={canEdit} canViewArrival={canRecord} onReload={onReload} onVerify={(reportId) => onOpen('ship', reportId)} />
+        </Flex>
+      </Card>
     </li>
   );
+}
+
+function BatchActions({ status, onOpen }: {
+  readonly status: OrderLineDetail['batches'][number]['status'];
+  readonly onOpen: (drawer: 'ship' | 'receipt') => void;
+}) {
+  const actions = openBatchActions(status);
+  if (actions.length === 0) return null;
+  return <Flex gap={space[1]} wrap>
+    {actions.map(({ kind, label }) => <Button key={kind} onClick={() => onOpen(kind)}>{label}</Button>)}
+  </Flex>;
 }
 
 function BatchPromise({ batch }: { readonly batch: OrderLineDetail['batches'][number] }) {
@@ -190,24 +218,6 @@ function ImportedSnapshot({ snapshot }: { readonly snapshot: OrderLineDetail['sn
       : snapshot.importBatchId}</p>
     {sources.size === 0 ? null : <ul>{[...sources].map((source) => <li key={source}>{source}</li>)}</ul>}
   </div>;
-}
-
-function DetailTimeline({ events }: { readonly events: readonly TimelineEvent[] }) {
-  return (
-    <>
-      <Typography.Title level={2}>时间线</Typography.Title>
-      <ul>{events.map((event) => (
-        <li key={event.id}>
-          {timelineLineText(event)}
-          {event.kind === 'follow_up' && !event.voided ? <div style={{ whiteSpace: 'pre-wrap' }}>
-            {event.text}
-            {event.nextFollowUpAt === undefined ? null : <div>{event.nextFollowUpAt === null
-              ? '已取消下次跟进提醒' : `下次跟进 · ${formatDateTime(event.nextFollowUpAt)}`}</div>}
-          </div> : null}
-        </li>
-      ))}</ul>
-    </>
-  );
 }
 
 function BatchDate(props: { readonly batch: OrderLineDetail['batches'][number]; readonly onReload: () => void; readonly setMessage: (message: string) => void }) {

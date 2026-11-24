@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Descriptions, Divider, Drawer, Empty, Flex, Skeleton, Typography } from 'antd';
+import { Alert, Button, Card, Descriptions, Divider, Drawer, Empty, Flex, Skeleton, Timeline, Typography } from 'antd';
 import { followUpKindLabel, lineStageLabel, type OrderLineId } from '@sw/domain';
 import type { LineTimeline, OrderLineDetail, TimelineEvent } from '@sw/contracts';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
@@ -106,15 +106,23 @@ function NextArrival({ detail }: { readonly detail: OrderLineDetail }) {
 
 function BatchSection({ detail }: { readonly detail: OrderLineDetail }) {
   if (detail.batches.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" />;
-  return <ul>{detail.batches.map((batch) => <li key={batch.id}>
-    <Typography.Text strong>{batchLineText(batch)}</Typography.Text>
-    <div>计划 {formatQuantity(batch.plannedQty)} · 已发 {formatQuantity(batch.shippedQty)} · 已收 {formatQuantity(batch.receivedQty)}</div>
-  </li>)}</ul>;
+  return <Flex vertical gap="small">
+    {detail.batches.map((batch) => <Card key={batch.id} size="small" title={batchLineText(batch)}>
+      <Descriptions size="small" column={{ xs: 1, sm: 3 }} items={[
+        { key: 'planned', label: '计划', children: formatQuantity(batch.plannedQty) },
+        { key: 'shipped', label: '已发', children: formatQuantity(batch.shippedQty) },
+        { key: 'received', label: '已收', children: formatQuantity(batch.receivedQty) },
+      ]} />
+    </Card>)}
+  </Flex>;
 }
 
 function TimelineSection({ events }: { readonly events: readonly TimelineEvent[] }) {
   if (events.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无时间线" />;
-  return <ul>{events.map((event) => <li key={event.id}>{timelineLineText(event)}{event.actor === null ? '' : ` · ${event.actor.name}`}</li>)}</ul>;
+  return <Timeline items={events.map((event) => ({
+    key: event.id,
+    content: `${timelineLineText(event)}${event.actor === null ? '' : ` · ${event.actor.name}`}`,
+  }))} />;
 }
 
 function FollowUpSection({ detail }: { readonly detail: OrderLineDetail }) {

@@ -5,6 +5,7 @@ import { deskAddress, exportAddress, lineTableLayout, renderedLineColumns, type 
 import { useShellViewport } from '../../../features/shell/index.js';
 import { bg, radiusCard, space } from '../../../theme/tokens.js';
 import { saveCurrent } from './actions.js';
+import { SaveViewButton } from './SaveViewButton.js';
 
 export type SavedView = LineDeskView;
 
@@ -138,7 +139,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
   const actions = <>
     {selected === undefined || !isModified ? null : <ModifiedActions search={props.search} view={selected} setParams={props.setParams} />}
     {selected === undefined ? null : <Button onClick={() => props.setParams(clearFiltersAddress(props.search))}>退出视图</Button>}
-    <SaveViewButton search={props.search} userId={props.userId} setMessage={props.setMessage} setParams={props.setParams} />
+    <SaveViewButton isDisabled={props.userId === ''} onSave={(label) => saveAsView(props, label)} />
   </>;
   if (isPhone) {
     return (
@@ -260,15 +261,12 @@ function ModifiedActions(props: { readonly search: string; readonly view: SavedV
   );
 }
 
-function SaveViewButton(props: { readonly search: string; readonly userId: string; readonly setMessage: (message: string) => void; readonly setParams: SearchWriter }): ReactNode {
-  return <Button onClick={() => saveAsView(props)}>保存当前视图</Button>;
-}
-
-function saveAsView(input: { readonly search: string; readonly userId: string; readonly setMessage: (message: string) => void; readonly setParams: SearchWriter }): void {
-  const query = saveAddress(input.search);
-  const id = saveCurrent({ userId: input.userId, search: query, setMessage: input.setMessage });
-  if (id === undefined) return;
-  input.setParams(viewAddress({ search: input.search, view: { id, label: id, query } }));
+function saveAsView(props: Pick<ViewBarProps, 'search' | 'userId' | 'setMessage' | 'setParams'>, label: string): boolean {
+  const query = saveAddress(props.search);
+  const id = saveCurrent({ userId: props.userId, search: query, label, setMessage: props.setMessage });
+  if (id === undefined) return false;
+  props.setParams(viewAddress({ search: props.search, view: { id, label: id, query } }));
+  return true;
 }
 
 function ColumnControl(props: { readonly columns: readonly ColumnView[]; readonly hiddenKeys: readonly string[]; readonly search: string; readonly setParams: SearchWriter }): ReactNode {
