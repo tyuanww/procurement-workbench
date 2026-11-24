@@ -178,6 +178,7 @@ export async function checkImportFactoryDetail(page: Page, origin: URL) {
   await batch.press('Enter');
   await page.getByText('演示包装工厂', { exact: true }).waitFor();
   await page.getByRole('heading', { name: '提交结果', exact: true }).waitFor();
+  await page.reload();
   await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
   await page.waitForURL(source.href);
   await batch.and(page.locator(':focus')).waitFor();

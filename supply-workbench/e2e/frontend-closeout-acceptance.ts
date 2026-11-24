@@ -171,6 +171,7 @@ async function checkProductPackagingReturn(page: Page, origin: URL): Promise<voi
     for (const text of ['渠道规格', `${barcode}-1`, '100 mL', '12 件/箱']) {
       await page.getByText(text, { exact: true }).waitFor();
     }
+    await page.reload();
     if (view === 'card') {
       await page.getByRole('tab', { name: '采购', exact: true }).press('Enter');
       await page.getByRole('link', { name: '返回产品档案', exact: true }).press('Enter');
