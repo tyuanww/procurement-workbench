@@ -306,11 +306,13 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   assert.equal(await row.getByText(oldNote, { exact: true }).count(), 0);
 
   await page.setViewportSize({ width: 320, height: 800 });
-  await row.getByRole('button', { name: '展开行', exact: true }).click();
+  const mobileProduct = page.getByRole('link', { name: `${finishedPo} ${finishedName}`, exact: true });
+  const mobileRow = current.getByRole('row').filter({ has: mobileProduct });
+  await mobileRow.getByRole('button', { name: '展开行', exact: true }).click();
   await current.getByText(newNote, { exact: true }).scrollIntoViewIfNeeded();
   assert.equal(await current.getByRole('textbox').count(), 0);
   await page.screenshot({ path: join(out, 'order-line-note-mobile.png'), animations: 'disabled' });
-  await product.click();
+  await mobileProduct.click();
   await page.waitForURL(order.href);
   await note.getByText(newNote, { exact: true }).waitFor();
   await textbox.fill('这条草稿属于成品');
