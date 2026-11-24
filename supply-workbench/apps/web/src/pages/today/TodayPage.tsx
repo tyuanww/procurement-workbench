@@ -182,7 +182,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     onCopy: (text) => { void copyNudge(text, state.setNotice); },
     onCloseDrawer: () => closeSession(null),
     onDraft: state.setDraft,
-    onSubmit: () => { void submitForm(state); },
+    onSubmit: () => { void submitForm({ state, close: () => closeSession(null) }); },
     onRetry: state.retry,
     onBack: () => window.history.back(),
   };
@@ -197,7 +197,7 @@ async function copyNudge(text: string, setNotice: (notice: string) => void): Pro
   }
 }
 
-async function submitForm(state: ReturnType<typeof useTodayState>): Promise<void> {
+async function submitForm({ state, close }: { readonly state: ReturnType<typeof useTodayState>; readonly close: () => void }): Promise<void> {
   const ready = readySubmit(state);
   if (ready === null) return;
   const errors = formErrors({ draft: ready.draft, hadDate: ready.target?.hadDate === true, today: businessToday() });
@@ -208,7 +208,7 @@ async function submitForm(state: ReturnType<typeof useTodayState>): Promise<void
   state.setSaving(true);
   state.setSaveError('');
   try {
-    await writeDraft({ ready, state });
+    await writeDraft({ ready, state, close });
   } finally {
     state.setSaving(false);
   }
@@ -224,16 +224,13 @@ function readySubmit(state: ReturnType<typeof useTodayState>): SaveInput | null 
   return { draft, target, note, row };
 }
 
-async function writeDraft(input: { readonly ready: SaveInput; readonly state: ReturnType<typeof useTodayState> }): Promise<void> {
-  const { ready, state } = input;
+async function writeDraft(input: { readonly ready: SaveInput; readonly state: ReturnType<typeof useTodayState>; readonly close: () => void }): Promise<void> {
+  const { ready, state, close } = input;
   try {
     const undo = await saveForm(ready);
     state.setUndo(undo);
     state.setNotice('');
-    await applyNextToday({
-      ...state,
-      close: () => { state.setDrawerId(null); state.setDraft(null); },
-    });
+    await applyNextToday({ refresh: state.refresh, setNotice: state.setNotice, close });
   } catch (error) {
     state.setSaveError(error instanceof Error ? error.message : '保存失败');
   }

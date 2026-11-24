@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 
 const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
 const batch = 'hz09-batch-501';
@@ -156,15 +156,26 @@ async function recordKeyboardReceipt(page: Page, { before, recv, evidence }: { r
   const dialog = page.getByRole('dialog');
   const qty = dialog.getByRole('spinbutton', { name: '数量', exact: true });
   await qty.waitFor();
+  await page.waitForURL((url) => url.searchParams.get('drawer') === 'batch:' + batch && url.searchParams.get('draft') === 'receipt');
   assert.equal(Number(await qty.inputValue()), before);
   await qty.fill(String(recv));
   await dialog.getByLabel('收货日', { exact: true }).fill('2025-02-02');
   await dialog.getByLabel('收货及归批依据', { exact: true }).fill(evidence);
-  const saved = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === '/api/v1/batches/' + batch + '/receipts'
-    && response.request().method() === 'POST');
-  await dialog.getByRole('button', { name: /^确\s*认$/ }).press('Enter');
-  assert.equal((await saved).status(), 200);
+  const refreshPath = /\/api\/v1\/today\?/;
+  const refreshGate = Promise.withResolvers<void>();
+  const delayRefresh = async (route: Route) => { await refreshGate.promise; await route.continue(); };
+  await page.route(refreshPath, delayRefresh);
+  try {
+    const saved = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/v1/batches/' + batch + '/receipts'
+      && response.request().method() === 'POST');
+    await dialog.getByRole('button', { name: /^确\s*认$/ }).press('Enter');
+    assert.equal((await saved).status(), 200);
+    await page.waitForURL((url) => !url.searchParams.has('drawer') && !url.searchParams.has('draft'));
+  } finally {
+    refreshGate.resolve();
+    await page.unroute(refreshPath, delayRefresh);
+  }
   await dialog.waitFor({ state: 'hidden' });
 }
 
