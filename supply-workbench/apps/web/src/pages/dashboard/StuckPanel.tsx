@@ -101,7 +101,7 @@ function DwellChart(props: {
       <Typography.Title level={2} style={{ margin: 0 }}>
         各阶段卡了几天
       </Typography.Title>
-      <Typography.Text type="secondary">每条横条表示该阶段内部的批次占比。选择天数档可筛选下方清单。</Typography.Text>
+      <Typography.Text type="secondary">每条横条表示该阶段内部的批次占比。选择天数档可筛选卡点清单。</Typography.Text>
       <StackedBarChart
         ariaLabel="各批次阶段停留天数分布"
         scale="composition"
