@@ -79,11 +79,7 @@ it('活动上报挂接和在途建单显示同一代工厂，订单筛选、汇�
       expect(LineSummarySchema.parse(summary.json()).total).toBe(2);
       const exported = await get(`/export.xlsx?lane=finished&${filter}&pageSize=1`);
       expect(exported.statusCode).toBe(200);
-      const sheet = readXlsx({ bytes: exported.rawPayload, fileName: '订单.xlsx' }).sheets[0];
-      expect(sheet?.rowCount).toBe(3);
-      expect(sheet?.cell(1, 4)?.text).toBe('工厂');
-      expect([sheet?.cell(2, 1)?.text, sheet?.cell(3, 1)?.text].sort()).toEqual(['PO-SCOPE-ATTACHED', 'PO202611230001']);
-      expect([sheet?.cell(2, 4)?.text, sheet?.cell(3, 4)?.text]).toEqual([factory.displayName, factory.displayName]);
+      expectFactoryExport(exported.rawPayload);
 
       expect((await list(`supplierPartyId=${factory.id}`)).items.map(({ id }) => id).sort()).toEqual([createdId, 'supplier-only'].sort());
       expect((await list(`factoryPartyId=${other.id}`)).items.map(({ id }) => id)).toEqual(['legacy-current']);
@@ -110,6 +106,15 @@ it('活动上报挂接和在途建单显示同一代工厂，订单筛选、汇�
     await rm(uploadDir, { recursive: true });
   }
 });
+
+function expectFactoryExport(bytes: Buffer): void {
+  const [sheet] = readXlsx({ bytes, fileName: '订单.xlsx' }).sheets;
+  if (sheet === undefined) throw new Error('导出缺少订单行工作表');
+  expect(sheet.rowCount).toBe(3);
+  expect(sheet.cell(1, 4)?.text).toBe('工厂');
+  expect([sheet.cell(2, 1)?.text, sheet.cell(3, 1)?.text].sort()).toEqual(['PO-SCOPE-ATTACHED', 'PO202611230001']);
+  expect([sheet.cell(2, 4)?.text, sheet.cell(3, 4)?.text]).toEqual([factory.displayName, factory.displayName]);
+}
 
 function openApp({ db, uploadDir }: { readonly db: AppDatabase; readonly uploadDir: string }) {
   const context = { db, clock: new FixedClock(at), timeZone: 'Asia/Shanghai' };
