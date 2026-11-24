@@ -22,7 +22,6 @@ export function LineResultSummary({ query, reload, total }: {
   readonly reload: number;
   readonly total: number | null;
 }) {
-  const result = useLineSummary({ query, reload });
   const [openQuery, setOpenQuery] = useState<string | null>(null);
   if (openQuery !== null && openQuery !== query) setOpenQuery(null);
   const isOpen = openQuery === query;
@@ -44,13 +43,14 @@ export function LineResultSummary({ query, reload, total }: {
         </Button>
       </Flex>
       <div id={summaryId} hidden={!isOpen}>
-        {isOpen ? <SummaryBody result={result} /> : null}
+        {isOpen ? <SummaryBody query={query} reload={reload} /> : null}
       </div>
     </>
   );
 }
 
-function SummaryBody({ result }: { readonly result: ReturnType<typeof useLineSummary> }) {
+function SummaryBody(request: Parameters<typeof useLineSummary>[0]) {
+  const result = useLineSummary(request);
   if (result.summary !== null) return <LineSummaryStrip summary={result.summary} />;
   if (result.error !== '') return <Alert type="error" showIcon title="订单汇总没有读出来" description={result.error} />;
   return <p role="status">正在读取订单汇总…</p>;
@@ -63,9 +63,9 @@ function LineSummaryStrip({ summary }: { readonly summary: LineSummary }) {
         ariaLabel="跟进中心筛选结果指标"
         items={[
           { key: 'total', label: '订单行', value: summary.total, tone: 'neutral' },
-          { key: 'overdue', label: '逾期', value: summary.overdue, tone: 'danger', hint: '按确认到货日' },
-          { key: 'due', label: '今日应到', value: summary.dueToday, tone: 'warning' },
-          { key: 'missing', label: '缺确认日期', value: summary.missingDate, tone: 'attention' },
+          { key: 'overdue', label: '逾期', value: summary.overdue, unit: ' 行', tone: 'danger', hint: '含逾期开放批次' },
+          { key: 'due', label: '今日应到', value: summary.dueToday, unit: ' 行', tone: 'warning', hint: '下一到货为今日' },
+          { key: 'missing', label: '待确认阶段', value: summary.missingDate, unit: ' 行', tone: 'attention' },
         ]}
       />
       <div style={{ marginTop: space[3] }}>

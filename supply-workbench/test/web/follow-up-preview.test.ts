@@ -51,6 +51,19 @@ describe('跟进台预览只读内容', () => {
     expect(html).not.toContain('ant-input');
   });
 
+  it('订单行下一到货指明汇总规则和对应批次，各批次列出自己的日期', () => {
+    const batch = detail.batches[0];
+    if (batch === undefined) throw new Error('缺测试批次');
+    const second = { ...batch, id: 'batch-2', seq: 2, dateBuyerConfirmed: localDate('2026-11-12') };
+    const html = markup(FollowUpPreviewFields, { detail: { ...detail, batches: [batch, second] }, timeline });
+    expect(html).toContain('开放批次最早的采购确认到货日');
+    expect(html).toContain('对应批次');
+    expect(html).toContain('href="/lines/line-1?focusBatch=batch-1"');
+    expect(html).toMatch(/第 1 批[^<]*下一到货/);
+    expect(html).toContain('2026-11-12');
+    expect(html).toContain('供应商承诺日');
+  });
+
   it('读取支持 AbortSignal，抽屉卸载时可取消请求', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
     const controller = new AbortController();
