@@ -86,6 +86,19 @@ describe('密度切换', () => {
 });
 
 describe('已修改状态', () => {
+  it('从本批导入切换预设后，请求和导出仍只查该批次', () => {
+    const view = presetViews().find((item) => item.id === 'no-batch');
+    if (view === undefined) throw new Error('缺少未建要货视图');
+    const address = viewAddress({ search: 'lane=all&importBatchId=batch%2Ba%3Db', view });
+    const desk = readDesk(address.toString());
+    const query = new URLSearchParams(desk.requestQuery);
+    expect(query.get('importBatchId')).toBe('batch+a=b');
+    expect(query.get('stages')).toBe('no_batch');
+    expect(new URL(exportAddress({ query: desk.requestQuery, columns: COLUMNS }), 'http://localhost')
+      .searchParams.get('importBatchId')).toBe('batch+a=b');
+    expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=all&importBatchId=batch%2Ba%3Db');
+  });
+
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {
     const view = presetViews().find((item) => item.id === 'yinong');
     if (view === undefined) throw new Error('缺少宜侬在途');
