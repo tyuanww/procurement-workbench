@@ -619,12 +619,12 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   const importBatchId = decodeURIComponent(importPath.slice('/imports/'.length));
   const matchesScope = (url: URL) => url.searchParams.get('importBatchId') === importBatchId;
   const batchCountBefore = readDeliveryBatchCount();
-  const [list, summary] = await Promise.all([
+  const [list] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
     orderLink.click(),
   ]);
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('lane') === 'all' && matchesScope(url));
+  const summary = await openOrderSummary(page);
   for (const response of [list, summary]) {
     assert.ok(response.ok() && matchesScope(new URL(response.url())));
     assert.equal(response.request().method(), 'GET');
@@ -652,14 +652,23 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true };
 }
 
+async function openOrderSummary(page: Page) {
+  const [response] = await Promise.all([
+    page.waitForResponse((item) => new URL(item.url()).pathname === '/api/v1/lines/summary'),
+    page.getByRole('button', { name: '筛选结果概览', exact: true, expanded: false }).click(),
+  ]);
+  await page.getByRole('group', { name: '跟进中心筛选结果指标', exact: true }).waitFor();
+  return response;
+}
+
 async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
   const noBatch = page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true });
-  const [list, summary] = await Promise.all([
+  const [list] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
     noBatch.click(),
   ]);
   await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch' && matchesScope(url));
+  const summary = await openOrderSummary(page);
   for (const response of [list, summary]) assert.ok(response.ok() && matchesScope(new URL(response.url())));
   const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
   assert.ok(matchesScope(new URL(await exportLink.getAttribute('href') ?? '', origin)));
