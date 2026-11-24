@@ -3,9 +3,11 @@ import { entityId, entityIdOrNull } from '../../mappers/id.js';
 import type { PerformanceReadModel } from '../../../../application/src/ports/performance-read-model.js';
 import type { AppDatabase } from '../../client.js';
 import { instant, instantOrNull } from '../../mappers/time.js';
-import { deliveryBatches, deliveryNotes, exceptions, followUps, lineFactoryLinks, orderLines, purchaseOrders, receipts, shipments, batchDateChanges } from '../../schema/orders.js';
+import { deliveryBatches, deliveryNotes, exceptions, followUps, orderLines, purchaseOrders, receipts, shipments, batchDateChanges } from '../../schema/orders.js';
 import { partyAliases, parties, users } from '../../schema/platform.js';
 import { bomLines, products } from '../../schema/archive.js';
+import { effectiveFactoryLinks, type EffectiveFactoryLink } from '../factory-links/line-association.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 import { toBatch } from './batch.js';
 
 type Clock = { today(): LocalDate };
@@ -33,7 +35,7 @@ async function loadFacts(db: AppDatabase, ctx: { readonly clock: Clock; readonly
     db.select().from(deliveryNotes),
     db.select().from(batchDateChanges),
     db.select().from(exceptions),
-    db.select().from(lineFactoryLinks),
+    activeFactoryBatchIds(db).then((activeIds) => effectiveFactoryLinks({ db, activeFactoryBatchIds: activeIds })),
     db.select().from(followUps),
     db.select().from(parties),
     db.select().from(users),
@@ -106,11 +108,11 @@ function exceptionOf(row: KpiSources['exceptionRows'][number], input: KpiSources
   };
 }
 
-function linkedFactoryLineIds(rows: readonly (typeof lineFactoryLinks.$inferSelect)[]): ReadonlySet<string> {
+function linkedFactoryLineIds(rows: readonly EffectiveFactoryLink[]): ReadonlySet<string> {
   return new Set(rows.flatMap((row) => (row.status === 'linked' || row.status === 'manual' ? [row.orderLineId] : [])));
 }
 
-function unlinkedFactoryLineIds(rows: readonly (typeof lineFactoryLinks.$inferSelect)[]): ReadonlySet<string> {
+function unlinkedFactoryLineIds(rows: readonly EffectiveFactoryLink[]): ReadonlySet<string> {
   return new Set(rows.flatMap((row) => (row.status === 'unlinked' ? [row.orderLineId] : [])));
 }
 

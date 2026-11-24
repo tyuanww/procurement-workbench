@@ -6,7 +6,7 @@ import type { ListResult } from '../../../../application/src/shared/page.js';
 import type { AppDatabase } from '../../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { actionableFactoryReport } from '../factory-report-actionable.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
+import { activeFactoryBatchIds } from './snapshot-scope.js';
 
 const REPORT_TABLES = {
   shipment: factoryShipmentRows,

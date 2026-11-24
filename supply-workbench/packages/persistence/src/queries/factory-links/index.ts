@@ -1,11 +1,12 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { normalizeText, type FactoryReportKind, type LineFactoryLinkSource, type LineFactoryLinkStatus, type LineFactoryMatchBasis } from '@sw/domain';
 import type { FactoryLinkQueries, FactoryRowMatchRef, LineFactoryLinkView, OrderLineMatchRef } from '../../../../application/src/ports/factory-link-views.js';
 import type { AppDatabase } from '../../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { lineFactoryLinks, orderLines, purchaseOrders } from '../../schema/orders.js';
 import { parties, partyAliases } from '../../schema/platform.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
+import { effectiveFactoryLinks, type EffectiveFactoryLink } from './line-association.js';
+import { activeFactoryBatchIds } from './snapshot-scope.js';
 import { listDiagnosticPage, listUnmatched } from './unmatched.js';
 
 const STATUSES: readonly LineFactoryLinkStatus[] = ['linked', 'unlinked', 'manual'];
@@ -101,40 +102,18 @@ function refOf(input: {
 }
 
 async function getView(db: AppDatabase, orderLineId: string): Promise<LineFactoryLinkView | undefined> {
-  const links = await db.select().from(lineFactoryLinks).where(eq(lineFactoryLinks.orderLineId, orderLineId));
-  const link = links[0];
-  if (link !== undefined) return viewOf({ row: link, factory: await factoryRef(db, link.factoryPartyId) });
-  return fallbackView(db, orderLineId);
-}
-
-async function fallbackView(db: AppDatabase, orderLineId: string): Promise<LineFactoryLinkView | undefined> {
-  const [shipments, transits, stocks] = await Promise.all([
-    db.select().from(factoryShipmentRows).where(eq(factoryShipmentRows.linkedOrderLineId, orderLineId)),
-    db.select().from(factoryInTransitRows).where(eq(factoryInTransitRows.linkedOrderLineId, orderLineId)),
-    db.select().from(factoryStockRows).where(eq(factoryStockRows.linkedOrderLineId, orderLineId)),
-  ]);
-  const row = shipments[0] ?? transits[0] ?? stocks[0];
-  if (row === undefined) return undefined;
-  return {
-    orderLineId,
-    factory: await factoryRef(db, row.factoryPartyId),
-    status: 'linked',
-    source: 'factory_progress',
-    confidence: 'none',
-    reason: null,
-    linkedAt: new Date(row.updatedAt).toISOString(),
-  };
+  const [link] = await effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db), lineIds: [orderLineId] });
+  return link === undefined ? undefined : viewOf({ row: link, factory: await factoryRef(db, link.factoryPartyId) });
 }
 
 async function countStates(db: AppDatabase): Promise<{ readonly linked: number; readonly manual: number; readonly unlinked: number }> {
-  const [lines, links] = await Promise.all([db.select().from(orderLines), db.select().from(lineFactoryLinks)]);
-  let linked = 0;
-  let manual = 0;
-  for (const link of links) {
-    if (link.status === 'linked') linked += 1;
-    else if (link.status === 'manual') manual += 1;
-  }
-  return { linked, manual, unlinked: Math.max(lines.length - linked - manual, 0) };
+  const links = effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db) }).as('effective_factory_links');
+  const [counts] = await db.select({
+    linked: sql<number>`count(*) filter (where ${links.status} = 'linked')::int`,
+    manual: sql<number>`count(*) filter (where ${links.status} = 'manual')::int`,
+    unlinked: sql<number>`count(*) filter (where ${links.status} is null or ${links.status} = 'unlinked')::int`,
+  }).from(orderLines).leftJoin(links, eq(links.orderLineId, orderLines.id));
+  return counts ?? { linked: 0, manual: 0, unlinked: 0 };
 }
 
 async function listApprovedSupplierAliases(db: AppDatabase): Promise<readonly { readonly normName: string; readonly partyId: string }[]> {
@@ -153,7 +132,7 @@ async function factoryRef(db: AppDatabase, partyId: string | null): Promise<{ re
   return row === undefined ? null : { id: row.id, displayName: row.displayName };
 }
 
-function viewOf(input: { readonly row: typeof lineFactoryLinks.$inferSelect; readonly factory: { readonly id: string; readonly displayName: string } | null }): LineFactoryLinkView {
+function viewOf(input: { readonly row: EffectiveFactoryLink; readonly factory: { readonly id: string; readonly displayName: string } | null }): LineFactoryLinkView {
   return {
     orderLineId: input.row.orderLineId,
     factory: input.factory,

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { LineFactoryLink, LineFactoryLinkSource, LineFactoryLinkStatus, LineFactoryMatchBasis } from '@sw/domain';
 import type { FactoryRef } from '../../../application/src/ports/factory-link-repository.js';
 import type { LineFactoryLinkRepository } from '../../../application/src/ports/factory-link-repository.js';
@@ -26,9 +26,14 @@ async function find(db: AppDatabase, orderLineIdValue: string): Promise<LineFact
   return row === undefined ? undefined : toLink(row);
 }
 
-async function save(db: AppDatabase, entity: LineFactoryLink): Promise<void> {
+async function save(db: AppDatabase, entity: LineFactoryLink): Promise<boolean> {
   const row = toRow(entity);
-  await db.insert(lineFactoryLinks).values(row).onConflictDoUpdate({ target: lineFactoryLinks.id, set: row });
+  const updated = await db.insert(lineFactoryLinks).values(row).onConflictDoUpdate({
+    target: lineFactoryLinks.id,
+    set: row,
+    setWhere: sql`${entity.source === 'manual'} or (${lineFactoryLinks.source} <> 'manual' and ${lineFactoryLinks.status} <> 'manual')`,
+  }).returning();
+  return updated.length > 0;
 }
 
 async function findFactoriesByName(db: AppDatabase, displayName: string): Promise<readonly FactoryRef[]> {

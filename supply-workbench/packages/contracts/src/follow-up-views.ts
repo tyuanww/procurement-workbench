@@ -183,6 +183,7 @@ export const LatestNoteSchema: z.ZodType<LatestNote> = strictObject({
   text: z.string(),
 });
 
+/** 每个请求的订单行最多返回一条最新订单行备注，仅包含未关联要货批次的 note 记录。 */
 export const LatestNotesSchema: z.ZodType<LatestNotes> = strictObject({
   items: z.array(LatestNoteSchema),
 });

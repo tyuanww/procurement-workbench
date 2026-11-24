@@ -5,10 +5,11 @@ import { readCsv } from '../../packages/importers/src/workbook/index.js';
 import { REQUIRED_COLUMNS } from '../../packages/importers/src/templates/po-master-v1/columns.js';
 import { template } from '../../packages/importers/src/templates/po-master-v1/index.js';
 import type { ParsedRow, PoMasterPayload } from '../../packages/application/src/ports/parsed-rows.js';
+import { makeSetLineFactoryLink } from '../../packages/application/src/factory-links/index.js';
 import { makeCommitImport } from '../../packages/application/src/imports/index.js';
 import './load-import-registry.js';
 import type { Actor } from '../../packages/application/src/shared/actor.js';
-import { aParty, aUser, FixedClock } from '../../packages/testkit/src/index.js';
+import { aParty, aUser, FixedClock, SequentialIds } from '../../packages/testkit/src/index.js';
 import { createPgFixture, queriesOf, type PgFixture } from './pg-fixtures.js';
 
 const at = '2026-11-09T00:00:00.000Z';
@@ -27,7 +28,7 @@ it('PO 总表带采购负责人和工厂列，提交后写负责人归属和工�
   const fixture = await createPgFixture();
   try {
     await seed(fixture);
-    await commitWith(fixture, { 采购负责人: '采购甲', 工厂: '宜侬' });
+    await commitWith(fixture, { fields: { 采购负责人: '采购甲', 工厂: '宜侬' } });
     const lineId = entityId('row-2:line');
     expect(await lineBuyer(fixture, lineId)).toBe('user-buyer-a');
     const owner = rowsOf(await fixture.handle.exec(`select status, owner_user_id, owner_name_raw, source, source_ref from owner_assignments where subject_id = 'row-2:line'`));
@@ -45,7 +46,7 @@ it('未知负责人进 pending，不写假负责人；未知工厂写未关联�
   const fixture = await createPgFixture();
   try {
     await seed(fixture);
-    await commitWith(fixture, { 采购负责人: '查无此人', 工厂: '不存在的工厂' });
+    await commitWith(fixture, { fields: { 采购负责人: '查无此人', 工厂: '不存在的工厂' } });
     expect(await lineBuyer(fixture, entityId('row-2:line'))).toBeNull();
     const owner = rowsOf(await fixture.handle.exec(`select status, owner_user_id, owner_name_raw from owner_assignments where subject_id = 'row-2:line'`));
     expect(owner[0]).toMatchObject({ status: 'pending', owner_user_id: null, owner_name_raw: '查无此人' });
@@ -64,7 +65,7 @@ it('负责人重名时进 pending，不替用户选人', async () => {
       aUser({ id: entityId('user-dup-1'), name: '重名采购', roles: ['buyer'] }),
       aUser({ id: entityId('user-dup-2'), name: '重名采购', roles: ['buyer'] }),
     ]);
-    await commitWith(fixture, { 采购负责人: '重名采购' });
+    await commitWith(fixture, { fields: { 采购负责人: '重名采购' } });
     expect(await lineBuyer(fixture, entityId('row-2:line'))).toBeNull();
     const owner = rowsOf(await fixture.handle.exec(`select status, owner_user_id, owner_name_raw from owner_assignments where subject_id = 'row-2:line'`));
     expect(owner[0]).toMatchObject({ status: 'pending', owner_user_id: null, owner_name_raw: '重名采购' });
@@ -77,10 +78,24 @@ it('没有可选列时提交行为不变，不写负责人和工厂关联', asyn
   const fixture = await createPgFixture();
   try {
     await seed(fixture);
-    await commitWith(fixture, {});
+    await commitWith(fixture, { fields: {} });
     expect(rowsOf(await fixture.handle.exec(`select id from owner_assignments`))).toHaveLength(0);
     expect(rowsOf(await fixture.handle.exec(`select id from line_factory_links`))).toHaveLength(0);
     expect(await lineBuyer(fixture, entityId('row-2:line'))).toBeNull();
+  } finally {
+    await fixture.handle.close();
+  }
+});
+
+it('更新 PO 总表保留人工取消工厂关联的决定', async () => {
+  const fixture = await createPgFixture();
+  try {
+    await seed(fixture);
+    await commitWith(fixture, { fields: { 工厂: '宜侬' } });
+    const clock = new FixedClock(at);
+    await makeSetLineFactoryLink({ uow: fixture.uow, clock, ids: new SequentialIds() })({ orderLineId: 'row-2:line', factoryPartyId: null, reason: '人工取消' }, admin());
+    await commitWith(fixture, { fields: { 工厂: '宜侬' }, targetId: 'row-2:line' });
+    expect(await queriesOf(fixture).links.getView('row-2:line')).toMatchObject({ factory: null, status: 'unlinked', source: 'manual', reason: '人工取消' });
   } finally {
     await fixture.handle.close();
   }
@@ -94,14 +109,19 @@ async function seed(fixture: PgFixture, extraUsers: readonly ReturnType<typeof a
   });
 }
 
-async function commitWith(fixture: PgFixture, optional: Readonly<Record<string, string>>): Promise<void> {
-  const parsed = template.parse(bookOf(optional), { uploadedAt: at, factoryPartyId: null });
-  const batch = batchOf('batch-1');
+async function commitWith(fixture: PgFixture, { fields, targetId }: {
+  readonly fields: Readonly<Record<string, string>>;
+  readonly targetId?: string;
+}): Promise<void> {
+  const parsed = template.parse(bookOf(fields), { uploadedAt: at, factoryPartyId: null });
+  const batch = batchOf(targetId === undefined ? 'batch-1' : 'batch-2');
   await fixture.uow.run(async (tx) => {
     await tx.imports.save(batch);
-    for (const row of importRowsOf({ batchId: 'batch-1', rows: parsed.rows })) await tx.imports.saveRow(row);
+    for (const row of importRowsOf({ batchId: batch.id, rows: parsed.rows })) {
+      await tx.imports.saveRow(targetId === undefined ? row : { ...row, id: entityId(`${batch.id}:${row.id}`), targetId: entityId(targetId), action: 'update' });
+    }
   });
-  await makeCommitImport({ uow: fixture.uow, clock: new FixedClock(at) })({ importBatchId: 'batch-1' }, admin());
+  await makeCommitImport({ uow: fixture.uow, clock: new FixedClock(at) })({ importBatchId: batch.id }, admin());
 }
 
 function bookOf(optional: Readonly<Record<string, string>>) {

@@ -11,7 +11,7 @@ import { factoryInTransitRows, factoryStockRows } from '../../schema/factory.js'
 import { codeLinks, itemCodes } from '../../schema/platform.js';
 import { orderLineSnapshots, orderLines, purchaseOrders } from '../../schema/orders.js';
 import { oneOf } from '../follow-up/guards.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 import { stockOf, transitOf } from '../follow-up/payloads.js';
 import { coverFile } from './cover.js';
 

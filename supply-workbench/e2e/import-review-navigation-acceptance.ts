@@ -81,6 +81,26 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await heading.waitFor();
   await settings.waitFor({ state: 'hidden' });
   await page.setViewportSize({ width: 1440, height: 900 });
+  await checkAccountFocusExit(page, origin);
+}
+
+async function checkAccountFocusExit(page: Page, origin: URL) {
+  const trigger = page.getByRole('banner').getByRole('button', { name: '管理员', exact: true });
+  const settings = page.getByRole('link', { name: SETTINGS_LABEL, exact: true });
+  const dashboard = page.getByRole('main').getByRole('link', { name: '看板', exact: true });
+  for (const width of [1440, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(new URL('/reports', origin).href);
+    await dashboard.waitFor();
+    await trigger.press('Enter');
+    await settings.waitFor();
+    for (const _step of [1, 2, 3]) await page.keyboard.press('Tab');
+    assert.equal(await dashboard.evaluate((link) => link === document.activeElement), true);
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false', '焦点移到页面时账户菜单应关闭');
+    await page.keyboard.press('Tab');
+    assert.ok(await page.evaluate(() => document.activeElement?.closest('main')), '继续 Tab 应留在页面内容');
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
 }
 
 async function checkWithoutSettingsAccess(page: Page, origin: URL, name: string): Promise<void> {

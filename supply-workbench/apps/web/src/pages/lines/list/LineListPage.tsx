@@ -216,8 +216,19 @@ function LineFilters(props: { readonly search: string; readonly desk: Desk; read
         <StageFilter search={props.search} desk={props.desk} setParams={props.setParams} />
       </div>
       <OverdueFilter search={props.search} isOverdue={props.desk.isOverdue} setParams={props.setParams} />
+      <ImportScopeAction search={props.search} setParams={props.setParams} />
     </div>
   );
+}
+
+function ImportScopeAction({ search, setParams }: { readonly search: string; readonly setParams: SearchSetter }) {
+  const params = new URLSearchParams(search);
+  if (!params.has('importBatchId')) return null;
+  return <Button onClick={() => {
+    params.delete('importBatchId');
+    params.delete('page');
+    setParams(params);
+  }}>退出本次导入范围</Button>;
 }
 
 function filterRowStyle(): CSSProperties {

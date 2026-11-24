@@ -4,8 +4,8 @@ import type { FactoryReportRowView, LinkedFactoryRow } from '@sw/application';
 import { NotFoundError } from '@sw/application/errors';
 import type { AppDatabase } from '../../client.js';
 import { factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
+import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 import { actionableFactoryReport } from '../factory-report-actionable.js';
-import { activeFactoryBatchIds } from '../follow-up/line-row.js';
 import { comboOf, demandOf, scheduleOf, shipmentOf, stockOf, transitOf } from '../follow-up/payloads.js';
 
 type ReportFilter = { readonly factoryPartyId?: string; readonly sheet?: string };
