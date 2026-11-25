@@ -3,16 +3,14 @@ import { useRef, useState, type ReactNode } from 'react';
 import { CopyOutlined, DownOutlined } from '@ant-design/icons';
 import { ACTION_LANES, actionIcon, FaceBlock, rowStyle, type BoardGroup, type BoardRow, type GroupMode, type QuickAction, type ReasonChip, type TodayBoard } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { fontSize } from '../../theme/tokens.js';
 import { ActionControls, ActionPagination, ActionResult, ChaseControls, type ActionPageControls } from './ActionControls.js';
+import { ReceiptAction, ReceiptFacts, type ReceiptWork } from './TodayAgenda.js';
 import { TodayGroup, TodayGrouping } from './TodayGroup.js';
+import { workspaceRowId } from './today-focus.js';
 
-const ACTION_VIEWS: readonly { readonly id: GroupMode; readonly label: string }[] = [
-  { id: 'kanban', label: '看板' },
-  { id: 'priority', label: '清单' },
-];
-
-const LIST_GROUPS: typeof ACTION_VIEWS = [
+const LIST_GROUPS: readonly { readonly id: GroupMode; readonly label: string }[] = [
   { id: 'priority', label: '不分组' },
   { id: 'waiting', label: '等待方' },
   { id: 'reason', label: '原因' },
@@ -20,18 +18,17 @@ const LIST_GROUPS: typeof ACTION_VIEWS = [
 ];
 
 type BatchSequence = (rowId: string) => number | undefined;
-type KanbanExtras = Partial<Record<typeof ACTION_LANES[number]['key'], {
-  readonly cards: readonly ReactNode[];
-  readonly footer?: ReactNode;
-}>>;
-
 export type ActionBoardProps = {
   readonly board: TodayBoard;
   readonly page: ActionPageControls | undefined;
-  readonly hasOtherWork: boolean;
   readonly batchSeqOf?: BatchSequence | undefined;
-  readonly renderArrival?: ((rowId: string) => ReactNode) | undefined;
-  readonly kanbanExtras?: KanbanExtras | undefined;
+  readonly receiptOf?: ((rowId: string) => ReceiptWork | undefined) | undefined;
+  readonly arrivalFocusId?: string | null | undefined;
+  readonly internalCards?: readonly ReactNode[] | undefined;
+  readonly internalPagination?: ReactNode;
+  readonly viewControls?: ReactNode;
+  readonly utilityLinks?: ReactNode;
+  readonly calendar?: ReactNode;
   readonly focus: string | null;
   readonly fading: string | null;
   readonly onToggleReason: (code: string) => void;
@@ -42,45 +39,32 @@ export type ActionBoardProps = {
 };
 
 export function ActionBoard(props: ActionBoardProps): ReactNode {
-  const { board, page } = props;
-  const view = board.group === 'kanban' ? 'kanban' : 'priority';
+  const { page } = props;
   return (
-    <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="行动板待办">
+    <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
       <Flex vertical gap="small">
-        <ActionHeading page={page} isKanban={isKanban(props)} />
         <Flex className="today-touch" align="center" gap="small" wrap>
-          {page?.sort.kind === 'bulk' ? null : <TodayGrouping label="行动板视图" modes={ACTION_VIEWS} group={view} onGroup={props.onGroup} />}
-          {page === undefined ? null : <ActionControls page={page} />}
+          {props.viewControls}
+          <ActionControls page={page} utilityLinks={props.utilityLinks} />
+          <ProcurementCutoff />
         </Flex>
         <ActionOptions {...props} />
+        {props.calendar}
         {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
       </Flex>
     </section>
   );
 }
 
-function ActionHeading({ page, isKanban }: { readonly page: ActionBoardProps['page']; readonly isKanban: boolean }) {
-  if (isKanban && page?.isFiltered !== true) return null;
-  const work = page?.work;
-  const title = work === 'factory_chase' ? '要催货' : work === 'internal_note' ? '内部等回单' : '行动清单';
-  return <Flex className="today-touch" align="center" gap="small" wrap>
-    <Typography.Title level={2} style={{ margin: 0 }}>{title}</Typography.Title>
-    {page?.isFiltered !== true ? null : <Button size="small" onClick={(event) => {
-      event.currentTarget.closest('section')?.focus({ preventScroll: true });
-      page.onWork();
-    }}>查看全部待办</Button>}
-  </Flex>;
-}
-
-function ActionOptions({ board, page, onGroup, onToggleReason }: ActionBoardProps) {
+function ActionOptions({ board, page, onGroup, onToggleReason, calendar, utilityLinks }: ActionBoardProps) {
   const selected = board.chips.filter((chip) => chip.isSelected);
-  const canGroupList = board.group !== 'kanban' && page?.sort.kind !== 'bulk';
-  const filterLabel = page === undefined ? '筛选' : '筛选与复制催单';
-  const label = canGroupList ? `分组、${filterLabel}` : filterLabel;
+  const canGroupList = calendar === undefined && board.group !== 'kanban' && page?.sort.kind !== 'bulk';
+  const canCopy = page?.inbox === 'today';
   return <Collapse size="small" items={[{
     key: 'options',
-    label: selected.length === 0 ? label : `${label}（${selected.map((chip) => chip.label).join('、')}）`,
+    label: optionLabel({ canGroupList, canCopy, selected }),
     children: <Flex vertical gap="small">
+      <ActionControls page={page} utilityLinks={utilityLinks} isNarrow />
       {canGroupList ? <Flex className="today-touch" align="center" gap="small" wrap>
         <Typography.Text>清单分组</Typography.Text>
         <TodayGrouping label="清单分组" modes={LIST_GROUPS} group={board.group} onGroup={onGroup} />
@@ -88,15 +72,34 @@ function ActionOptions({ board, page, onGroup, onToggleReason }: ActionBoardProp
       <search className="today-touch" aria-label="行动板筛选">
         <ReasonChips chips={board.chips} onToggle={onToggleReason} />
       </search>
-      {page === undefined ? null : <ChaseControls page={page} />}
+      {canCopy ? <ChaseOptions page={page} /> : null}
     </Flex>,
   }]} />;
+}
+
+function optionLabel({ canGroupList, canCopy, selected }: { readonly canGroupList: boolean; readonly canCopy: boolean; readonly selected: readonly ReasonChip[] }) {
+  const filter = canCopy ? '筛选与复制催单' : '筛选';
+  const label = canGroupList ? `分组、${filter}` : filter;
+  return selected.length === 0 ? label : `${label}（${selected.map((chip) => chip.label).join('、')}）`;
+}
+
+function ChaseOptions({ page }: { readonly page: ActionPageControls }) {
+  const isAllUnshipped = page.work === 'all_unshipped';
+  return <>
+    <Button size="small" style={{ alignSelf: 'flex-start' }} aria-pressed={isAllUnshipped}
+      onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>全部未发</Button>
+    <ChaseControls page={page} />
+  </>;
 }
 
 function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageControls }) {
   const { page } = props;
   return <>
-    <ActionResult page={page} isKanban={isKanban(props)} />
+    <ActionResult page={page} />
+    {page.isFiltered ? <Button size="small" style={{ alignSelf: 'flex-start' }} onClick={(event) => {
+      event.currentTarget.closest('section')?.focus({ preventScroll: true });
+      page.onWork();
+    }}>清除筛选</Button> : null}
     {page.copyNotice === '' ? null : <Typography.Text role="status">{page.copyNotice}</Typography.Text>}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
     <Spin spinning={page.isLoading}>
@@ -119,25 +122,32 @@ function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly on
 }
 
 function ActionGroups(props: ActionBoardProps): ReactNode {
-  const hasCards = Object.values(props.kanbanExtras ?? {}).some((extra) => extra.cards.length > 0);
-  if (isKanban(props) && (props.board.body.kind === 'groups' || hasCards)) {
-    return <ActionKanban {...props} />;
-  }
-  if (props.board.body.kind === 'empty') return <ActionEmpty {...props} description={props.board.body.text} />;
+  const { body } = props.board;
+  const hasCards = Boolean(props.internalCards?.length);
+  if (isKanban(props) && (body.kind === 'groups' || hasCards)) return <ActionKanban {...props} />;
+  if (body.kind === 'empty') return hasCards ? <PriorityActions {...props} rows={[]} /> : <ActionEmpty {...props} description={body.text} />;
+  const groups = body.groups;
+  if (groups[0]?.key === 'priority') return <PriorityActions {...props} rows={groups[0].rows} />;
   return (
     <>
-      {props.board.body.groups.map((group) => (
-        <GroupBlock key={group.key} group={group} focus={props.focus} fading={props.fading} onOpen={props.onOpen} onQuick={props.onQuick}
-          page={props.page} batchSeqOf={props.batchSeqOf} renderArrival={props.renderArrival} onCopy={props.onCopy} />
-      ))}
+      {groups.map((group) => <GroupBlock {...props} key={group.key} group={group} />)}
+      {hasCards ? <PriorityActions {...props} rows={[]} /> : null}
     </>
   );
 }
 
-function ActionEmpty({ page, board, hasOtherWork, description }: ActionBoardProps & { readonly description: string }) {
+function PriorityActions(props: ActionBoardProps & { readonly rows: readonly BoardRow[] }) {
+  return <>
+    <ActionRows {...props} isPriorityList extras={props.internalCards} />
+    {props.internalPagination}
+  </>;
+}
+
+function ActionEmpty({ page, board, description }: ActionBoardProps & { readonly description: string }) {
   if (isActionFiltered({ board, page })) return <Empty description="当前筛选没有待办" />;
-  if (hasOtherWork) return null;
-  return <Empty description={description}><Button href="/lines">去跟进中心</Button></Empty>;
+  if (page?.inbox === 'scheduled') return <Empty description={page.calendar === undefined ? '暂无已约跟进' : '这天没有已约跟进'} />;
+  if (page?.inbox === 'unassigned') return <Empty description="暂无待分派事项" />;
+  return <Empty description={page?.calendar === undefined ? description : '这天没有待办'}><Button href="/lines">去跟进中心</Button></Empty>;
 }
 
 export function isKanban({ board, page }: Pick<ActionBoardProps, 'board' | 'page'>): boolean {
@@ -150,20 +160,19 @@ export function isActionFiltered({ board, page }: Pick<ActionBoardProps, 'board'
 
 function ActionKanban(props: ActionBoardProps) {
   const groups = props.board.body.kind === 'groups' ? props.board.body.groups : [];
-  const headingLevel = props.page?.isFiltered === true ? 3 : 2;
   return <div className="today-kanban">
     {ACTION_LANES.map(({ key, name }) => {
       const rows = groups.find((group) => group.key === key)?.rows ?? [];
-      const extras = props.kanbanExtras?.[key];
-      const count = rows.length + (extras?.cards.length ?? 0);
+      const extras = key === 'internal' ? props.internalCards : undefined;
+      const count = rows.length + (extras?.length ?? 0);
       return <section key={key} className="today-kanban-lane" aria-label={name}>
         <Flex align="center" gap="small" wrap>
-          <Typography.Title level={headingLevel} style={{ margin: 0, fontSize: fontSize.section }}>{name}</Typography.Title>
+          <Typography.Title level={2} style={{ margin: 0, fontSize: fontSize.section }}>{name}</Typography.Title>
           <Typography.Text type="secondary">{count} 项</Typography.Text>
         </Flex>
         {count === 0 ? <Typography.Text type="secondary">暂无待办</Typography.Text> :
-          <ActionRows {...props} rows={rows} isPriorityList isCompact extras={extras?.cards} />}
-        {extras?.footer}
+          <ActionRows {...props} rows={rows} isPriorityList isCompact extras={extras} />}
+        {key === 'internal' ? props.internalPagination : null}
       </section>;
     })}
   </div>;
@@ -189,12 +198,11 @@ function batchCopy(page: ActionBoardProps['page'], id: string): CopyAction | nul
   return { label: '复制本批催单', disabled: page.isCopying, run: () => page.onCopyChase({ kind: 'batch', id }) };
 }
 
-type ActionRowsProps = Pick<ActionBoardProps, 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'renderArrival' | 'onOpen' | 'onQuick'> & {
+type ActionRowsProps = Pick<ActionBoardProps, 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'receiptOf' | 'arrivalFocusId' | 'onOpen' | 'onQuick'> & {
   readonly group: BoardGroup;
 };
 
 function GroupBlock(props: ActionRowsProps & Pick<ActionBoardProps, 'onCopy'>): ReactNode {
-  if (props.group.key === 'priority') return <ActionRows {...props} rows={props.group.rows} isPriorityList />;
   const copy = groupCopy({ group: props.group, page: props.page, onCopy: props.onCopy });
   return (
     <TodayGroup name={props.group.name} counts={props.group.counts} action={copy === null ? null :
@@ -214,10 +222,11 @@ function ActionRows(props: Omit<ActionRowsProps, 'group'> & {
   return (
     <List role="list" className={props.isPriorityList ? 'today-action-list today-priority-list' : 'today-action-list'}>
       {props.rows.map((row) => (
-        <li key={row.id}>
+        <li key={row.id} id={workspaceRowId(row.id)} className="today-jump-target" tabIndex={-1}>
           <TodayRow row={row} isCard={props.isPriorityList} isFocused={props.focus === row.id} isFading={props.fading === row.id}
             isCompact={props.isCompact === true}
-            batchSeq={props.batchSeqOf?.(row.id)} arrival={props.renderArrival?.(row.id)} copy={batchCopy(props.page, row.id)}
+            batchSeq={props.batchSeqOf?.(row.id)} receipt={props.receiptOf?.(row.id)} arrivalFocusId={props.arrivalFocusId}
+            copy={batchCopy(props.page, row.id)} isScheduled={props.page?.inbox === 'scheduled'}
             onOpen={() => props.onOpen(row.id)} onQuick={(kind) => props.onQuick({ id: row.id, kind })} />
         </li>
       ))}
@@ -233,8 +242,10 @@ function TodayRow(props: {
   readonly isFocused: boolean;
   readonly isFading: boolean;
   readonly batchSeq: number | undefined;
-  readonly arrival: ReactNode;
+  readonly receipt: ReceiptWork | undefined;
+  readonly arrivalFocusId: string | null | undefined;
   readonly copy: CopyAction | null;
+  readonly isScheduled: boolean;
   readonly onOpen: () => void;
   readonly onQuick: (kind: QuickAction['kind']) => void;
 }): ReactNode {
@@ -243,51 +254,53 @@ function TodayRow(props: {
     <Flex className={props.isCompact ? undefined : 'today-row-layout'} vertical gap="small" wrap>
       <Flex className="today-row-facts" vertical>
         <FaceBlock face={props.row.face} batchSeq={props.batchSeq} isCompact={props.isCompact} />
-        {props.arrival}
+        {props.receipt === undefined ? null : <ReceiptFacts {...props.receipt} />}
       </Flex>
-      <RowActions {...props} hasArrival={Boolean(props.arrival)} />
+      <RowActions {...props} />
     </Flex>
   );
   return props.isCard
-    ? <article><Card className="today-row" size="small" style={style}>{content}</Card></article>
-    : <div className="today-row today-grouped-row" style={style}>{content}</div>;
+    ? <article><Card className="today-row" data-receipt={props.receipt !== undefined || undefined} size="small" style={style}>{content}</Card></article>
+    : <div className="today-row today-grouped-row" data-receipt={props.receipt !== undefined || undefined} style={style}>{content}</div>;
 }
 
-function RowActions({ row, batchSeq, copy, hasArrival, onOpen, onQuick }: {
+function RowActions({ row, batchSeq, copy, receipt, arrivalFocusId, isScheduled, onOpen, onQuick }: {
   readonly row: BoardRow;
   readonly batchSeq: number | undefined;
   readonly copy: CopyAction | null;
-  readonly hasArrival: boolean;
+  readonly receipt: ReceiptWork | undefined;
+  readonly arrivalFocusId: string | null | undefined;
+  readonly isScheduled: boolean;
   readonly onOpen: () => void;
   readonly onQuick: (kind: QuickAction['kind']) => void;
 }): ReactNode {
   const canRecord = useCanWrite('records.write');
   const actions = canRecord ? row.actions : [];
-  const primary = preferredAction({ actions, hasCopy: copy !== null, hasArrival });
-  const isCopyPrimary = copy !== null && primary === undefined;
+  const primary = receipt === undefined ? preferredAction({ actions, hasCopy: copy !== null, isScheduled }) : undefined;
+  const hasPrimary = receipt !== undefined || primary !== undefined;
   const remaining = actions.filter((action) => action.kind !== primary?.kind);
   const { orderNo, productName } = row.face;
   const batch = batchSeq === undefined ? '' : ` · 第 ${batchSeq} 批`;
   const identity = [orderNo, productName].filter((value) => value !== '—').join(' · ') + batch;
   return (
     <Flex className="today-touch today-row-actions" align="center" gap="small" wrap>
+      {receipt === undefined ? null : <ReceiptAction memo={receipt.memo} isFocused={arrivalFocusId === receipt.memo.batchId} />}
       {primary === undefined ? null : <Button type="primary" size="small" icon={actionIcon(primary.kind)} onClick={() => onQuick(primary.kind)}>{primary.label}</Button>}
-      {copy === null ? null : <CopyButton copy={copy} primary={isCopyPrimary} />}
-      <Button type={primary === undefined && !isCopyPrimary ? 'primary' : 'text'} size="small" onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
+      {copy === null ? null : <CopyButton copy={copy} primary={!hasPrimary} />}
+      <Button type={hasPrimary || copy !== null ? 'text' : 'primary'} size="small" onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
       <RowMenu actions={remaining} identity={identity} onQuick={onQuick} />
     </Flex>
   );
 }
 
-function preferredAction({ actions, hasCopy, hasArrival }: {
+function preferredAction({ actions, hasCopy, isScheduled }: {
   readonly actions: readonly QuickAction[];
   readonly hasCopy: boolean;
-  readonly hasArrival: boolean;
+  readonly isScheduled: boolean;
 }): QuickAction | undefined {
+  if (isScheduled) return actions.find((action) => action.kind === 'note') ?? actions[0];
   const first = actions[0];
-  if (!hasCopy || first?.kind === 'date') return first;
-  if (!hasArrival || !actions.some((action) => action.kind === 'note')) return undefined;
-  return { kind: 'note', label: '跟进工厂' };
+  return !hasCopy || first?.kind === 'date' ? first : undefined;
 }
 
 function RowMenu({ actions, identity, onQuick }: {

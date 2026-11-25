@@ -79,9 +79,10 @@ function planGroupOf(group: GroupMode): 'schedule' | 'owner' | 'supplier' {
   return 'schedule';
 }
 
-export function sessionRows(input: { readonly board: TodayBoard; readonly plan: { readonly load: PlanLoad } }): readonly { readonly id: string }[] {
+export function sessionRows(input: { readonly board: TodayBoard; readonly plan: { readonly load: PlanLoad }; readonly myPlan?: MyPlan | undefined }): readonly { readonly id: string }[] {
   if (todayViewOf(input.board.group) === 'schedule') return planRowIds(input.plan.load);
-  return visibleRows(input.board);
+  const rows = visibleRows(input.board);
+  return input.myPlan?.kind === 'ready' ? [...rows, ...input.myPlan.rows] : rows;
 }
 
 function planRowIds(load: PlanLoad): readonly { readonly id: string }[] {

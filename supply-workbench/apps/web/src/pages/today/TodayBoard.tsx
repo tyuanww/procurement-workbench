@@ -1,5 +1,5 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { Button, Card, Empty, Flex, Result, Skeleton } from 'antd';
+import { Button, Card, Empty, Flex, Result, Skeleton, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
@@ -10,13 +10,14 @@ import {
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { ActionPageControls } from './ActionControls.js';
-import { ActionBoard, isActionFiltered, isKanban } from './ActionBoard.js';
-import { PendingBatches, PendingBatchPagination, pendingBatchCards, usePendingBatches, type PendingBatchView } from './PendingBatches.js';
+import { ActionBoard, isActionFiltered } from './ActionBoard.js';
+import { PendingBatchPagination, pendingBatchCards, usePendingBatches } from './PendingBatches.js';
 import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
-import { arrivalWork, planTaskCards, ReceiptTask, TodayAgenda } from './TodayAgenda.js';
+import { arrivalWork, planTaskCards } from './TodayAgenda.js';
 import { arrivalShortcutPath, TodayLinks, type ArrivalTiming } from './TodayLinks.js';
 import type { MyPlan } from './use-today-plan.js';
+import { WorkspaceCalendar, WorkspaceDestinations, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
 
 const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
 const ACTION_HELP = `${NAVIGATION_HELP}，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭`;
@@ -25,6 +26,9 @@ const SCHEDULE_HELP = `${NAVIGATION_HELP}，? 帮助，Esc 关闭`;
 export type TodayScreenProps = {
   readonly asOf?: TodayResponse['asOf'] | undefined;
   readonly board: TodayBoard;
+  readonly workspace?: WorkspaceControls;
+  readonly canRecord?: boolean;
+  readonly isInternalWorkVisible?: boolean;
   readonly search?: string;
   readonly arrivalsView?: { readonly focusBatch: string | null; readonly timing?: ArrivalTiming } | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
@@ -38,7 +42,7 @@ export type TodayScreenProps = {
   readonly fulfillmentOf?: ((rowId: string) => BatchFulfillment | undefined) | undefined;
   readonly buyerName?: string;
   readonly detailOf?: (id: string) => ActionDetail | undefined;
-  readonly myPlan?: MyPlan;
+  readonly myPlan?: MyPlan | undefined;
   readonly plan?: PlanLoad;
   readonly isMyPlan?: boolean;
   readonly onRetryPlan?: () => void;
@@ -68,7 +72,7 @@ export type TodayScreenProps = {
 };
 
 export function TodayScreen(props: TodayScreenProps): ReactNode {
-  const title = props.arrivalsView === undefined ? '今日事项' : '在途待收';
+  const title = props.arrivalsView === undefined ? '个人工作台' : '在途待收';
   if (props.arrivalsView === undefined && todayViewOf(props.board.group) === 'schedule') return <TodayReady {...props} />;
   if (!props.isReady) return <TodayLoading title={title} />;
   if (props.loadError !== '') return <TodayError {...props} title={title} />;
@@ -90,7 +94,7 @@ function TodayError(props: TodayScreenProps & { readonly title: string }): React
       <PageHeader title={props.title} />
       <Result
         status="error"
-        title={props.arrivalsView === undefined ? '今日没有读出来' : '在途待收没有读出来'}
+        title={props.arrivalsView === undefined ? '个人工作台没有读出来' : '在途待收没有读出来'}
         subTitle={props.loadError}
         extra={[
           <Button key="retry" type="primary" onClick={props.onRetry}>重试</Button>,
@@ -104,16 +108,21 @@ function TodayError(props: TodayScreenProps & { readonly title: string }): React
 function TodayReady(props: TodayScreenProps): ReactNode {
   const view = todayViewOf(props.board.group);
   if (props.arrivalsView !== undefined) return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
+  const isSchedule = view === 'schedule';
   return (
     <section style={screenStyle()}>
       <style>{todayMotionCss()}</style>
-      <PageHeader title={view === 'schedule' ? '今日排期' : '行动板'} />
-      {view === 'schedule' ? <SchedulePane {...props} /> : <ActionPane {...props} />}
+      <PageHeader title={isSchedule ? '今日排期' : '个人工作台'} />
+      {isSchedule ? <SchedulePane {...props} /> : <ActionPane {...props} />}
       <PageDrawers {...props} />
-      {props.isHelpOpen ? <p style={helpStyle()}>{view === 'schedule' ? SCHEDULE_HELP : ACTION_HELP}</p> : null}
+      <ShortcutHelp isOpen={props.isHelpOpen} isNavigationOnly={isSchedule || props.canRecord === false} />
       <div role="status" style={helpStyle()}>{props.notice}</div>
     </section>
   );
+}
+
+function ShortcutHelp({ isOpen, isNavigationOnly }: { readonly isOpen: boolean; readonly isNavigationOnly: boolean }) {
+  return isOpen ? <p style={helpStyle()}>{isNavigationOnly ? SCHEDULE_HELP : ACTION_HELP}</p> : null;
 }
 
 function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: NonNullable<TodayScreenProps['arrivalsView']>; readonly search: string }): ReactNode {
@@ -123,7 +132,7 @@ function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['
   const title = view.timing === 'overdue' ? '到仓逾期' : view.timing === 'due_today' ? '今日应到' : '在途待收';
   return <section style={screenStyle()}>
     <PageHeader title={title} />
-    <Flex align="center" gap="small" wrap><Link to={returnPath}>返回行动板</Link>
+    <Flex align="center" gap="small" wrap><Link to={returnPath}>返回个人工作台</Link>
       {view.timing === undefined ? null : <Link to={arrivalShortcutPath({ returnSearch })}>查看全部在途</Link>}<ProcurementCutoff />
     </Flex>
     <Card size="small">
@@ -134,79 +143,65 @@ function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['
 }
 
 function ActionPane(props: TodayScreenProps): ReactNode {
-  const { board, actionPage: page, arrivalMemos: arrivals = [], pendingBatch: pendingRows = [], pendingFocusId = null, buyerName = '', search = '', onRetryPlan = noop } = props;
-  const isShowingKanban = isKanban({ board, page });
-  const isFiltered = isActionFiltered({ board, page });
+  const { board, actionPage: page, workspace } = props;
+  const summary = actionSummary(props);
+  const inbox = workspace?.inbox ?? 'today';
   const pending = usePendingBatches({
-    rows: pendingRows,
-    focusId: pendingFocusId,
+    rows: summary.pendingRows,
+    focusId: summary.pendingFocusId,
     canFocus: page?.isSettled !== false,
     onChanged: props.onPendingBatchChanged,
   });
+  const receipts = arrivalWork(summary.arrivals, board.body.kind === 'groups' ? board.body.rows : []);
   return <>
-    <TodayLinks pending={pending.total} arrivals={arrivals} page={page} buyerName={buyerName} asOf={props.asOf}
-      isPendingFiltered={isShowingKanban && isFiltered} myPlan={props.myPlan} onRetryPlan={onRetryPlan} returnSearch={search} />
+    <TodayLinks pending={pending.total} page={page} buyerName={summary.buyerName} asOf={props.asOf}
+      myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
-    <ActionWorkspace screen={props} isShowingKanban={isShowingKanban} isFiltered={isFiltered} arrivals={arrivals} pending={pending} />
+    <ActionBoard {...props} page={page} receiptOf={(id) => receipts.get(id)}
+      internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending)]}
+      internalPagination={<PendingBatchPagination view={pending} />} {...actionDisplay(props)} />
+    {workspace === undefined ? null : <Typography.Text type="secondary"><Link to="/today/personal?preview=1">打开合成预览</Link></Typography.Text>}
   </>;
 }
 
-function ActionWorkspace({ screen, pending, isShowingKanban, isFiltered, arrivals }: {
-  readonly screen: TodayScreenProps;
-  readonly pending: PendingBatchView;
-  readonly isShowingKanban: boolean;
-  readonly isFiltered: boolean;
-  readonly arrivals: TodayResponse['arrivalMemos'];
-}) {
-  const { separateArrivals, tasks, renderArrival, focusArrivalId } = actionAgenda({ screen, arrivals, isFiltered });
-  const { onOpen } = screen;
-  const hasAgenda = !isShowingKanban && (separateArrivals.length > 0 || tasks.length > 0);
-  return (
-    <div className={hasAgenda ? 'today-action-layout today-action-layout-aside' : 'today-action-layout'}>
-      <Flex vertical gap="middle">
-        <ActionBoard board={screen.board} page={screen.actionPage} batchSeqOf={screen.batchSeqOf} focus={screen.focus} fading={screen.fading}
-          hasOtherWork={pending.total > 0 || hasAgenda}
-          kanbanExtras={isShowingKanban && !isFiltered ? {
-            receipt: { cards: receiptTaskCards(separateArrivals, focusArrivalId) },
-            internal: { cards: [...planTaskCards(tasks, onOpen), ...pendingBatchCards(pending)], footer: <PendingBatchPagination view={pending} isCompact /> },
-          } : undefined}
-          renderArrival={renderArrival}
-          onToggleReason={screen.onToggleReason} onGroup={screen.onGroup} onOpen={onOpen} onQuick={screen.onQuick} onCopy={screen.onCopy} />
-        {isShowingKanban ? null : <PendingBatches view={pending} />}
-      </Flex>
-      {hasAgenda ? <TodayAgenda arrivals={separateArrivals} tasks={tasks} focusArrivalId={focusArrivalId} onOpen={onOpen} /> : null}
-    </div>
-  );
-}
-
-function actionAgenda({ screen, arrivals, isFiltered }: {
-  readonly screen: TodayScreenProps;
-  readonly arrivals: TodayResponse['arrivalMemos'];
-  readonly isFiltered: boolean;
-}) {
-  const { board, myPlan, arrivalFocusId: focusArrivalId = null } = screen;
-  const work = arrivalWork(arrivals, board.body.kind === 'groups' ? board.body.rows : []);
+function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, arrivalMemos, buyerName, onRetryPlan, board, actionPage }: TodayScreenProps) {
+  const canShowInternal = isInternalWorkVisible ?? !isActionFiltered({ board, page: actionPage });
   return {
-    focusArrivalId,
-    separateArrivals: isFiltered ? [] : work.separate,
-    tasks: !isFiltered && myPlan?.kind === 'ready' ? myPlan.rows : [],
-    renderArrival: (rowId: string) => {
-      const receipt = work.byActionId.get(rowId);
-      return receipt === undefined ? null : <ReceiptTask {...receipt} isFocused={focusArrivalId === receipt.memo.batchId} />;
-    },
+    tasks: canShowInternal && myPlan?.kind === 'ready' ? myPlan.rows : [],
+    pendingRows: canShowInternal ? pendingBatch ?? [] : [],
+    pendingFocusId: pendingFocusId ?? null,
+    arrivals: arrivalMemos ?? [],
+    buyerName,
+    onRetryPlan: onRetryPlan ?? noop,
   };
 }
 
-function receiptTaskCards(memos: TodayResponse['arrivalMemos'], focusId: string | null) {
-  return memos.map((memo) => <li key={`batch:${memo.batchId}`}>
-    <article><Card size="small"><ReceiptTask memo={memo} isFocused={focusId === memo.batchId} isStandalone /></Card></article>
-  </li>);
+function actionDisplay({ workspace, actionPage, asOf, search, myPlan }: TodayScreenProps) {
+  if (workspace === undefined) return {};
+  const calendar = actionPage?.paging.calendar;
+  const date = calendar?.date ?? asOf;
+  const unit = workspace.inbox === 'scheduled' ? '批' : '项';
+  return {
+    viewControls: <WorkspaceViewControls view={workspace.view} onView={workspace.onView} />,
+    utilityLinks: <WorkspaceDestinations search={search ?? ''} />,
+    calendar: workspace.view === 'calendar' && date !== undefined
+      ? <WorkspaceCalendar calendar={calendar} date={date} unit={unit} onDay={workspace.onDay}
+        todayAdditions={workspace.inbox === 'today' ? calendarAdditions({ actionPage, asOf, myPlan }) : undefined} /> : undefined,
+  };
+}
+
+function calendarAdditions({ actionPage, asOf, myPlan }: Pick<TodayScreenProps, 'actionPage' | 'asOf' | 'myPlan'>) {
+  if (actionPage?.isFiltered !== false || asOf === undefined) return undefined;
+  const pending = actionPage.paging.pendingCount;
+  const count = myPlan?.kind !== 'ready' || pending === undefined ? undefined : pending + myPlan.rows.length;
+  return { day: asOf, count };
 }
 
 function SchedulePane(props: TodayScreenProps): ReactNode {
   return (
     <ScheduleView
       isMine={props.isMyPlan === true}
+      returnSearch={new URLSearchParams(props.search).get('workspaceReturn') ?? ''}
       group={props.board.group}
       load={props.plan ?? { kind: 'idle' }}
       focus={props.focus}

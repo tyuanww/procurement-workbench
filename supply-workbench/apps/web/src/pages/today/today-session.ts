@@ -1,17 +1,35 @@
-import { readGroup, type GroupMode, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
+import { isPlanGroupMode, readGroup, type GroupMode, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
 import type { TodayScreenProps } from './TodayBoard.js';
 import { startTransition, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
-import { actionPageParams } from './action-query.js';
+import { actionPageParams, type WorkspaceView } from './action-query.js';
 import { openQuick } from './today-open.js';
 
-export function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
+export function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly workspaceView: WorkspaceView; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
   if (params.get('view') === 'arrivals') {
     const timing = params.get('timing');
-    return { group: 'waiting', arrivalsView: { focusBatch: params.get('focusBatch'), ...(timing === 'overdue' || timing === 'due_today' ? { timing } : {}) } };
+    return { group: 'waiting', workspaceView: 'list', arrivalsView: { focusBatch: params.get('focusBatch'), ...(timing === 'overdue' || timing === 'due_today' ? { timing } : {}) } };
   }
-  return { group: readGroup(params.toString()), arrivalsView: undefined };
+  const group = readGroup(params.toString());
+  const view = params.get('view');
+  if (isPlanGroupMode(group)) return { group, workspaceView: 'list', arrivalsView: undefined };
+  if (view === 'schedule') return { group: 'schedule', workspaceView: 'list', arrivalsView: undefined };
+  return workspaceScreen({ params, group });
+}
+
+function workspaceScreen({ params, group }: { readonly params: URLSearchParams; readonly group: GroupMode }) {
+  const workspaceView = readWorkspaceView({ params, group });
+  const listGroup = group === 'kanban' ? 'priority' : group;
+  const actionGroup: GroupMode = workspaceView === 'board' ? 'kanban' : workspaceView === 'calendar' ? 'priority' : listGroup;
+  return { group: actionGroup, workspaceView, arrivalsView: undefined };
+}
+
+function readWorkspaceView({ params, group }: { readonly params: URLSearchParams; readonly group: GroupMode }): WorkspaceView {
+  const view = params.get('view');
+  if (view === 'list' || view === 'calendar') return view;
+  const isBoard = view === 'board' || (group === 'kanban' && (params.has('group') || view === 'actions'));
+  return isBoard && params.get('sort') !== 'bulk' ? 'board' : 'list';
 }
 
 export type TodaySession = {
@@ -67,7 +85,7 @@ export function useTodaySession(input: {
   readonly state: TodaySessionState;
   readonly rows: readonly { readonly id: string }[];
   readonly isReady: boolean;
-}): (keepDrawerId: string | null) => void {
+}): (keepDrawerId: string | null, selection?: URLSearchParams) => void {
   const [params, setParams] = useSearchParams();
   const search = params.toString();
   const syncedSearch = useRef<string | null>(null);
@@ -90,12 +108,12 @@ export function useTodaySession(input: {
     restore({ session, search, state: input.state, setParams });
   }, [search, input.isReady, drawerId, draftKind]);
 
-  return (keepDrawerId) => {
+  return (keepDrawerId, selection) => {
     const session: TodaySession = { drawerId: keepDrawerId, draftKind: null };
     // 路由在过渡中更新。一起提交关闭状态，避免同步逻辑重复写入浏览器历史。
     startTransition(() => {
       applySession({ session, state: input.state });
-      setParams((current) => new URLSearchParams(writeTodaySession({ search: current.toString(), session })));
+      setParams((current) => new URLSearchParams(writeTodaySession({ search: (selection ?? current).toString(), session })));
     });
   };
 }

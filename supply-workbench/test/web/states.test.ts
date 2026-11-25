@@ -13,13 +13,13 @@ describe('加载、错误和空态', () => {
   it('今日没读完是骨架，不是白屏', () => {
     const html = render(TodayScreen, todayProps({ isReady: false }));
     expect(html).toContain('ant-skeleton');
-    expect(html).toContain('今日');
+    expect(html).toContain('个人工作台');
   });
 
   it('今日读失败是 Result，带错误、重试和返回', () => {
     const html = render(TodayScreen, todayProps({ isReady: true, loadError: '网络断了' }));
     expect(html).toContain('ant-result');
-    expect(html).toContain('今日没有读出来');
+    expect(html).toContain('个人工作台没有读出来');
     expect(html).toContain('网络断了');
     const text = html.replace(/\s+/g, '');
     expect(text).toContain('重试');

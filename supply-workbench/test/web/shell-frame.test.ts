@@ -81,12 +81,12 @@ describe('壳标记', () => {
       onSearch: () => undefined,
       contentInset: 24,
       menuButton: null,
-      startContent: '今日事项 / 行动板',
+      startContent: '今日事项 / 个人工作台',
     }));
     expect(html).toMatch(/z-index:10(?!\d)/);
     expect(html).toContain('position:sticky');
     expect(html).toMatch(/top:0(?!\d)/);
-    expect(html).toContain('今日事项 / 行动板');
+    expect(html).toContain('今日事项 / 个人工作台');
     expect(html).not.toContain('开发登录');
     const searchButton = html.match(/<button\b[^>]*aria-label="搜索单号、品名、供应商"[^>]*>.*?<\/button>/)?.[0];
     expect(searchButton).toContain(`aria-keyshortcuts="${ariaKeys}"`);
@@ -129,7 +129,7 @@ describe('页标题', () => {
     const today = inRouter(h(TodayPage, null));
     const printed = inRouter(h(ReportPrintPage, null));
     expect(headingCount(today)).toBe(1);
-    expect(today).toContain('>今日事项<');
+    expect(today).toContain('>个人工作台<');
     expect(today).not.toContain('shell-page');
     expect(headingCount(printed)).toBe(1);
     expect(printed).toContain('>周报<');

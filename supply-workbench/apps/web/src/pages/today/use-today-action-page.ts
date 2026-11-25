@@ -15,12 +15,16 @@ export function useTodayActionPage({ query, search, setParams, today, isSettled 
   const paging = today.data?.paging;
   if (paging === undefined) return undefined;
   return {
-    paging, sort: query.sort, work: query.work, isLoading: today.isLoading, isSettled, loadError: today.loadError,
+    paging, sort: query.sort, work: query.work, inbox: query.inbox, calendar: query.calendar, isLoading: today.isLoading, isSettled, loadError: today.loadError,
     factoryId: new URLSearchParams(search).get('chaseFactory'),
     isFiltered: query.work !== undefined || query.reasons.length > 0 || query.sort.kind === 'bulk',
     onFactory: (id) => setParams(actionFactoryParams(search, id)),
     onFollowUp: (reason) => setParams(actionFollowUpParams(search, reason)),
-    onPage: (page) => setParams(actionPageParams(search, page)),
+    onPage: (page) => {
+      const params = actionPageParams(search, page);
+      params.delete('focusId');
+      setParams(params);
+    },
     onSort: (sort) => setParams(actionSortParams(search, sort)),
     onWork: (work) => setParams(actionWorkParams(search, work)),
     onRetry: today.retry,

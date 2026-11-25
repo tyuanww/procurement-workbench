@@ -2,7 +2,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { matchesMetric, type MetricScope, type PersonalTask } from '../../apps/web/src/pages/personal-workspace/workspace-model.js';
 import { loadEntries, saveEntry } from '../../apps/web/src/pages/personal-workspace/workspace-store.js';
-import { workspaceParams, workspaceQuery } from '../../apps/web/src/pages/personal-workspace/personal-query.js';
+import { legacyPersonalPath } from '../../apps/web/src/features/today/index.js';
 import { lineDetailBack } from '../../apps/web/src/pages/lines/detail/desk-navigation.js';
 
 const today = '2026-11-30';
@@ -13,23 +13,21 @@ function matches(scope: MetricScope, changes: Partial<PersonalTask>) {
 
 beforeEach(() => localStorage.clear());
 
-it('个人工作台列表默认待跟进，切换看板或日历可看全量，显式状态筛选随视图保留', () => {
-  expect(workspaceQuery(new URLSearchParams())).toMatchObject({ scope: 'pending', view: 'list' });
-  expect(workspaceQuery(new URLSearchParams('view=board'))).toMatchObject({ scope: 'all', view: 'board' });
-  expect(workspaceQuery(new URLSearchParams('view=calendar'))).toMatchObject({ scope: 'all', view: 'calendar', request: 'scope=all&page=1&calendar=today' });
-  expect(workspaceQuery(new URLSearchParams('view=calendar&scope=scheduled&date=2026-11-30')).request)
-    .toBe('scope=scheduled&page=1&calendar=2026-11-30');
+it('原个人入口和旧跟进链接打开同一工作台，保留日期、抽屉和批次焦点', () => {
+  expect(legacyPersonalPath('', today)).toBe('/today');
+  const old = 'scope=scheduled&view=calendar&date=2026-12-01&drawer=batch%3Asample&focus=batch%3Asample';
+  const result = new URL(legacyPersonalPath(old, today), 'http://localhost');
+  expect(result.pathname).toBe('/today');
+  expect(Object.fromEntries(result.searchParams)).toEqual({
+    inbox: 'scheduled', view: 'calendar', date: '2026-12-01', drawer: 'batch:sample', focusId: 'batch:sample',
+  });
+  expect(lineDetailBack({ progress: null, state: { personalTodaySearch: old }, lineId: 'line-1' }))
+    .toEqual({ label: '返回个人工作台', to: result.pathname + result.search });
 });
 
-it('跟进后定位服务端已约日期，订单详情返回保留原批次抽屉和日历', () => {
-  const filters = new URLSearchParams('view=calendar&date=2026-11-30&page=2');
-  const opened = workspaceParams(filters, { kind: 'open', id: 'batch:sample' });
-  expect(workspaceQuery(opened)).toMatchObject({ drawer: 'batch:sample', page: 2 });
-  const back = lineDetailBack({ progress: null, state: { personalTodaySearch: opened.toString() }, lineId: 'line-1' });
-  expect(back).toEqual({ label: '返回个人工作台', to: `/today/personal?${opened}` });
-  const saved = workspaceParams(opened, { kind: 'saved', location: { id: 'batch:sample', scope: 'scheduled', date: '2026-12-01' } });
-  expect(workspaceQuery(saved)).toMatchObject({ view: 'calendar', scope: 'scheduled', page: 1, focus: 'batch:sample', drawer: null,
-    request: 'scope=scheduled&page=1&focusId=batch%3Asample&calendar=2026-12-01' });
+it('旧全量日历的未来日期落在已约跟进，今天默认打开工作清单', () => {
+  expect(legacyPersonalPath('scope=all&view=calendar&date=2026-12-01', today)).toContain('inbox=scheduled');
+  expect(legacyPersonalPath('scope=pending&focus=batch%3A1', today)).toBe('/today?focusId=batch%3A1');
 });
 
 it('今日和三日到期使用截止日，逾期和已完成不计入待办', () => {

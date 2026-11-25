@@ -11,15 +11,16 @@ const requireWeb = createRequire(new URL('../../apps/web/package.json', import.m
 const root = new URL('../../', import.meta.url);
 
 describe('今日页两个视图', () => {
-  it('行动板首屏只提供看板和清单，默认选中看板', () => {
+  it('个人工作台有统一的范围入口，筛选默认收起', () => {
     const html = render(TodayScreen, todayProps());
-    expect(html).toContain('aria-label="行动板视图"');
-    expect(html).toMatch(/<label class="[^"]*ant-segmented-item-selected[^"]*"[^>]*>[^]*?title="看板"/);
-    expect(html).toContain('title="清单"');
+    expect(html).toContain('个人工作台');
+    expect(html).toContain('aria-label="工作范围"');
+    expect(html).toContain('今天要办');
+    expect(html).toContain('已约跟进');
+    expect(html).toContain('待分派');
     expect(html).not.toContain('title="等待方"');
     expect(html).not.toContain('title="原因"');
     expect(html).not.toContain('title="日期"');
-    expect(html).toContain('筛选');
     expect(html).not.toContain('缺确认日期');
     expect(html).not.toContain('供应商');
     expect(html).not.toContain('今天到期');
@@ -61,7 +62,7 @@ describe('今日页两个视图', () => {
 });
 
 describe('今日视图各自渲染', () => {
-  it.each(['priority', 'waiting'] as const)('行动板 %s 在批次事实下显示一次待收信息，保留详情入口', (group) => {
+  it.each(['priority', 'waiting'] as const)('工作台 %s 保留批次事实和详情入口', (group) => {
     const row: BoardRow = {
       id: 'todo-1',
       face: { ...face(), orderNo: 'PO-1', productName: '样品', date: '2026-11-24', waiting: '样例工厂' },
@@ -69,11 +70,9 @@ describe('今日视图各自渲染', () => {
     };
     const content = { key: group, name: '待办组标题', counts: [{ label: '待办组计数', count: 1 }], nudgeText: '样例催单', rows: [row] };
     const board: TodayBoard = { group, chips: [], body: { kind: 'groups', groups: [content], rows: [row] } };
-    const html = render(ActionBoard, todayProps({ board, batchSeqOf: () => 2, renderArrival: (id: string) => `${id} 待收 5 件` }));
+    const html = render(ActionBoard, todayProps({ board, batchSeqOf: () => 2 }));
     expect(html).toContain('aria-label="查看详情 PO-1 · 样品 · 第 2 批"');
-    expect(html.match(/todo-1 待收 5 件/g)).toHaveLength(1);
-    expect(html.indexOf('2026-11-24')).toBeLessThan(html.indexOf('todo-1 待收 5 件'));
-    expect(html.indexOf('todo-1 待收 5 件')).toBeLessThan(html.indexOf('aria-label="查看详情'));
+    expect(html.indexOf('2026-11-24')).toBeLessThan(html.indexOf('aria-label="查看详情'));
     if (group === 'priority') {
       expect(html).toMatch(/class="(?=[^"]*\bant-card\b)(?=[^"]*\btoday-row\b)[^"]+"/);
       expect(html).not.toContain('待办组计数');

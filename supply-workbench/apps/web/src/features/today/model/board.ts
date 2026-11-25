@@ -62,8 +62,8 @@ function groupsOf(input: {
 function kanbanGroups(items: readonly BoardItem[], receiptActionIds: ReadonlySet<string> | undefined): BoardGroup[] {
   const lanes: Record<typeof ACTION_LANES[number]['key'], BoardItem[]> = { shipment: [], receipt: [], internal: [] };
   for (const item of items) {
-    if (item.waitingKind === 'supplier' && item.batchStatus !== null) lanes.shipment.push(item);
-    else if (receiptActionIds?.has(item.id) === true) lanes.receipt.push(item);
+    if (receiptActionIds?.has(item.id) === true) lanes.receipt.push(item);
+    else if (item.waitingKind === 'supplier' && item.batchStatus !== null) lanes.shipment.push(item);
     else lanes.internal.push(item);
   }
   return ACTION_LANES.map(({ key, name }) => ({ key, name, counts: [], nudgeText: '', rows: rowsOf(lanes[key]) }));

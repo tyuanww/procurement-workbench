@@ -4,7 +4,6 @@ import { Button, Card, Flex, Pagination, Typography } from 'antd';
 import { HintBatchResultSchema, type TodayResponse } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../shared/api/client.js';
-import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { MissingValue } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
 
@@ -57,26 +56,12 @@ export function usePendingBatches({ rows, focusId, canFocus, onChanged }: Pendin
   };
 }
 
-export type PendingBatchView = ReturnType<typeof usePendingBatches>;
-
-export function PendingBatches({ view }: { readonly view: PendingBatchView }) {
-  if (view.rows.length === 0) return null;
-  return (
-    <div {...jumpTarget}>
-      <SectionGroup title="待建批次" meta={`${view.total} 行`}>
-        <ul role="list" className="today-action-list">
-          {view.rows.map((row) => <li key={row.orderLineId}><PendingBatchItem row={row} view={view} /></li>)}
-        </ul>
-        <PendingBatchPagination view={view} />
-      </SectionGroup>
-    </div>
-  );
-}
+type PendingBatchView = ReturnType<typeof usePendingBatches>;
 
 export function pendingBatchCards(view: PendingBatchView) {
   return view.rows.map((row, index) => (
     <li key={`line:${row.orderLineId}`} {...(index === 0 ? jumpTarget : {})}>
-      <article><Card className="today-row" size="small"><PendingBatchItem row={row} view={view} isCard /></Card></article>
+      <article><Card className="today-row" size="small"><PendingBatchItem row={row} view={view} /></Card></article>
     </li>
   ));
 }
@@ -101,10 +86,9 @@ async function createFirstBatch(orderLineId: string): Promise<string> {
   return result.created > 0 ? '已生成首批次' : result.skipped[0]?.reason ?? '请在订单详情核对';
 }
 
-function PendingBatchItem({ row, view, isCard }: {
+function PendingBatchItem({ row, view }: {
   readonly row: PendingBatch;
   readonly view: PendingBatchView;
-  readonly isCard?: boolean;
 }) {
   const { focusId, canFocus, posting, onCreate } = view;
   const shouldFocus = canFocus && row.orderLineId === focusId;
@@ -132,11 +116,11 @@ function PendingBatchItem({ row, view, isCard }: {
         {nextStep(row)}
       </Typography.Text>
   </>;
-  return isCard === true ? <Flex vertical gap={space[1]}>
+  return <Flex vertical gap={space[1]}>
     <Typography.Text type="secondary">待建批次</Typography.Text>
     <div>{facts}</div>
     {actions}
-  </Flex> : <SectionRow action={actions}>{facts}</SectionRow>;
+  </Flex>;
 }
 
 function nextStep(row: PendingBatch) {

@@ -8,7 +8,6 @@ import {
   MeResponseSchema,
   OrderLineDetailSchema,
   OrderLineRowSchema,
-  PersonalTodayResponseSchema,
   ProjectProgressSchema,
   ScheduleViewSchema,
   SupplierDashboardSchema,
@@ -48,10 +47,6 @@ export function fetchToday(path: string, signal: AbortSignal): Promise<TodayResp
 
 export function fetchTodayPage(query: string, signal?: AbortSignal) {
   return fetchOwned({ path: `/api/v1/today?${query}`, schema: TodayPageResponseSchema, signal });
-}
-
-export function fetchPersonalToday(query: string, signal: AbortSignal) {
-  return fetchOwned({ path: `/api/v1/today/personal?${query}`, schema: PersonalTodayResponseSchema, signal });
 }
 
 export function fetchTodayChase(query: string, signal: AbortSignal) {

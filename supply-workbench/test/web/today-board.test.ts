@@ -116,7 +116,7 @@ describe('今日看板', () => {
     });
     expect(board.group).toBe('kanban');
     expect(names(board)).toEqual(['跟进发货', '核对收货', '内部待办']);
-    expect(memberIds(board)).toEqual([['both'], ['receipt'], ['review']]);
+    expect(memberIds(board)).toEqual([[], ['both', 'receipt'], ['review']]);
     expect(flatIds(board)).toEqual(['both', 'receipt', 'review']);
   });
 

@@ -16,6 +16,7 @@ const SCHEDULE_MODES: readonly { readonly id: GroupMode; readonly label: string 
 
 export type ScheduleViewProps = {
   readonly isMine?: boolean;
+  readonly returnSearch?: string;
   readonly group: GroupMode;
   readonly load: PlanLoad;
   readonly focus: string | null;
@@ -28,7 +29,7 @@ export function ScheduleView(props: ScheduleViewProps): ReactNode {
   return (
     <>
       <Flex className="today-touch" wrap align="center" gap={space[2]}>
-        <PlanScope isMine={props.isMine === true} group={props.group} />
+        <PlanScope isMine={props.isMine === true} group={props.group} returnSearch={props.returnSearch ?? ''} />
         <TodayGrouping label="今日排期分组" modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} />
         <ProcurementCutoff />
       </Flex>
@@ -37,14 +38,15 @@ export function ScheduleView(props: ScheduleViewProps): ReactNode {
   );
 }
 
-function PlanScope({ isMine, group }: { readonly isMine: boolean; readonly group: GroupMode }) {
+function PlanScope({ isMine, group, returnSearch }: { readonly isMine: boolean; readonly group: GroupMode; readonly returnSearch: string }) {
   const isRouted = useInRouterContext();
   const query = new URLSearchParams({ group });
-  if (isMine) query.delete('mine');
-  else query.set('mine', '1');
+  if (!isMine) query.set('mine', '1');
+  if (returnSearch !== '') query.set('workspaceReturn', returnSearch);
+  const returnPath = returnSearch === '' ? '/today' : '/today?' + new URLSearchParams(returnSearch);
   if (!isRouted) return null;
   return <Flex gap="small" align="center" wrap>
-    <Link to="/today">返回行动板</Link>
+    <Link to={returnPath}>返回个人工作台</Link>
     <Typography.Text strong>{isMine ? '我的到期排期' : '全部可见排期'}</Typography.Text>
     <Link to={'/today?' + query}>{isMine ? '查看全部可见排期' : '只看我的到期排期'}</Link>
   </Flex>;

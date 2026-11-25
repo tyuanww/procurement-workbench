@@ -21,7 +21,6 @@ export function todayMotionCss(): string {
     .today-row { transition: opacity 180ms ease-out; overflow-wrap: anywhere; }
     .today-action-list { list-style: none; margin: 0; padding: 0; }
     .today-priority-list { display: flex; flex-direction: column; gap: ${small}px; }
-    .today-action-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; }
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
@@ -29,23 +28,29 @@ export function todayMotionCss(): string {
     .today-row-facts { gap: ${tiny}px; }
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
+    .today-controls-wide { display: contents; }
+    .today-controls-narrow { display: none; }
+    @media (max-width: 520px) {
+      .today-controls-wide { display: none; }
+      .today-controls-narrow { display: block; }
+      .today-workspace-views .ant-segmented-item-icon { display: none; }
+      .today-row[data-receipt] .today-row-facts, .today-row[data-receipt] .today-row-face { display: contents; }
+      .today-row[data-receipt] .today-row-identity { order: -2; }
+      .today-row[data-receipt] .today-row-actions { order: -1; }
+    }
     @media (min-width: 960px) {
       .today-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    }
-    @media (min-width: 1200px) {
-      .today-action-layout-aside { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
     }
     @media (min-width: 980px) {
       .today-row-layout.ant-flex-vertical { flex-direction: row; justify-content: space-between; align-items: center; }
       .today-row-layout > .today-row-facts { flex: 1 1 22rem; }
     }
     @media (any-pointer: coarse) {
-      .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label {
+      .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a {
         min-block-size: 44px;
         min-inline-size: 44px;
       }
-      .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label { display: inline-flex; align-items: center; justify-content: center; }
-      .today-receipt-task a { display: inline-flex; align-items: center; min-block-size: 44px; }
+      .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a { display: inline-flex; align-items: center; justify-content: center; }
     }
     @media (prefers-reduced-motion: reduce) { .today-row { transition: none; } }
   `;
@@ -70,10 +75,6 @@ export function overdueStyle(tone: RowFace['overdueTone']): CSSProperties {
 
 export function metaStyle(): CSSProperties {
   return { color: text.secondary, fontSize: fontSize.body, marginTop: tiny };
-}
-
-export function faceStackStyle(): CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: tiny };
 }
 
 export function helpStyle(): CSSProperties {

@@ -18,7 +18,7 @@ function Workspace({ userId }: { readonly userId: string }) {
   const { today, records, reload, save } = usePersonalWorkspace(userId);
   return (
     <WorkbenchPage title="个人工作台合成预览" secondary={`业务日 ${today} · 合成预览，修改保存在当前浏览器的本账号下`}
-      action={<Link to="/today/personal">返回个人工作台</Link>}>
+      action={<Link to="/today">返回个人工作台</Link>}>
       {records.kind === 'ready' ? <WorkspaceBody entries={records.entries} today={today} onSave={save} /> :
         records.kind === 'loading' ? <Skeleton active /> :
         <Alert type="error" showIcon title="无法读取当前浏览器的个人工作台记录" action={<Button onClick={reload}>重试</Button>} />}

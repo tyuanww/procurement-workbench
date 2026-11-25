@@ -4,6 +4,7 @@ import { Link, matchPath } from 'react-router';
 import type { NavPath, NavRow } from '../features/shell/index.js';
 import type { NavDestination } from '../shared/page-manifest.js';
 import { navGlyph } from '../shared/ui/nav-glyph.js';
+import { fontSize } from '../theme/tokens.js';
 import { NavBadge } from './shell-session.js';
 
 export type NavLocation = { readonly pathname: string; readonly search: string };
@@ -31,7 +32,7 @@ export function navMenuItems(input: {
     icon: <span aria-hidden="true">{navGlyph(row.to)}</span>,
   } : {
     key: groupKey(row.to),
-    title: row.badge.kind === 'count' ? `${row.badge.value} 项待办` : row.label,
+    title: row.badge.kind === 'count' ? `${row.badge.value} 项${row.to === '/today' ? '需关注事项' : '待办'}` : row.label,
     icon: <span aria-hidden="true">{navGlyph(row.to)}</span>,
     label: <NavLabel row={row} isCollapsed={input.isCollapsed} />,
     children: row.destinations.map((destination) => leaf({
@@ -47,7 +48,10 @@ function NavLabel(input: { readonly row: NavRow; readonly isCollapsed: boolean }
   return (
     <span>
       {input.row.label}{' '}
-      <span aria-hidden="true"><NavBadge mark={input.row.badge} compact={input.isCollapsed} /></span>
+      <span aria-hidden="true">
+        {input.row.to === '/today' && input.row.badge.kind === 'count' && !input.isCollapsed ? <span style={{ fontSize: fontSize.meta }}>需关注 </span> : null}
+        <NavBadge mark={input.row.badge} compact={input.isCollapsed} />
+      </span>
     </span>
   );
 }

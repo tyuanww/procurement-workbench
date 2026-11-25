@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
-import { todayArrivalsPath } from '../../../features/today/index.js';
+import { businessToday } from '../../../features/follow-up/index.js';
+import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
   const isRouted = useInRouterContext();
@@ -22,8 +23,7 @@ export function lineDetailBack(input: { readonly progress: string | null; readon
 function todayBack(state: unknown, batchId: string | null | undefined): DetailBack | null {
   if (typeof state !== 'object' || state === null) return null;
   if ('personalTodaySearch' in state && typeof state.personalTodaySearch === 'string') {
-    const search = new URLSearchParams(state.personalTodaySearch);
-    return { to: search.size === 0 ? '/today/personal' : `/today/personal?${search}`, label: '返回个人工作台' };
+    return { to: legacyPersonalPath(state.personalTodaySearch, businessToday()), label: '返回个人工作台' };
   }
   if (!('todaySearch' in state) || typeof state.todaySearch !== 'string') return null;
   const query = new URLSearchParams(state.todaySearch);
@@ -38,7 +38,7 @@ function actionBack(query: URLSearchParams, state: object): DetailBack {
   const pending = 'todayPendingId' in state && typeof state.todayPendingId === 'string' ? state.todayPendingId : null;
   const to = query.size === 0 ? '/today' : '/today?' + query;
   if (pending !== null) return { to, label: '返回待建批次', state: { todayPendingId: pending } };
-  const label = ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '') ? '返回今日排期' : '返回行动板';
+  const label = ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '') ? '返回今日排期' : '返回个人工作台';
   const arrival = 'todayArrivalId' in state && typeof state.todayArrivalId === 'string' ? state.todayArrivalId : null;
   return arrival === null ? { to, label } : { to, label, state: { todayArrivalId: arrival } };
 }

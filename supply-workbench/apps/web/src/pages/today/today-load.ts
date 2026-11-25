@@ -36,8 +36,8 @@ export function useTodayData(query: ActionQuery) {
   });
   useEffect(() => { loadIfNeeded(); }, [path, focusId]);
   const refreshScheduled = useEffectEvent(() => {
-    if (focusId === null && document.visibilityState === 'visible' && (loaded?.value.paging.followUpCounts?.scheduled ?? 0) > 0) {
-      void run(false).catch(() => undefined);
+    if (document.visibilityState === 'visible' && (loaded?.value.paging.followUpCounts?.scheduled ?? 0) > 0) {
+      void run(focusId !== null).catch(() => undefined);
     }
   });
   useEffect(() => {

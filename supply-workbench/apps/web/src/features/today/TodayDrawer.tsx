@@ -8,12 +8,12 @@ import type { BatchFulfillment } from '@sw/domain';
 import { businessToday } from '../../features/follow-up/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { formatDateTime } from '../../shared/ui/format.js';
-import { drawerWidth } from '../../theme/tokens.js';
+import { drawerWidth, space } from '../../theme/tokens.js';
 import { TodayOrderLink, type TodayOrderRef } from './TodayOrderLink.js';
 import type { BoardRow, QuickAction, RowFace } from './model/types.js';
 import { ActionForm, formErrors, type OpenForm } from './TodayForms.js';
 import { BatchProgress } from './batch-progress.js';
-import { faceStackStyle, metaStyle, overdueStyle, reasonStyle } from './today-style.js';
+import { metaStyle, overdueStyle, reasonStyle } from './today-style.js';
 
 export type ActionDetail =
   | { readonly kind: 'order'; readonly order: TodayOrderRef; readonly exception: TodoItemView['exception'] }
@@ -110,8 +110,8 @@ export function RecordFooter(props: {
 
 export function FaceBlock(props: { readonly face: RowFace; readonly batchSeq?: number | undefined; readonly showsQuantities?: boolean; readonly isCompact?: boolean }) {
   return (
-    <div style={faceStackStyle()}>
-      <Typography.Text strong>{props.face.orderNo === '—' ? null : props.face.orderNo + ' · '}{props.batchSeq === undefined ? '' : `第 ${props.batchSeq} 批 · `}{props.face.productName}</Typography.Text>
+    <Flex className="today-row-face" vertical gap={space[0]}>
+      <Typography.Text className="today-row-identity" strong>{props.face.orderNo === '—' ? null : props.face.orderNo + ' · '}{props.batchSeq === undefined ? '' : `第 ${props.batchSeq} 批 · `}{props.face.productName}</Typography.Text>
       <Flex wrap align="center" gap="small">
         <Typography.Text style={reasonStyle()}>{props.face.reason}</Typography.Text>
         {props.face.overdueTone === 'quiet' ? null : <span style={overdueStyle(props.face.overdueTone)}>{props.face.overdue}</span>}
@@ -123,7 +123,7 @@ export function FaceBlock(props: { readonly face: RowFace; readonly batchSeq?: n
       </Flex>}
       {props.face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>下次跟进 · {formatDateTime(props.face.nextFollowUpAt)}</div>}
       {props.isCompact === true ? null : <FollowUpFacts face={props.face} />}
-    </div>
+    </Flex>
   );
 }
 

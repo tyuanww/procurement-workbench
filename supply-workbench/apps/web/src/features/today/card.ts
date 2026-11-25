@@ -33,9 +33,14 @@ function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining' 
   const { unshippedQty, inTransitQty, unit } = fulfillment;
   return {
     qty: unshippedQty,
-    ...(item.reasons.includes('unshipped') ? { remaining: fulfillment } : {}),
+    ...(shouldShowRemaining({ reasons: item.reasons, unshippedQty }) ? { remaining: fulfillment } : {}),
     ...(inTransitQty !== null && inTransitQty > 0 && unit !== null ? { inTransit: { qty: inTransitQty, unit } } : {}),
   };
+}
+
+function shouldShowRemaining({ reasons, unshippedQty }: { readonly reasons: TodoItemView['reasons']; readonly unshippedQty: number | null }): boolean {
+  if (reasons.includes('unshipped')) return true;
+  return unshippedQty !== null && unshippedQty > 0 && (reasons.includes('shipped_not_received') || reasons.includes('follow_up_scheduled'));
 }
 
 function replyOf(batch: TodoItemView['batch']): Pick<BoardItem, 'latestFollowUp' | 'latestPromise' | 'nextFollowUpAt'> {

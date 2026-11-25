@@ -6,8 +6,9 @@ const SHIP: readonly QuickAction[] = [
   { kind: 'date', label: '改确认日' },
   { kind: 'note', label: '记跟进' },
 ];
+const REGISTER_RECEIPT: QuickAction = { kind: 'receipt', label: '登记收货' };
 const RECEIPT: readonly QuickAction[] = [
-  { kind: 'receipt', label: '登记收货' },
+  REGISTER_RECEIPT,
   { kind: 'date', label: '改确认日' },
   { kind: 'note', label: '记跟进' },
 ];
@@ -38,7 +39,10 @@ const BY_REASON: readonly { readonly reason: string; readonly actions: readonly 
 ];
 
 export function actionsOf(item: BoardItem): readonly QuickAction[] {
-  if (item.remaining !== undefined) return item.reasons.includes('missing_date') ? DATE : SHIP;
+  if (item.remaining !== undefined) {
+    if (item.reasons.includes('missing_date')) return DATE;
+    return item.reasons.includes('shipped_not_received') && item.inTransit !== undefined ? [...SHIP, REGISTER_RECEIPT] : SHIP;
+  }
   if (item.reasons.includes('fulfillment_review')) return [NOTE];
   if (item.batchStatus === null) return reasonActions(item.reasons);
   const actions = listed(item.batchStatus);

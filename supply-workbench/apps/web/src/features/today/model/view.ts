@@ -3,7 +3,7 @@ import type { GroupMode } from './types.js';
 
 export const todayArrivalsPath = '/today?view=arrivals';
 
-/** 行动板是默认视图，排期是辅助视图。 */
+/** 工作台和排期共享抽屉导航。 */
 export type TodayView = 'action' | 'schedule';
 
 export function todayViewOf(group: GroupMode): TodayView {
@@ -19,4 +19,19 @@ export function todayViewFromKey(value: string): TodayView {
 export function groupForView(view: TodayView): GroupMode {
   if (view === 'schedule') return 'schedule';
   return 'kanban';
+}
+
+/** 以前保存的个人工作台链接可以携带预约日期、抽屉或列表焦点。 */
+export function legacyPersonalPath(search: string, today: string): string {
+  const params = new URLSearchParams(search);
+  const focus = params.get('focus');
+  const scope = params.get('scope');
+  const date = params.get('date') ?? today;
+  const isFutureCalendar = params.get('view') === 'calendar' && date > today;
+  params.delete('scope');
+  params.delete('focus');
+  if (focus) params.set('focusId', focus);
+  if (scope === 'scheduled' || (scope !== 'pending' && isFutureCalendar)) params.set('inbox', 'scheduled');
+  const query = params.toString();
+  return query === '' ? '/today' : '/today?' + query;
 }

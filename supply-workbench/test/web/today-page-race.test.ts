@@ -1,17 +1,13 @@
 // @vitest-environment happy-dom
-import { createRequire } from 'node:module';
-import path from 'node:path';
 import { expect, it } from 'vitest';
 import type { TodoItemView } from '../../packages/contracts/src/index.js';
-import { TodayPage } from '../../apps/web/src/pages/today/TodayPage.js';
 import { BatchProgress } from '../../apps/web/src/features/today/batch-progress.js';
 import { actionQuery } from '../../apps/web/src/pages/today/action-query.js';
 import { handleKey, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { useTodayData } from '../../apps/web/src/pages/today/today-load.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
-import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, useHostSearch, useHostState, waitFor } from './party-preview-dom.js';
-
-const requireWeb = createRequire(path.join(process.cwd(), 'apps/web/package.json'));
+import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, useHostState, waitFor } from './party-preview-dom.js';
+import { antdApp, batchTodo, LocationAndToday, pageBody } from './today-workspace-fixture.js';
 
 it('请求顺序颠倒时，较早的行动板页无法覆盖已经显示的新筛选结果', async () => {
   emptyReads();
@@ -52,6 +48,7 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
       fulfill({ urlPart: '/api/v1/today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batchTodo(2)] } });
     });
+    expect(textOf('[aria-label="工作台视图"] .ant-segmented-item-selected')).toBe('列表');
     expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
     expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
     expect(textOf('body')).not.toContain('截至今日');
@@ -137,7 +134,7 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
     expect(textOf('#today-chase')).toContain('共 1 批等回单');
-    click(button('查看全部待办'));
+    click(button('清除筛选'));
     await act(() => { fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
     expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
@@ -147,18 +144,6 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     emptyReads();
   }
 });
-
-function batchTodo(seq: number): TodoItemView {
-  const id = `batch-${seq}`;
-  return {
-    id: `batch:${id}`, subject: 'batch', reasons: ['missing_date'], severity: 1, ownerUserId: 'buyer-1',
-    waitingOn: { kind: 'supplier', partyId: null }, dueDate: null, overdueDays: null, refs: { orderLineId: 'line', batchId: id },
-    line: { id: 'line', lane: 'finished', poRaw: 'PO', poFormat: 'OTHER', nameRaw: '同名样品', itemCodeRaw: null, barcodeRaw: null, buyerName: null },
-    batch: { id, seq, plannedQty: 10, status: 'awaiting_date', noteStatus: 'missing', dateBuyerConfirmed: null, firstConfirmedDate: null,
-      dateFactoryRequired: null, dateSupplierPromised: null, shippedQty: null, receivedQty: null, lastShippedOn: null },
-    waitingOnParty: null, exception: null,
-  };
-}
 
 async function openOldLink({ target, isPresent }: { readonly target: string; readonly isPresent: boolean }) {
   emptyReads();
@@ -187,20 +172,6 @@ async function openOldLink({ target, isPresent }: { readonly target: string; rea
     resetDom();
     emptyReads();
   }
-}
-
-function antdApp(children: unknown) {
-  const antd: unknown = requireWeb('antd');
-  if (typeof antd !== 'object' || antd === null || !('App' in antd)) throw new Error('没有 Ant Design App');
-  return element(antd.App, { children });
-}
-
-function LocationAndToday() {
-  const [search] = useHostSearch();
-  return element('div', { children: [
-    element('output', { key: 'url', children: search.toString() }),
-    element(TodayPage, { key: 'today' }),
-  ] });
 }
 
 function locatedPage({ target, isPresent }: { readonly target: string; readonly isPresent: boolean }) {
@@ -246,15 +217,4 @@ function BoardRead() {
     element('button', { key: 'filter', onClick: () => setSearch('reasons=missing_date'), children: '换筛选' }),
     element('output', { key: 'total', children: board.data?.paging.total }),
   ] });
-}
-
-function pageBody(total: number) {
-  const counts = {
-    overdue: 0, demand_before_confirmed: 0, due_today: 0, missing_date: 0, shipped_not_received: 0, note_missing: 0, upcoming: 0,
-    unshipped: 0, fulfillment_review: 0, follow_up_due: 0, follow_up_scheduled: 0, exception_open: 0, review_pending: 0, import_pending: 0, unassigned: 0,
-  };
-  return {
-    asOf: '2026-11-21', counts, items: [], arrivalMemos: [], truncated: false,
-    paging: { page: 1, pageSize: 50, total, reasonCounts: counts, urgent: 0, units: [], factories: [] },
-  };
 }

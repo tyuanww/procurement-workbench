@@ -33,8 +33,8 @@ it('别名通过后今日要重读', async () => {
     expect(first.items.map((item) => item.id)).toEqual(['review']);
     expect(second.items.map((item) => item.id)).toEqual([]);
     expect(seen.filter((url) => url.startsWith('/api/v1/today'))).toEqual([
-      '/api/v1/today?scope=mine&includePending=true&page=1&pageSize=50',
-      '/api/v1/today?scope=mine&includePending=true&page=1&pageSize=50',
+      '/api/v1/today?scope=mine&includePending=true&inbox=today&page=1&pageSize=50',
+      '/api/v1/today?scope=mine&includePending=true&inbox=today&page=1&pageSize=50',
     ]);
   } finally {
     globalThis.fetch = previous;

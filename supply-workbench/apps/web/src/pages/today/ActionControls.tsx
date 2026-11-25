@@ -1,13 +1,17 @@
 import { Button, Flex, Pagination, Select, Typography } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
-import type { ChaseScope } from './action-query.js';
+import type { ReactNode } from 'react';
+import type { ChaseScope, WorkspaceInbox } from './action-query.js';
 import type { FollowUpFilter } from './action-query.js';
+import { focusSection } from './today-focus.js';
 
 export type ActionPageControls = {
   readonly paging: TodayPaging;
   readonly sort: TodaySort;
   readonly work: TodayWorkFilter | undefined;
+  readonly inbox: WorkspaceInbox | undefined;
+  readonly calendar: string | undefined;
   readonly isLoading: boolean;
   readonly isFiltered: boolean;
   readonly isSettled: boolean;
@@ -24,24 +28,52 @@ export type ActionPageControls = {
   readonly onRetry: () => void;
 };
 
-export function ActionControls({ page }: { readonly page: ActionPageControls }) {
-  return <SortControls page={page} />;
+export function ActionControls({ page, utilityLinks, isNarrow = false }: {
+  readonly page: ActionPageControls | undefined;
+  readonly utilityLinks: ReactNode;
+  readonly isNarrow?: boolean;
+}) {
+  const canFilterBatch = isNarrow && page?.inbox === 'today' && page.work !== 'all_unshipped';
+  return <div className={isNarrow ? 'today-controls-narrow' : 'today-controls-wide'}>
+    <Flex className="today-touch" gap="small" align="center" wrap>
+      {utilityLinks}
+      {page === undefined || page.inbox === 'scheduled' ? null : <SortControls page={page} />}
+      {canFilterBatch ? <BatchLinks page={page} /> : null}
+    </Flex>
+  </div>;
 }
 
 export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
+  return <Flex className="today-touch" align="center" gap="small" wrap>
+    <ChaseCopyButtons page={page} />
+    <FactoryCopy page={page} />
+  </Flex>;
+}
+
+function ChaseCopyButtons({ page }: { readonly page: ActionPageControls }) {
   const counts = page.paging.chaseCounts;
+  const isFiltered = page.isFiltered || page.calendar !== undefined;
+  const filteredCount = page.isSettled ? counts?.filtered : undefined;
+  const todayCount = page.work === 'all_unshipped' ? undefined : counts?.all;
   return (
-    <div>
-      <Flex className="today-touch" align="center" gap="small" wrap>
-        <Button icon={<CopyOutlined aria-hidden />} disabled={page.isCopying || counts?.all === 0} onClick={() => page.onCopyChase({ kind: 'all' })}>
-          复制全部催单{counts === undefined ? '' : `（${counts.all} 批）`}
-        </Button>
-        {page.isFiltered ? <Button icon={<CopyOutlined aria-hidden />} disabled={!page.isSettled || page.isCopying || page.paging.factories.length === 0}
-          onClick={() => page.onCopyChase({ kind: 'filtered' })}>复制筛选催单{counts === undefined || !page.isSettled ? '' : `（${counts.filtered} 批）`}</Button> : null}
-        <FactoryCopy page={page} />
-      </Flex>
-    </div>
+    <>
+      <ChaseCopyButton copy={page.onCopyChase} scope="all" label="复制全部可催（今日）" count={todayCount} disabled={page.isCopying} />
+      {isFiltered ? <ChaseCopyButton copy={page.onCopyChase} scope="filtered"
+        label="复制当前范围催单" count={filteredCount} disabled={page.isCopying || !page.isSettled} /> : null}
+    </>
   );
+}
+
+function ChaseCopyButton({ copy, scope, label, count, disabled }: {
+  readonly copy: ActionPageControls['onCopyChase'];
+  readonly scope: Extract<ChaseScope, { readonly kind: 'all' | 'filtered' }>['kind'];
+  readonly label: string;
+  readonly count: number | undefined;
+  readonly disabled: boolean;
+}) {
+  return <Button icon={<CopyOutlined aria-hidden />} disabled={disabled || count === 0} onClick={() => copy({ kind: scope })}>
+    {label}{count === undefined ? '' : `（${count} 批）`}
+  </Button>;
 }
 
 function SortControls({ page }: { readonly page: ActionPageControls }) {
@@ -91,24 +123,46 @@ export function ActionPagination({ page }: { readonly page: ActionPageControls }
   const { paging } = page;
   if (paging.total <= paging.pageSize) return null;
   return (
-    <nav aria-label="行动板分页">
+    <nav aria-label="工作台待办分页">
       <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total} onChange={page.onPage} size="small" showSizeChanger={false} />
     </nav>
   );
 }
 
-export function ActionResult({ page, isKanban }: { readonly page: ActionPageControls; readonly isKanban: boolean }) {
-  const message = actionResultMessage(page, isKanban);
+export function ActionResult({ page }: { readonly page: ActionPageControls }) {
+  const message = actionResultMessage(page);
   if (message === '') return null;
   return <Typography.Text role="status" type="secondary">{message}</Typography.Text>;
 }
 
-function actionResultMessage(page: ActionPageControls, isKanban: boolean): string {
-  if (page.isLoading) return '正在更新行动板…';
-  if (page.loadError !== '') return '行动板更新失败';
+function actionResultMessage(page: ActionPageControls): string {
+  if (page.isLoading) return '正在更新待办…';
+  if (page.loadError !== '') return '工作台待办更新失败';
   const { paging } = page;
   const hasPages = paging.total > paging.pageSize;
-  if (isKanban && !page.isFiltered && !hasPages) return '';
-  const unit = page.work === 'factory_chase' ? '批待催货' : page.work === 'internal_note' ? '批等回单' : '条待办';
+  if (!page.isFiltered && !hasPages && page.calendar === undefined) return '';
+  const unit = page.work === undefined ? (page.inbox === 'scheduled' ? '批已约跟进' : '项批次与跟进待办') : WORK_RESULT_UNITS[page.work];
   return `共 ${paging.total} ${unit}${hasPages ? ` · 第 ${paging.page} 页` : ''}`;
+}
+
+const WORK_RESULT_UNITS: Record<TodayWorkFilter, string> = { factory_chase: '批待催货', internal_note: '批等回单', all_unshipped: '批未发' };
+
+export function BatchLinks({ page }: { readonly page: ActionPageControls }) {
+  const scopes: readonly { key: TodayWorkFilter; label: string; count: number | undefined }[] = [
+    { key: 'factory_chase', label: '要催货', count: page.paging.chaseCounts?.all },
+    { key: 'internal_note', label: '内部等回单', count: page.paging.internalNoteCount },
+  ];
+  const due = page.paging.followUpCounts?.due ?? 0;
+  return <>
+    {scopes.filter(({ key, count }) => count !== undefined && (count > 0 || page.work === key)).map(({ key, label, count }) => (
+      <Button key={key} size="small" aria-pressed={page.work === key} onClick={() => {
+        page.onWork(key);
+        focusSection('today-chase');
+      }}>{label} {count} 批</Button>
+    ))}
+    {due === 0 ? null : <Button size="small" onClick={() => {
+      page.onFollowUp('follow_up_due');
+      focusSection('today-chase');
+    }}>到时跟进 {due} 批</Button>}
+  </>;
 }
