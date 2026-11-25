@@ -8,6 +8,7 @@ export const handlers = [
     parties: [{ kind: 'party', id: 'party-1', displayName: '宜侬' }],
   })),
   http.get('/api/v1/meta/freshness', () => HttpResponse.json({
+    procurementUploadedAt: '2026-10-11T05:00:00.000Z',
     sources: [{ template: 'po-master-v1', factoryPartyId: null, label: '总表', lastCommittedAt: '2026-10-11T06:02:00.000Z', fileModifiedAt: null }],
   })),
 ];

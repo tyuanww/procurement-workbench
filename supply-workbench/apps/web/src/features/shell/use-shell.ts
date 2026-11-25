@@ -2,26 +2,23 @@ import { createContext, createElement, useCallback, useContext, useEffect, useRe
 import {
   FreshnessResponseSchema,
   ReviewCountsSchema,
-  type FreshnessResponse,
   type ReviewCounts,
   type TodayResponse,
 } from '@sw/contracts';
 import { can, type Role } from '@sw/domain';
+import { procurementCutoff } from './model/freshness.js';
 import { apiGet, apiPostEmpty } from '../../shared/api/client.js';
 import { listenToday, read, type ReadView } from '../../shared/api/reads.js';
 import {
   todayScope,
-  type FreshnessFacts,
   type QueueFacts,
-  type SourceFact,
   type TodayFacts,
 } from './model/shell.js';
 
 export type ShellLoadState = {
   readonly queue: QueueFacts;
   readonly today: TodayFacts;
-  readonly freshness: FreshnessFacts;
-  readonly now: string;
+  readonly procurementDate: string | null;
 };
 
 const ReviewQueueContext = createContext<(() => Promise<void>) | null>(null);
@@ -29,24 +26,20 @@ const ReviewQueueContext = createContext<(() => Promise<void>) | null>(null);
 export function useShellLoad(input: {
   readonly name: string;
   readonly roles: readonly Role[];
+  readonly pathname: string;
 }): ShellLoadState & { readonly refreshReviewQueue: () => Promise<void> } {
   const canReadReviewQueue = can(input, 'master.read');
   const [queue, setQueue] = useState<QueueFacts>({ kind: 'pending' });
   const [today, setToday] = useState<TodayFacts>({ kind: 'pending' });
-  const [freshness, setFreshness] = useState<FreshnessFacts>({ kind: 'pending' });
-  const [now, setNow] = useState(() => new Date().toISOString());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date().toISOString()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const procurementDate = useProcurementDate(input);
   const race = useRef(createQueueRace());
   const refreshReviewQueue = useCallback(async () => {
     if (!canReadReviewQueue) return;
     const next = await commitQueue({ race: race.current, read: readQueue });
     if (next !== null) setQueue(next);
   }, [canReadReviewQueue]);
-  useShellRequests({ name: input.name, roles: input.roles, refreshReviewQueue, setToday, setFreshness });
-  return { queue: canReadReviewQueue ? queue : { kind: 'unknown' }, today, freshness, now, refreshReviewQueue };
+  useShellRequests({ name: input.name, roles: input.roles, refreshReviewQueue, setToday });
+  return { queue: canReadReviewQueue ? queue : { kind: 'unknown' }, today, procurementDate, refreshReviewQueue };
 }
 
 export function ReviewQueueProvider(props: { readonly refresh: () => Promise<void>; readonly children: ReactNode }): ReactNode {
@@ -92,9 +85,8 @@ function useShellRequests(input: {
   readonly roles: readonly Role[];
   readonly refreshReviewQueue: () => Promise<void>;
   readonly setToday: (today: TodayFacts) => void;
-  readonly setFreshness: (freshness: FreshnessFacts) => void;
 }): void {
-  const { name, roles, refreshReviewQueue, setToday, setFreshness } = input;
+  const { name, roles, refreshReviewQueue, setToday } = input;
   useEffect(() => {
     let isCurrent = true;
     void refreshReviewQueue();
@@ -104,14 +96,11 @@ function useShellRequests(input: {
         if (isCurrent) setToday(factsOf(view));
       },
     });
-    void readFreshness().then((next) => {
-      if (isCurrent) setFreshness(next);
-    });
     return () => {
       isCurrent = false;
       stopToday();
     };
-  }, [name, roles, refreshReviewQueue, setToday, setFreshness]);
+  }, [name, roles, refreshReviewQueue, setToday]);
 }
 
 async function readQueue(): Promise<QueueFacts> {
@@ -147,21 +136,16 @@ function todayFacts(today: TodayResponse): TodayFacts {
   return { kind: 'complete', severities: today.items.map((item) => item.severity) };
 }
 
-async function readFreshness(): Promise<FreshnessFacts> {
-  try {
-    const body = await apiGet('/api/v1/meta/freshness', FreshnessResponseSchema);
-    return { kind: 'ready', sources: body.sources.map(sourceFact) };
-  } catch {
-    return { kind: 'failed' };
-  }
-}
-
-function sourceFact(source: FreshnessResponse['sources'][number]): SourceFact {
-  return {
-    template: source.template,
-    factoryPartyId: source.factoryPartyId,
-    label: source.label,
-    lastCommittedAt: source.lastCommittedAt,
-    fileModifiedAt: source.fileModifiedAt,
-  };
+function useProcurementDate({ name, pathname }: { readonly name: string; readonly pathname: string }): string | null {
+  const [date, setDate] = useState<string | null>(null);
+  useEffect(() => {
+    let isCurrent = true;
+    void apiGet('/api/v1/meta/freshness', FreshnessResponseSchema).then((body) => {
+      if (isCurrent) setDate(procurementCutoff(body.procurementUploadedAt));
+    }, () => {
+      if (isCurrent) setDate(null);
+    });
+    return () => { isCurrent = false; };
+  }, [name, pathname]);
+  return date;
 }

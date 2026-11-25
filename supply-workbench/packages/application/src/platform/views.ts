@@ -29,7 +29,10 @@ export type FreshnessSource = {
   readonly fileModifiedAt: string | null;
 };
 
-export type FreshnessResponse = { readonly sources: readonly FreshnessSource[] };
+export type FreshnessResponse = {
+  readonly sources: readonly FreshnessSource[];
+  readonly procurementUploadedAt?: string | undefined;
+};
 
 export type CreateUserInput = { readonly name: string; readonly roles: readonly Role[] };
 export type UpdateUserInput = { readonly userId: string; readonly name?: string; readonly roles?: readonly Role[]; readonly active?: boolean };

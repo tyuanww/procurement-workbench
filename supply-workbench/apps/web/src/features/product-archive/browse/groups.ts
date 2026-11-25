@@ -1,3 +1,5 @@
+import { barcodeBase, comparableBarcode } from '@sw/domain';
+
 export function groupByFiling(products: readonly { readonly id: string; readonly filingName: string | null }[]) {
   const groups = new Map<string, string[]>();
   for (const product of products) {
@@ -8,7 +10,7 @@ export function groupByFiling(products: readonly { readonly id: string; readonly
 }
 
 export function isChannelVariant(barcodeRaw: string): boolean {
-  return /-\d+$/.test(barcodeRaw);
+  return comparableBarcode(barcodeRaw) !== barcodeBase(barcodeRaw);
 }
 
 export function stockMissingText(reason: string): string {

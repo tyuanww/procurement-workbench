@@ -1,3 +1,4 @@
+import { settingsSection, settingsSectionLabels } from './settings-section.js';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Alert, Button, Result, Skeleton } from 'antd';
@@ -72,9 +73,7 @@ type SettingsSectionsProps = {
 
 function SettingsSections(input: SettingsSectionsProps) {
   const [params, setParams] = useSearchParams();
-  const section = params.get('section');
-  const defaultSection = params.get('entity') ? 'audit' : 'users';
-  const activeKey = section === 'users' || section === 'audit' || section === 'settings' ? section : defaultSection;
+  const { activeKey, defaultSection } = settingsSection(params);
   return (
     <ContentTabs
       aria-label="设置内容"
@@ -88,19 +87,19 @@ function SettingsSections(input: SettingsSectionsProps) {
       items={[
         {
           key: 'users',
-          label: '用户',
+          label: settingsSectionLabels.users,
           children: <UsersPanel users={input.users} onRefresh={input.refresh} setMessage={input.setMessage} />,
         },
         {
           key: 'settings',
-          label: '阈值',
+          label: settingsSectionLabels.settings,
           children: input.settings === null ? null : (
             <ThresholdPanel settings={input.settings} onDone={input.setSettings} setMessage={input.setMessage} />
           ),
         },
         {
           key: 'audit',
-          label: '审计',
+          label: settingsSectionLabels.audit,
           children: (
             <AuditPanel audit={input.audit} openId={input.openId} setOpenId={input.setOpenId} />
           ),

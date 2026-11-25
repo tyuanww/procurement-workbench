@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Card, DatePicker, Flex, Select, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useId, type CSSProperties } from 'react';
@@ -47,6 +48,7 @@ export function DashboardChrome(props: {
           <Typography.Text strong>线别</Typography.Text>
           <LaneChips lane={query.lane} onSearch={onSearch} />
         </>}
+        <ProcurementCutoff />
       </Flex>
     </Card>
   );

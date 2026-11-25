@@ -30,6 +30,7 @@ export function TodayDrawer(props: {
       open={props.isOpen}
       onClose={props.onClose}
       keyboard={false}
+      focusable={{ trap: true, focusTriggerAfterClose: true }}
       title={drawerTitle(props.row)}
       footer={props.draft === null || !canRecord ? null : <RecordFooter draft={props.draft} hadDate={props.hadDate} isSaving={props.isSaving} onSubmit={props.onSubmit} />}
     >
@@ -62,7 +63,7 @@ export function FaceBlock(props: { readonly face: RowFace; readonly batchSeq?: n
       <div style={reasonStyle()}>{props.face.reason}</div>
       {props.face.overdueTone === 'quiet' ? null : <span style={overdueStyle(props.face.overdueTone)}>{props.face.overdue}</span>}
       <div style={metaStyle()}>{props.face.orderNo}{props.batchSeq === undefined ? '' : ` · 第 ${props.batchSeq} 批`} · {props.face.productName} · {props.face.date}</div>
-      {props.face.factory === undefined ? null : <div style={metaStyle()}>工厂 · {props.face.factory}</div>}
+      {props.face.waiting === undefined ? null : <div style={metaStyle()}>等待方 · {props.face.waiting}</div>}
       {props.face.remaining === undefined ? null : <div>{props.face.remaining}</div>}
       {props.face.inTransit === undefined ? null : <div>{props.face.inTransit}</div>}
       {props.face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>下次跟进 · {formatDateTime(props.face.nextFollowUpAt)}</div>}
