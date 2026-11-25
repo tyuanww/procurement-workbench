@@ -8,6 +8,7 @@ import { storeLabels } from './store-query.js';
 
 const amount = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 const UNKNOWN_OA = 'unlinked';
+export const progressFilterStyle = { width: `min(152px, calc((100% - ${space[2]}px) / 2))`, minWidth: 0 };
 
 export function progressOrderRef(line: OrderLineRow | undefined): string {
   const refs = line?.storeProgress?.sources.flatMap((source) => source.oaRaw === null ? [] : [source.oaRaw]) ?? [];
@@ -36,7 +37,7 @@ export function ProgressOaFilter(props: {
       value={props.value ?? ''}
       options={[{ value: '', label: '全部 OA' }, ...keys.map((key) => ({ value: key, label: key === UNKNOWN_OA ? '未关联 OA' : key }))]}
       showSearch={{ optionFilterProp: 'label' }}
-      style={{ minWidth: 164, maxWidth: '100%' }}
+      style={progressFilterStyle}
       onChange={(value) => props.onChange(value === '' ? null : value)}
     />
   );

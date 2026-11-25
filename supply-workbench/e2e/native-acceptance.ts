@@ -99,6 +99,7 @@ try {
     TZ_BUSINESS: 'Asia/Shanghai',
     UPLOAD_DIR: join(working, 'uploads'),
     SERVE_WEB_DIR: webDir,
+    DEVELOPMENT_SCHEDULE_DIR: resolve('fixtures/synthetic/director-schedule'),
     E2E_ALLOW_MUTATION: '1',
     ACCEPT_API: origin,
     ACCEPT_BROWSER: browserChannel,

@@ -1,10 +1,12 @@
 import { Select } from 'antd';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
+import type { ProcurementStore } from '@sw/contracts';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { ProductDevelopmentPanel } from './product-development-panel.js';
 import { ProgressCurrent } from './progress-current.js';
 import { ProgressSchedule } from './progress-schedule.js';
+import { progressFilterStyle } from './store-order.js';
 import { progressStoreOf, storeLabels, withProgressScope, withProgressStore } from './store-query.js';
 
 export { ArrivalTag, noteBatches, pagesFor } from './progress-current.js';
@@ -22,13 +24,7 @@ export function ProgressPage({ view: selectedView }: { readonly view?: ProgressV
   const isMine = params.get('scope') === 'mine';
   const scope = (
     <>
-      <Select
-        aria-label="店铺"
-        value={view === 'development' && store === 'unassigned' ? 'all' : store}
-        options={view === 'development' ? STORE_OPTIONS.filter(({ value }) => value !== 'unassigned') : STORE_OPTIONS}
-        style={{ minWidth: 144 }}
-        onChange={(value) => setParams(withProgressStore(params.toString(), progressStoreOf(value)))}
-      />
+      <StorePicker view={view} store={store} onChange={(value) => setParams(withProgressStore(params.toString(), value))} />
       {view === 'current' ? <OrderScopePicker isMine={isMine} onChange={(value) => setParams(withProgressScope(params.toString(), value === 'mine'))} /> : null}
     </>
   );
@@ -41,12 +37,22 @@ export function ProgressPage({ view: selectedView }: { readonly view?: ProgressV
   );
 }
 
+function StorePicker({ view, store, onChange }: { readonly view: ProgressView; readonly store: ProcurementStore; readonly onChange: (value: ProcurementStore) => void }) {
+  return <Select
+    aria-label="店铺"
+    value={view === 'development' && store === 'unassigned' ? 'all' : store}
+    options={view === 'development' ? STORE_OPTIONS.filter(({ value }) => value !== 'unassigned') : STORE_OPTIONS}
+    style={view === 'current' ? progressFilterStyle : { minWidth: 144 }}
+    onChange={(value) => onChange(progressStoreOf(value))}
+  />;
+}
+
 function OrderScopePicker({ isMine, onChange }: { readonly isMine: boolean; readonly onChange: (value: string) => void }) {
   return <Select
     aria-label="事项范围"
     value={isMine ? 'mine' : 'all'}
     options={[{ value: 'all', label: '全部事项' }, { value: 'mine', label: '我的事项' }]}
-    style={{ minWidth: 144 }}
+    style={progressFilterStyle}
     onChange={onChange}
   />;
 }
