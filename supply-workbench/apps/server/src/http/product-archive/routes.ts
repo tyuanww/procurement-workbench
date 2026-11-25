@@ -8,6 +8,12 @@ import { registerProductImages } from './images.js';
 
 const IdParams = z.object({ id: ProductIdSchema }).strict();
 const ImageParams = z.object({ id: ProductIdSchema, imageId: EntityIdSchema }).strict();
+const ListQuery = z.object({
+  q: z.string().optional(),
+  productLine: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+});
 
 export function registerProductRoutes({ app, api, attachmentMaxBytes }: { readonly app: FastifyInstance; readonly api: ProductApi; readonly attachmentMaxBytes: number }): void {
   app.get('/api/v1/products', async (req) => api.list(pageQuery(req), requireActor(req)));
@@ -58,8 +64,8 @@ function purchaseQuery(req: FastifyRequest) {
 }
 
 function pageQuery(req: FastifyRequest) {
-  const raw = isRecord(req.query) ? req.query : {};
-  return { ...(typeof raw.q === 'string' ? { q: raw.q } : {}), ...(typeof raw.productLine === 'string' ? { productLine: raw.productLine } : {}) };
+  const { q, productLine, page, pageSize } = parse(ListQuery, req.query);
+  return { page, pageSize, ...(q === undefined ? {} : { q }), ...(productLine === undefined ? {} : { productLine }) };
 }
 
 function bodyOf(req: FastifyRequest): Record<string, string> {

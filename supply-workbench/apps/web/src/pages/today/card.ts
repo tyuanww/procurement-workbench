@@ -10,6 +10,7 @@ export function toBoardItem(item: TodoItemView): BoardItem {
     lineId: item.refs.orderLineId ?? item.id,
     waitingName: waitingName(item),
     waitingKey: `${item.waitingOn.kind}:${resolvedPartyId(item)}`,
+    waitingKind: item.waitingOn.kind,
     reasons: item.reasons,
     poRaw: item.line?.poRaw ?? null,
     productName: item.line?.nameRaw ?? null,

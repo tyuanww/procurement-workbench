@@ -30,7 +30,7 @@ it.each(['desktop', 'phone'])('总排期 %s 展示依赖冲突并打开正确的
     removeEventListener: () => undefined,
   }));
   installFetch();
-  mounted = mount(memoryRouter(element(ProgressSchedule, { store: 'all' }), '/progress?view=schedule&from=2026-11-09'));
+  mounted = mount(memoryRouter(element(ProgressSchedule, { store: 'all', filters: null }), '/progress?view=schedule&from=2026-11-09'));
   await waitFor(() => calls.some((call) => call.url === '/api/v1/plan/schedule?from=2026-11-09&to=2026-11-15'));
   await act(async () => { fulfill({ urlPart: '/api/v1/plan/schedule?', status: 200, body: {
     from: '2026-11-09', to: '2026-11-15', total: 1, items: [production],

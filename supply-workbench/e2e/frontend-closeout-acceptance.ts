@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { sidebarLink } from './sidebar.ts';
+import { sidebarEntries, sidebarLink } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
@@ -25,8 +25,9 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await page.goto(new URL('/products', origin).href);
   await checkProductArchive(page, out);
   await checkProductSearch(page, origin);
+  await checkProductPackagingReturn(page, origin);
   return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次', '到仓待收'], dailySchedule: ['今日', '逾期', '前置阻塞'],
-    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true },
+    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'] },
     savedFollowUpView: true };
 }
 
@@ -48,25 +49,26 @@ async function checkSaveFollowUpView(page: Page): Promise<void> {
 }
 
 async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
+  const entryCount = await sidebarEntries(page.locator('aside')).count();
   await page.getByRole('button', { name: '收起侧栏', exact: true }).click();
   const sidebar = page.locator('.ant-layout-sider-collapsed');
   await sidebar.waitFor();
   const toggle = sidebar.getByRole('button', { name: '展开侧栏', exact: true });
   await toggle.waitFor();
-  await page.waitForFunction(() => {
+  await page.waitForFunction((expectedIconCount) => {
     const sider = document.querySelector('.ant-layout-sider-collapsed');
     if (sider === null) return false;
     const { x, width } = sider.getBoundingClientRect();
     const icons = sider.querySelectorAll('ul.ant-menu-root > li > .ant-menu-item-icon svg, ul.ant-menu-root > li > .ant-menu-submenu-title > .ant-menu-item-icon svg, button[aria-label="展开侧栏"] svg');
-    return icons.length === 7 && [...icons].every((icon) => {
+    return icons.length === expectedIconCount && [...icons].every((icon) => {
       const bounds = icon.getBoundingClientRect();
       return bounds.width > 0 && Math.abs(bounds.x + bounds.width / 2 - x - width / 2) <= 1;
     });
-  });
+  }, entryCount + 1);
   await page.screenshot({ path: join(out, 'closeout-collapsed-sidebar.png'), animations: 'disabled' });
   await toggle.click();
   await sidebar.waitFor({ state: 'hidden' });
-  return 6;
+  return entryCount;
 }
 
 async function checkActionBoard(page: Page): Promise<void> {
@@ -76,6 +78,7 @@ async function checkActionBoard(page: Page): Promise<void> {
   await page.locator('#today-pending-batches').getByText('UI-DEMO-003', { exact: false }).first().waitFor();
   await page.locator('#today-arrival-memos').getByText('UI-DEMO-004', { exact: false }).first().waitFor();
   assert.equal(await board.getByText('UI-DEMO-005', { exact: false }).count(), 0);
+  await board.getByRole('button', { name: /筛选、指标与复制催单/ }).click();
   assert.equal(await page.getByRole('button', { name: /复制全部催单/ }).isEnabled(), true);
 }
 
@@ -103,20 +106,27 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   await page.screenshot({ path: join(out, 'closeout-product-archive.png'), animations: 'disabled' });
   await product.click();
   await page.getByRole('heading', { name: '产品 演示净润洁面乳', exact: true }).waitFor();
-  await page.getByRole('button', { name: /^采\s*购$/ }).click();
+  const tabs = page.getByRole('tablist', { name: '产品详情内容' });
+  await tabs.getByRole('tab', { name: '采购', exact: true }).click();
   await page.getByText('采购 4 行', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '只看本条码', exact: true }).click();
+  await page.getByRole('radio', { name: '全部渠道', exact: true }).press('ArrowRight');
   await page.getByText('采购 2 行', { exact: true }).waitFor();
-  await page.getByRole('button', { name: /^库\s*存$/ }).click();
+  const exact = page.getByRole('radio', { name: '只看本条码', exact: true });
+  assert.ok(await exact.isChecked() && await exact.evaluate((node) => node === document.activeElement));
+  await tabs.getByRole('tab', { name: '库存', exact: true }).click();
+  await page.reload();
+  await page.getByRole('tabpanel', { name: '库存', exact: true }).waitFor();
+  const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
+  assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['产品档案', '产品详情', '库存']);
   await page.getByText('库存 1 行', { exact: true }).waitFor();
   const stock = await page.request.get(new URL('/api/v1/products/ui-demo-cleanser/stock', page.url()).href);
   assert.equal((await stock.json()).factory.total.value, 320);
   const source = await page.request.get(new URL('/api/v1/imports/ui-demo-stock-batch', page.url()).href);
   assert.equal(source.status(), 200);
-  await page.getByRole('button', { name: '组成物料', exact: true }).click();
+  await tabs.getByRole('tab', { name: '组成物料', exact: true }).click();
   await page.getByText('子件 2', { exact: true }).waitFor();
   await page.goto(new URL(cream, page.url()).href);
-  await page.getByRole('button', { name: '组成物料', exact: true }).click();
+  await tabs.getByRole('tab', { name: '组成物料', exact: true }).click();
   await page.getByText('没有 BOM', { exact: true }).waitFor();
 }
 
@@ -141,4 +151,42 @@ async function checkProductSearch(page: Page, origin: URL): Promise<void> {
   await page.getByText('没有符合条件的产品。', { exact: true }).waitFor();
   await page.getByRole('button', { name: '清除搜索', exact: true }).click();
   await page.locator(`a[href="${cleanser}"]`).waitFor();
+  await page.goto(new URL('/products?page=99', origin).href);
+  await page.getByRole('button', { name: '返回第一页' }).press('Enter');
+  await page.locator(`a[href="${cleanser}"]`).waitFor();
+  assert.ok(await page.getByRole('region', { name: '产品查询结果' }).evaluate((node) => document.activeElement === node));
+}
+
+async function checkProductPackagingReturn(page: Page, origin: URL): Promise<void> {
+  const barcode = '2099000000101';
+  for (const { width, view } of [{ width: 1440, view: 'card' }, { width: 390, view: 'table' }]) {
+    await page.setViewportSize({ width, height: 900 });
+    const source = new URL(`/products?q=${barcode}&view=${view}`, origin);
+    await page.goto(source.href);
+    const results = page.getByRole('region', { name: '产品查询结果', exact: true });
+    const channel = results.locator(`a[href="${cleanser}-channel"]`);
+    await results.getByText('标准规格', { exact: true }).waitFor();
+    await results.getByText('渠道规格', { exact: true }).waitFor();
+    await results.getByText(/24 件\/箱/).waitFor();
+    await results.getByText(/12 件\/箱/).waitFor();
+    await channel.press('Enter');
+    await page.getByRole('heading', { name: '产品 演示净润洁面乳渠道装', exact: true }).waitFor();
+    for (const text of ['渠道规格', `${barcode}-1`, '100 mL', '12 件/箱']) {
+      await page.getByText(text, { exact: true }).waitFor();
+    }
+    await page.reload();
+    if (view === 'card') {
+      await page.getByRole('tab', { name: '采购', exact: true }).press('Enter');
+      await page.getByRole('link', { name: '返回产品档案', exact: true }).press('Enter');
+    } else {
+      await page.goBack();
+    }
+    await page.waitForURL(source.href);
+    await channel.and(page.locator(':focus')).waitFor();
+    const search = page.getByLabel('品名或条码', { exact: true });
+    assert.equal(await search.inputValue(), barcode);
+    assert.ok(await page.getByRole('radio', { name: view === 'card' ? '卡片' : '表格', exact: true }).isChecked());
+    assert.ok(await page.evaluate((viewportWidth) => document.documentElement.scrollWidth <= viewportWidth, width));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
 }

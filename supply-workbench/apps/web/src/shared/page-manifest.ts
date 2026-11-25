@@ -3,6 +3,7 @@ export type PageGate = 'always' | 'oversight' | 'imports' | 'review' | 'admin';
 export const SETTINGS_PATH = '/settings';
 
 export type NavPath =
+  | '/home'
   | '/progress'
   | '/today'
   | '/lines'

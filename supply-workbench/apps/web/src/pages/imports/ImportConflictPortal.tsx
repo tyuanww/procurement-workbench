@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
 import { ImportBatchSummarySchema, ImportRowViewSchema, listResponseSchema, type ImportBatchSummary, type ImportRowView } from '@sw/contracts';
 import { apiErrorMessage, apiGet, apiSend } from '../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
@@ -12,21 +11,20 @@ import {
 } from '../../features/imports/index.js';
 import { decisionsWithConflictResolutions } from '../../features/imports/index.js';
 import { ImportConflictDrawer } from './ImportConflictDrawer.js';
-import { readImportConflictDrawer, writeImportConflictDrawer } from './import-conflict-drawer-url.js';
 
-export function ImportConflictPortal(props: {
+export function ImportConflictPortal({ isOpen, ...props }: {
   readonly id: string;
   readonly summary: ImportBatchSummary;
   readonly setSummary: (summary: ImportBatchSummary) => void;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
 }) {
-  const [search, setSearch] = useSearchParams();
   const [rows, setRows] = useState<readonly ImportRowView[]>([]);
   const [candidates, setCandidates] = useState<Readonly<Record<string, readonly ConflictCandidate[]>>>({});
   const [choices, setChoices] = useState<Readonly<Record<string, string>>>({});
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [request, setRequest] = useState<ConflictRequest>({ kind: 'idle' });
-  const isOpen = readImportConflictDrawer(search.toString());
   useEffect(() => {
     if (!isOpen) return;
     setPage(1);
@@ -50,8 +48,8 @@ export function ImportConflictPortal(props: {
     total,
     onPageChange,
     onChoice: (rowId, choice) => setChoices((current) => ({ ...current, [rowId]: choice })),
-    onSave: () => { void saveConflicts({ id: props.id, summary: props.summary, rows, choices, setSummary: props.setSummary, setRequest, onClose: () => setSearch(writeImportConflictDrawer({ search: search.toString(), isOpen: false })) }); },
-    onClose: () => setSearch(writeImportConflictDrawer({ search: search.toString(), isOpen: false })),
+    onSave: () => { void saveConflicts({ id: props.id, summary: props.summary, rows, choices, setSummary: props.setSummary, setRequest, onClose: props.onClose }); },
+    onClose: props.onClose,
   });
 }
 

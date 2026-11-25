@@ -17,7 +17,8 @@ describe('今日页两个视图', () => {
     expect(html).toContain('等待方');
     expect(html).toContain('原因');
     expect(html).toContain('日期');
-    expect(html).toContain('缺确认日期');
+    expect(html).toContain('筛选与指标');
+    expect(html).not.toContain('缺确认日期');
     expect(html).not.toContain('供应商');
     expect(html).not.toContain('今天到期');
   });
@@ -32,6 +33,13 @@ describe('今日页两个视图', () => {
     expect(html).not.toContain('今日排期指标');
   });
 
+  it('行动板的读取失败不会挡住今日排期任务', () => {
+    const html = render(TodayScreen, { ...scheduleProps(), isReady: false, loadError: '行动板失败' });
+    expect(html).toContain('今天到期');
+    expect(html).toContain('里程碑');
+    expect(html).not.toContain('行动板失败');
+  });
+
   it('今日页 KPI 不随视图换成排期口径', () => {
     const html = render(TodayScreen, scheduleProps());
     expect(html).not.toContain('今日排期指标');
@@ -41,10 +49,11 @@ describe('今日页两个视图', () => {
 });
 
 describe('今日视图各自渲染', () => {
-  it('行动板不带排期负载也能渲染自己的 KPI', () => {
+  it('行动板的指标和原因筛选初始收起，分组仍可见', () => {
     const html = render(ActionBoard, todayProps());
-    expect(html).toContain('aria-label="今日关键指标"');
-    expect(html).toContain('缺确认日期');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('aria-label="今日关键指标"');
+    expect(html).not.toContain('缺确认日期');
     expect(html).toContain('等待方');
     expect(html).not.toContain('今天到期');
     expect(html).not.toContain('今日排期指标');

@@ -48,6 +48,36 @@ it.each([
   expect(html).not.toContain('aria-label="管理视图"');
 });
 
+it.each([
+  ['/home', ['首页']],
+  ['/today?group=owner', ['今日事项', '今日排期']],
+  ['/progress/current?store=dafuyan', ['管理店铺', '当前进度']],
+  ['/progress?view=schedule', ['管理店铺', '总排期']],
+  ['/lines', ['跟进中心']],
+  ['/lines/id', ['跟进中心', '订单行详情']],
+  ['/products', ['产品档案']],
+  ['/products/id?card=stock', ['产品档案', '产品详情', '库存']],
+  ['/imports/id', ['导入与审核', '导入中心', '导入批次']],
+  ['/master?tab=unlinked&scope=active', ['导入与审核', '当前关联诊断']],
+  ['/reports/id', ['管理看板', '周报（待开发）', '周报详情']],
+  ['/parties/id', ['主体详情']],
+  ['/settings?entity=orders', ['系统设置', '审计']],
+  ['/settings?entity=orders&section=settings', ['系统设置', '阈值']],
+] satisfies [string, string[]][])('%s 的桌面顶栏只显示一条完整路径', (path, labels) => {
+  const html = render(path, ['admin']);
+  expect(html.match(/aria-label="当前位置"/g)).toHaveLength(1);
+  expect(html.match(/<header\b[^>]*\bshell-header\b[^>]*>/g)).toHaveLength(1);
+  const header = html.match(/<header\b[^>]*>(.*?)<\/header>/s)?.[1] ?? '';
+  const nav = header.match(/<nav[^>]*aria-label="当前位置"[^>]*>(.*?)<\/nav>/s)?.[1] ?? '';
+  const trail = [...nav.matchAll(/<li[^>]+class="ant-breadcrumb-item"[^>]*>(.*?)<\/li>/gs)].map((match) => match[1]?.replace(/<[^>]+>/g, ''));
+  expect(trail).toEqual(labels);
+  expect(nav).toContain(`aria-current="page">${labels.at(-1)}<`);
+});
+
+it.each(['/master?tab=owner-map', '/settings', '/reports/id', '/lines/id/unknown'])('无权或不存在的页面 %s 不显示业务路径', (path) => {
+  expect(render(path, ['buyer'])).not.toContain('aria-label="当前位置"');
+});
+
 it('负责人可查看和打印周报，管理层可生成周报但无设置权限', () => {
   expect(render('/settings', ['manager'])).toContain('这个角色看不到这页。');
   const leadList = render('/reports', ['lead']);

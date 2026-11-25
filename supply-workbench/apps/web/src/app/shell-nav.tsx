@@ -1,18 +1,9 @@
-import {
-  AppstoreOutlined,
-  CalendarOutlined,
-  DashboardOutlined,
-  FieldTimeOutlined,
-  ImportOutlined,
-  ProfileOutlined,
-} from '@ant-design/icons';
-import { Breadcrumb, type MenuProps } from 'antd';
+import type { MenuProps } from 'antd';
 import type { ReactNode } from 'react';
-import { Link, matchPath, useLocation } from 'react-router';
+import { Link, matchPath } from 'react-router';
 import type { NavPath, NavRow } from '../features/shell/index.js';
-import { useCan } from '../shared/actor.js';
-import { SETTINGS_PATH, type NavDestination } from '../shared/page-manifest.js';
-import { space } from '../theme/tokens.js';
+import type { NavDestination } from '../shared/page-manifest.js';
+import { navGlyph } from '../shared/ui/nav-glyph.js';
 import { NavBadge } from './shell-session.js';
 
 export type NavLocation = { readonly pathname: string; readonly search: string };
@@ -107,37 +98,4 @@ function destinationHref({ row, destination, location }: { readonly row: NavRow;
     if (value !== null) next.set(key, value);
   }
   return next.size === 0 ? destination.to : `${path}?${next}`;
-}
-
-export function WorkspaceBreadcrumb({ rows }: { readonly rows: readonly NavRow[] }) {
-  const location = useLocation();
-  const active = navigationSelection(rows, location);
-  const canReadSettings = useCan('admin');
-  const group = active?.row.label ?? (canReadSettings && matchPath(SETTINGS_PATH, location.pathname) !== null ? '系统设置' : undefined);
-  if (group === undefined) return null;
-  const items = active?.destination === undefined ? [{ title: group }] : [{ title: group }, { title: active.destination.label }];
-  return <Breadcrumb aria-label="当前位置" items={items} style={{ marginBottom: space[2] }} />;
-}
-
-function navGlyph(path: NavPath): ReactNode {
-  switch (path) {
-    case '/progress':
-      return <FieldTimeOutlined />;
-    case '/today':
-      return <CalendarOutlined />;
-    case '/lines':
-      return <ProfileOutlined />;
-    case '/dashboard':
-      return <DashboardOutlined />;
-    case '/products':
-      return <AppstoreOutlined />;
-    case '/imports':
-      return <ImportOutlined />;
-    default:
-      return missed(path);
-  }
-}
-
-function missed(path: never): never {
-  throw new Error(`导航没有图标 ${path}`);
 }
