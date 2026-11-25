@@ -1,7 +1,7 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Card, Collapse, Empty, Flex, Result, Select, Skeleton, Typography } from 'antd';
 import { useEffect, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { ScheduleViewSchema, type ProcurementStore } from '@sw/contracts';
 import { localDate, type LocalDate } from '@sw/domain';
@@ -17,7 +17,7 @@ import {
 } from '../../features/progress/index.js';
 import { taskIdOf, taskParam, type WorkItem } from '../../features/today/index.js';
 import { MetricStrip } from '../../shared/ui/analytics.js';
-import { fontSize, space } from '../../theme/tokens.js';
+import { space } from '../../theme/tokens.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import { ProcurementSchedulePanel } from './procurement-schedule-panel.js';
 import { ScheduleList, ScheduleTimeline } from './progress-timeline.js';
@@ -74,25 +74,26 @@ function withScheduleLine(params: URLSearchParams, id: string | null): URLSearch
 }
 
 function useScheduleLoad(window: ScheduleWindow, store: ProcurementStore): { readonly load: ScheduleLoad; readonly reload: () => void } {
-  const [result, setResult] = useState<{ readonly store: ProcurementStore; readonly load: ScheduleLoad }>({ store, load: { kind: 'loading' } });
+  const scope = `${store}:${window.from}:${window.to}`;
+  const [result, setResult] = useState<{ readonly scope: string; readonly load: ScheduleLoad }>({ scope, load: { kind: 'loading' } });
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let isActive = true;
-    setResult((current) => ({ store, load: current.store === store && current.load.kind === 'ready'
+    setResult((current) => ({ scope, load: current.scope === scope && current.load.kind === 'ready'
       ? { ...current.load, isLoading: true, notice: '' } : { kind: 'loading' } }));
     void read({ name: 'planSchedule', from: window.from, to: window.to, store })
-      .then((view) => { if (isActive) setResult({ store, load: { kind: 'ready', view, isLoading: false, notice: '' } }); })
+      .then((view) => { if (isActive) setResult({ scope, load: { kind: 'ready', view, isLoading: false, notice: '' } }); })
       .catch((error: unknown) => {
         if (!isActive) return;
         const failure = readFailureOf(error);
         if (failure === null) return;
         const message = failureText(failure);
-        setResult((current) => ({ store, load: current.load.kind === 'ready'
+        setResult((current) => ({ scope, load: current.load.kind === 'ready'
           ? { ...current.load, isLoading: false, notice: message } : { kind: 'error', message } }));
       });
     return () => { isActive = false; };
-  }, [window.from, window.to, store, reload]);
-  return { load: result.store === store ? result.load : { kind: 'loading' }, reload: () => setReload((value) => value + 1) };
+  }, [window.from, window.to, store, scope, reload]);
+  return { load: result.scope === scope ? result.load : { kind: 'loading' }, reload: () => setReload((value) => value + 1) };
 }
 
 function ScheduleFiltersBar(props: {
@@ -164,7 +165,7 @@ function ScheduleKpis(props: { readonly items: readonly WorkItem[]; readonly sca
     <MetricStrip
       ariaLabel="总排期指标"
       items={[
-        { key: 'total', label: props.scale === 'week' ? '本周任务' : '本月任务', value: insight.total, tone: 'neutral' },
+        { key: 'total', label: props.scale === 'week' ? '所选周任务' : '所选月任务', value: insight.total, tone: 'neutral' },
         { key: 'progress', label: '进行中', value: insight.inProgress, tone: 'info' },
         { key: 'overdue', label: '逾期', value: insight.overdue, tone: 'danger' },
         { key: 'blocked', label: '阻塞', value: insight.blocked, tone: 'warning' },
@@ -184,18 +185,14 @@ function ScheduleBody(props: {
   const isPhone = useShellViewport().band === 'phone';
   if (props.load.kind === 'loading') return <Skeleton active paragraph={{ rows: 8 }} />;
   if (props.load.kind === 'error') return <Result status="error" title="总排期没有读出来" subTitle={props.load.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} />;
-  const notice = props.load.kind === 'ready' && props.load.notice !== ''
+  const notice = props.load.notice !== ''
     ? <Alert type="error" showIcon title="总排期没有读出来" description={props.load.notice} />
     : null;
-  if (props.timeline.total === 0) return <>{notice}<EmptySchedule total={props.load.view.total} scale={props.scale} onClear={props.onClear} /></>;
+  if (props.timeline.total === 0) return <>{notice}<EmptySchedule total={props.load.view.total} onClear={props.onClear} /></>;
   return (
     <div>
       {notice}
       {props.load.isLoading ? <Typography.Paragraph role="status" type="secondary">正在更新排期</Typography.Paragraph> : null}
-      <div style={timelineHeadStyle()}>
-        <Typography.Text strong>{props.scale === 'week' ? '本周排期' : '本月排期'}</Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{props.timeline.total} 条 · 按负责人分组</Typography.Text>
-      </div>
       {isPhone
         ? <ScheduleList timeline={props.timeline} onOpen={props.onOpen} />
         : <ScheduleTimeline timeline={props.timeline} scale={props.scale} onOpen={props.onOpen} />}
@@ -203,19 +200,14 @@ function ScheduleBody(props: {
   );
 }
 
-function EmptySchedule(props: { readonly total: number; readonly scale: ScheduleScale; readonly onClear: () => void }): ReactNode {
+function EmptySchedule(props: { readonly total: number; readonly onClear: () => void }): ReactNode {
   const canReadImports = useCan('imports.read');
   if (props.total === 0) {
-    const range = props.scale === 'week' ? '本周' : '本月';
-    return <Empty description={`${range}没有排期任务。`}>{canReadImports ? <Button href="/imports">去导入排期里程碑</Button> : null}</Empty>;
+    return <Empty description="所选期间没有排期任务。">{canReadImports ? <Button href="/imports">去导入排期里程碑</Button> : null}</Empty>;
   }
   return <Empty description="筛选后没有任务。下一步：清空筛选。"><Button onClick={props.onClear}>清空筛选</Button></Empty>;
 }
 
 function statusOf(value: string | null): ScheduleQuery['filters']['status'] {
   return value === 'planned' || value === 'in_progress' || value === 'blocked' ? value : null;
-}
-
-function timelineHeadStyle(): CSSProperties {
-  return { display: 'flex', alignItems: 'baseline', gap: space[2], marginBottom: space[1], flexWrap: 'wrap' };
 }

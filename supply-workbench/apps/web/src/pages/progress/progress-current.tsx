@@ -5,6 +5,7 @@ import { type OrderLineRow, type ProcurementStore } from '@sw/contracts';
 import { matchesProgressDrill, PROGRESS_STAYS, progressDrillKey, progressInsights, readProgressDrill, withProgressDrill, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { useCan } from '../../shared/actor.js';
+import { formatQuantity } from '../../shared/ui/format.js';
 import { tablePagination } from '../../shared/ui/pagination.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { ArrivalMemos } from '../../features/today/index.js';
@@ -31,6 +32,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
   const insight = progressInsights(scopedRows);
   const emptyMessage = currentEmptyMessage({ drill, oa, stay });
+  const shouldShowMatchCount = isLoaded && drill.kind !== 'all' && (error === '' || data.rows.length > 0);
   useProgressRowFocus({ tableRef, search: table.search, isLoaded });
   return (
     <>
@@ -39,7 +41,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
         onOa={setOa} onStay={setStay} onDrill={setDrill} />
       {insight.total === 0 ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
       <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
-        <SectionGroup title="订单清单" meta={<span role="status">{isLoaded ? progressResultCount(rows.length, scopedRows.length) : ''}</span>}>
+        <SectionGroup title="订单清单" meta={<span role="status">{shouldShowMatchCount ? `匹配 ${formatQuantity(rows.length)} 行` : ''}</span>}>
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
             <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} />
@@ -50,10 +52,6 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
       {isLoaded ? <ArrivalMemos memos={memosForOa(data, oa)} /> : null}
     </>
   );
-}
-
-function progressResultCount(shown: number, total: number): string {
-  return shown === total ? `进行中 ${total} 行` : `匹配 ${shown} 行 · 进行中 ${total} 行`;
 }
 
 function useProgressRowFocus({ tableRef, search, isLoaded }: {
@@ -227,6 +225,7 @@ function ProgressTable(props: ProgressTableProps) {
         page: Math.min(props.page, Math.max(1, Math.ceil(props.rows.length / props.pageSize))),
         pageSize: props.pageSize,
         total: props.rows.length,
+        showTotal: false,
         onChange: props.setPage,
         onSizeChange: props.setPageSize,
       })}

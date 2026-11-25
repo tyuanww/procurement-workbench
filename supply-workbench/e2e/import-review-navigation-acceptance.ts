@@ -259,7 +259,7 @@ async function checkProcurementCutoff(page: Page, cutoff: Locator, filter: Locat
 
 async function checkEmptySchedule(page: Page, origin: URL, canReadImports: boolean): Promise<void> {
   await page.goto(new URL(EMPTY_SCHEDULE, origin).href);
-  await page.getByText('本周没有排期任务。', { exact: true }).waitFor();
+  await page.getByText('所选期间没有排期任务。', { exact: true }).waitFor();
   const link = page.getByRole('link', { name: '去导入排期里程碑', exact: true });
   assert.equal(await link.count(), canReadImports ? 1 : 0);
 }

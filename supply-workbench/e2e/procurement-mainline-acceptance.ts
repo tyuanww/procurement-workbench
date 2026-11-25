@@ -33,8 +33,16 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   assert.ok(table.x + table.width <= viewport.width, '当前进度表格应容纳在桌面可视范围');
   assert.ok(table.y < viewport.height, '桌面首屏应能看到订单清单');
   const progressStages = manager.getByRole('group', { name: '按进度阶段筛选' });
-  await progressStages.getByRole('button', { name: /^待建批次 / }).click();
+  const denominator = manager.getByText(/^[\d,]+ 条订单行$/u);
+  await denominator.waitFor();
+  assert.equal(await current.getByText(/^(进行中|共|匹配) [\d,]+ 行$/u).count(), 0);
+  const noBatch = progressStages.getByRole('button', { name: /^待建批次 / });
+  const stageCount = (await noBatch.innerText()).match(/待建批次 ([\d,]+) 行/u)?.[1];
+  assert.ok(stageCount);
+  await noBatch.click();
   await progressStages.getByRole('button', { name: /^待建批次 /, pressed: true }).waitFor();
+  await current.getByRole('status').and(current.getByText(`匹配 ${stageCount} 行`, { exact: true })).waitFor();
+  await denominator.waitFor();
   assert.equal(new URL(manager.url()).searchParams.get('drill'), 'stage:no_batch');
   await select(stay, manager, '15+ 天');
   await manager.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden' });
@@ -80,9 +88,13 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await stages.waitFor();
   assert.deepEqual(await stages.getByRole('button', { name: /^(下单|齐料|生产|交付)$/ }).allTextContents(), ['下单', '齐料', '生产', '交付']);
   await panel.getByText('周期依据 ' + basis + ' · 齐料间隔 3 天 · 生产 4 天 · 交付间隔 2 天', { exact: true }).waitFor();
-  await page.getByText('本月排期', { exact: true }).waitFor();
-  await page.getByText('4 条 · 按负责人分组', { exact: true }).waitFor();
+  const scheduleMetrics = page.getByRole('group', { name: '总排期指标' });
+  const monthlyTotal = scheduleMetrics.locator('.ant-card').filter({ hasText: '所选月任务' });
+  await monthlyTotal.getByText('4', { exact: true }).waitFor();
+  await page.getByText(/^左端虚线表示任务在所选期间前已开始/u).waitFor();
+  assert.equal(await page.getByText(/按负责人分组|点任务条打开|本月排期/u).count(), 0);
   await page.screenshot({ path: join(out, 'procurement-schedule.png'), animations: 'disabled' });
+  await checkScheduleWindow(page, origin, out);
   await page.goto(new URL('/today', origin).href);
   await (await sidebarLink(page.locator('aside'), '今日事项', '今日排期')).click();
   await page.getByRole('button', { name: /^下单\s/ }).press('Enter');
@@ -95,6 +107,35 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await page.waitForURL((url) => url.pathname === '/progress/schedule');
   const taskContext = await checkScheduleTaskContext(page, origin);
   return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true, taskContext };
+}
+
+async function checkScheduleWindow(page: Page, origin: URL, out: string) {
+  await page.goto(new URL(`/progress/schedule?store=${store}&from=2026-11-23`, origin).href);
+  const dateRange = page.locator('[aria-live="polite"]');
+  const tasks = page.getByRole('group', { name: '总排期指标' }).getByText('所选周任务', { exact: true });
+  const production = page.getByRole('button', { name: /^生产\s/u });
+  const borderStyles = () => production.evaluate((bar) => {
+    const css = getComputedStyle(bar);
+    return [css.borderLeftStyle, css.borderRightStyle, css.borderTopStyle, css.borderBottomStyle];
+  });
+  await dateRange.and(page.getByText(/11-23 至 (?:2026-)?11-29$/u)).waitFor();
+  await tasks.waitFor();
+  assert.deepEqual(await borderStyles(), ['dashed', 'solid', 'solid', 'solid']);
+  await page.getByRole('button', { name: '上一周', exact: true }).click();
+  await dateRange.and(page.getByText(/11-16 至 (?:2026-)?11-22$/u)).waitFor();
+  await tasks.waitFor();
+  await page.getByRole('button', { name: /^下单\s/u }).waitFor();
+  assert.deepEqual(await borderStyles(), ['solid', 'dashed', 'solid', 'solid']);
+  assert.equal(await page.getByText(/本周任务|本周排期/u).count(), 0);
+  const desktop = page.viewportSize();
+  assert.ok(desktop);
+  await page.setViewportSize({ width: 320, height: 800 });
+  const legend = page.getByText(/^左端虚线表示任务在所选期间前已开始/u);
+  await legend.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: /^下单\s/u }).waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+  await page.screenshot({ path: join(out, 'procurement-schedule-320.png'), animations: 'disabled' });
+  await page.setViewportSize(desktop);
 }
 
 async function checkScheduleTaskContext(page: Page, origin: URL) {

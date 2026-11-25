@@ -28,8 +28,8 @@ export function ScheduleTimeline(props: {
         </div>
       </div>
       <div style={footStyle()}>
-        <span>{props.hint ?? '点任务条打开 720 任务抽屉，和今日同一组件。'}</span>
-        <span>左端虚线表示任务开始日早于本期；右端虚线表示延续到下一期。</span>
+        {props.hint === undefined ? null : <span>{props.hint}</span>}
+        <span>左端虚线表示任务在所选期间前已开始，右端虚线表示任务延续到所选期间之后。</span>
       </div>
     </div>
   );
@@ -251,7 +251,9 @@ function barStyle(input: { readonly bar: TimelineRow['bar']; readonly color: { r
     color: input.color.text,
     background: input.color.bg,
     borderColor: input.color.border,
-    borderStyle: input.bar.isCutStart || input.bar.isCutEnd ? 'dashed' : 'solid',
+    borderBlockStyle: 'solid',
+    borderInlineStartStyle: input.bar.isCutStart ? 'dashed' : 'solid',
+    borderInlineEndStyle: input.bar.isCutEnd ? 'dashed' : 'solid',
     zIndex: 2,
     fontSize: fontSize.meta,
   };
