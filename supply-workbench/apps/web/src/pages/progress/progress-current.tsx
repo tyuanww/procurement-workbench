@@ -1,59 +1,52 @@
-import { Alert, Button, Card, Empty, Flex, Result, Skeleton, Table, Tag, type TableColumnsType } from 'antd';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Alert, Button, Empty, Result, Skeleton, Table } from 'antd';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { type OrderLineRow, type ProcurementStore } from '@sw/contracts';
-import { arrivalPaint, matchesProgressDrill, progressDrillKey, progressDrillLabel, progressInsights, readProgressDrill, withProgressDrill, type ProgressArrival, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
+import { matchesProgressDrill, PROGRESS_STAYS, progressDrillKey, progressInsights, readProgressDrill, withProgressDrill, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { useCan } from '../../shared/actor.js';
 import { tablePagination } from '../../shared/ui/pagination.js';
-import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { ArrivalMemos } from '../../features/today/index.js';
-import { fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
+import { space, topBar } from '../../theme/tokens.js';
 import { ProgressNote } from './progress-note.js';
 import type { StoreBatchFacts } from './progress-batch-facts.js';
-import { progressArrivalDate, progressMobileColumns, progressMobileDetails, StoreBatchQuantities } from './progress-mobile.js';
+import { progressMobileColumns, progressMobileDetails, StoreBatchQuantities } from './progress-mobile.js';
 import { loadProgress, type ProgressData } from './progress-load.js';
 export { noteBatches, pagesFor } from './progress-load.js';
-import { ProgressBreakdown, ProgressMetrics } from './progress-overview.js';
-import { ProgressNextAction } from './progress-material-risk.js';
-import { matchingOa, ProgressOaFilter, progressOrderRef, scopedLineLink, StoreGapSummary, StoreOrderDetails } from './store-order.js';
-import { progressPagination, resetProgressPagination, storeLabels, withProgressPagination } from './store-query.js';
+import { ProgressBreakdown, ProgressFilters } from './progress-overview.js';
+export { ArrivalTag } from './progress-columns.js';
+import { progressColumns } from './progress-columns.js';
+import { matchingOa, scopedLineLink, StoreGapSummary, StoreOrderDetails } from './store-order.js';
+import { progressPagination, resetProgressPagination, withProgressPagination } from './store-query.js';
 
 type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
 const emptyProgress: ProgressData = { rows: [], lines: new Map(), batchFacts: new Map(), arrivalMemos: [], actionNotice: '' };
 
 export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonly filters: ReactNode }) {
   const { data, error, isLoaded, notes, now, retry } = useCurrentData(scope);
-  const { oa, drill, setOa, setDrill, tableRef, ...table } = useCurrentFilter();
-  const scopedRows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
+  const { oa, stay, drill, setOa, setStay, setDrill, tableRef, ...table } = useCurrentFilter();
+  const oaRows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
+  const scopedRows = stay === null ? oaRows : oaRows.filter((row) => row.stay === stay);
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
-  const insight = isLoaded && scopedRows.length > 0 ? progressInsights(scopedRows) : null;
-  const emptyMessage = currentEmptyMessage(drill, oa);
+  const insight = progressInsights(scopedRows);
+  const emptyMessage = currentEmptyMessage({ drill, oa, stay });
   useProgressRowFocus({ tableRef, search: table.search, isLoaded });
   return (
     <>
-      <Card size="small" style={{ marginBottom: space[3] }}>
-        <Flex gap={space[2]} wrap align="center">
-          {filters}
-          {data.rows.length > 0 ? <ProgressOaFilter lines={data.rows.map((row) => data.lines.get(row.lineId))} value={oa} onChange={setOa} /> : null}
-        </Flex>
-      </Card>
-      {insight === null ? null : <ProgressMetrics insight={insight} drill={drill} onDrill={setDrill} />}
+      <ProgressFilters filters={filters} lines={data.rows.map((row) => data.lines.get(row.lineId))}
+        oa={oa} stay={stay} drill={drill} overdue={isLoaded ? insight.overdue : null}
+        onOa={setOa} onStay={setStay} onDrill={setDrill} />
+      {insight.total === 0 ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
       <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
-        <SectionGroup title="当前进度" {...(isLoaded ? { meta: progressResultCount(rows.length, scopedRows.length) } : {})}>
-          {drill.kind === 'all' ? null : <Flex align="center" wrap gap={space[2]} style={{ marginBottom: space[2] }}>
-            <Tag>当前筛选 {progressDrillLabel(drill)}</Tag>
-            <Button onClick={() => setDrill({ kind: 'all' })}>清除下钻</Button>
-          </Flex>}
+        <SectionGroup title="订单清单" meta={<span role="status">{isLoaded ? progressResultCount(rows.length, scopedRows.length) : ''}</span>}>
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
             <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} />
           </ProgressBody>
         </SectionGroup>
       </div>
-      {isLoaded ? <StoreGapSummary lines={scopedRows.map((row) => data.lines.get(row.lineId))} /> : null}
-      {insight === null ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
+      {isLoaded ? <StoreGapSummary lines={oaRows.map((row) => data.lines.get(row.lineId))} /> : null}
       {isLoaded ? <ArrivalMemos memos={memosForOa(data, oa)} /> : null}
     </>
   );
@@ -78,8 +71,9 @@ function useProgressRowFocus({ tableRef, search, isLoaded }: {
   }, [isLoaded, search, tableRef]);
 }
 
-function currentEmptyMessage(drill: ProgressDrill, oa: string | null) {
+function currentEmptyMessage({ drill, oa, stay }: { readonly drill: ProgressDrill; readonly oa: string | null; readonly stay: ProgressStay | null }) {
   if (drill.kind !== 'all') return '当前指标没有匹配的订单行。';
+  if (stay !== null) return '所选停留天数没有匹配的订单行。';
   return oa === null ? null : '这个 OA 没有进行中的成品订单行。';
 }
 
@@ -91,21 +85,31 @@ function ProgressActionNotice(props: { readonly message: string; readonly hasRow
 function useCurrentFilter() {
   const [params, setParams] = useSearchParams();
   const oa = params.get('oa');
-  const drill = readProgressDrill(params.get('drill'));
+  const savedDrill = readProgressDrill(params.get('drill'));
+  const savedStay = PROGRESS_STAYS.find(({ bucket }) => bucket === params.get('stay'));
+  const stay = savedStay?.bucket ?? (savedDrill.kind === 'stay' ? savedDrill.bucket : null);
+  const drill: ProgressDrill = savedDrill.kind === 'stay' ? { kind: 'all' } : savedDrill;
   const { page, pageSize } = progressPagination(params);
   const tableRef = useRef<HTMLDivElement>(null);
   const writePage = (nextPage: number, nextSize: number) => setParams(
     withProgressPagination(params, { page: nextPage, pageSize: nextSize }), { preventScrollReset: true },
   );
+  const writeFilters = (nextDrill: ProgressDrill, nextStay: ProgressStay | null) => {
+    const next = withProgressDrill(resetProgressPagination(params), nextDrill);
+    if (nextStay === null) next.delete('stay');
+    else next.set('stay', nextStay);
+    setParams(next, { preventScrollReset: true });
+  };
   return {
-    oa, drill, tableRef, page, pageSize, search: params.toString(),
+    oa, stay, drill, tableRef, page, pageSize, search: params.toString(),
     setPage: (value: number) => writePage(value, pageSize),
     setPageSize: (value: number) => writePage(1, value),
-    setOa: (value: string | null) => setParams(oaParams(resetProgressPagination(params), value)),
+    setOa: (value: string | null) => setParams(oaParams(resetProgressPagination(params), value), { preventScrollReset: true }),
+    setStay: (value: ProgressStay | null) => writeFilters(drill, value),
     setDrill: (value: ProgressDrill) => {
+      if (value.kind === 'all' && drill.kind === 'all') return;
       const next: ProgressDrill = progressDrillKey(value) === progressDrillKey(drill) ? { kind: 'all' } : value;
-      setParams(withProgressDrill(resetProgressPagination(params), next), { preventScrollReset: true });
-      tableRef.current?.focus();
+      writeFilters(next, stay);
     },
   };
 }
@@ -216,8 +220,8 @@ function ProgressTable(props: ProgressTableProps) {
       dataSource={[...props.rows]}
       locale={{ emptyText: <EmptyProgress message={props.emptyMessage} /> }}
       expandable={{ expandedRowRender: expand, ...(isPhone ? { columnWidth: 34 } : {}) }}
-      {...(isPhone ? {} : { scroll: { x: 'max-content' as const }, sticky: { offsetHeader: topBar } })}
-      {...(isPhone ? { tableLayout: 'fixed' } : {})}
+      {...(isPhone ? {} : { sticky: { offsetHeader: topBar } })}
+      tableLayout="fixed"
       columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineOf, lineHref, overdueHref, now }) : progressColumns({ lines, lineHref, overdueHref, note, now })}
       pagination={tablePagination({
         page: Math.min(props.page, Math.max(1, Math.ceil(props.rows.length / props.pageSize))),
@@ -242,71 +246,4 @@ function ProgressExpandedRow({ row, line, facts, search, note }: {
     <StoreBatchQuantities facts={facts} />
     <StoreOrderDetails line={line} search={search} />
   </>;
-}
-
-function progressColumns(input: {
-  readonly lines: ReadonlyMap<string, OrderLineRow>;
-  readonly lineHref: (lineId: string) => string;
-  readonly overdueHref: (row: ProgressRow) => string | undefined;
-  readonly note: (lineId: string) => ReactNode;
-  readonly now: Date;
-}): TableColumnsType<ProgressRow> {
-  return [
-    { title: 'OA 需求', render: (_value: unknown, row: ProgressRow) => progressOrderRef(input.lines.get(row.lineId)) },
-    { title: '单号', dataIndex: 'po', rowScope: 'row' },
-    { title: '品名', dataIndex: 'title', render: (title: string, row: ProgressRow) => <Link to={input.lineHref(row.lineId)}>{title}</Link> },
-    { title: '店铺', key: 'store', render: (_value: unknown, row: ProgressRow) => storeLabels[input.lines.get(row.lineId)?.storeProgress?.store ?? 'unassigned'] },
-    { title: '供应商', dataIndex: 'supplierLabel' },
-    { title: '阶段', dataIndex: 'stageLabel' },
-    { title: '停留天数', align: 'right', render: (_value: unknown, row: ProgressRow) => <StayDays row={row} /> },
-    { title: '批次确认到货日', render: (_value: unknown, row: ProgressRow) => progressArrivalDate({ arrival: row.arrival, now: input.now, href: input.overdueHref(row) }) },
-    { title: '状态', render: (_value: unknown, row: ProgressRow) => <ArrivalTag arrival={row.arrival} /> },
-    { title: '下一步', render: (_value: unknown, row: ProgressRow) => <ProgressNextAction row={row} /> },
-    { title: '进度说明', render: (_value: unknown, row: ProgressRow) => input.note(row.lineId) },
-  ];
-}
-
-const STAY_PAINT: Record<ProgressStay, { readonly fontSize: number; readonly fontWeight: number; readonly color: string }> = {
-  '0-3': { fontSize: fontSize.table, fontWeight: 400, color: text.tertiary },
-  '4-7': { fontSize: fontSize.body, fontWeight: 400, color: text.secondary },
-  '8-14': { fontSize: fontSize.section, fontWeight: 600, color: text.primary },
-  '15+': { fontSize: fontSize.page, fontWeight: 600, color: text.primary },
-};
-
-function StayDays({ row }: { readonly row: ProgressRow }) {
-  const paint = STAY_PAINT[row.stay];
-  const shared: CSSProperties = {
-    fontSize: paint.fontSize,
-    fontWeight: paint.fontWeight,
-    fontVariantNumeric: 'tabular-nums',
-  };
-  switch (row.arrival.kind) {
-    case 'overdue':
-      return (
-        <span style={{ ...shared, color: statusColor.danger.text, background: statusColor.danger.bg, paddingInline: space[0] }}>
-          {row.dayText}
-        </span>
-      );
-    case 'missing':
-    case 'dated':
-      return <span style={{ ...shared, color: paint.color }}>{row.dayText}</span>;
-    default: {
-      const unchecked: never = row.arrival;
-      return unchecked;
-    }
-  }
-}
-
-export function ArrivalTag({ arrival }: { readonly arrival: ProgressArrival }) {
-  const paint = arrivalPaint(arrival.kind);
-  switch (paint.kind) {
-    case 'status':
-      return <StatusTag status={paint.status} />;
-    case 'missing':
-      return <MissingValue reason={paint.reason} />;
-    default: {
-      const unchecked: never = paint;
-      return unchecked;
-    }
-  }
 }

@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Empty, Flex, Input, Result, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router';
@@ -57,9 +58,11 @@ function AliasReviewQueue({ refresh }: { readonly refresh: () => Promise<void> }
 function AliasReviewList(props: { readonly state: LoadState<readonly PartyAliasView[]>; readonly onRetry: () => void; readonly onOpen: (aliasId: string) => void }) {
   if (props.state.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
   if (props.state.kind === 'error') return <Result status="error" title="待审核别名没有读出来。" subTitle={props.state.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} />;
-  if (props.state.value.length === 0) return <Empty description="没有待审核的别名。下一步：去导入总表。"><Button href="/imports">去导入</Button></Empty>;
+  if (props.state.value.length === 0) return <SectionGroup title="待审核别名" action={<ProcurementCutoff />}>
+    <Empty description="没有待审核的别名。下一步：去导入总表。"><Button href="/imports">去导入</Button></Empty>
+  </SectionGroup>;
   return (
-    <SectionGroup title="待审核别名" meta={`${props.state.value.length} 条`}>
+    <SectionGroup title="待审核别名" action={<ProcurementCutoff />} meta={`${props.state.value.length} 条`}>
       <Table<PartyAliasView>
         size="small" rowKey="id" pagination={false} dataSource={props.state.value}
         columns={[
@@ -140,9 +143,11 @@ function MultiNameReview({ refresh }: { readonly refresh: () => Promise<void> })
   useEffect(() => { load(); }, []);
   if (state.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
   if (state.kind === 'error') return <Result status="error" title="一号多名没有读出来。" subTitle={state.message} extra={<Button type="primary" onClick={load}>重试</Button>} />;
-  if (state.value.length === 0) return <Empty description="没有一号多名记录。下一步：去导入总表。"><Button href="/imports">去导入</Button></Empty>;
+  if (state.value.length === 0) return <SectionGroup title="一号多名" action={<ProcurementCutoff />}>
+    <Empty description="没有一号多名记录。下一步：去导入总表。"><Button href="/imports">去导入</Button></Empty>
+  </SectionGroup>;
   return (
-    <SectionGroup title="一号多名" meta={`${state.value.length} 条`}>
+    <SectionGroup title="一号多名" action={<ProcurementCutoff />} meta={`${state.value.length} 条`}>
       {message === '' ? null : <Alert type="error" showIcon title={message} />}
       {state.value.map((row) => {
         const isRowPending = pending === row.codeId;

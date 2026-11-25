@@ -2,6 +2,7 @@ export interface CellLike {
   readonly kind: 'string' | 'number' | 'bool' | 'error' | 'empty';
   readonly value: string | number | boolean | null;
   readonly text: string;
+  readonly displayText?: string;
   readonly richText?: string;
   readonly formula?: string;
   readonly mergedFrom?: { readonly row: number; readonly col: number };

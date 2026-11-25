@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, it } from 'vitest';
+import { directorBrands } from '@sw/persistence';
 import { ImportBatchSummarySchema } from '@sw/contracts';
 import { must, openProcurementImport, procurementImportClient } from './helpers/procurement-import.js';
 
@@ -10,6 +11,20 @@ const master = '采购订单总表';
 const project = '达肤妍项目进度表';
 const updatedDate = '2026-11-18';
 type Api = Awaited<ReturnType<typeof procurementImportClient>>;
+
+withProcurementImport('新增品牌工作表使首页能筛到对应的成品与关联物料', async ({ api, handle }) => {
+  const book = XLSX.read(original);
+  const newSheet = '合成第三品牌项目进度表';
+  book.Sheets[newSheet] = book.Sheets[project];
+  delete book.Sheets[project];
+  book.SheetNames = book.SheetNames.map((name: string) => name === project ? newSheet : name);
+  const batch = await api.upload('third-brand.xlsx', XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }));
+  expect((await api.commit(batch)).statusCode).toBe(200);
+  const finished = must((await api.preview(batch)).submission?.finished.find((row) => row.rowNo === 2)?.orderLineId);
+  const component = must((await api.detail(finished, 'all')).line.storeProgress?.materials[0]?.id);
+  const members = await directorBrands(handle.db);
+  expect(members).toEqual(expect.arrayContaining([finished, component].map((lineId) => ({ lineId, brand: '合成第三品牌' }))));
+});
 
 withProcurementImport('重传决定不能进入当前成品和总排期来源', async ({ api, handle }) => {
   const { first, lineId } = await commitFirst(api);

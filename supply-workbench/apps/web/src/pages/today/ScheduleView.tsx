@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Empty, Flex, Result, Skeleton, Typography } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import type { GroupMode, PlanBoardGroup, PlanLoad, PlanRow } from '../../features/today/index.js';
@@ -26,7 +27,10 @@ export function ScheduleView(props: ScheduleViewProps): ReactNode {
   return (
     <>
       {date === null ? null : <Typography.Text type="secondary">截至今日 <time dateTime={date}>{date}</time></Typography.Text>}
-      <div className="today-touch"><TodayGrouping label="今日排期分组" modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} /></div>
+      <Flex className="today-touch" wrap align="center" gap={space[2]}>
+        <TodayGrouping label="今日排期分组" modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} />
+        <ProcurementCutoff />
+      </Flex>
       <ScheduleBody load={props.load} focus={props.focus} onOpen={props.onOpen} onRetry={props.onRetry} />
     </>
   );

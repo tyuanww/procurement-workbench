@@ -130,7 +130,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     id: 'reporting',
     readPermissions: ['reports.read', 'dashboard.read'],
     writePermissions: ['reports.generate', 'reports.export'],
-    routePrefixes: ['/api/v1/reports', '/api/v1/dashboard/management-meeting'],
+    routePrefixes: ['/api/v1/reports', '/api/v1/dashboard/management-meeting', '/api/v1/dashboard/director'],
     webFeature: 'reporting',
     navLabel: null,
     dependsOn: ['platform', 'performance'],
