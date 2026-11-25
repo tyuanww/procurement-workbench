@@ -12,7 +12,7 @@ import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
-import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
+import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
 import { checkRedReview } from './red-review-acceptance.ts';
@@ -91,8 +91,13 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
-  const { page: manager } = await open('manager', '/', '/dashboard');
-  await manager.getByRole('heading', { name: '卡点', exact: true }).waitFor();
+  const { page: manager } = await open('manager', '/', '/home');
+  await manager.getByRole('heading', { name: '暂无需要你优先处理的事项', exact: true }).waitFor();
+  const directorMenu = manager.locator('aside');
+  const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
+  const today = await sidebarLink(directorMenu, '今日事项', '行动板');
+  const todayBox = await today.boundingBox();
+  assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);
   await checkEmptyProductArchive(manager, origin, false);
   result.checks.productArchiveImportLink = { buyer: true, manager: false };
@@ -110,7 +115,10 @@ async function procurementAcceptance(): Promise<void> {
   await deepBuyer.getByRole('link', { name: componentPo, exact: true }).waitFor();
   await buyer.goto(new URL('/reports', origin).href);
   await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
-  result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
+  await buyer.goto(new URL('/home', origin).href);
+  await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
+  assert.equal(await buyer.locator('aside').getByRole('link', { name: '首页', exact: true }).count(), 0);
+  result.checks.procurementHome = { buyer: '/today', manager: '/home', restoredDeepLink: deep, forbiddenReports: true, forbiddenHome: true };
   result.checks.orderLineNote = await checkOrderLineNote({ page: buyer, manager, origin, out });
 
   const { page: reviewer, devtools } = await open('reviewer', '/', '/master');
@@ -122,6 +130,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.pageStories = await checkPageStories({ buyer, manager });
   const { page: lead } = await open('lead', '/', '/reports');
   result.checks.managementNavigation = await checkManagementNavigation({ manager, lead, buyer, reviewer, reportPath: meeting.frozenReport });
+  result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
   const badge = sidebarGroup(reviewer.locator('aside'), '导入与审核').locator('.ant-badge');
   await badge.waitFor();
   const visibleCount = (await badge.innerText()).trim();

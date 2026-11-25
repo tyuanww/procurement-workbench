@@ -3,6 +3,7 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   FieldTimeOutlined,
+  HomeOutlined,
   ImportOutlined,
   ProfileOutlined,
 } from '@ant-design/icons';
@@ -121,6 +122,8 @@ export function WorkspaceBreadcrumb({ rows, inline = false }: { readonly rows: r
 
 function navGlyph(path: NavPath): ReactNode {
   switch (path) {
+    case '/home':
+      return <HomeOutlined />;
     case '/progress':
       return <FieldTimeOutlined />;
     case '/today':

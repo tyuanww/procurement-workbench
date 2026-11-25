@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../shared/page-manifest.js';
 import { DashboardPage } from '../pages/dashboard/DashboardPage.js';
+import { DirectorHomePage } from '../pages/director-home/DirectorHomePage.js';
 import { ImportBatchPage } from '../pages/imports/ImportBatchPage.js';
 import { ImportCenter } from '../pages/imports/ImportCenter.js';
 import { LineDetailPage } from '../pages/lines/detail/LineDetailPage.js';
@@ -35,6 +36,7 @@ type OtherPageEntry = {
 export type PageManifestEntry = NavPageEntry | OtherPageEntry;
 
 export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
+  { path: '/home', nav: { label: '首页' }, gate: 'oversight', element: <DirectorHomePage /> },
   { path: '/today', nav: { label: '今日事项' }, gate: 'always', element: <TodayPage /> },
   { path: '/progress', nav: { label: '管理店铺' }, gate: 'always', element: <ProgressPage /> },
   { path: '/progress/current', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="current" /> },

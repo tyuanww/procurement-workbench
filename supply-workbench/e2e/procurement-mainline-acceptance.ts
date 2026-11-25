@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarLink } from './sidebar.ts';
 
@@ -280,6 +281,81 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   assert.equal(await record.getByText(evidence, { exact: false }).count(), 0);
   await page.screenshot({ path: join(out, 'procurement-frozen-weekly.png'), animations: 'disabled' });
   return { store, weekStart, previousWeek, materialPo, ordered: 200_000, sourceReported: 158_000, sourceReportedGap: 42_000, decision, currentCompletion: evidence, frozenReport: new URL(frozenReport).pathname };
+}
+
+export async function checkDirectorHome({ page, buyer, lead, origin, out, materialPo, weekStart, warehouse }: Scenario & {
+  readonly page: Page;
+  readonly buyer: Page;
+  readonly lead: Page;
+  readonly materialPo: string;
+  readonly weekStart: string;
+  readonly warehouse: string;
+}) {
+  const params = new URLSearchParams({ store, weekStart });
+  const source = await page.request.get(new URL(`/api/v1/dashboard/management-meeting?${params}`, origin).href);
+  assert.ok(source.ok());
+  const meeting: { readonly materials: readonly { readonly poRef: string | null; readonly materialLineId: string }[] } = await source.json();
+  const material = meeting.materials.find(({ poRef }) => poRef === materialPo);
+  assert.ok(material);
+  const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+  const seeded = await buyer.request.post(new URL(`/api/v1/lines/${material.materialLineId}/batches`, origin).href, {
+    data: { plannedQty: 50, receiverPartyId: warehouse, dateBuyerConfirmed: yesterday },
+  });
+  assert.ok(seeded.ok(), `总监首页合成逾期批次 HTTP ${seeded.status()}: ${await seeded.text()}`);
+
+  const home = new URL('/home', origin).href;
+  await page.goto(home);
+  const coordinate = page.getByRole('button', { name: '查看协调信息', exact: true });
+  await coordinate.waitFor();
+  const position = await coordinate.boundingBox();
+  assert.ok(position && position.y < 500, '协调入口在首屏');
+  const risk = page.getByRole('group', { name: '交付风险筛选' }).getByRole('button', { name: /^逾期未到/ });
+  await risk.press('Enter');
+  let drawer = page.getByRole('dialog', { name: /^逾期未到/ });
+  await drawer.getByText(materialPo, { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await risk.and(page.locator(':focus')).waitFor();
+  await coordinate.click();
+  drawer = page.getByRole('dialog', { name: /^协调这笔逾期交付/ });
+  await drawer.getByText(`逾期未到 · ${yesterday} 应到`, { exact: true }).waitFor();
+  await drawer.getByText('可找谁协调', { exact: true }).waitFor();
+  await page.screenshot({ path: join(out, 'director-home-coordination.png'), animations: 'disabled' });
+  await drawer.getByRole('button', { name: '记录协调决定', exact: true }).click();
+  const form = page.getByRole('dialog', { name: '记录周会决定', exact: true });
+  const decision = '合成总监决定，核对余货到厂时间';
+  const criteria = '采购回传更新后的预计到货日';
+  await form.getByLabel('决定', { exact: true }).fill(decision);
+  await select(form.getByRole('combobox', { name: '负责人', exact: true }), page, '采购甲');
+  await fillDate(form.getByLabel('截止日', { exact: true }), weekStart);
+  await form.getByLabel('完成标准或要核对的依据', { exact: true }).fill(criteria);
+  await form.getByRole('button', { name: /^保\s*存$/ }).click();
+  const heading = page.getByRole('heading', { name: decision, exact: true });
+  await heading.waitFor();
+  await page.getByText('已记录决定', { exact: true }).waitFor();
+  await page.screenshot({ path: join(out, 'director-home.png'), animations: 'disabled' });
+  await page.reload();
+  await heading.waitFor();
+
+  await lead.goto(home);
+  await lead.getByRole('heading', { name: decision, exact: true }).waitFor();
+  assert.equal(await lead.getByRole('button', { name: '登记决定完成', exact: true }).count(), 0);
+  await lead.getByRole('link', { name: '查看管理周会', exact: true }).waitFor();
+  await page.setViewportSize({ width: 320, height: 780 });
+  await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
+  await heading.waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  await page.getByRole('button', { name: '登记决定完成', exact: true }).click();
+  const complete = page.getByRole('dialog', { name: '登记决定完成', exact: true });
+  await complete.getByLabel('实际完成依据', { exact: true }).fill('已回读合成供应商到货回复');
+  await complete.getByRole('button', { name: /^保\s*存$/ }).click();
+  await page.getByText('已登记完成', { exact: true }).waitFor();
+  await coordinate.waitFor();
+  await page.screenshot({ path: join(out, 'director-home-phone.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await select(page.getByRole('combobox', { name: '店铺范围', exact: true }), page, otherStoreName);
+  await page.getByRole('heading', { name: '暂无需要你优先处理的事项', exact: true }).waitFor();
+  return { home: '/home', overdueDrill: true, savedOnReload: true, leadReadOnly: true, completion: true, phoneWidth: 320, emptyStore: otherStoreName };
 }
 
 async function seedDevelopment(page: Page, origin: URL, resource: 'projects' | 'nodes', data: object) {

@@ -15,8 +15,8 @@ import {
 } from '../../apps/web/src/features/shell/index.js';
 
 const NOW = '2026-10-18T00:00:00.000Z';
-const HIDDEN = ['/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '今日事项,管理店铺,跟进中心,管理看板,产品档案,导入与审核';
+const HIDDEN = ['/home', '/master', '/settings', '/dashboard', '/reports'];
+const NAV_LABELS = '首页,今日事项,管理店铺,跟进中心,管理看板,产品档案,导入与审核';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;
@@ -114,12 +114,12 @@ describe('首页和主数据角标', () => {
     expect(badgeAt(view, '/imports')).toEqual({ kind: 'missing' });
   });
 
-  it('审核人兼管理层在未知和空队列时都进看板', () => {
+  it('审核人兼管理层在未知和空队列时都进首页', () => {
     const unknown = home(['reviewer', 'manager'], { kind: 'unknown' });
     const empty = home(['reviewer', 'manager'], counts([0, 0, 0, 0]));
-    expect(unknown.home).toBe('/dashboard');
+    expect(unknown.home).toBe('/home');
     expect(badgeAt(unknown, '/imports')).toEqual({ kind: 'missing' });
-    expect(empty.home).toBe('/dashboard');
+    expect(empty.home).toBe('/home');
     expect(badgeAt(empty, '/imports')).toEqual({ kind: 'none' });
   });
 
@@ -170,7 +170,7 @@ describe('首页和主数据角标', () => {
   it('采购兼审核人按原队列和角色优先级选择首页', () => {
     expect(home(['buyer', 'reviewer'], counts([1, 0, 0, 0])).home).toBe('/master');
     expect(home(['buyer', 'reviewer'], counts([0, 0, 0, 0])).home).toBe('/progress');
-    expect(home(['buyer', 'manager'], counts([0, 0, 0, 0])).home).toBe('/dashboard');
+    expect(home(['buyer', 'manager'], counts([0, 0, 0, 0])).home).toBe('/home');
   });
 
   it('负责人进周报，侧栏共用管理看板入口', () => {
@@ -181,8 +181,8 @@ describe('首页和主数据角标', () => {
     expect(view.nav.map((item) => item.to)).not.toContain('/imports');
   });
 
-  it('管理层兼负责人进看板', () => {
-    expect(home(['manager', 'lead'], { kind: 'unknown' }).home).toBe('/dashboard');
+  it('管理层兼负责人进首页', () => {
+    expect(home(['manager', 'lead'], { kind: 'unknown' }).home).toBe('/home');
   });
 
   it('审核人在队列未完成时首页未定，角标保持 pending', () => {

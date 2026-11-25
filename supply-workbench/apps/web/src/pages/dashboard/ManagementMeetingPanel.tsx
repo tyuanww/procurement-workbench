@@ -6,12 +6,11 @@ import { addDays, businessDay, parseLocalDate, weekStart, type LocalDate } from 
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { MeetingSections, meetingStoreLabels } from '../../features/reporting/index.js';
+import { MEETING_PATH, MeetingDecisionEditor, MeetingSections, meetingStoreLabels, type DecisionEditor } from '../../features/reporting/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { space } from '../../theme/tokens.js';
-import { MEETING_PATH, MeetingDecisionEditor, type DecisionEditor } from './meeting-decisions.js';
 
 const STORES = MANAGEMENT_MEETING_STORES.map((value) => ({ value, label: meetingStoreLabels[value] }));
 const WEEK_DAYS = 7;
