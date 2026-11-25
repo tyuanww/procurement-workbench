@@ -57,8 +57,8 @@ export function ProgressSchedule({ store, filters }: { readonly store: Procureme
   return (
     <Flex vertical gap={space[3]}>
       <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} isPhone={isPhone} filters={filters} />
-      {metrics}
       <ScheduleBody load={load} timeline={timeline} scale={query.scale} onOpen={writeDrawer} onRetry={scheduleLoad.reload} onClear={() => write({ ...query, filters: emptyScheduleFilters() })} />
+      {metrics}
       <ProcurementSchedulePanel key={store} store={store} selected={params.get('scheduleLine')} onSelect={(id) => setParams(withScheduleLine(params, id))}
         search={params.toString()} onTimelineChanged={scheduleLoad.reload} onAnchor={(anchor) => write({ ...query, anchor })} />
       <TaskDrawer workItemId={drawerId} isOpen={drawerId !== null} onClose={() => writeDrawer(null)} onChanged={scheduleLoad.reload} />

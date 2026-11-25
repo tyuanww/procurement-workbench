@@ -32,7 +32,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
   const insight = progressInsights(scopedRows);
   const emptyMessage = currentEmptyMessage({ drill, oa, stay });
-  const showMatchCount = isLoaded && drill.kind !== 'all' && (error === '' || data.rows.length > 0);
+  const shouldShowMatchCount = isLoaded && drill.kind !== 'all' && (error === '' || data.rows.length > 0);
   useProgressRowFocus({ tableRef, search: table.search, isLoaded });
   return (
     <>
@@ -41,7 +41,7 @@ export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonl
         onOa={setOa} onStay={setStay} onDrill={setDrill} />
       {insight.total === 0 ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
       <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
-        <SectionGroup title="订单清单" meta={<span role="status">{showMatchCount ? `匹配 ${formatQuantity(rows.length)} 行` : ''}</span>}>
+        <SectionGroup title="订单清单" meta={<span role="status">{shouldShowMatchCount ? `匹配 ${formatQuantity(rows.length)} 行` : ''}</span>}>
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
             <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} />

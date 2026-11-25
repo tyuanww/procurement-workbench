@@ -113,12 +113,19 @@ async function checkScheduleWindow(page: Page, origin: URL, out: string) {
   await page.goto(new URL(`/progress/schedule?store=${store}&from=2026-11-23`, origin).href);
   const dateRange = page.locator('[aria-live="polite"]');
   const tasks = page.getByRole('group', { name: '总排期指标' }).getByText('所选周任务', { exact: true });
+  const production = page.getByRole('button', { name: /^生产\s/u });
+  const borderStyles = () => production.evaluate((bar) => {
+    const css = getComputedStyle(bar);
+    return [css.borderLeftStyle, css.borderRightStyle, css.borderTopStyle, css.borderBottomStyle];
+  });
   await dateRange.and(page.getByText(/11-23 至 (?:2026-)?11-29$/u)).waitFor();
   await tasks.waitFor();
+  assert.deepEqual(await borderStyles(), ['dashed', 'solid', 'solid', 'solid']);
   await page.getByRole('button', { name: '上一周', exact: true }).click();
   await dateRange.and(page.getByText(/11-16 至 (?:2026-)?11-22$/u)).waitFor();
   await tasks.waitFor();
   await page.getByRole('button', { name: /^下单\s/u }).waitFor();
+  assert.deepEqual(await borderStyles(), ['solid', 'dashed', 'solid', 'solid']);
   assert.equal(await page.getByText(/本周任务|本周排期/u).count(), 0);
   const desktop = page.viewportSize();
   assert.ok(desktop);
@@ -137,7 +144,7 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
   const businessDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format();
   const monday = new Date(businessDay + 'T00:00:00Z');
   monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - 7);
-  const predecessorStart = new Date(monday.getTime() - 86_400_000).toISOString().slice(0, 10);
+  const predecessorStart = monday.toISOString().slice(0, 10);
   monday.setUTCDate(monday.getUTCDate() + 1);
   const predecessorEnd = monday.toISOString().slice(0, 10);
   monday.setUTCDate(monday.getUTCDate() + 1);
@@ -166,11 +173,6 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
   await warning.waitFor();
   const taskBar = page.getByRole('button', { name: new RegExp('^' + successor + '\\s'), includeHidden: true });
   await taskBar.waitFor();
-  const precedingBar = page.getByRole('button', { name: new RegExp('^' + predecessor + '\\s'), includeHidden: true });
-  assert.deepEqual(await precedingBar.evaluate((bar) => {
-    const css = getComputedStyle(bar);
-    return [css.borderLeftStyle, css.borderRightStyle, css.borderTopStyle, css.borderBottomStyle];
-  }), ['dashed', 'solid', 'solid', 'solid']);
   const dependencyHint = page.getByText(`依赖冲突 · ${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: true });
   await dependencyHint.waitFor();
   await page.goBack();
