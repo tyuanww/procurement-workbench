@@ -86,6 +86,7 @@ async function checkScheduledReceipt({ buyer, origin }: { readonly buyer: Page; 
   assert.equal(received.status(), 200);
 
   const today = new URL(workspace, origin);
+  today.searchParams.set('reasons', 'shipped_not_received');
   await buyer.goto(today.href);
   const card = buyer.getByRole('main').locator('.today-row').filter({ hasText: 'HZ09-0001' });
   const receipt = card.getByRole('link', { name: /^核对收货 HZ09-0001/ });
