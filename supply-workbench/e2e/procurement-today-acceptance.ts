@@ -35,10 +35,10 @@ export async function checkChaseToday({ page, origin, out }: {
     await page.getByRole('region', { name: lane, exact: true }).waitFor();
   }
   assert.equal(await sampleRows.count(), 50);
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*项.*第\s*1\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*批未发.*第\s*1\s*页/ }).waitFor();
   await page.getByTitle('下一页', { exact: true }).click();
   await page.waitForURL((url) => url.searchParams.get('page') === '2');
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*项.*第\s*2\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*批未发.*第\s*2\s*页/ }).waitFor();
   await page.goto(new URL('/today?group=waiting&reasons=unshipped&page=11', origin).href);
   await order('HZ09-0501').waitFor();
   assert.equal(await sampleRows.count(), 1);
@@ -94,6 +94,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await checkInlineReceiptLink(page, order('HZ09-0501'));
   const memos = arrivalMemos(page);
   const sourceSearch = new URL(page.url()).search;
+  await page.getByRole('button', { name: /筛选与复制催单/ }).click();
   await page.getByRole('main').getByRole('link', { name: '在途待收', exact: true }).click();
   await page.getByText(/待收 25,000 件/).waitFor();
   await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
@@ -432,7 +433,7 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
   }
 
   await page.reload();
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*项.*第\s*11\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*批未发.*第\s*11\s*页/ }).waitFor();
   await detail.waitFor();
   assert.equal(page.url(), listUrl.href);
   assert.equal(await dialog.isVisible(), false);
