@@ -38,6 +38,9 @@ async function checkLineQuery(page: Page, origin: URL): Promise<void> {
   await order(page, 'UI-DEMO-002').waitFor();
   assert.equal(await overview.getAttribute('aria-expanded'), 'false');
   assert.equal(await page.getByLabel('搜索单号、品名或编码').evaluate((input) => input === document.activeElement), true);
+  await page.getByRole('button', { name: '查看结果', exact: true }).press('Enter');
+  const results = page.getByRole('region', { name: '订单查询结果' });
+  assert.equal(await results.evaluate((element) => element === document.activeElement), true);
   await page.getByRole('button', { name: '按总表生成批次', exact: true }).waitFor({ state: 'hidden' });
   await checkLineBulkTarget(page);
 
@@ -58,7 +61,7 @@ async function checkLineQuery(page: Page, origin: URL): Promise<void> {
   await order(page, 'UI-DEMO-001').click();
   await page.getByRole('link', { name: '返回跟进中心', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('q') === 'UI-DEMO-001' && url.searchParams.get('pageSize') === '20');
-  await order(page, 'UI-DEMO-001').waitFor();
+  await page.waitForFunction(() => document.activeElement?.textContent === 'UI-DEMO-001');
 }
 
 async function checkLineBulkTarget(page: Page): Promise<void> {
@@ -113,6 +116,11 @@ async function checkLinePreviewFocus(page: Page, origin: URL): Promise<void> {
   await dialog.waitFor({ state: 'hidden' });
   await page.waitForFunction(() => document.activeElement?.textContent?.replace(/\s/g, '') === '预览');
   assert.equal(await trigger.evaluate((element) => element === document.activeElement), true);
+  await page.goto(new URL('/lines?q=UI-DEMO-001&drawer=preview&lineId=ui-demo-line-chase', origin).href);
+  await dialog.getByText('订单行摘要', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.id === 'line-search-results');
 }
 
 async function checkScheduleFilters(page: Page, origin: URL): Promise<void> {

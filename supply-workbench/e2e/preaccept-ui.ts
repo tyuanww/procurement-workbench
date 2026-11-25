@@ -9,9 +9,10 @@ import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
+import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
-import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
+import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
 import { checkRedReview } from './red-review-acceptance.ts';
@@ -90,8 +91,13 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
-  const { page: manager } = await open('manager', '/', '/dashboard');
-  await manager.getByRole('heading', { name: '卡点', exact: true }).waitFor();
+  const { page: manager } = await open('manager', '/', '/home');
+  await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
+  const directorMenu = manager.locator('aside');
+  const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
+  const today = await sidebarLink(directorMenu, '今日事项', '行动板');
+  const todayBox = await today.boundingBox();
+  assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);
   await checkEmptyProductArchive(manager, origin, false);
   result.checks.productArchiveImportLink = { buyer: true, manager: false };
@@ -109,7 +115,10 @@ async function procurementAcceptance(): Promise<void> {
   await deepBuyer.getByRole('link', { name: componentPo, exact: true }).waitFor();
   await buyer.goto(new URL('/reports', origin).href);
   await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
-  result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
+  await buyer.goto(new URL('/home', origin).href);
+  await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
+  assert.equal(await buyer.locator('aside').getByRole('link', { name: '首页', exact: true }).count(), 0);
+  result.checks.procurementHome = { buyer: '/today', manager: '/home', restoredDeepLink: deep, forbiddenReports: true, forbiddenHome: true };
   result.checks.orderLineNote = await checkOrderLineNote({ page: buyer, manager, origin, out });
 
   const { page: reviewer, devtools } = await open('reviewer', '/', '/master');
@@ -141,6 +150,8 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.importFactoryDetail = await checkImportFactoryDetail(admin, origin);
   result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
   result.checks.redReview = await checkRedReview({ page: admin, origin });
+  result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
+  result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
@@ -313,7 +324,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {
   const header = page.getByRole('banner');
-  await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
+  await header.getByRole('navigation', { name: '当前位置' }).getByText('行动板', { exact: true }).and(page.locator('[aria-current="page"]')).waitFor();
   assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
   const search = page.getByRole('button', { name: searchLabel });
   const mac = process.platform === 'darwin';
@@ -619,12 +630,12 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   const importBatchId = decodeURIComponent(importPath.slice('/imports/'.length));
   const matchesScope = (url: URL) => url.searchParams.get('importBatchId') === importBatchId;
   const batchCountBefore = readDeliveryBatchCount();
-  const [list, summary] = await Promise.all([
+  const [list] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
     orderLink.click(),
   ]);
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('lane') === 'all' && matchesScope(url));
+  const summary = await openOrderSummary(page);
   for (const response of [list, summary]) {
     assert.ok(response.ok() && matchesScope(new URL(response.url())));
     assert.equal(response.request().method(), 'GET');
@@ -652,14 +663,23 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true };
 }
 
+async function openOrderSummary(page: Page) {
+  const [response] = await Promise.all([
+    page.waitForResponse((item) => new URL(item.url()).pathname === '/api/v1/lines/summary'),
+    page.getByRole('button', { name: '筛选结果概览', exact: true, expanded: false }).click(),
+  ]);
+  await page.getByRole('group', { name: '跟进中心筛选结果指标', exact: true }).waitFor();
+  return response;
+}
+
 async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
   const noBatch = page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true });
-  const [list, summary] = await Promise.all([
+  const [list] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
     noBatch.click(),
   ]);
   await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch' && matchesScope(url));
+  const summary = await openOrderSummary(page);
   for (const response of [list, summary]) assert.ok(response.ok() && matchesScope(new URL(response.url())));
   const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
   assert.ok(matchesScope(new URL(await exportLink.getAttribute('href') ?? '', origin)));
@@ -697,7 +717,7 @@ async function fits(field: Locator) {
   return field.evaluate((node: BrowserElement) => {
     const range = node.ownerDocument.createRange();
     range.selectNodeContents(node);
-    const cell = node.closest('td');
+    const cell = node.closest('th, td');
     if (cell === null) return false;
     const bounds = cell.getBoundingClientRect();
     let top = bounds.top;

@@ -15,11 +15,11 @@ export function readXlsx({ bytes, fileName, options = {} }: { readonly bytes: Ui
   }
 }
 
-export function workbookReader(): WorkbookReader {
+export function workbookReader(options?: ReadXlsxOptions): WorkbookReader {
   return {
     async read(bytes, fileName) {
       if (fileName.toLowerCase().endsWith('.csv')) return readCsv(bytes, fileName);
-      return readXlsx({ bytes, fileName });
+      return readXlsx({ bytes, fileName, options });
     },
   };
 }

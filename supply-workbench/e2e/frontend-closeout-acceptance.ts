@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { sidebarLink } from './sidebar.ts';
+import { sidebarEntries, sidebarLink } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
@@ -49,25 +49,26 @@ async function checkSaveFollowUpView(page: Page): Promise<void> {
 }
 
 async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
+  const entryCount = await sidebarEntries(page.locator('aside')).count();
   await page.getByRole('button', { name: '收起侧栏', exact: true }).click();
   const sidebar = page.locator('.ant-layout-sider-collapsed');
   await sidebar.waitFor();
   const toggle = sidebar.getByRole('button', { name: '展开侧栏', exact: true });
   await toggle.waitFor();
-  await page.waitForFunction(() => {
+  await page.waitForFunction((expectedIconCount) => {
     const sider = document.querySelector('.ant-layout-sider-collapsed');
     if (sider === null) return false;
     const { x, width } = sider.getBoundingClientRect();
     const icons = sider.querySelectorAll('ul.ant-menu-root > li > .ant-menu-item-icon svg, ul.ant-menu-root > li > .ant-menu-submenu-title > .ant-menu-item-icon svg, button[aria-label="展开侧栏"] svg');
-    return icons.length === 7 && [...icons].every((icon) => {
+    return icons.length === expectedIconCount && [...icons].every((icon) => {
       const bounds = icon.getBoundingClientRect();
       return bounds.width > 0 && Math.abs(bounds.x + bounds.width / 2 - x - width / 2) <= 1;
     });
-  });
+  }, entryCount + 1);
   await page.screenshot({ path: join(out, 'closeout-collapsed-sidebar.png'), animations: 'disabled' });
   await toggle.click();
   await sidebar.waitFor({ state: 'hidden' });
-  return 6;
+  return entryCount;
 }
 
 async function checkActionBoard(page: Page): Promise<void> {
@@ -115,6 +116,8 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   await tabs.getByRole('tab', { name: '库存', exact: true }).click();
   await page.reload();
   await page.getByRole('tabpanel', { name: '库存', exact: true }).waitFor();
+  const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
+  assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['产品档案', '产品详情', '库存']);
   await page.getByText('库存 1 行', { exact: true }).waitFor();
   const stock = await page.request.get(new URL('/api/v1/products/ui-demo-cleanser/stock', page.url()).href);
   assert.equal((await stock.json()).factory.total.value, 320);
@@ -171,6 +174,7 @@ async function checkProductPackagingReturn(page: Page, origin: URL): Promise<voi
     for (const text of ['渠道规格', `${barcode}-1`, '100 mL', '12 件/箱']) {
       await page.getByText(text, { exact: true }).waitFor();
     }
+    await page.reload();
     if (view === 'card') {
       await page.getByRole('tab', { name: '采购', exact: true }).press('Enter');
       await page.getByRole('link', { name: '返回产品档案', exact: true }).press('Enter');
