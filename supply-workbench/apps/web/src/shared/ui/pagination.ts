@@ -7,6 +7,7 @@ export function tablePagination(input: {
   readonly page: number;
   readonly pageSize: number;
   readonly total: number;
+  readonly showTotal?: boolean;
   readonly onChange: (page: number) => void;
   readonly onSizeChange: (size: number) => void;
 }): TablePaginationConfig {
@@ -16,7 +17,7 @@ export function tablePagination(input: {
     pageSize: input.pageSize,
     pageSizeOptions: [...PAGE_SIZE_OPTIONS],
     showSizeChanger: true,
-    showTotal: (total) => `共 ${total} 行`,
+    ...(input.showTotal === false ? {} : { showTotal: (total: number) => `共 ${total} 行` }),
     onChange: (page, size) => {
       if (size !== input.pageSize) {
         input.onSizeChange(size);
