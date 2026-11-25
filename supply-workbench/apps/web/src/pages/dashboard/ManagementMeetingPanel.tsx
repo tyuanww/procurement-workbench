@@ -1,5 +1,5 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { Alert, Button, Card, DatePicker, Descriptions, Flex, Select, Skeleton, Statistic, Typography } from 'antd';
+import { Alert, Button, Card, DatePicker, Descriptions, Flex, Select, Skeleton, Statistic } from 'antd';
 import {
   MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementDecision, type ManagementMeeting, type ManagementMeetingStore,
 } from '@sw/contracts';
@@ -87,7 +87,6 @@ function MeetingContent({ selected }: { readonly selected: MeetingQuery }) {
   if (load.kind === 'error') return <Alert type="error" showIcon title="周会没有读出来" description={load.message} action={<Button onClick={() => setReload((version) => version + 1)}>重试</Button>} />;
   const { meeting } = load;
   return <>
-    <Typography.Text type="secondary">{meetingStoreLabels[meeting.store]} · {meeting.weekStart} 至 {meeting.weekEnd} · 对照 {meeting.previousWeekStart} 起一周的最后承诺</Typography.Text>
     <OpenDecisionSummary meeting={meeting} {...(canWrite ? { onComplete: (decision: ManagementDecision) => setEditor({ kind: 'complete', decision }) } : {})} />
     <MeetingSections meeting={meeting} {...(canWrite ? {
       onRecord: (material) => setEditor({ kind: 'record', material }),

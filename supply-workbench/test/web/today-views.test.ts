@@ -1,7 +1,6 @@
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { localDate } from '../../packages/domain/src/index.js';
 import { sessionRows } from '../../apps/web/src/pages/today/use-today-plan.js';
 import { ActionBoard } from '../../apps/web/src/pages/today/ActionBoard.js';
 import { ScheduleView } from '../../apps/web/src/pages/today/ScheduleView.js';
@@ -21,6 +20,8 @@ describe('今日页两个视图', () => {
     expect(html).not.toContain('缺确认日期');
     expect(html).not.toContain('供应商');
     expect(html).not.toContain('今天到期');
+    expect(html).not.toContain('用 j k 移动');
+    expect(html).not.toContain('j k 或方向键移动');
   });
 
   it('排期视图独立成组，不再显示行动板 KPI 和原因筛选', () => {
@@ -28,9 +29,18 @@ describe('今日页两个视图', () => {
     expect(html).toContain('负责人');
     expect(html).toContain('供应商');
     expect(html).toContain('今天到期');
+    expect(html).toContain('PO · 样品 · 11-09 至 11-10');
     expect(html).not.toContain('等待方');
     expect(html).not.toContain('缺确认日期');
     expect(html).not.toContain('今日排期指标');
+    expect(html).not.toContain('截至今日');
+    expect(html).not.toContain('用 j k 移动');
+  });
+
+  it('打开键盘帮助后仍可见操作反馈', () => {
+    const html = render(TodayScreen, todayProps({ isHelpOpen: true, notice: '已复制催办文本' }));
+    expect(html).toContain('j k 或方向键移动，Enter 打开');
+    expect(html).toContain('已复制催办文本');
   });
 
   it('行动板的读取失败不会挡住今日排期任务', () => {
@@ -230,19 +240,9 @@ function face(): BoardRow['face'] {
 }
 
 function readyPlan(rowIds: readonly string[]): PlanLoad {
-  const rows = rowIds.map((id) => ({ id, workItemId: id, title: '里程碑', meta: '', tags: [] }));
+  const rows = rowIds.map((id) => ({ id, workItemId: id, title: '里程碑', meta: 'PO · 样品 · 11-09 至 11-10', tags: [] }));
   return {
     kind: 'ready',
-    view: {
-      date: localDate('2026-11-10'),
-      asOf: localDate('2026-11-10'),
-      total: 9,
-      overdueCount: 8,
-      items: [],
-      byOwner: [],
-      bySupplier: [],
-      byFactory: [],
-    },
     board: {
       kind: 'groups',
       groups: [{ key: 'due-today', name: '今天到期', counts: [], note: null, isUnassigned: false, rows }],

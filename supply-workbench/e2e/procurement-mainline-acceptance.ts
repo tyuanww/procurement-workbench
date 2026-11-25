@@ -226,6 +226,7 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   const search = page.getByRole('textbox', { name: '搜索采购事项' });
   const material = page.getByRole('row').filter({ hasText: materialPo });
   await material.getByText(/订购 200,000/).waitFor();
+  assert.equal(await page.getByText(/起一周的最后承诺/u).count(), 0);
   await search.fill(materialPo);
   await page.getByRole('status').filter({ hasText: '找到 1 条采购事项' }).waitFor();
   await material.getByText(/报告已送 158,000/).waitFor();

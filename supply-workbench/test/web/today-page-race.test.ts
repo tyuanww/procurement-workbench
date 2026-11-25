@@ -41,7 +41,7 @@ it('分页定位完成后保留旧抽屉地址，当前结果中没有的抽屉�
   await openOldLink({ target: 'batch:unavailable', isPresent: false });
 });
 
-it('同一采购单上两个同名批次可以分别打开，关闭后保留清单', async () => {
+it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单', async () => {
   emptyReads();
   installMatchMedia();
   installFetch();
@@ -52,11 +52,26 @@ it('同一采购单上两个同名批次可以分别打开，关闭后保留清�
       fulfill({ urlPart: '/api/v1/today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batchTodo(2)] } });
     });
     expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
-    click(button('查看详情 PO · 同名样品 · 第 2 批'));
+    expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
+    expect(textOf('body')).not.toContain('截至今日');
+    expect(textOf('body')).not.toContain('2026-11-21');
+    expect(textOf('body')).not.toContain('用 j k 移动');
+    pressTodayKey('?');
+    expect(textOf('body')).toContain('j k 或方向键移动，Enter 打开');
+    pressTodayKey('?');
+    expect(textOf('body')).not.toContain('j k 或方向键移动');
+    pressTodayKey('j');
+    expect(keyboardRow()).toContain('第 1 批');
+    pressTodayKey('ArrowDown');
+    expect(keyboardRow()).toContain('第 2 批');
+    pressTodayKey('k');
+    expect(keyboardRow()).toContain('第 1 批');
+    pressTodayKey('ArrowDown');
+    pressTodayKey('Enter');
     await waitFor(() => textOf('[role="dialog"]').includes('第 2 批'));
     expect(textOf('[role="dialog"]')).not.toContain('第 1 批');
     expect(new URLSearchParams(textOf('output')).get('drawer')).toBe('batch:batch-2');
-    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    pressTodayKey('Escape');
     await waitFor(() => !new URLSearchParams(textOf('output')).has('drawer'));
     expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
     expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
@@ -66,6 +81,15 @@ it('同一采购单上两个同名批次可以分别打开，关闭后保留清�
     emptyReads();
   }
 });
+
+function pressTodayKey(key: string): void {
+  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key })); });
+}
+
+function keyboardRow(): string | null {
+  const row = [...document.querySelectorAll<HTMLElement>('.today-row')].find((item) => item.style.outlineStyle === 'solid');
+  return row?.querySelector('button[aria-label^="查看详情"]')?.getAttribute('aria-label') ?? null;
+}
 
 it('要催货与内部等回单各显示对应批次并保留回到全部待办的入口', async () => {
   emptyReads();

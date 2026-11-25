@@ -9,7 +9,6 @@ import { toBoardItem } from './card.js';
 import type { NoteRef, Target } from './TodayForms.js';
 
 export type TodayLoad = {
-  readonly asOf: TodayResponse['asOf'];
   readonly items: readonly BoardItem[];
   readonly targets: Readonly<Record<string, Target>>;
   readonly noteRefs: Readonly<Record<string, NoteRef>>;
@@ -116,7 +115,7 @@ export async function loadToday(query = actionPageSearch(actionQuery('')), signa
     read({ name: 'me', ...(signal === undefined ? {} : { signal }) }).then((me) => me.name, () => ''),
   ]);
   return {
-    ...collect(today.items), asOf: today.asOf, pendingBatch: today.pendingBatch ?? [], arrivalMemos: today.arrivalMemos,
+    ...collect(today.items), pendingBatch: today.pendingBatch ?? [], arrivalMemos: today.arrivalMemos,
     counts: today.counts, paging: today.paging, buyerName,
   };
 }

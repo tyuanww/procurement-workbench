@@ -26,12 +26,9 @@ export function ProjectProgressPanel({ project, onChanged }: { readonly project:
   const visibleGroups = dimension === 'all' ? groups : groups.filter((group) => group.dimension === dimension);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      {project.details === undefined ? null : <Typography.Text type="secondary">
-        截至今日（{project.details.asOf}），统计与所选周期重叠的任务
-      </Typography.Text>}
       {project.total === 0 ? <EmptyProgress /> : <>
         <MetricStrip ariaLabel="项目进度指标" items={[
-          { key: 'total', label: '任务总数', value: project.total, tone: 'neutral' },
+          { key: 'total', label: '任务总数', value: project.total, tone: 'neutral', hint: '与所选周期重叠的任务' },
           { key: 'done', label: '已完成', value: project.done, tone: 'success', hint: rateText(project.completionRate) },
           riskMetric({ project, kind: 'overdue', onSelect: setSelection }),
           riskMetric({ project, kind: 'blocked', onSelect: setSelection }),
