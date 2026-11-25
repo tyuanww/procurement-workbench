@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Button, Card, Flex, Select, Typography } from 'antd';
 import type { OrderLineRow } from '@sw/contracts';
 import type { ReactNode } from 'react';
@@ -41,6 +42,7 @@ export function ProgressFilters({ filters, lines, oa, stay, drill, overdue, onOa
         />
         {overdue === null ? null : <Button aria-pressed={drill.kind === 'overdue'} onClick={() => onDrill({ kind: 'overdue' })}>逾期未到 {overdue} 行</Button>}
         <Button type="text" aria-disabled={drill.kind === 'all'} onClick={() => onDrill({ kind: 'all' })}>清除下钻</Button>
+        <ProcurementCutoff />
       </Flex>
     </Card>
   );

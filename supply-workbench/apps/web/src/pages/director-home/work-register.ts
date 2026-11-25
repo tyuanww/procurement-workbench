@@ -12,6 +12,9 @@ export const SIGNALS = {
 const signalPriority = Object.keys(SIGNALS);
 export type Signal = keyof typeof SIGNALS;
 export type View = 'all' | 'risk' | 'watch';
+export type WorkFilter = { view: View; owner: string | undefined; signal: Signal | undefined; search: string };
+export const initialFilter: WorkFilter = { view: 'watch', owner: undefined, signal: undefined, search: '' };
+
 export const VIEWS: Record<View, string> = { all: '进行中事项', risk: '交期风险', watch: '需要关注' };
 export type WorkRow = {
   readonly line: OrderLineRow;

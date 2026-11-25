@@ -92,7 +92,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
   const { page: manager } = await open('manager', '/', '/home');
-  await manager.getByRole('heading', { name: '暂无需要你优先处理的事项', exact: true }).waitFor();
+  await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
   const directorMenu = manager.locator('aside');
   const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
   const today = await sidebarLink(directorMenu, '今日事项', '行动板');
@@ -324,7 +324,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {
   const header = page.getByRole('banner');
-  await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
+  await header.getByRole('navigation', { name: '当前位置' }).getByText('行动板', { exact: true }).and(page.locator('[aria-current="page"]')).waitFor();
   assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
   const search = page.getByRole('button', { name: searchLabel });
   const mac = process.platform === 'darwin';
