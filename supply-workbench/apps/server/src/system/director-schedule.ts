@@ -1,10 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { extname, join, parse } from 'node:path';
+import { join, parse } from 'node:path';
 import { SCHEDULE_MILESTONES, DirectorProjectSchema, type DirectorProject } from '@sw/contracts';
-import { readCsv, readXlsx } from '@sw/importers';
+import type { WorkbookLike, WorkbookReader } from '@sw/application';
 
-type Workbook = ReturnType<typeof readXlsx>;
-type Sheet = Workbook['sheets'][number];
+type Sheet = WorkbookLike['sheets'][number];
 const basic = ['产品名称', '项目对接人', '主要事项', '预计入仓时间'] as const;
 const headers: readonly string[] = [...basic, ...SCHEDULE_MILESTONES];
 
@@ -29,7 +28,7 @@ function displayedCell(sheet: Sheet, address: { row: number; col: number }) {
   return (cell.displayText ?? cell.richText ?? cell.text).trim();
 }
 
-export function scheduleProjects(book: Workbook, brand: string): DirectorProject[] {
+export function scheduleProjects(book: WorkbookLike, brand: string): DirectorProject[] {
   const sheet = book.source.kind === 'csv' ? book.sheets[0] : book.sheets.find((entry) => entry.name === '开发中产品');
   if (!sheet) throw new Error('找不到开发中产品工作表');
   const columns = headerColumns(sheet);
@@ -44,7 +43,7 @@ export function scheduleProjects(book: Workbook, brand: string): DirectorProject
   return projects;
 }
 
-export async function directorSchedule(directory: string | undefined) {
+export async function directorSchedule(directory: string | undefined, reader: WorkbookReader) {
   if (!directory) return { brands: [], projects: [] };
   const entries = await readdir(directory, { withFileTypes: true });
   const files = entries.filter((entry) => entry.isFile() && !entry.name.startsWith('~$') && /\.(xlsx|csv)$/iu.test(entry.name));
@@ -53,8 +52,7 @@ export async function directorSchedule(directory: string | undefined) {
   const projects: DirectorProject[] = [];
   for (const file of files) {
     const bytes = await readFile(join(directory, file.name));
-    const book = extname(file.name).toLowerCase() === '.csv' ? readCsv(bytes, file.name)
-      : readXlsx({ bytes, fileName: file.name, options: { engine: 'sheetjs' } });
+    const book = await reader.read(bytes, file.name);
     projects.push(...scheduleProjects(book, parse(file.name).name.trim()));
   }
   return { brands, projects };
