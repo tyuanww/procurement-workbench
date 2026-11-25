@@ -6,6 +6,8 @@ import { Link } from 'react-router';
 import { drawerWidth, space } from '../../theme/tokens.js';
 import { dateOf, inView, matchesSearch, SIGNALS, type OwnerLoad, type Signal, type WorkFilter, type WorkRow } from './work-register.js';
 
+const pageSize = 8;
+
 function signalColor(signal: Signal) {
   if (signal === 'overdue') return 'error';
   if (signal === 'late' || signal === 'exception') return 'warning';
@@ -44,6 +46,7 @@ export function WorkDetails({ rows, owners, filter, onFilter }: {
   const [selected, setSelected] = useState<WorkRow>();
   const filtered = rows.filter((row) => inView(row, filter.view) && (filter.owner === undefined || row.ownerId === filter.owner)
     && (filter.signal === undefined || row.signals.includes(filter.signal)) && matchesSearch(row, filter.search));
+  const tableHeight = filtered.length > pageSize ? 'clamp(144px, calc(100dvh - 532px), 360px)' : 'clamp(160px, calc(100dvh - 476px), 360px)';
   return <section className="director-work-details" aria-label="事项跟踪明细"><Card size="small" title={
     <div className="director-work-header">
       <Flex align="baseline" gap={space[1]}>
@@ -52,8 +55,8 @@ export function WorkDetails({ rows, owners, filter, onFilter }: {
       <WorkFilters owners={owners} filter={filter} onFilter={onFilter} />
     </div>}>
     <Table<WorkRow> size="small" rowKey={(row) => row.line.id} columns={columns(setSelected)} dataSource={filtered}
-      scroll={{ x: 520, y: 'clamp(160px, calc(100dvh - 476px), 360px)' }}
-      pagination={{ pageSize: 8, hideOnSinglePage: true, showSizeChanger: false, size: 'small' }}
+      scroll={{ x: 520, y: tableHeight }}
+      pagination={{ pageSize, hideOnSinglePage: true, showSizeChanger: false, size: 'small' }}
       locale={{ emptyText: '当前条件没有匹配事项' }} />
     {selected === undefined ? null : <WorkDrawer row={selected} onClose={() => setSelected(undefined)} />}
   </Card></section>;

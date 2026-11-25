@@ -342,6 +342,7 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   assert.ok(position && position.y < 500, '总监在首屏看到交期风险');
   await risk.click();
   const table = page.getByRole('region', { name: '事项跟踪明细' });
+  const originalCount = await table.getByRole('status').innerText();
   const search = table.getByRole('textbox', { name: '搜索事项' });
   assert.equal(await search.count(), 0);
   const scope = table.getByRole('combobox', { name: '事项范围' });
@@ -365,7 +366,7 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   await search.press('Escape');
   await table.getByRole('button', { name: '展开事项搜索' }).and(page.locator(':focus')).waitFor();
   assert.equal(await search.count(), 0);
-  await first.waitFor();
+  await table.getByRole('status').and(page.getByText(originalCount, { exact: true })).waitFor();
   await table.getByRole('columnheader', { name: /下一到货日/ }).click();
   await table.locator('th[aria-sort="ascending"]').waitFor();
   await risk.click();
@@ -399,6 +400,7 @@ async function checkDirectorProjects(page: Page) {
 }
 
 async function checkDirectorViewport(page: Page) {
+  await page.getByRole('group', { name: '事项概览' }).getByRole('button', { name: /^进行中事项/ }).click();
   const shops = page.getByRole('group', { name: '店铺范围' });
   const cutoff = shops.getByText(/^\*数据截止/u);
   const lastBrand = shops.getByRole('button', { name: '未分店铺' });
