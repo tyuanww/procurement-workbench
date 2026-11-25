@@ -3,13 +3,13 @@ import { lineInScope, type BrandScope } from './project-register.js';
 import type { LocalDate } from '@sw/domain';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useOutletContext } from 'react-router';
-import type { NavRow } from '../../features/shell/index.js';
+import type { ShellView } from '../../features/shell/index.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
 import { MetricStrip } from '../../shared/ui/analytics.js';
 import { navGlyph } from '../../shared/ui/nav-glyph.js';
 import { bg, border, brand, radiusCard, space } from '../../theme/tokens.js';
-import { initialFilter, WorkDetails, type WorkFilter } from './WorkDetails.js';
-import { inView, loadWorkLines, ownerLoads, VIEWS, workRows, type View, type WorkRow } from './work-register.js';
+import { WorkDetails } from './WorkDetails.js';
+import { initialFilter, inView, loadWorkLines, ownerLoads, VIEWS, workRows, type View, type WorkFilter, type WorkRow } from './work-register.js';
 
 type Load = { kind: 'ready'; rows: WorkRow[] } | { kind: 'error'; message: string };
 function useWorkRegister(today: LocalDate) {
@@ -29,7 +29,7 @@ function useWorkRegister(today: LocalDate) {
 }
 
 function Shortcuts() {
-  const nav = useOutletContext<readonly NavRow[]>();
+  const { nav } = useOutletContext<ShellView>();
   const routes = nav.filter((row) => row.to !== '/home');
   return <nav aria-label="可用功能" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 102px), 1fr))', gap: space[1] }}>
     {routes.map((row) => <Link key={row.to} to={row.destinations?.[0]?.to ?? row.to}
@@ -53,7 +53,7 @@ export function DirectorWorkBoard({ scope, today, children, memberships, brandsR
     const includes = (id: string) => lineInScope(scope, memberships.get(id));
     return load.rows.filter((row) => includes(row.line.id)).map((row) => ({ ...row, related: row.related.filter((p) => includes(p.id)) }));
   }, [load, memberships, scope]);
-  return <Row gutter={[space[3], space[3]]}>
+  return <Row className="director-board" gutter={[space[3], space[3]]}>
     <Col xs={24} lg={16} style={{ minWidth: 0 }}><Flex vertical gap={space[3]}>
       <Shortcuts />
       {load === undefined || (scope !== 'all' && !brandsReady) ? <Skeleton active /> : load.kind === 'error'

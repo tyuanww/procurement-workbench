@@ -29,12 +29,6 @@ export function NavBadge({ mark, compact }: { readonly mark: BadgeMark; readonly
   }
 }
 
-export function ProcurementCutoff({ freshness }: { readonly freshness: ShellView['freshness'] }) {
-  return <Typography.Text type="secondary" title="采购订单总表最近一次成功导入的业务日期">
-    *数据截止 {freshness.procurementDate ?? '—'}
-  </Typography.Text>;
-}
-
 export function FreshnessLink({ freshness }: { readonly freshness: ShellView['freshness'] }) {
   const canReadImports = useCan('imports.read');
   const body =

@@ -18,7 +18,6 @@ import {
 import { matchesShortcut, searchShortcut, type Shortcut } from '../shared/hooks/shortcuts.js';
 import { bg } from '../theme/tokens.js';
 import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-frame.js';
-import { ProcurementCutoff } from './shell-session.js';
 import { WorkspaceBreadcrumb } from './workspace-breadcrumb.js';
 
 export function Shell(props: {
@@ -69,8 +68,7 @@ function ShellColumns(input: {
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
           {isBreadcrumbInHeader ? null : <WorkspaceBreadcrumb rows={input.view.nav} />}
-          {isHome && !isBreadcrumbInHeader ? <ProcurementCutoff freshness={input.view.freshness} /> : null}
-          <Outlet context={input.view.nav} />
+          <Outlet context={input.view} />
         </Layout.Content>
       </Layout>
     </>

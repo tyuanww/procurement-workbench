@@ -6,7 +6,7 @@ import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../fe
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
 import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
-import { AccountMenu, FreshnessLink, ProcurementCutoff } from './shell-session.js';
+import { AccountMenu, FreshnessLink } from './shell-session.js';
 
 export const searchTrackPx = 280;
 const searchLabel = '搜索单号、品名、供应商';
@@ -140,16 +140,15 @@ export function ShellTop(input: {
   const isPhone = input.menuButton !== null;
   return (
     <Layout.Header style={{ ...headerBarStyle({ contentInset: input.contentInset, isPhone }),
-      ...(input.home ? { gridTemplateColumns: isPhone ? 'auto auto minmax(0, 1fr)' : 'minmax(0, 1fr) auto minmax(0, 280px)' } : {}) }}>
+      ...(input.home && !isPhone ? { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 280px) auto' } : {}) }}>
       <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
-      {input.home ? null : <SearchButton onSearch={input.onSearch} />}
+      <SearchButton onSearch={input.onSearch} />
       <div style={headerClusterStyle({ edge: 'end' })}>
-        {isPhone ? null : input.home ? <ProcurementCutoff freshness={input.freshness} /> : <FreshnessLink freshness={input.freshness} />}
+        {isPhone || input.home ? null : <FreshnessLink freshness={input.freshness} />}
         <div style={accountSlotStyle()}>
           <AccountMenu account={input.account} />
         </div>
       </div>
-      {input.home ? <SearchButton onSearch={input.onSearch} /> : null}
     </Layout.Header>
   );
 }

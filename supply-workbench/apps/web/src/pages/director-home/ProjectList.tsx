@@ -3,6 +3,8 @@ import { SearchOutlined } from '@ant-design/icons';
 import { SCHEDULE_MILESTONES, type DirectorProject } from '@sw/contracts';
 import { useState } from 'react';
 import { drawerWide, space } from '../../theme/tokens.js';
+import { matchesPreparation, PreparationFilters, type PreparationFilter } from './PreparationFilters.js';
+import type { ProjectGroup } from './project-progress.js';
 import { compareArrival } from './project-register.js';
 
 function projectColumns(open: (project: DirectorProject) => void): TableColumnsType<DirectorProject> {
@@ -16,17 +18,17 @@ function projectColumns(open: (project: DirectorProject) => void): TableColumnsT
   ];
 }
 
-export function ProjectList({ projects, contact, onProject, onClose }: {
-  readonly projects: readonly DirectorProject[]; readonly contact: string | undefined;
+export function ProjectList({ group, onProject, onClose }: {
+  readonly group: ProjectGroup;
   readonly onProject: (project: DirectorProject) => void; readonly onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [preparation, setPreparation] = useState<PreparationFilter>();
   const query = search.trim().toLocaleLowerCase();
-  const filtered = projects.filter((p) => (contact === undefined || p.contact === contact)
-    && [p.name, p.contact, p.brand, p.notes, p.arrival].some((s) => s.toLocaleLowerCase().includes(query)));
-  const title = contact === undefined ? '全部新品项目' : (contact || '待分配') + ' · 负责项目';
-  return <Drawer open title={title} size={`min(${drawerWide}px, 100vw)`} onClose={onClose}>
+  const filtered = group.projects.filter((p) => matchesPreparation(p, preparation) && [p.name, p.contact, p.brand, p.notes, p.arrival].some((s) => s.toLocaleLowerCase().includes(query)));
+  return <Drawer open title={group.label} size={`min(${drawerWide}px, 100vw)`} onClose={onClose}>
     <Flex vertical gap={space[3]}>
+      {group.showPreparation && <PreparationFilters projects={group.projects} filter={preparation} select={setPreparation} />}
       <Input aria-label="搜索负责项目" prefix={<SearchOutlined />} placeholder="搜索产品、对接人或主要事项"
         allowClear value={search} onChange={(event) => setSearch(event.target.value)} />
       <Typography.Text type="secondary" role="status">共 {filtered.length} 个项目</Typography.Text>

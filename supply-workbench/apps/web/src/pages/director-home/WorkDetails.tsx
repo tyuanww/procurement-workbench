@@ -1,13 +1,10 @@
-import { Button, Card, Descriptions, Drawer, Flex, Input, Select, Table, Tag, Typography, type TableColumnsType } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { Button, Card, Descriptions, Drawer, Flex, Table, Tag, Typography, type TableColumnsType } from 'antd';
+import { WorkFilters } from './WorkFilters.js';
 import { lineStageLabel } from '@sw/domain';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { drawerWidth, space } from '../../theme/tokens.js';
-import { dateOf, inView, matchesSearch, SIGNALS, VIEWS, type OwnerLoad, type Signal, type View, type WorkRow } from './work-register.js';
-
-export type WorkFilter = { view: View; owner: string | undefined; signal: Signal | undefined; search: string };
-export const initialFilter: WorkFilter = { view: 'watch', owner: undefined, signal: undefined, search: '' };
+import { dateOf, inView, matchesSearch, SIGNALS, type OwnerLoad, type Signal, type WorkFilter, type WorkRow } from './work-register.js';
 
 function signalColor(signal: Signal) {
   if (signal === 'overdue') return 'error';
@@ -33,9 +30,9 @@ function columns(open: (row: WorkRow) => void): TableColumnsType<WorkRow> {
         <Typography.Text type="secondary">{row.line.lane === 'finished' ? '成品' : '物料'} · {row.line.po.poRaw ?? '无单号'}</Typography.Text>
       </Flex> },
     { title: '关注原因', key: 'signals', render: (_, row) => <Signals row={row} /> },
-    { title: '采购负责人', key: 'owner', sorter: (a, b) => (a.line.buyer?.name ?? '').localeCompare(b.line.buyer?.name ?? '', 'zh-CN'),
+    { title: '采购负责人', key: 'owner', width: 110, sorter: (a, b) => (a.line.buyer?.name ?? '').localeCompare(b.line.buyer?.name ?? '', 'zh-CN'),
       render: (_, row) => row.line.buyer?.name ?? '待分配' },
-    { title: '下一到货日', key: 'date', sorter: (a, b) => dateOf(a).localeCompare(dateOf(b)),
+    { title: '下一到货日', key: 'date', width: 124, sorter: (a, b) => dateOf(a).localeCompare(dateOf(b)),
       render: (_, row) => row.line.nextDue?.dateBuyerConfirmed ?? (row.line.stage === 'no_batch' ? '尚未建批' : '待确认') },
   ];
 }
@@ -47,32 +44,19 @@ export function WorkDetails({ rows, owners, filter, onFilter }: {
   const [selected, setSelected] = useState<WorkRow>();
   const filtered = rows.filter((row) => inView(row, filter.view) && (filter.owner === undefined || row.ownerId === filter.owner)
     && (filter.signal === undefined || row.signals.includes(filter.signal)) && matchesSearch(row, filter.search));
-  return <section aria-label="事项跟踪明细"><Card title="事项跟踪明细" extra={<Typography.Text type="secondary" role="status">{filtered.length} 件</Typography.Text>}>
-    <Flex vertical gap={space[3]}>
+  return <section className="director-work-details" aria-label="事项跟踪明细"><Card size="small" title={
+    <div className="director-work-header">
+      <Flex align="baseline" gap={space[1]}>
+        <span>事项跟踪明细</span><Typography.Text type="secondary" className="director-caption" role="status">{filtered.length} 件</Typography.Text>
+      </Flex>
       <WorkFilters owners={owners} filter={filter} onFilter={onFilter} />
-      <Table<WorkRow> size="small" rowKey={(row) => row.line.id} columns={columns(setSelected)} dataSource={filtered}
-        scroll={{ x: 520 }} pagination={{ pageSize: 8, hideOnSinglePage: true, showSizeChanger: false }}
-        locale={{ emptyText: '当前条件没有匹配事项' }} />
-    </Flex>
+    </div>}>
+    <Table<WorkRow> size="small" rowKey={(row) => row.line.id} columns={columns(setSelected)} dataSource={filtered}
+      scroll={{ x: 520, y: 'clamp(160px, calc(100dvh - 476px), 360px)' }}
+      pagination={{ pageSize: 8, hideOnSinglePage: true, showSizeChanger: false, size: 'small' }}
+      locale={{ emptyText: '当前条件没有匹配事项' }} />
     {selected === undefined ? null : <WorkDrawer row={selected} onClose={() => setSelected(undefined)} />}
   </Card></section>;
-}
-
-function WorkFilters({ owners, filter, onFilter }: {
-  readonly owners: readonly OwnerLoad[]; readonly filter: WorkFilter; readonly onFilter: (filter: WorkFilter) => void;
-}) {
-  return <Flex wrap gap={space[1]}>
-    <Input aria-label="搜索事项" prefix={<SearchOutlined />} placeholder="产品、单号、编码或负责人" allowClear
-      style={{ flex: '1 1 220px', minWidth: 0 }} value={filter.search} onChange={(event) => onFilter({ ...filter, search: event.target.value })} />
-    <Select<View> aria-label="事项范围" value={filter.view} options={Object.entries(VIEWS).map(([value, label]) => ({ value, label }))}
-      onChange={(view) => onFilter({ ...filter, view, signal: undefined })} />
-    <Select aria-label="筛选采购负责人" placeholder="全部负责人" allowClear value={filter.owner}
-      options={owners.map((owner) => ({ value: owner.id, label: owner.name }))} style={{ minWidth: 120 }}
-      onChange={(owner: string | undefined) => onFilter({ ...filter, owner })} />
-    <Select aria-label="筛选关注原因" placeholder="全部原因" allowClear value={filter.signal}
-      options={Object.entries(SIGNALS).map(([value, label]) => ({ value, label }))} style={{ minWidth: 138 }}
-      onChange={(signal: Signal | undefined) => onFilter({ ...filter, signal, view: signal === undefined ? filter.view : 'watch' })} />
-  </Flex>;
 }
 
 function WorkDrawer({ row, onClose }: { readonly row: WorkRow; readonly onClose: () => void }) {

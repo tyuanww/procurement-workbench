@@ -1,5 +1,7 @@
-import { Alert, Button, Flex, Skeleton } from 'antd';
+import { Alert, Button, Flex, Skeleton, Typography } from 'antd';
 import { DirectorBrandsSchema, DirectorScheduleSchema } from '@sw/contracts';
+import { useOutletContext } from 'react-router';
+import type { ShellView } from '../../features/shell/index.js';
 import { businessDay } from '@sw/domain';
 import { useEffect, useMemo, useState } from 'react';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
@@ -7,6 +9,7 @@ import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { meetingStoreLabels } from '../../features/reporting/index.js';
 import { space } from '../../theme/tokens.js';
+import { projectStyles } from './director-projects.styles.js';
 import { DirectorWorkBoard } from './DirectorWorkBoard.js';
 import { DirectorProjects } from './DirectorProjects.js';
 import { brandIndex, type BrandScope } from './project-register.js';
@@ -39,12 +42,13 @@ export function DirectorHomePage() {
   const memberships = useMemo(() => brandIndex(brands.load?.value ?? []), [brands.load]);
   const names = brandNames(brands.load?.value, schedule.load?.value?.brands);
   return <WorkbenchPage title="首页"><Flex vertical gap={space[3]}>
+    <style>{projectStyles}</style>
     <BrandButtons names={names} scope={scope} onChange={setScope} />
     {brands.load?.error ? <Alert type="error" title="采购店铺归属暂未读出" action={<Button onClick={brands.retry}>重试</Button>} /> : null}
     <DirectorWorkBoard scope={scope} today={today} memberships={memberships} brandsReady={brands.load?.value !== undefined}>
       {!schedule.load ? <Skeleton active /> : schedule.load.error !== undefined
         ? <Alert type="error" title="新品开发排期暂未读出" description={schedule.load.error} action={<Button onClick={schedule.retry}>重试</Button>} />
-        : <DirectorProjects key={scope} schedule={schedule.load.value} scope={scope} />}
+        : <DirectorProjects key={scope} schedule={schedule.load.value} scope={scope} today={today} />}
     </DirectorWorkBoard>
   </Flex></WorkbenchPage>;
 }
@@ -59,8 +63,11 @@ function BrandButtons({ names, scope, onChange }: {
   readonly names: string[]; readonly scope: BrandScope; readonly onChange: (value: BrandScope) => void;
 }) {
   const choices: [BrandScope, string][] = [['all', '全部店铺'], ...names.map((name): [BrandScope, string] => [`brand:${name}`, name]), ['unassigned', '未分店铺']];
-  return <Flex role="group" aria-label="店铺范围" wrap gap={space[1]}>
+  const { freshness } = useOutletContext<ShellView>();
+  return <Flex role="group" aria-label="店铺范围" wrap align="center" gap={space[1]}>
     {choices.map(([value, label]) => <Button key={value} aria-pressed={value === scope} type={value === scope ? 'primary' : 'default'}
       onClick={() => onChange(value)}>{label}</Button>)}
+    <Typography.Text type="secondary" style={{ marginInlineStart: 'auto', whiteSpace: 'nowrap' }}
+      title="采购订单总表最近一次成功导入的业务日期">*数据截止 {freshness.procurementDate ?? '—'}</Typography.Text>
   </Flex>;
 }

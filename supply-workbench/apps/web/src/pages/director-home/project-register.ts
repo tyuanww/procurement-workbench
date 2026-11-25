@@ -1,3 +1,4 @@
+import { isLocalDate } from '@sw/domain';
 import type { DirectorProject } from '@sw/contracts';
 
 export type BrandScope = 'all' | 'unassigned' | `brand:${string}`;
@@ -28,10 +29,21 @@ export function rankedContacts(projects: readonly DirectorProject[]) {
     .map(([name, count], index) => ({ name, count, rank: index + 1 }));
 }
 
+export type Arrival = { month: string; day: string | null };
+
+export function plannedArrival(raw: string): Arrival | undefined {
+  const match = /^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?$/u.exec(raw.trim());
+  if (!match?.[2]) return undefined;
+  const month = match[1] + '-' + match[2].padStart(2, '0');
+  const day = month + '-' + (match[3] ?? '01').padStart(2, '0');
+  if (!isLocalDate(day)) return undefined;
+  return { month, day: match[3] === undefined ? null : day };
+}
+
 function arrivalKey(raw: string) {
-  const date = /^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?$/u.exec(raw);
-  if (!date) return raw ? `1-${raw}` : '2';
-  return `0-${date[1]}-${date[2]?.padStart(2, '0')}-${date[3]?.padStart(2, '0') ?? '32'}`;
+  const arrival = plannedArrival(raw);
+  if (!arrival) return raw ? '1-' + raw : '2';
+  return '0-' + (arrival.day ?? arrival.month + '-32');
 }
 
 export function compareArrival(a: DirectorProject, b: DirectorProject) {

@@ -3,40 +3,34 @@ import type { DirectorProject } from '@sw/contracts';
 import { useState } from 'react';
 import { brand, space } from '../../theme/tokens.js';
 import { compareArrival, rankedContacts, type BrandScope } from './project-register.js';
-import { projectStyles } from './director-projects.styles.js';
+import { ProjectProgress } from './ProjectProgress.js';
+import type { ProjectGroup } from './project-progress.js';
 import { ProjectDetail, ProjectList } from './ProjectList.js';
 
 type Ranking = ReturnType<typeof rankedContacts>;
 type Schedule = { brands: string[]; projects: DirectorProject[] };
 
-export function DirectorProjects({ schedule, scope }: { readonly schedule: Schedule; readonly scope: BrandScope }) {
+export function DirectorProjects({ schedule, scope, today }: { readonly today: string; readonly schedule: Schedule; readonly scope: BrandScope }) {
   const projects = schedule.projects.filter((p) => scope === 'all' || scope === `brand:${p.brand}`).sort(compareArrival);
-  const [list, setList] = useState<{ contact?: string }>();
+  const [list, setList] = useState<ProjectGroup>();
   const [detail, setDetail] = useState<DirectorProject>();
   const ranking = rankedContacts(projects);
   const unassigned = projects.filter((p) => !p.contact).length;
   const empty = schedule.brands.length ? '当前店铺没有新品排期记录' : '尚未接入开发中产品排期表';
+  const byContact = (contact: string) => setList({
+    label: (contact || '待分配') + ' · 负责项目', projects: projects.filter((p) => p.contact === contact),
+  });
   return <>
-    <style>{projectStyles}</style>
-    <section aria-label="员工负责事项"><Card title="员工负责事项" size="small">
+    <ProjectProgress projects={projects} today={today} empty={empty} onList={setList} onProject={setDetail} />
+    <section className="director-staff" aria-label="员工负责事项"><Card size="small" title={<Flex align="baseline" gap={space[1]} wrap>
+      <span>员工负责事项</span><Typography.Text type="secondary" className="director-caption">按项目对接人负责的新品数量排行</Typography.Text>
+    </Flex>}>
       <Flex vertical gap={space[2]}>
-        <Typography.Text type="secondary">按项目对接人负责的新品数量排名</Typography.Text>
-        {ranking.length ? <RankingList rows={ranking} select={(contact) => setList({ contact })} /> : <Empty description="暂无已分配的新品项目" />}
-        {unassigned ? <Button type="link" onClick={() => setList({ contact: '' })}>待分配 · {unassigned} 个项目</Button> : null}
+        {ranking.length ? <RankingList rows={ranking} select={byContact} /> : <Empty description="暂无已分配的新品项目" />}
+        {unassigned ? <Button type="link" onClick={() => byContact('')}>待分配 · {unassigned} 个项目</Button> : null}
       </Flex>
     </Card></section>
-    <section aria-label="新品开发进度"><Card title="新品开发进度" size="small"
-      extra={projects.length > 0 && <Button type="link" size="small" onClick={() => setList({})}>查看全部 {projects.length} 个</Button>}>
-      {projects.length ? <Flex vertical gap={space[2]}>{projects.slice(0, 4).map((p) => <Flex key={p.brand + p.row} vertical gap={space[0]}>
-        <Flex justify="space-between" align="baseline" gap={space[2]}>
-          <Button type="link" className="director-project-link" onClick={() => setDetail(p)}>{p.name}</Button>
-          <Typography.Text type="secondary" style={{ flexShrink: 0 }}>{p.contact || '待分配'}</Typography.Text>
-        </Flex>
-        {p.notes && <Typography.Text ellipsis title={p.notes}>{p.notes}</Typography.Text>}
-        <Typography.Text type="secondary">预计入仓 · {p.arrival || '待填写'}</Typography.Text>
-      </Flex>)}</Flex> : <Empty description={empty} />}
-    </Card></section>
-    {list && <ProjectList projects={projects} contact={list.contact} onClose={() => setList(undefined)} onProject={setDetail} />}
+    {list && <ProjectList group={list} onClose={() => setList(undefined)} onProject={setDetail} />}
     {detail && <ProjectDetail project={detail} onClose={() => setDetail(undefined)} />}
   </>;
 }
@@ -47,7 +41,7 @@ function RankingList({ rows, select }: { readonly rows: Ranking; readonly select
   return <>
     <div className="director-podium">{podium.map((person) => <Button type="text" className="director-rank" data-rank={person.rank}
       key={person.name} aria-label={rankLabel(person)} onClick={() => select(person.name)}>
-      <span className="director-medal"><Avatar size={42} style={{ background: brand[100], color: brand[800] }}>{person.name.slice(-2)}</Avatar>
+      <span className="director-medal"><Avatar size={36} style={{ background: brand[100], color: brand[800] }}>{person.name.slice(-2)}</Avatar>
         <span className="director-rank-number">{person.rank}</span></span>
       <Typography.Text ellipsis>{person.name}</Typography.Text><strong>{person.count} 个项目</strong>
     </Button>)}</div>
