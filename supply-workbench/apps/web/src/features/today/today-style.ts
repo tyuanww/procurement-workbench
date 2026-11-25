@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { bg, border, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
+import { bg, border, brand, controlBorder, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import type { RowFace } from './model/types.js';
 
 const [tiny, small, , regular] = space;
@@ -71,6 +71,7 @@ function todayCardCss(): string {
     .today-row-quantities { font-variant-numeric: tabular-nums; font-weight: 600; }
     .today-row-follow-up { border-block-start: 1px solid ${border}; padding-block-start: ${tiny}px; }
     .today-row-actions { min-inline-size: 0; }
+    ${todayPrimaryActionCss()}
     @container today-card (min-width: 44rem) {
       .today-row-layout { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
       .today-row-actions {
@@ -85,6 +86,18 @@ function todayCardCss(): string {
       .today-pending-actions > a:not(.ant-btn-primary) { text-align: center; }
       .today-row-follow-up { grid-column: 1 / -1; }
     }
+  `;
+}
+
+function todayPrimaryActionCss(): string {
+  const primary = '.today-row .today-row-actions > .ant-btn.ant-btn-primary:not(:disabled, .ant-btn-disabled)';
+  return `
+    ${primary} { background: ${bg.surface}; color: ${text.primary}; border-color: ${controlBorder}; }
+    @media (hover: hover) {
+      ${primary}:hover { background: ${statusColor.neutral.bg}; color: ${text.primary}; border-color: ${text.tertiary}; }
+    }
+    ${primary}:active { background: ${statusColor.neutral.border}; color: ${text.primary}; border-color: ${text.secondary}; }
+    ${primary}:focus-visible { outline-color: ${text.primary}; }
   `;
 }
 
