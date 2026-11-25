@@ -1,12 +1,13 @@
 import { Button, Flex, Pagination, Select, Typography } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
-import type { TodayPaging, TodaySort } from '@sw/contracts';
+import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
 import type { ChaseScope } from './action-query.js';
 import type { FollowUpFilter } from './action-query.js';
 
 export type ActionPageControls = {
   readonly paging: TodayPaging;
   readonly sort: TodaySort;
+  readonly work: TodayWorkFilter | undefined;
   readonly isLoading: boolean;
   readonly isFiltered: boolean;
   readonly isSettled: boolean;
@@ -16,6 +17,7 @@ export type ActionPageControls = {
   readonly loadError: string;
   readonly onPage: (page: number) => void;
   readonly onSort: (sort: TodaySort) => void;
+  readonly onWork: (work?: TodayWorkFilter) => void;
   readonly onFactory: (id: string) => void;
   readonly onFollowUp: (reason: FollowUpFilter) => void;
   readonly onCopyChase: (scope: ChaseScope) => void;
@@ -97,7 +99,8 @@ export function ActionPagination({ page }: { readonly page: ActionPageControls }
 
 export function ActionResult({ page }: { readonly page: ActionPageControls }) {
   const { paging } = page;
+  const unit = page.work === 'factory_chase' ? '批待催货' : page.work === 'internal_note' ? '批等回单' : '条待办';
   return <Typography.Text role="status" type="secondary">
-    {page.isLoading ? '正在更新行动板…' : page.loadError === '' ? `共 ${paging.total} 条待办${paging.total > paging.pageSize ? ` · 第 ${paging.page} 页` : ''}` : '行动板更新失败'}
+    {page.isLoading ? '正在更新行动板…' : page.loadError === '' ? `共 ${paging.total} ${unit}${paging.total > paging.pageSize ? ` · 第 ${paging.page} 页` : ''}` : '行动板更新失败'}
   </Typography.Text>;
 }

@@ -29,7 +29,7 @@ export function formatDateTime(iso: string | null, timeZone = businessTimeZone()
 
 export function formatQuantity(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return MISSING;
-  return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 3 }).format(value);
+  return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value);
 }
 
 export function formatMoney(value: number | null): string {

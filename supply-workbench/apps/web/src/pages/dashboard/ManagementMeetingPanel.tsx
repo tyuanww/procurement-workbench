@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Card, DatePicker, Descriptions, Flex, Select, Skeleton, Statistic, Typography } from 'antd';
 import {
   MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementDecision, type ManagementMeeting, type ManagementMeetingStore,
@@ -6,12 +7,11 @@ import { addDays, businessDay, parseLocalDate, weekStart, type LocalDate } from 
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { MeetingSections, meetingStoreLabels } from '../../features/reporting/index.js';
+import { MEETING_PATH, MeetingDecisionEditor, MeetingSections, meetingStoreLabels, type DecisionEditor } from '../../features/reporting/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { space } from '../../theme/tokens.js';
-import { MEETING_PATH, MeetingDecisionEditor, type DecisionEditor } from './meeting-decisions.js';
 
 const STORES = MANAGEMENT_MEETING_STORES.map((value) => ({ value, label: meetingStoreLabels[value] }));
 const WEEK_DAYS = 7;
@@ -63,6 +63,7 @@ function MeetingFilters({ selected, update, thisWeek }: {
       />
       <Button disabled={selected.weekStart >= thisWeek} onClick={() => update({ weekStart: addDays(selected.weekStart, WEEK_DAYS) })}>下周</Button>
       <Button href={`/reports?${reportQuery}`}>查看周报</Button>
+      <ProcurementCutoff />
     </Flex>
   </Card>;
 }

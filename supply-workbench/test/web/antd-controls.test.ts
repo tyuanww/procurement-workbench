@@ -26,6 +26,12 @@ describe('页面只用 antd 控件', () => {
     expect(tags.filter((tag) => /size=\{\d+\}/.test(tag))).toEqual([]);
   });
 
+  it('内容页签由共享组件生成，不手写 tab 或 tablist', async () => {
+    const files = await collectTsx(path.join(WEB_ROOT, 'src'));
+    const handmade = /\srole\s*=\s*(?:\{\s*)?["'](?:tab|tablist|tabpanel)["']/;
+    expect(files.filter((file) => handmade.test(file.text)).map((file) => file.path)).toEqual([]);
+  });
+
   it('今日非记录表单也把确认按钮放在抽屉 footer 里', async () => {
     const drawer = await readFile(path.join(WEB_ROOT, 'src/pages/today/TodayDrawer.tsx'), 'utf8');
     const forms = await readFile(path.join(WEB_ROOT, 'src/pages/today/TodayForms.tsx'), 'utf8');

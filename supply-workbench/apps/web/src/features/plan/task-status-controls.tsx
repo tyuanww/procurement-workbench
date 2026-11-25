@@ -1,5 +1,5 @@
-import { Button, Flex, Segmented, Space, Typography } from 'antd';
-import type { ReactNode } from 'react';
+import { Button, Flex, Radio, Space, Typography } from 'antd';
+import { useId, type ReactNode } from 'react';
 import { useCanWrite } from '../../shared/actor.js';
 import { fontSize, space } from '../../theme/tokens.js';
 import {
@@ -37,6 +37,7 @@ function StatusPicker(props: {
   readonly saving: boolean;
   readonly onRequest: (status: WorkItemStatus) => void;
 }): ReactNode {
+  const groupName = useId();
   const options = drawerStatusOptions().map((status) => ({
     value: status,
     label: workItemStatusLabel(status),
@@ -49,12 +50,17 @@ function StatusPicker(props: {
         <WorkItemStatusTag status={props.status} />
         {props.saving ? <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>保存中</Typography.Text> : null}
       </Space>
-      <Segmented
-        block
+      <Radio.Group
+        aria-label="更改任务状态"
+        name={groupName}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: space[0] }}
         disabled={props.isLocked}
         value={props.status}
         options={options}
-        onChange={(value) => { if (typeof value === 'string' && isWorkItemStatus(value)) props.onRequest(value); }}
+        onChange={(event) => {
+          const value: unknown = event.target.value;
+          if (typeof value === 'string' && isWorkItemStatus(value)) props.onRequest(value);
+        }}
       />
       <Typography.Paragraph type="secondary" style={{ marginTop: space[1], fontSize: fontSize.meta }}>
         只允许计划中到进行中，进行中到阻塞或已完成，阻塞回到进行中，任意状态到已取消。
@@ -90,12 +96,12 @@ export function TaskActionBar(props: {
   const canRecord = useCanWrite('records.write');
   const isLocked = props.isLocked === true || props.isSaving;
   return (
-    <Flex justify="flex-end" gap={space[1]}>
+    <Flex justify="flex-end" wrap gap={space[1]}>
       <Button onClick={props.onClose}>关闭</Button>
-      {canRecord && props.status !== null ? <DoneButton status={props.status} isSaving={props.isSaving} isLocked={isLocked} onChange={props.onChange} /> : null}
       {canRecord && props.status !== null && canCancel(props.status) ? (
         <Button danger loading={props.isSaving} disabled={isLocked} onClick={() => props.onChange('cancelled')}>取消任务</Button>
       ) : null}
+      {canRecord && props.status !== null ? <DoneButton status={props.status} isSaving={props.isSaving} isLocked={isLocked} onChange={props.onChange} /> : null}
     </Flex>
   );
 }

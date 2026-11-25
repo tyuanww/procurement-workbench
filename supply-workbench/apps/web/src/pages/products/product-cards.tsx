@@ -5,7 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import type { ProductCard } from '@sw/contracts';
 import { comparableBarcode } from '@sw/domain';
-import { bg, border, brand, fontSize, space, text } from '../../theme/tokens.js';
+import { useDetailFocusLink } from '../../shared/hooks/detail-return-focus.js';
+import { brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 
 export type ProductView = 'card' | 'table';
 
@@ -26,11 +27,7 @@ export function ProductCards({ items, exactBarcode = '' }: { readonly items: rea
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 220px), 1fr))', gap: space[3] }}>
       {items.map((item) => (
-        <CatalogProductLink key={item.id} id={item.id} style={cardLinkStyle()}>
-          <Card hoverable size="small" styles={{ body: { padding: space[2] } }} cover={<ProductCover item={item} />}>
-            <CardBody item={item} exactBarcode={exactBarcode} />
-          </Card>
-        </CatalogProductLink>
+        <CatalogCard key={item.id} item={item} exactBarcode={exactBarcode} />
       ))}
     </div>
   );
@@ -38,21 +35,46 @@ export function ProductCards({ items, exactBarcode = '' }: { readonly items: rea
 
 export function CatalogProductLink({ id, children, style }: { readonly id: string; readonly children: ReactNode; readonly style?: CSSProperties }) {
   const { search } = useLocation();
-  return <Link to={`/products/${encodeURIComponent(id)}`} state={{ catalogSearch: search }} style={style}>{children}</Link>;
+  const to = `/products/${encodeURIComponent(id)}`;
+  const focus = useDetailFocusLink(to);
+  return <Link to={to} {...focus} state={{ ...focus.state, catalogSearch: search }}
+    style={{ scrollMarginBlockStart: topBar + space[2], ...style }}>{children}</Link>;
 }
 
-function CardBody({ item, exactBarcode }: { readonly item: ProductCard; readonly exactBarcode: string }): ReactNode {
+function CatalogCard({ item, exactBarcode }: { readonly item: ProductCard; readonly exactBarcode: string }): ReactNode {
+  const [isBroken, setIsBroken] = useState(false);
+  const src = thumbnailSrc(item.thumbnail);
+  const hasImage = src !== null && !isBroken;
+  const cover = hasImage ? <Image alt="" src={src} preview={false} width="100%" styles={{ image: coverImageStyle() }} onError={() => setIsBroken(true)} /> : null;
+  return (
+    <CatalogProductLink id={item.id} style={cardLinkStyle()}>
+      <Card hoverable size="small" styles={{ body: { padding: space[2] } }} cover={cover}>
+        <CardBody item={item} exactBarcode={exactBarcode} hasImage={hasImage} />
+      </Card>
+    </CatalogProductLink>
+  );
+}
+
+function CardBody({ item, exactBarcode, hasImage }: { readonly item: ProductCard; readonly exactBarcode: string; readonly hasImage: boolean }): ReactNode {
   return (
     <Flex vertical gap={space[1]} style={{ overflowWrap: 'anywhere' }}>
       <Flex align="flex-start" justify="space-between" gap={space[1]}>
         <Typography.Text strong style={{ fontSize: fontSize.body, lineHeight: '20px' }}>{item.skuName}</Typography.Text>
-        {item.isChannelVariant ? <Tag variant="outlined" style={{ flexShrink: 0, marginInlineEnd: 0 }}>渠道规格</Tag> : null}
+        <ProductVariantTag isChannelVariant={item.isChannelVariant} />
       </Flex>
       <ProductBarcode item={item} exactBarcode={exactBarcode} />
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>备案名 {filingNameText(item.filingName)}</Typography.Text>
-      <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{specText(item)}</Typography.Text>
+      <ProductPackagingText item={item} />
+      {hasImage ? null : <CoverPlaceholder item={item} />}
     </Flex>
   );
+}
+
+export function ProductVariantTag({ isChannelVariant }: { readonly isChannelVariant: boolean }) {
+  const tone = isChannelVariant ? statusColor.info : statusColor.neutral;
+  return <Tag style={{ flexShrink: 0, marginInlineEnd: 0, color: tone.text, background: tone.bg, borderColor: tone.border }}>
+    {isChannelVariant ? '渠道规格' : '标准规格'}
+  </Tag>;
 }
 
 export function ProductBarcode({ item, exactBarcode }: { readonly item: ProductCard; readonly exactBarcode: string }): ReactNode {
@@ -65,31 +87,19 @@ export function ProductBarcode({ item, exactBarcode }: { readonly item: ProductC
   );
 }
 
-function specText(item: ProductCard): string {
-  return `净含量 ${item.netContent ?? '—'} · 箱规 ${item.casePack ?? '—'}`;
-}
-
-function ProductCover({ item }: { readonly item: ProductCard }): ReactNode {
-  const [isBroken, setIsBroken] = useState(false);
-  const src = thumbnailSrc(item.thumbnail);
-  if (src === null || isBroken) return <CoverPlaceholder item={item} />;
+export function ProductPackagingText({ item }: { readonly item: Pick<ProductCard, 'netContent' | 'casePack'> }) {
   return (
-    <Image
-      alt={item.skuName}
-      src={src}
-      preview={false}
-      width="100%"
-      styles={{ image: coverImageStyle() }}
-      onError={() => setIsBroken(true)}
-    />
+    <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>
+      净含量 {item.netContent ?? '—'} · 箱规 {item.casePack ?? '—'}
+    </Typography.Text>
   );
 }
 
 function CoverPlaceholder({ item }: { readonly item: ProductCard }): ReactNode {
   return (
-    <div role="img" aria-label={`${item.skuName} 无图`} style={placeholderStyle()}>
-      <PictureOutlined aria-hidden style={{ fontSize: fontSize.page }} />
-    </div>
+    <Flex role="img" aria-label={`${item.skuName} 无图`} gap={space[1]} align="center" style={{ color: text.tertiary, fontSize: fontSize.meta }}>
+      <PictureOutlined aria-hidden />无图
+    </Flex>
   );
 }
 
@@ -99,16 +109,4 @@ function cardLinkStyle(): CSSProperties {
 
 function coverImageStyle(): CSSProperties {
   return { display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover' };
-}
-
-function placeholderStyle(): CSSProperties {
-  return {
-    minHeight: 48,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: bg.page,
-    borderBottom: `1px solid ${border}`,
-    color: text.tertiary,
-  };
 }
