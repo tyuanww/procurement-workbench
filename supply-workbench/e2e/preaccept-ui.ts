@@ -324,7 +324,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {
   const header = page.getByRole('banner');
-  await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
+  await header.getByRole('navigation', { name: '当前位置' }).getByText('行动板', { exact: true }).and(page.locator('[aria-current="page"]')).waitFor();
   assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
   const search = page.getByRole('button', { name: searchLabel });
   const mac = process.platform === 'darwin';

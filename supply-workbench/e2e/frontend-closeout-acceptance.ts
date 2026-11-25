@@ -116,6 +116,8 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   await tabs.getByRole('tab', { name: '库存', exact: true }).click();
   await page.reload();
   await page.getByRole('tabpanel', { name: '库存', exact: true }).waitFor();
+  const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
+  assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['产品档案', '产品详情', '库存']);
   await page.getByText('库存 1 行', { exact: true }).waitFor();
   const stock = await page.request.get(new URL('/api/v1/products/ui-demo-cleanser/stock', page.url()).href);
   assert.equal((await stock.json()).factory.total.value, 320);

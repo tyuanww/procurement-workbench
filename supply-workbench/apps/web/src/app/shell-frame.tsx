@@ -1,10 +1,10 @@
-import { Button, ConfigProvider, Drawer, Layout, Menu, Typography } from 'antd';
+import { Button, ConfigProvider, Drawer, Layout, Menu } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
-import { bg, border, brand, fontSize, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
+import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
 import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
 import { AccountMenu, FreshnessLink } from './shell-session.js';
 
@@ -72,18 +72,6 @@ export function headerClusterStyle(input: { readonly edge: 'start' | 'end' }): C
   };
 }
 
-export function headerTitleStyle(): CSSProperties {
-  return {
-    color: brand[800],
-    fontSize: fontSize.body,
-    fontWeight: 600,
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  };
-}
-
 export function accountSlotStyle(): CSSProperties {
   return { flexShrink: 0 };
 }
@@ -146,7 +134,7 @@ export function ShellTop(input: {
   readonly onSearch: () => void;
   readonly contentInset: 16 | 24;
   readonly menuButton: MenuButton | null;
-  readonly startContent?: ReactNode;
+  readonly startContent: ReactNode;
 }): ReactNode {
   const isPhone = input.menuButton !== null;
   return (
@@ -232,7 +220,7 @@ function HeaderStart(input: { readonly menuButton: MenuButton | null; readonly s
   if (input.menuButton !== null) return <div style={headerClusterStyle({ edge: 'start' })}><HeaderMenuButton button={input.menuButton} /></div>;
   return (
     <div style={headerClusterStyle({ edge: 'start' })}>
-      {input.startContent ?? <Typography.Text style={headerTitleStyle()}>SHINEMAGE 供应链工作台</Typography.Text>}
+      {input.startContent}
     </div>
   );
 }

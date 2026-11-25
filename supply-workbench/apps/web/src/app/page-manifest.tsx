@@ -1,3 +1,5 @@
+import { settingsSection, settingsSectionLabels } from '../pages/settings/settings-section.js';
+import { productSection, productSectionLabels } from '../pages/products/product-section.js';
 import type { ReactNode } from 'react';
 import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../shared/page-manifest.js';
 import { DashboardPage } from '../pages/dashboard/DashboardPage.js';
@@ -33,7 +35,9 @@ type OtherPageEntry = {
   | { readonly gate: PageGate; readonly menuParent?: never; readonly standalone: true }
 );
 
-export type PageManifestEntry = NavPageEntry | OtherPageEntry;
+export type PageManifestEntry = (NavPageEntry | OtherPageEntry) & {
+  readonly breadcrumb?: string | ((params: URLSearchParams) => readonly string[]);
+};
 
 export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/home', nav: { label: '首页' }, gate: 'oversight', element: <DirectorHomePage /> },
@@ -43,18 +47,18 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="schedule" /> },
   { path: '/progress/development', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="development" /> },
   { path: '/lines', nav: { label: '跟进中心' }, gate: 'always', element: <LineListPage /> },
-  { path: '/lines/:id', nav: null, element: <LineDetailPage /> },
+  { path: '/lines/:id', nav: null, breadcrumb: '订单行详情', element: <LineDetailPage /> },
   { path: '/dashboard', nav: { label: '管理看板' }, gate: 'oversight', element: <DashboardPage /> },
   { path: '/reports', nav: null, gate: 'oversight', menuParent: '/dashboard', element: <ReportListPage /> },
-  { path: '/reports/:id', nav: null, gate: 'oversight', element: <ReportDetailPage /> },
+  { path: '/reports/:id', nav: null, breadcrumb: '周报详情', gate: 'oversight', element: <ReportDetailPage /> },
   { path: '/reports/:id/print', nav: null, gate: 'oversight', standalone: true, element: <ReportPrintPage /> },
-  { path: '/parties/:id', nav: null, element: <PartyPage /> },
+  { path: '/parties/:id', nav: null, breadcrumb: '主体详情', element: <PartyPage /> },
   { path: '/products', nav: { label: '产品档案' }, gate: 'always', element: <ProductListPage /> },
-  { path: '/products/:id', nav: null, element: <ProductDetailPage /> },
+  { path: '/products/:id', nav: null, breadcrumb: (params) => ['产品详情', productSectionLabels[productSection(params)]], element: <ProductDetailPage /> },
   { path: '/imports', nav: { label: '导入与审核' }, gate: 'imports', element: <ImportCenter /> },
-  { path: '/imports/:id', nav: null, gate: 'imports', menuParent: '/imports', element: <ImportBatchPage /> },
+  { path: '/imports/:id', nav: null, breadcrumb: '导入批次', gate: 'imports', menuParent: '/imports', element: <ImportBatchPage /> },
   { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <MasterPage /> },
-  { path: SETTINGS_PATH, nav: null, gate: 'admin', element: <SettingsPage /> },
+  { path: SETTINGS_PATH, nav: null, breadcrumb: (params) => ['系统设置', settingsSectionLabels[settingsSection(params).activeKey]], gate: 'admin', element: <SettingsPage /> },
 ];
 
 export const NAV_ROUTES: readonly NavRoute[] = PAGE_MANIFEST.flatMap((entry) =>

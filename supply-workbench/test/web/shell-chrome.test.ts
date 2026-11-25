@@ -15,7 +15,7 @@ import { readViewport, shellQuery, subscribeViewport, unknownViewport } from '..
 import { matchesShortcut, searchShortcutHint, type Shortcut } from '../../apps/web/src/shared/hooks/shortcuts.js';
 import { antdTheme } from '../../apps/web/src/theme/antd.js';
 import { contrastRatio } from '../../apps/web/src/theme/contrast.js';
-import { accountSlotStyle, drawerFrame, headerBarStyle, headerClusterStyle, headerGridColumns, headerTitleStyle, menuWidth, searchButtonStyle, searchTextStyle, siderBarStyle } from '../../apps/web/src/app/shell-frame.js';
+import { accountSlotStyle, drawerFrame, headerBarStyle, headerClusterStyle, headerGridColumns, menuWidth, searchButtonStyle, searchTextStyle, siderBarStyle } from '../../apps/web/src/app/shell-frame.js';
 import { freshnessChipBoxStyle, freshnessLinkStyle } from '../../apps/web/src/app/shell-session.js';
 import { surfaceStyle } from '../../apps/web/src/shared/ui/page.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, radius, radiusCard, space } from '../../apps/web/src/theme/tokens.js';
@@ -212,7 +212,6 @@ describe('层、圆角和菜单对比', () => {
   it('顶栏左右两簇都填满自己的列，内容靠边，不压到中间搜索', () => {
     expect(headerClusterStyle({ edge: 'start' })).toMatchObject({ justifySelf: 'stretch', justifyContent: 'flex-start', minWidth: 0, overflow: 'hidden' });
     expect(headerClusterStyle({ edge: 'end' })).toMatchObject({ justifySelf: 'stretch', justifyContent: 'flex-end', minWidth: 0, overflow: 'hidden' });
-    expect(headerTitleStyle()).toMatchObject({ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' });
     expect(accountSlotStyle()).toEqual({ flexShrink: 0 });
   });
 

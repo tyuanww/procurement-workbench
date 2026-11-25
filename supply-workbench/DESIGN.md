@@ -184,7 +184,7 @@ attention 和 neutral 不映射成 antd 的种子色。实心 Tag 用浅边。�
 | 指标数字 | `Statistic.contentFontSize` | 28 |
 | 指标标题 | `Statistic.titleFontSize` | 12 |
 
-面包屑标出主页面名称。对象详情的可见一级标题使用 `Typography.Title` 的 `level={1}`。标题区规则见第 3 节。
+工作台共用 Ant Design 面包屑标出当前位置。桌面在顶栏左侧显示，手机在顶栏下、内容开头显示，每页只出现一次。一级入口直接显示名称，子页沿用侧栏的「板块 / 页面」，对象详情追加详情名称，具备独立页签的详情和设置随当前页签更新。对象详情的可见一级标题使用 `Typography.Title` 的 `level={1}`。标题区规则见第 3 节。
 
 最小字号 12。不要出现 11 或更小。成段中文行高 1.75。数字列 `font-variant-numeric: tabular-nums`，右对齐，千分位。
 
