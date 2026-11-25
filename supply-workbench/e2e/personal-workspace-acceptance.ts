@@ -63,7 +63,7 @@ export async function checkPersonalWorkspace(input: { readonly buyer: Page; read
   const card = buyerMain.locator('.today-row').filter({ hasText: 'HZ09-0001' });
   await card.waitFor();
   assert.equal(await card.count(), 1);
-  await buyerMain.getByRole('listitem').filter({ has: card }).and(buyer.locator(':focus')).waitFor();
+  await buyerMain.getByRole('listitem').filter({ hasText: 'HZ09-0001' }).and(buyer.locator(':focus')).waitFor();
   await peer.goto(legacy.href);
   await peerMain.getByText('暂无已约跟进', { exact: true }).waitFor();
   assert.equal(await peerMain.getByText(/HZ09-0001/).count(), 0);
