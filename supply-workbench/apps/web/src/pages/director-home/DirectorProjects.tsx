@@ -22,8 +22,11 @@ export function DirectorProjects({ schedule, scope, today }: { readonly today: s
   });
   return <>
     <ProjectProgress projects={projects} today={today} empty={empty} onList={setList} onProject={setDetail} />
-    <section className="director-staff" aria-label="员工负责事项"><Card size="small" title={<Flex align="baseline" gap={space[1]} wrap>
-      <span>员工负责事项</span><Typography.Text type="secondary" className="director-caption">按项目对接人负责的新品数量排行</Typography.Text>
+    <section className="director-staff" aria-label="员工负责事项"><Card size="small" title={<Flex align="baseline" gap={space[1]}>
+      <span style={{ flexShrink: 0 }}>员工负责事项</span>
+      <Typography.Text type="secondary" className="director-caption" style={{ minWidth: 0, whiteSpace: 'normal' }}>
+        按项目对接人负责的新品数量排行
+      </Typography.Text>
     </Flex>}>
       <Flex vertical gap={space[2]}>
         {ranking.length ? <RankingList rows={ranking} select={byContact} /> : <Empty description="暂无已分配的新品项目" />}

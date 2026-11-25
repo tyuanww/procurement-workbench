@@ -411,13 +411,19 @@ async function checkDirectorViewport(page: Page) {
   const details = page.getByRole('region', { name: '事项跟踪明细' });
   for (const viewport of [{ width: 1280, height: 720 }, { width: 1366, height: 768 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const brand = await lastBrand.boundingBox();
-    const date = await cutoff.boundingBox();
-    assert.ok(date && brand && date.x > brand.x + brand.width && Math.abs(date.y - brand.y) < 10);
-    const title = await rank.getByText('员工负责事项', { exact: true }).boundingBox();
-    const caption = await rank.getByText('按项目对接人负责的新品数量排行', { exact: true }).boundingBox();
-    assert.ok(title && caption && caption.x >= title.x + title.width && Math.abs(title.y - caption.y) < 8);
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      window.scrollTo(0, 0);
+    });
+    const [brand, date, title, caption] = await Promise.all([
+      lastBrand.boundingBox(), cutoff.boundingBox(),
+      rank.getByText('员工负责事项', { exact: true }).boundingBox(),
+      rank.getByText('按项目对接人负责的新品数量排行', { exact: true }).boundingBox(),
+    ]);
+    assert.ok(date && brand && date.x >= brand.x + brand.width && date.y < brand.y + brand.height && brand.y < date.y + date.height,
+      `店铺筛选和截止日期应同行。宽度 ${viewport.width}，位置 ${JSON.stringify({ brand, date })}`);
+    assert.ok(title && caption && caption.x >= title.x + title.width && caption.y < title.y + title.height && title.y < caption.y + caption.height,
+      `排行口径应在标题右侧。宽度 ${viewport.width}，位置 ${JSON.stringify({ title, caption })}`);
     const [navigation, projects, tracking, staff] = await Promise.all([
       shortcuts.boundingBox(),
       ...[dev, details, rank].map((panel) => panel.locator('.ant-card').first().boundingBox()),
