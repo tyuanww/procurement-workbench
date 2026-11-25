@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { bg, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
+import { bg, border, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import type { RowFace } from './model/types.js';
 
 const [tiny, small, , regular] = space;
@@ -24,8 +24,7 @@ export function todayMotionCss(): string {
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
-    .today-row-facts, .today-row-actions { min-inline-size: 0; }
-    .today-row-facts { gap: ${tiny}px; }
+    ${todayCardCss()}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     #today-chase { container: today-action / inline-size; }
@@ -38,16 +37,9 @@ export function todayMotionCss(): string {
       .today-controls-wide { display: none; }
       .today-controls-narrow { display: block; }
       .today-workspace-views .ant-segmented-item-icon { display: none; }
-      .today-row[data-receipt] .today-row-facts, .today-row[data-receipt] .today-row-face { display: contents; }
-      .today-row[data-receipt] .today-row-identity { order: -2; }
-      .today-row[data-receipt] .today-row-actions { order: -1; }
     }
-    @media (min-width: 960px) {
+    @container today-action (min-width: 60rem) {
       .today-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    }
-    @media (min-width: 980px) {
-      .today-row-layout.ant-flex-vertical { flex-direction: row; justify-content: space-between; align-items: center; }
-      .today-row-layout > .today-row-facts { flex: 1 1 22rem; }
     }
     @media (any-pointer: coarse) {
       .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a {
@@ -57,6 +49,33 @@ export function todayMotionCss(): string {
       .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a { display: inline-flex; align-items: center; justify-content: center; }
     }
     @media (prefers-reduced-motion: reduce) { .today-row { transition: none; } }
+  `;
+}
+
+function todayCardCss(): string {
+  return `
+    .today-work-card { container: today-card / inline-size; }
+    .today-row-layout { display: grid; gap: ${small}px; }
+    .today-row-facts, .today-row-follow-up { display: grid; gap: ${tiny}px; min-inline-size: 0; }
+    .today-row-facts .today-row-title { margin: 0; font-size: ${fontSize.section}px; line-height: 1.4; }
+    .today-row-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 ${space[2]}px;
+      min-inline-size: 0;
+    }
+    .today-row-line:empty, .today-row-follow-up:has(> :only-child:empty) { display: none; }
+    .today-row-identifiers, .today-row-follow-up { font-size: ${fontSize.table}px; }
+    .today-row-line .ant-tag { margin-inline-end: 0; }
+    .today-row-quantities { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .today-row-follow-up { border-block-start: 1px solid ${border}; padding-block-start: ${tiny}px; }
+    .today-row-actions { min-inline-size: 0; }
+    @container today-card (min-width: 44rem) {
+      .today-row-layout { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+      .today-row-actions { justify-content: flex-end; }
+      .today-row-follow-up { grid-column: 1 / -1; }
+    }
   `;
 }
 

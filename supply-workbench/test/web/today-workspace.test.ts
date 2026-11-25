@@ -16,8 +16,9 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
   if (mixed.batch === null || mixed.line === null) throw new Error('缺少样例批次');
   const due = localDate('2026-11-20');
   const batch: TodoItemView = {
-    ...mixed, reasons: ['shipped_not_received'], dueDate: due,
+    ...mixed, reasons: ['shipped_not_received', 'note_missing'], dueDate: due, waitingOn: { kind: 'internal', partyId: null },
     batch: { ...mixed.batch, plannedQty: 1100, status: 'partially_received', nextFollowUpAt: '2026-11-22T01:00:00.000Z',
+      latestFollowUp: { id: 'last-note', text: '回查最近一次催货记录', createdAt: '2026-11-20T01:00:00.000Z' },
       fulfillment: { unit: '件', unshippedQty: 800, inTransitQty: 300, receivedQty: 0, verifiedShippedQty: 300,
         verifiedReceivedQty: 0, overShippedQty: 0, overReceivedQty: 0, receiptWithoutShipmentQty: 0, reviewCount: 0 } },
   };
@@ -41,6 +42,11 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
     expect(primary.getAttribute('href')).toBe('/lines/line?focusBatch=batch-1');
     expect(primary.textContent).toBe('核对收货');
     expect(receipt.textContent).not.toContain('复制本批催单');
+    const facts = receipt.textContent ?? '';
+    expect(facts).toMatch(/同名样品.*单号 PO.*第 1 批.*到仓逾期.*采购确认到仓日 2026-11-20.*收货方 上海仓.*核对收货.*跟进等待方 · 内部（等回单）/);
+    expect(facts).not.toContain('回查最近一次催货记录');
+    click(button('查看详情'));
+    await waitFor(() => textOf('[role="dialog"]').includes('最近跟进 · 回查最近一次催货记录'));
   } finally {
     act(() => { root.unmount(); });
     resetDom();

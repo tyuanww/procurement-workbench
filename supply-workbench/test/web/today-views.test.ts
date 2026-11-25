@@ -73,11 +73,12 @@ describe('今日视图各自渲染', () => {
     const html = render(ActionBoard, todayProps({ board, batchSeqOf: () => 2 }));
     expect(html).toContain('aria-label="查看详情 PO-1 · 样品 · 第 2 批"');
     expect(html.indexOf('2026-11-24')).toBeLessThan(html.indexOf('aria-label="查看详情'));
+    expect(html).toMatch(group === 'priority' ? /<h2[^>]*>样品<\/h2>/ : /<h3[^>]*>样品<\/h3>/);
     if (group === 'priority') {
       expect(html).toMatch(/class="(?=[^"]*\bant-card\b)(?=[^"]*\btoday-row\b)[^"]+"/);
       expect(html).not.toContain('待办组计数');
     } else {
-      expect(html).toContain('待办组标题');
+      expect(html).toMatch(/<h2[^>]*>待办组标题<\/h2>/);
       expect(html).toContain('复制催办文本');
     }
   });

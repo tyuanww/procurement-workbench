@@ -108,10 +108,10 @@ export function RecordFooter(props: {
   );
 }
 
-export function FaceBlock(props: { readonly face: RowFace; readonly batchSeq?: number | undefined; readonly showsQuantities?: boolean; readonly isCompact?: boolean }) {
+function FaceBlock(props: { readonly face: RowFace; readonly batchSeq?: number | undefined; readonly showsQuantities?: boolean }) {
   return (
-    <Flex className="today-row-face" vertical gap={space[0]}>
-      <Typography.Text className="today-row-identity" strong>{props.face.orderNo === '—' ? null : props.face.orderNo + ' · '}{props.batchSeq === undefined ? '' : `第 ${props.batchSeq} 批 · `}{props.face.productName}</Typography.Text>
+    <Flex vertical gap={space[0]}>
+      <Typography.Text strong>{props.face.orderNo === '—' ? null : props.face.orderNo + ' · '}{props.batchSeq === undefined ? '' : `第 ${props.batchSeq} 批 · `}{props.face.productName}</Typography.Text>
       <Flex wrap align="center" gap="small">
         <Typography.Text style={reasonStyle()}>{props.face.reason}</Typography.Text>
         {props.face.overdueTone === 'quiet' ? null : <span style={overdueStyle(props.face.overdueTone)}>{props.face.overdue}</span>}
@@ -122,7 +122,7 @@ export function FaceBlock(props: { readonly face: RowFace; readonly batchSeq?: n
         {props.face.inTransit === undefined ? null : <Typography.Text>{props.face.inTransit}</Typography.Text>}
       </Flex>}
       {props.face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>下次跟进 · {formatDateTime(props.face.nextFollowUpAt)}</div>}
-      {props.isCompact === true ? null : <FollowUpFacts face={props.face} />}
+      <FollowUpFacts face={props.face} />
     </Flex>
   );
 }

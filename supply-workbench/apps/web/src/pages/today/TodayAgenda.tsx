@@ -2,21 +2,19 @@ import { useEffect, useRef } from 'react';
 import { Button, Card, Flex, Typography } from 'antd';
 import type { TodayResponse } from '@sw/contracts';
 import { rowStyle, TodayOrderLink, type BoardRow, type PlanRow } from '../../features/today/index.js';
-import { space, statusColor } from '../../theme/tokens.js';
+import { space } from '../../theme/tokens.js';
 
 export const PLAN_TASK_TARGET = 'today-plan-tasks';
 
-type Arrival = TodayResponse['arrivalMemos'][number];
+export type ReceiptWork = TodayResponse['arrivalMemos'][number];
 
-export type ReceiptWork = { readonly memo: Arrival; readonly showsQuantity: boolean; readonly showsDate: boolean };
-
-export function arrivalWork(memos: readonly Arrival[], rows: readonly BoardRow[]) {
+export function arrivalWork(memos: readonly ReceiptWork[], rows: readonly BoardRow[]) {
   const byBatch = new Map(memos.filter((memo) => memo.status !== 'in_transit').map((memo) => ['batch:' + memo.batchId, memo]));
   const byActionId = new Map<string, ReceiptWork>();
   for (const row of rows) {
     const memo = byBatch.get(row.id);
     if (memo === undefined) continue;
-    byActionId.set(row.id, { memo, showsQuantity: row.face.inTransit === undefined, showsDate: row.face.date !== memo.confirmedDate });
+    byActionId.set(row.id, memo);
   }
   return byActionId;
 }
@@ -40,18 +38,7 @@ export function planTaskCards({ tasks, focus, onOpen }: {
   </li>);
 }
 
-export function ReceiptFacts({ memo, showsQuantity, showsDate }: ReceiptWork) {
-  const isLate = memo.status === 'overdue';
-  const state = isLate ? '到仓逾期' : '今日应到';
-  const quantity = showsQuantity ? '待收 ' + memo.inTransitQty.toLocaleString('zh-CN', { maximumFractionDigits: 4 }) + ' ' + memo.unit : null;
-  const facts = [memo.warehouse ?? '收货方未命名', showsDate ? memo.confirmedDate : null, quantity].filter(Boolean).join(' · ');
-  return <Flex align="baseline" gap={space[1]} wrap>
-    <Typography.Text style={{ color: (isLate ? statusColor.danger : statusColor.warning).text }}>{state}</Typography.Text>
-    <Typography.Text type="secondary">{facts}</Typography.Text>
-  </Flex>;
-}
-
-export function ReceiptAction({ memo, isFocused }: { readonly memo: Arrival; readonly isFocused: boolean }) {
+export function ReceiptAction({ memo, isFocused }: { readonly memo: ReceiptWork; readonly isFocused: boolean }) {
   const link = useRef<HTMLAnchorElement>(null);
   useEffect(() => { if (isFocused) link.current?.focus(); }, [isFocused]);
   const label = [memo.line.poRaw, memo.line.nameRaw, memo.batchSeq == null ? null : '第 ' + memo.batchSeq + ' 批'].filter(Boolean).join(' · ');
