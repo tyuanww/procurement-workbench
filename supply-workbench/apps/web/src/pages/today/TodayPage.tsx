@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { BatchViewSchema, ExceptionViewSchema, FollowUpViewSchema, ReceiptViewSchema, type TodaySort } from '@sw/contracts';
 import { apiDelete, apiSend } from '../../shared/api/client.js';
+import { useCanWrite } from '../../shared/actor.js';
 import { businessToday, postReceipt, postShipment } from '../../features/follow-up/index.js';
 import {
   readGroup, todayBoard, todayInsights, todayViewOf, withGroup,
   type BoardItem, type TodayBoard,
 } from '../../features/today/index.js';
 import { confirmedDateBody, formErrors, type NoteRef, type OpenForm, type Target, type Undo } from './TodayForms.js';
-import { actionFactoryParams, actionFollowUpParams, actionPageParams, actionQuery, actionReasonParams, actionSortParams } from './action-query.js';
+import { actionQuery, actionReasonParams } from './action-query.js';
 import { reminderChangeOf } from './follow-up-time.js';
-import { useChaseCopy } from './today-copy.js';
+import { useTodayActionPage } from './use-today-action-page.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, handleKey, rowsSettled } from './today-keys.js';
 import { openQuick } from './today-open.js';
@@ -38,34 +39,25 @@ function useTodayScreen(): TodayScreenProps {
   const loadedPage = today.isLoadedForQuery ? state.paging?.page : undefined;
   useAppliedPage({ loadedPage, requested: query.page, search, setParams });
   const isSettled = loadedPage === query.page;
+  const actionPage = useTodayActionPage({ query, search, setParams, today, isSettled });
   const nextFocusId = focusForRows({
     focus: state.focus,
     rows: visible,
-    isSettled: rowsSettled({ isReady: isSettled, isSchedule: isPlanMode, plan: plan.load.kind }),
+    isSettled: rowsSettled({ isReady: isSettled || isPlanMode, isSchedule: isPlanMode, plan: plan.load.kind }),
   });
   if (nextFocusId !== state.focus) state.setFocus(nextFocusId);
-  const closeSession = useTodaySession({ state, rows: visible, isReady: isSettled });
+  const closeSession = useTodaySession({
+    state,
+    rows: sessionRows({ board: actionBoard, plan }),
+    isReady: isSettled || (isPlanMode && query.focusId === null),
+  });
   useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode, closeSession });
   useUndoMessage({ undo: state.undo, onRestore: () => { void restore(state); } });
-  const copy = useChaseCopy({ query, buyerName: state.buyerName });
-  return {
-    ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }),
-    actionPage: state.paging === undefined ? undefined : {
-      paging: state.paging, sort: query.sort, isLoading: today.isLoading, isSettled, loadError: today.loadError,
-      factoryId: params.get('chaseFactory'),
-      isFiltered: query.reasons.length > 0 || query.sort.kind === 'bulk',
-      onFactory: (id) => setParams(actionFactoryParams(search, id)),
-      onFollowUp: (reason) => setParams(actionFollowUpParams(search, reason)),
-      onPage: (page) => setParams(actionPageParams(search, page)),
-      onSort: (sort) => setParams(actionSortParams(search, sort)),
-      onRetry: state.retry,
-      ...copy,
-    },
-  };
+  return { ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }), actionPage };
 }
 
-const EMPTY_PAGE: Omit<TodayLoad, 'counts' | 'paging'> & { readonly paging: undefined } = {
-  items: [], arrivalMemos: [], pendingBatch: [], targets: {}, noteRefs: {}, buyerName: '', paging: undefined,
+const EMPTY_PAGE: Omit<TodayLoad, 'asOf' | 'counts' | 'paging'> & { readonly asOf: undefined; readonly paging: undefined } = {
+  items: [], arrivalMemos: [], pendingBatch: [], targets: {}, noteRefs: {}, buyerName: '', asOf: undefined, paging: undefined,
 };
 
 function useTodayState(today: ReturnType<typeof useTodayData>) {
@@ -113,6 +105,7 @@ function useTodayKeys(input: {
   readonly closeSession: ReturnType<typeof useTodaySession>;
 }): void {
   const { state, visible, isPlanMode, closeSession } = input;
+  const canRecord = useCanWrite('records.write');
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => handleKey({
       event,
@@ -131,14 +124,14 @@ function useTodayKeys(input: {
           state.setDraft(null);
         },
         open: (kind) => {
-          if (state.focus === null) return;
+          if (state.focus === null || !canRecord) return;
           openQuick({ id: state.focus, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError });
         },
       },
     });
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state, visible, isPlanMode, closeSession]);
+  }, [state, visible, isPlanMode, closeSession, canRecord]);
 }
 
 type ScreenInput = {
@@ -155,10 +148,12 @@ function screenProps(input: ScreenInput): TodayScreenProps {
   const { state, board, actionBoard, search, setParams, plan, closeSession } = input;
   return {
     board,
+    asOf: state.asOf,
     arrivalMemos: state.arrivalMemos,
     pendingBatch: state.pendingBatch,
     onPendingBatchChanged: () => applyNextToday(state),
     actionBoard,
+    batchSeqOf: (rowId) => state.targets[rowId]?.batchSeq,
     insight: state.insight,
     plan: plan.load,
     onRetryPlan: plan.reload,

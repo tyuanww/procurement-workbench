@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   deskNavigation,
   deskScrollPlan,
-  isSummarySettled,
   readDeskScrollY,
   rememberDeskScroll,
 } from '../../apps/web/src/pages/lines/list/desk-scroll.js';
@@ -40,11 +39,5 @@ describe('跟进台整页后退滚动', () => {
     expect(readDeskScrollY({ swDeskScrollY: '240' })).toBeNull();
     expect(rememberDeskScroll({ idx: 1 }, Number.NaN)).toBeNull();
     expect(deskScrollPlan({ navigation: 'back_forward', savedScrollY: null, hasRestored: false, canHold: true })).toEqual({ scrollY: null, mark: true });
-  });
-
-  it('订单汇总还在读时不把列表当成已经摆好', () => {
-    expect(isSummarySettled({ summary: null, error: '' })).toBe(false);
-    expect(isSummarySettled({ summary: { total: 1 }, error: '' })).toBe(true);
-    expect(isSummarySettled({ summary: null, error: '订单汇总没有读出来' })).toBe(true);
   });
 });

@@ -3,6 +3,7 @@ import type { TodayResponse, TodoItemView, StoreProgressMaterial } from '../../p
 import { batchFulfillment, localDate } from '../../packages/domain/src/index.js';
 import { progressMaterialRisks, risksForLine } from '../../apps/web/src/features/progress/index.js';
 import { progressActionSource } from '../../apps/web/src/pages/progress/progress-action-source.js';
+import { storeBatchFacts } from '../../apps/web/src/pages/progress/progress-batch-facts.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
 
 const day = localDate('2026-11-19');
@@ -56,6 +57,33 @@ it('后续页出错时保留已读待办并标明风险需核对，缺实物依�
   void fulfillment;
   expect(progressMaterialRisks([{ ...task, batch }]).size).toBe(0);
 });
+
+it('无待办批次仍显示到仓备忘的在途和实收，同订单的其他批和重复备忘不并入', () => {
+  const line = { id: material.id, nextDue: { batchId: 'shared-batch', dateBuyerConfirmed: day, overdueDays: null, dateFactoryRequired: null } };
+  const memo = arrivalMemo();
+  const facts = storeBatchFacts([line], { items: [], arrivalMemos: [memo, { ...memo, batchId: 'other-batch', inTransitQty: 999 }, memo] });
+  expect([...facts]).toEqual([[line.id, { seq: 3, unit: '个', unshippedQty: null, inTransitQty: 0.0001, receivedQty: 0 }]]);
+  expect(storeBatchFacts([line], { items: [], arrivalMemos: [{ ...memo, confirmedDate: due }] }).size).toBe(0);
+  expect(storeBatchFacts([line], { items: [], arrivalMemos: [{ ...memo, line: { ...memo.line, id: 'other-line' } }] }).size).toBe(0);
+});
+
+it('同一批有待办数量时沿用该批核实结果，备忘的旧数量不会填入待核的字段', () => {
+  const line = { id: material.id, nextDue: { batchId: 'shared-batch', dateBuyerConfirmed: day, overdueDays: null, dateFactoryRequired: null } };
+  const task = overdueMaterial();
+  if (task.batch?.fulfillment === undefined) throw new Error('缺批次事实');
+  const confirmed = { ...task.batch, dateBuyerConfirmed: day, fulfillment: { ...task.batch.fulfillment, inTransitQty: null, receivedQty: null } };
+  const facts = storeBatchFacts([line], { items: [{ ...task, batch: confirmed }], arrivalMemos: [arrivalMemo()] });
+  expect(facts.get(line.id)).toEqual({ seq: 3, unit: '个', unshippedQty: 25, inTransitQty: null, receivedQty: null });
+  expect(storeBatchFacts([line], { items: [{ ...task, batch: { ...confirmed, status: 'closed' } }], arrivalMemos: [arrivalMemo()] }).size).toBe(0);
+});
+
+function arrivalMemo(): TodayResponse['arrivalMemos'][number] {
+  return {
+    batchId: 'shared-batch', batchSeq: 3, warehouse: '甲仓', confirmedDate: day, status: 'due_today',
+    inTransitQty: 0.0001, receivedQty: 0, unit: '个',
+    line: { id: material.id, lane: 'finished', poRaw: 'PO-1', poFormat: null, nameRaw: '成品', itemCodeRaw: null, barcodeRaw: null, buyerName: null },
+  };
+}
 
 function today(): TodayResponse {
   const task = overdueMaterial();

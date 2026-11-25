@@ -38,10 +38,6 @@ export function rememberDeskScroll(state: unknown, scrollY: number): Record<stri
   return { ...base, [SCROLL_KEY]: saved };
 }
 
-export function isSummarySettled(summary: { readonly summary: unknown; readonly error: string }): boolean {
-  return summary.summary !== null || summary.error !== '';
-}
-
 export function deskScrollPlan(input: DeskScrollPlan): DeskScrollMove {
   if (input.hasRestored) return waitForLayout;
   if (input.navigation !== 'back_forward' || input.savedScrollY === null) return markWithoutScroll;

@@ -56,11 +56,11 @@ function FactoryLinkQueue({ refreshReviewQueue }: { readonly refreshReviewQueue:
   return (
     <Space orientation="vertical" size={space[4]} style={{ width: '100%' }}>
       {notice === null ? null : <Alert type={notice.kind} showIcon title={notice.text} />}
+      <UnlinkedRows revision={revision} busy={action !== null} pending={typeof action === 'object' ? action : null} onAction={run} />
       <FactoryLinkSummary key={revision} />
       <FactoryLinkActions action={action} onRelink={() => run('relink', async () => relinkResultText(await relinkFactoryRows()))}
         onSchedule={() => run('schedule', async () => scheduleRelinkText(await relinkSchedule()))}
         onBackfill={() => run('backfill', async () => backfillResultText(await backfillSupplierParties()))} />
-      <UnlinkedRows revision={revision} busy={action !== null} pending={typeof action === 'object' ? action : null} onAction={run} />
     </Space>
   );
 }

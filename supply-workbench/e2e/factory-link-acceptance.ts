@@ -136,7 +136,7 @@ function seedFactoryRows(): void {
     INSERT INTO import_batches (id, created_at, updated_at, file_id, template, factory_party_id, status, source_key, superseded_at,
       file_meta, stats, decisions, created_by, committed_by, committed_at)
     SELECT 'sc06-' || phase, now(), now(), 'sc06-file-' || phase, 'factory-progress-v1', 'hz09-factory-a', 'committed', 'sc06-source',
-      CASE WHEN phase = 'historical' THEN now() END, '{}', '{}', '{}', '0199f0a0-0000-7000-8000-000000000001',
+      CASE WHEN phase = 'historical' THEN now() END, '{"bytes":0,"pendingLinks":0}', '{}', '{}', '0199f0a0-0000-7000-8000-000000000001',
       '0199f0a0-0000-7000-8000-000000000001', now() FROM (VALUES ('active'), ('historical')) AS snapshot(phase);
     INSERT INTO factory_in_transit_rows (id, import_batch_id, factory_party_id, sheet_name, row_no, raw, fingerprint, link_status,
       created_at, updated_at, po_raw, po_norm, name_raw, qty_required)

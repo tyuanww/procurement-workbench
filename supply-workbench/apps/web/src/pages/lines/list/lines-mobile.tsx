@@ -48,16 +48,15 @@ export function lineMobileColumns(input: LineMobileInput): TableColumnsType<Orde
   const widths: Partial<Record<LineColumnKey, number>> = input.layout === 'narrow'
     ? { stage: 44, nextDue: 52, daysInStage: 32 }
     : { stage: 48, nextDue: 56, daysInStage: 34 };
-  return input.shown.map((column) => {
+  return input.shown.filter((column) => column.key !== 'name').map((column) => {
     if (column.key === 'po') return {
       key: column.key,
       title: '采购单号 / 品名',
       align: 'left',
-      colSpan: 2,
-      onCell: () => ({ colSpan: 2, style: { paddingInline: space[0] } }),
+      rowScope: 'row',
+      onCell: () => ({ style: { paddingInline: space[0] } }),
       render: (_value: unknown, row: OrderLineRow) => <MobileLineIdentity row={row} input={input} />,
     };
-    if (column.key === 'name') return { key: column.key, colSpan: 0, onCell: () => ({ colSpan: 0 }) };
     return {
       key: column.key,
       title: mobileTitle(column.key, column.title),

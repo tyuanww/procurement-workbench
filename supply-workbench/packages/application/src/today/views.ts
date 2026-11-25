@@ -93,7 +93,8 @@ export type PendingBatchRow = {
 
 export type TodaySort = { readonly kind: 'urgency' } | { readonly kind: 'bulk'; readonly unit: string };
 export type TodayFilter = { readonly reasons?: readonly TodoReason[]; readonly sort: TodaySort };
-export type TodayChaseQuery = TodayFilter & { readonly factoryId?: string; readonly itemId?: string };
+export type TodayWorkFilter = 'factory_chase' | 'internal_note';
+export type TodayChaseQuery = TodayFilter & { readonly factoryId?: string; readonly itemId?: string; readonly work?: TodayWorkFilter };
 export type TodayQuery = Omit<TodayFilter, 'sort'> & {
   readonly scope: 'mine' | 'all';
   readonly includePending?: boolean;
@@ -101,6 +102,7 @@ export type TodayQuery = Omit<TodayFilter, 'sort'> & {
 export type TodayPageQuery = TodayQuery & {
   readonly page: { readonly number: number; readonly size: number };
   readonly sort: TodaySort;
+  readonly work?: TodayWorkFilter;
   readonly focusId?: string;
 };
 export type TodayFactory = { readonly id: string; readonly name: string };
@@ -114,6 +116,7 @@ export type TodayPaging = {
   readonly factories: readonly TodayFactory[];
   readonly followUpCounts?: { readonly due: number; readonly scheduled: number };
   readonly chaseCounts?: { readonly all: number; readonly filtered: number };
+  readonly internalNoteCount?: number;
   readonly chaseItemIds?: readonly string[];
 };
 export type TodayPageResponse = TodayResponse & { readonly paging: TodayPaging };

@@ -36,7 +36,10 @@ export function AliasReviewDrawer(props: AliasReviewDrawerProps) {
       open={props.open}
       onClose={props.onClose}
       title="审核主体别名"
-      footer={<Flex justify="flex-end"><Button type="primary" loading={props.isSubmitting} disabled={props.isSubmitting || isBlocked || !canCreate} onClick={props.onSubmit}>通过</Button></Flex>}
+      footer={<Flex justify="flex-end" gap={space[1]} wrap>
+        <Button onClick={props.onClose}>关闭</Button>
+        <Button type="primary" loading={props.isSubmitting} disabled={props.isSubmitting || isBlocked || !canCreate} onClick={props.onSubmit}>通过</Button>
+      </Flex>}
     >
       <AliasReviewFields {...props} />
     </Drawer>

@@ -1,27 +1,26 @@
-import type { TableColumnType } from 'antd';
+import { Flex, Typography, type TableColumnType } from 'antd';
 import type { ReactNode } from 'react';
 import { EM_DASH, type StuckTableRow } from '../../features/performance/index.js';
-import { text } from '../../theme/tokens.js';
+import { formatTableDate } from '../../shared/ui/format.js';
+import { fontSize } from '../../theme/tokens.js';
 
-export function mobileStuckColumns(isNarrowPhone: boolean, openBatch: (row: StuckTableRow) => ReactNode): TableColumnType<StuckTableRow>[] {
-  const widths = isNarrowPhone
-    ? { stage: 52, days: 32, po: 72, name: 80 }
-    : { stage: 64, days: 40, po: 88, name: 100 };
+export function mobileStuckColumns({ now, openBatch }: {
+  readonly now: Date;
+  readonly openBatch: (row: StuckTableRow) => ReactNode;
+}): TableColumnType<StuckTableRow>[] {
   return [
-    { title: '阶段', dataIndex: 'stageLabel', width: widths.stage, ellipsis: true, responsive: ['xs'] },
+    { title: '采购单 / 批次', rowScope: 'row', width: '38%', render: (_value, row) => openBatch(row) },
     {
-      title: '卡了',
-      dataIndex: 'daysInStage',
-      width: widths.days,
-      align: 'right' as const,
-      responsive: ['xs'],
-      render: (value: number) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>,
+      title: '商品与卡点',
+      render: (_value, row) => <Flex vertical>
+        <Typography.Text style={{ overflowWrap: 'anywhere' }}>{row.name}</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>
+          {row.stageLabel} · 停留 {row.daysInStage} 天
+        </Typography.Text>
+        {row.confirmed === EM_DASH ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>
+          确认到货 {formatTableDate({ iso: row.confirmed, now })}
+        </Typography.Text>}
+      </Flex>,
     },
-    { title: '单号', width: widths.po, responsive: ['xs'], render: (_value, row) => openBatch(row) },
-    { title: '品名', dataIndex: 'name', width: widths.name, ellipsis: true, responsive: ['xs'], render: (value: string) => <MobileDashText value={value} /> },
   ];
-}
-
-function MobileDashText(props: { readonly value: string }) {
-  return <span style={{ color: props.value === EM_DASH ? text.tertiary : text.primary }}>{props.value}</span>;
 }

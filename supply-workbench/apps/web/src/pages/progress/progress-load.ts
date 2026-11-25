@@ -3,10 +3,12 @@ import { fetchLatestNotes } from '../../shared/api/catalog.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
 import { NOTE_READ_ERROR, progressMaterialRisks, progressRows, risksForLine, type ProgressLine, type ProgressMaterialRisk, type ProgressNudge, type ProgressRow } from '../../features/progress/index.js';
 import { progressActionSource } from './progress-action-source.js';
+import { storeBatchFacts, type StoreBatchFacts } from './progress-batch-facts.js';
 
 export type ProgressData = {
   readonly rows: readonly ProgressRow[];
   readonly lines: ReadonlyMap<string, OrderLineRow>;
+  readonly batchFacts: ReadonlyMap<string, StoreBatchFacts>;
   readonly arrivalMemos: TodayResponse['arrivalMemos'];
   readonly actionNotice: string;
 };
@@ -42,7 +44,8 @@ export async function loadProgress(
     const byId = new Map(lines.map((line) => [line.id, line]));
     const risks = progressMaterialRisks(actions.items);
     const rows = progressRows({ lines: [...byId.values()].map((line) => toLine(line, risksForLine(line, risks))), nudges: actions.items.flatMap(toNudge) });
-    setData({ rows, lines: byId, arrivalMemos: today.arrivalMemos, actionNotice: actions.notice });
+    const batchFacts = storeBatchFacts(lines, { items: actions.items, arrivalMemos: today.arrivalMemos });
+    setData({ rows, lines: byId, batchFacts, arrivalMemos: today.arrivalMemos, actionNotice: actions.notice });
     const saved = await loadSavedNotes(rows);
     if (current !== latest()) return;
     setNotes(saved.notes);

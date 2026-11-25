@@ -2,12 +2,12 @@ import { TEMPLATE_IDS, TEMPLATE_ID_LABELS, type TemplateId } from '@sw/domain';
 import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { AuditQueries } from '../../../../application/src/ports/audit-queries.js';
 import type { FreshnessQueries } from '../../../../application/src/ports/freshness-queries.js';
-import type { AuditEntryView, FreshnessSource } from '../../../../application/src/platform/views.js';
+import type { AuditEntryView, FreshnessResponse, FreshnessSource } from '../../../../application/src/platform/views.js';
 import type { AppDatabase } from '../../client.js';
-import { instant } from '../../mappers/time.js';
+import { instant, instantOrNull } from '../../mappers/time.js';
 import { importBatches } from '../../schema/archive.js';
 import { isAppliedImportBatch } from '../imports/applied-source.js';
-import { auditLog } from '../../schema/platform.js';
+import { auditLog, storedFiles } from '../../schema/platform.js';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 50;
@@ -28,8 +28,9 @@ export function auditQueries(db: AppDatabase): AuditQueries {
 export function freshnessQueries(db: AppDatabase): FreshnessQueries {
   return {
     async load() {
-      const rows = await db.select().from(importBatches).where(isAppliedImportBatch());
-      return { sources: latest(rows) };
+      const rows = await db.select({ batch: importBatches, uploadedAt: storedFiles.createdAt }).from(importBatches)
+        .leftJoin(storedFiles, eq(storedFiles.id, importBatches.fileId)).where(isAppliedImportBatch());
+      return latest(rows);
     },
   };
 }
@@ -49,18 +50,25 @@ function toEntry(row: typeof auditLog.$inferSelect): AuditEntryView {
   return { ...row, at: instant(row.at) };
 }
 
-function latest(rows: readonly (typeof importBatches.$inferSelect)[]): FreshnessSource[] {
-  const grouped = new Map<string, FreshnessSource>();
-  for (const row of rows) {
-    const key = `${row.template}:${row.factoryPartyId ?? ''}`;
+type AppliedSource = { readonly batch: typeof importBatches.$inferSelect; readonly uploadedAt: string | null };
+
+function latest(rows: readonly AppliedSource[]): FreshnessResponse {
+  const grouped = new Map<string, { source: FreshnessSource; uploadedAt: string | null }>();
+  for (const { batch, uploadedAt } of rows) {
+    const key = `${batch.template}:${batch.factoryPartyId ?? ''}`;
     const current = grouped.get(key);
-    const template = templateOf(row.template);
-    const at = row.committedAt === null ? null : instant(row.committedAt);
-    if (current === undefined || (at !== null && (current.lastCommittedAt === null || at > current.lastCommittedAt))) {
-      grouped.set(key, { template, factoryPartyId: row.factoryPartyId, label: TEMPLATE_ID_LABELS[template], lastCommittedAt: at, fileModifiedAt: modifiedAt(row.fileMeta) });
-    }
+    const at = instantOrNull(batch.committedAt);
+    if (current !== undefined && !isLaterCommit(at, current.source.lastCommittedAt)) continue;
+    const template = templateOf(batch.template);
+    const source = { template, factoryPartyId: batch.factoryPartyId, label: TEMPLATE_ID_LABELS[template], lastCommittedAt: at, fileModifiedAt: modifiedAt(batch.fileMeta) };
+    grouped.set(key, { source, uploadedAt });
   }
-  return [...grouped.values()];
+  const uploaded = grouped.get('po-master-v1:')?.uploadedAt;
+  return { sources: [...grouped.values()].map(({ source }) => source), ...(uploaded ? { procurementUploadedAt: instant(uploaded) } : {}) };
+}
+
+function isLaterCommit(at: string | null, previous: string | null): boolean {
+  return at !== null && (previous === null || at > previous);
 }
 
 function templateOf(value: string): TemplateId {

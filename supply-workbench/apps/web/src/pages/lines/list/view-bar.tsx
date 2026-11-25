@@ -1,8 +1,9 @@
-import { Button, Checkbox, Popover, Radio, Segmented, Tag } from 'antd';
+import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
 import { deskAddress, exportAddress, lineTableLayout, renderedLineColumns, type LineDeskView } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
+import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { bg, radiusCard, space } from '../../../theme/tokens.js';
 import { saveCurrent } from './actions.js';
 import { SaveViewButton } from './SaveViewButton.js';
@@ -38,7 +39,7 @@ const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM,
 const DENSITY_OPTIONS = [
   { label: '紧凑', value: 'small' },
   { label: '舒适', value: 'middle' },
-];
+] satisfies { readonly label: string; readonly value: Density }[];
 
 export function readDensity(search: string): Density {
   return new URLSearchParams(search).get(DENSITY_PARAM) === 'middle' ? 'middle' : 'small';
@@ -144,11 +145,9 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
   if (isPhone) {
     return (
       <div style={phoneViewRowStyle()}>
-        <div style={phonePickerStyle()}>
-          <ViewPicker search={props.search} views={props.views} setParams={props.setParams} compact />
-        </div>
+        <ViewPicker search={props.search} views={props.views} setParams={props.setParams} />
         <div style={phoneActionsStyle()}>
-          <div style={viewClusterStyle()}>
+          <div role="group" aria-label="视图操作" style={viewClusterStyle()}>
             {actions}
           </div>
           <DisplayControl shown={shown} density={props.density} query={props.query} search={props.search} setParams={props.setParams} />
@@ -162,7 +161,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
         <ViewPicker search={props.search} views={props.views} setParams={props.setParams} />
         {actions}
       </div>
-      <div style={viewRightStyle()}>
+      <div role="group" aria-label="列表工具" style={viewRightStyle()}>
         <ColumnControl columns={props.columns} hiddenKeys={props.hiddenKeys} search={props.search} setParams={props.setParams} />
         <DensityControl density={props.density} search={props.search} setParams={props.setParams} />
         <Button href={exportAddress({ query: props.query, columns: shown })}>导出 Excel</Button>
@@ -216,10 +215,6 @@ function phoneViewRowStyle(): CSSProperties {
   return { display: 'flex', flexDirection: 'column', gap: space[1], minHeight: 72 };
 }
 
-function phonePickerStyle(): CSSProperties {
-  return { overflowX: 'auto', width: '100%' };
-}
-
 function phoneActionsStyle(): CSSProperties {
   return { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[1] };
 }
@@ -232,17 +227,18 @@ function ViewPicker(props: {
   readonly search: string;
   readonly views: readonly SavedView[];
   readonly setParams: SearchWriter;
-  readonly compact?: boolean;
 }): ReactNode {
   const selected = selectedViewOf({ search: props.search, views: props.views });
   return (
-    <Radio.Group
-      optionType="button"
-      options={props.views.map((view) => ({ label: view.label, value: view.id }))}
-      {...(selected === undefined ? {} : { value: selected.id })}
-      {...(props.compact === true ? { style: { display: 'inline-flex', flexWrap: 'nowrap' as const, width: 'max-content' } } : {})}
-      onChange={(event) => applyPickedView({ search: props.search, views: props.views, setParams: props.setParams, picked: String(event.target.value) })}
-    />
+    <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+      <ViewSwitch
+        aria-label="常用视图"
+        options={props.views.map((view) => ({ label: view.label, value: view.id }))}
+        value={selected?.id ?? ''}
+        style={{ width: 'max-content' }}
+        onChange={(picked) => applyPickedView({ search: props.search, views: props.views, setParams: props.setParams, picked })}
+      />
+    </div>
   );
 }
 
@@ -300,16 +296,13 @@ function ColumnMenu(props: { readonly columns: readonly ColumnView[]; readonly h
 
 function DensityControl(props: { readonly density: Density; readonly search: string; readonly setParams: SearchWriter }): ReactNode {
   return (
-    <Segmented
+    <ViewSwitch<Density>
+      aria-label="列表密度"
       value={props.density}
       options={DENSITY_OPTIONS}
-      onChange={(value) => props.setParams(densityAddress({ search: props.search, density: densityOf(value) }))}
+      onChange={(density) => props.setParams(densityAddress({ search: props.search, density }))}
     />
   );
-}
-
-function densityOf(value: unknown): Density {
-  return value === 'middle' ? 'middle' : 'small';
 }
 
 function copyParam(input: { readonly from: URLSearchParams; readonly to: URLSearchParams; readonly key: string }): void {

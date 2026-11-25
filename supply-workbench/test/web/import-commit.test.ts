@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 import { expect, it } from 'vitest';
 import type { ImportContinuationInput } from '../../apps/web/src/features/imports/index.js';
-import { commitFailureText, ImportCommitPanel, type CommitRequest } from '../../apps/web/src/pages/imports/ImportBatchPage.js';
+import { commitFailureText } from '../../apps/web/src/pages/imports/ImportBatchPage.js';
+import { ImportCommitPanel, type CommitRequest } from '../../apps/web/src/pages/imports/import-commit-panel.js';
 import { ApiError } from '../../apps/web/src/shared/api/client.js';
 import { FactorySelect } from '../../apps/web/src/pages/imports/ImportCenter.js';
 

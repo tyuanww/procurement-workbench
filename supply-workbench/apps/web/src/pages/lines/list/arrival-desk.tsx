@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Alert, Button, Card, Drawer, Empty, Flex, Pagination, Segmented, Skeleton, Typography } from 'antd';
+import { Alert, Button, Card, Drawer, Empty, Flex, Pagination, Skeleton, Typography } from 'antd';
 import { ArrivalDetailSchema, ArrivalListSchema, ArrivalSchema, type Arrival, type ArrivalCandidate, type RegisterArrivalInput, type ReviseArrivalInput } from '@sw/contracts';
 import { loadPartyOptions } from '../../../features/master-data/index.js';
 import { useCanWrite } from '../../../shared/actor.js';
 import { ApiError, apiErrorMessage, apiGet, apiGetWithSignal, apiSend } from '../../../shared/api/client.js';
 import { writeUrlState } from '../../../shared/hooks/url-state.js';
+import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { AllocateArrivalForm, arrivalCandidateSource, RegisterArrivalForm, RollbackArrivalForm, type Warehouse } from './arrival-forms.js';
 
 const base = '/api/v1/receipts/arrivals';
@@ -66,14 +67,16 @@ function ArrivalList({ warehouses, select }: { readonly warehouses: readonly War
   const [error, setError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
-    void readArrivalList({ filter, page, signal: controller.signal }).then(setResult).catch((caught: unknown) => {
+    void readArrivalList({ filter, page, signal: controller.signal }).then((next) => {
+      if (!controller.signal.aborted) setResult(next);
+    }).catch((caught: unknown) => {
       if (!controller.signal.aborted) setError(apiErrorMessage(caught) ?? '到仓记录读取失败');
     });
     return () => controller.abort();
   }, [filter, page]);
   return <Flex vertical gap={12}>
     <Flex justify="space-between" wrap="wrap" gap={8}>
-      <Segmented<'pending' | 'all'> value={filter} options={[{ label: '待归单', value: 'pending' }, { label: '全部记录', value: 'all' }]}
+      <ViewSwitch aria-label="到仓记录范围" value={filter} options={[{ label: '待归单', value: 'pending' }, { label: '全部记录', value: 'all' }]}
         onChange={(value) => { setError(''); setResult(null); setPage(1); setFilter(value); }} />
       <Button type="primary" onClick={() => select('register')}>登记到仓</Button>
     </Flex>
@@ -181,7 +184,7 @@ function AllocationActions({ arrival, candidates, onSaved }: {
     {arrival.allocation === null ? null : <Button danger onClick={() => setMode('rollback')}>撤销分配</Button>}
   </Flex>;
   return <Card size="small" title={mode === 'rollback' ? '撤销分配' : arrival.allocation === null ? '核实凭据并分配' : '更正分配'}
-    extra={<Button type="link" disabled={isSaving} onClick={() => setMode(null)}>取消</Button>}>
+    extra={<Button disabled={isSaving} onClick={() => setMode(null)}>取消</Button>}>
     {error === '' ? null : <Alert showIcon type="error" title={error} />}
     {mode === 'rollback'
       ? <RollbackArrivalForm arrival={arrival} isSaving={isSaving} onSubmit={save} onInvalid={invalidate} />

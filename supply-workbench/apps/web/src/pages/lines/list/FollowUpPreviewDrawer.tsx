@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Descriptions, Divider, Drawer, Empty, Flex, Skeleton, Timeline, Typography } from 'antd';
-import { followUpKindLabel, lineStageLabel, type OrderLineId } from '@sw/domain';
+import { batchStatusLabel, followUpKindLabel, isOpenBatch, lineStageLabel, type OrderLineId } from '@sw/domain';
 import type { LineTimeline, OrderLineDetail, TimelineEvent } from '@sw/contracts';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
-import { batchLineText, timelineLineText } from '../../../features/follow-up/index.js';
+import { timelineLineText } from '../../../features/follow-up/index.js';
 import { formatDateTime, formatQuantity } from '../../../shared/ui/format.js';
 import { drawerWide } from '../../../theme/tokens.js';
 import { LineDetailLink } from '../detail/desk-navigation.js';
@@ -55,7 +55,7 @@ export function FollowUpPreviewDrawer(props: FollowUpPreviewDrawerProps) {
     >
       {state.kind === 'loading' ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
       {state.kind === 'failed' ? <Alert type="error" showIcon title={state.message} /> : null}
-      {state.kind === 'ready' ? <FollowUpPreviewFields detail={state.detail} timeline={state.timeline} /> : null}
+      {state.kind === 'ready' ? <FollowUpPreviewFields detail={state.detail} timeline={state.timeline} search={props.search} /> : null}
     </Drawer>
   );
 }
@@ -64,12 +64,12 @@ function PreviewFooter({ lineId, search, onClose }: Pick<FollowUpPreviewDrawerPr
   return (
     <Flex align="center" justify="flex-end" gap={12} wrap>
       <LineDetailLink href={`/lines/${encodeURIComponent(lineId)}`} search={search}>打开订单行详情</LineDetailLink>
-      <Button type="primary" onClick={onClose}>关闭</Button>
+      <Button onClick={onClose}>关闭</Button>
     </Flex>
   );
 }
 
-export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail; readonly timeline: LineTimeline; readonly error?: string }) {
+export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail; readonly timeline: LineTimeline; readonly search?: string; readonly error?: string }) {
   const { detail, timeline } = props;
   const line = detail.line;
   return (
@@ -86,10 +86,10 @@ export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail;
         { key: 'buyer', label: '负责人', children: line.buyer?.name ?? '未分配' },
       ]} />
       <Divider />
-      <Typography.Title level={4}>下一到货</Typography.Title>
-      <NextArrival detail={detail} />
+      <Typography.Title level={4}>订单行下一到货</Typography.Title>
+      <NextArrival detail={detail} search={props.search ?? ''} />
       <Divider />
-      <Typography.Title level={4}>批次</Typography.Title>
+      <Typography.Title level={4}>各批次交期与数量</Typography.Title>
       <BatchSection detail={detail} />
       <Divider />
       <Typography.Title level={4}>时间线</Typography.Title>
@@ -105,24 +105,42 @@ function factoryText(line: OrderLineDetail['line']): string {
   return line.factory?.displayName ?? '未关联';
 }
 
-function NextArrival({ detail }: { readonly detail: OrderLineDetail }) {
+function NextArrival({ detail, search }: { readonly detail: OrderLineDetail; readonly search: string }) {
   const due = detail.line.nextDue;
-  if (due === null) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无下一到货" />;
+  if (due === null || due.dateBuyerConfirmed === null) {
+    return <Typography.Text type="secondary">{nextArrivalMissing(detail)}</Typography.Text>;
+  }
+  const batch = detail.batches.find(({ id }) => id === due.batchId);
+  const batchLink = batch === undefined ? null : <LineDetailLink href={`/lines/${encodeURIComponent(detail.line.id)}?focusBatch=${encodeURIComponent(batch.id)}`} search={search}>第 {batch.seq} 批</LineDetailLink>;
   return <Descriptions size="small" column={1} items={[
-    { key: 'confirmed', label: '确认日', children: due.dateBuyerConfirmed ?? '—' },
-    { key: 'overdue', label: '逾期天数', children: due.overdueDays === null ? '—' : String(due.overdueDays) },
-    { key: 'factory', label: '代工厂需求日', children: due.dateFactoryRequired ?? '—' },
+    { key: 'confirmed', label: '开放批次最早的采购确认到货日', children: due.dateBuyerConfirmed },
+    ...(batchLink === null ? [] : [{ key: 'batch', label: '对应批次', children: batchLink }]),
+    ...(due.overdueDays === null || due.overdueDays <= 0 ? [] : [{ key: 'overdue', label: '逾期天数', children: `${due.overdueDays} 天` }]),
   ]} />;
+}
+
+function nextArrivalMissing(detail: OrderLineDetail): string {
+  const open = detail.batches.filter((batch) => isOpenBatch(batch.status));
+  if (open.length === 0) return '当前没有开放批次。历史批次的采购确认到货日见下方。';
+  if (open.every((batch) => batch.dateBuyerConfirmed === null)) return '开放批次尚未填写采购确认到货日。';
+  return '订单行暂无汇总日期，可在下方核对各批次的采购确认到货日。';
 }
 
 function BatchSection({ detail }: { readonly detail: OrderLineDetail }) {
   if (detail.batches.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" />;
+  const due = detail.line.nextDue;
   return <Flex vertical gap="small">
-    {detail.batches.map((batch) => <Descriptions key={batch.id} title={batchLineText(batch)} size="small" column={{ xs: 1, sm: 3 }} items={[
-      { key: 'planned', label: '计划', children: formatQuantity(batch.plannedQty) },
-      { key: 'shipped', label: '已发', children: formatQuantity(batch.shippedQty) },
-      { key: 'received', label: '已收', children: formatQuantity(batch.receivedQty) },
-    ]} />)}
+    {detail.batches.map((batch) => {
+      const isNext = due?.batchId === batch.id && due.dateBuyerConfirmed !== null;
+      return <Descriptions key={batch.id} title={`第 ${batch.seq} 批 · ${batchStatusLabel(batch.status)}${isNext ? ' · 下一到货' : ''}`} size="small" column={{ xs: 1, sm: 3 }} items={[
+        { key: 'confirmed', label: '采购确认到货日', children: batch.dateBuyerConfirmed ?? '未填写' },
+        ...(batch.dateFactoryRequired === null ? [] : [{ key: 'factory', label: '代工厂需求日', children: batch.dateFactoryRequired }]),
+        ...(batch.dateSupplierPromised === null ? [] : [{ key: 'supplier', label: '供应商承诺日', children: batch.dateSupplierPromised }]),
+        { key: 'planned', label: '计划', children: formatQuantity(batch.plannedQty) },
+        { key: 'shipped', label: '已发', children: formatQuantity(batch.shippedQty) },
+        { key: 'received', label: '已收', children: formatQuantity(batch.receivedQty) },
+      ]} />;
+    })}
   </Flex>;
 }
 

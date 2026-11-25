@@ -13,6 +13,7 @@ export type NoteRef = {
 
 export type Target = {
   readonly batchId: string;
+  readonly batchSeq?: number;
   readonly lineId: string;
   readonly plannedQty: number;
   readonly receivedQty: number;
