@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Card, Empty, Flex, Popconfirm, Select, Skeleton, Space, Statistic, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -67,7 +68,7 @@ export function OwnerCoverageSection(input: { readonly state: CoverageState; rea
 
 export function OwnerCoverageCards({ coverage }: { readonly coverage: OwnerCoverage }): ReactNode {
   return (
-    <SectionGroup title="负责人覆盖" meta="订单行当前归属">
+    <SectionGroup title="负责人覆盖" action={<ProcurementCutoff />} meta="订单行当前归属">
       <Flex wrap gap={space[3]}>
         {coverageStats(coverage).map((item) => (
           <Card key={item.key} size="small" style={{ flex: '1 1 140px', minWidth: 140 }}>

@@ -1,6 +1,8 @@
-import { DatePicker, Segmented } from 'antd';
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
+import { Card, DatePicker, Flex, Select, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import type { CSSProperties } from 'react';
+import { useId, type CSSProperties } from 'react';
+import { useShellViewport } from '../../features/shell/index.js';
 import {
   DASHBOARD_LANES,
   DASHBOARD_PRESETS,
@@ -9,7 +11,8 @@ import {
   type DashboardPreset,
   type DashboardQuery,
 } from '../../features/performance/index.js';
-import { brand, fontSize, radius, space, text } from '../../theme/tokens.js';
+import { ViewSwitch } from '../../shared/ui/view-switch.js';
+import { space } from '../../theme/tokens.js';
 
 type SearchHandler = (patch: DashboardPatch) => void;
 
@@ -32,56 +35,73 @@ export function DashboardChrome(props: {
   readonly query: DashboardQuery;
   readonly onSearch: SearchHandler;
 }) {
+  const { query, onSearch } = props;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2], alignItems: 'center' }}>
-      <PeriodChips query={props.query} onSearch={props.onSearch} />
-      {props.query.view === 'project' ? null : <LaneChips lane={props.query.lane} onSearch={props.onSearch} />}
-      <PeriodPicker query={props.query} onSearch={props.onSearch} />
-      <span
-        style={{
-          color: text.secondary,
-          fontVariantNumeric: 'tabular-nums',
-          fontSize: fontSize.body,
-        }}
-      >
-        {props.query.from} 至 {props.query.to}
-      </span>
-      {props.query.preset === 'custom' ? <span style={{ color: brand[600] }}>自定义</span> : null}
-    </div>
+    <Card size="small">
+      <Flex wrap gap={space[2]} align="center">
+        {query.view === 'stuck' ? null : <>
+          <Typography.Text strong>统计期间</Typography.Text>
+          <PeriodChips query={query} onSearch={onSearch} />
+          <PeriodPicker query={query} onSearch={onSearch} />
+        </>}
+        {query.view === 'project' ? null : <>
+          <Typography.Text strong>线别</Typography.Text>
+          <LaneChips lane={query.lane} onSearch={onSearch} />
+        </>}
+        <ProcurementCutoff />
+      </Flex>
+    </Card>
   );
 }
 
-function PeriodChips(props: { readonly query: DashboardQuery; readonly onSearch: SearchHandler }) {
-  return (
-    <Segmented
+function PeriodChips({ query, onSearch }: { readonly query: DashboardQuery; readonly onSearch: SearchHandler }) {
+  const isPhone = useShellViewport().band === 'phone';
+  const named = namedPresetOptions();
+  const options = query.preset === 'custom' ? [...named, { value: 'custom', label: PRESET_LABEL.custom }] : named;
+  if (isPhone) {
+    return <Select<DashboardPreset>
       aria-label="期间"
-      value={props.query.preset}
-      options={namedPresetOptions()}
-      onChange={(value) => choosePreset(String(value), props.onSearch)}
-    />
-  );
+      value={query.preset}
+      options={options}
+      onChange={(value) => choosePreset(value, onSearch)}
+      style={{ minWidth: 120 }}
+    />;
+  }
+  return <ViewSwitch aria-label="期间" value={query.preset} options={options} onChange={(value) => choosePreset(value, onSearch)} />;
 }
 
 function LaneChips(props: { readonly lane: DashboardLane; readonly onSearch: SearchHandler }) {
   return (
-    <Segmented
-      aria-label="线"
+    <ViewSwitch
+      aria-label="线别"
       value={props.lane}
       options={DASHBOARD_LANES.map((lane) => ({ label: LANE_LABEL[lane], value: lane }))}
-      onChange={(value) => chooseLane(String(value), props.onSearch)}
+      onChange={(lane) => props.onSearch({ lane })}
     />
   );
 }
 
+const hiddenLabel: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)',
+};
+
 function PeriodPicker(props: { readonly query: DashboardQuery; readonly onSearch: SearchHandler }) {
+  const start = useId();
+  const end = useId();
   return (
-    <DatePicker.RangePicker
-      format="YYYY-MM-DD"
-      placeholder={['开始', '结束']}
-      value={[pickerDay(props.query.from), pickerDay(props.query.to)]}
-      onChange={(_dates, dateStrings) => commitRange(dateStrings, props.onSearch)}
-      style={pickerStyle(props.query.preset === 'custom')}
-    />
+    <Flex role="group" aria-label="统计起止日期" style={{ maxWidth: '100%' }}>
+      <label htmlFor={start} style={hiddenLabel}>开始日期</label>
+      <label htmlFor={end} style={hiddenLabel}>结束日期</label>
+      <DatePicker.RangePicker
+        format="YYYY-MM-DD"
+        placeholder={['开始日期', '结束日期']}
+        id={{ start, end }}
+        allowClear={false}
+        value={[pickerDay(props.query.from), pickerDay(props.query.to)]}
+        onChange={(_dates, dateStrings) => commitRange(dateStrings, props.onSearch)}
+        style={{ maxWidth: '100%' }}
+      />
+    </Flex>
   );
 }
 
@@ -98,22 +118,12 @@ function choosePreset(value: string, onSearch: SearchHandler): void {
   onSearch({ preset });
 }
 
-function chooseLane(value: string, onSearch: SearchHandler): void {
-  const lane = DASHBOARD_LANES.find((item) => item === value);
-  if (lane === undefined) return;
-  onSearch({ lane });
-}
-
 function commitRange(dateStrings: [string, string] | null, onSearch: SearchHandler): void {
   if (dateStrings === null) return;
   const from = dateStrings[0];
   const to = dateStrings[1];
   if (from === undefined || to === undefined || from === '' || to === '') return;
   onSearch({ preset: 'custom', from, to });
-}
-
-function pickerStyle(isCustom: boolean): CSSProperties {
-  return { outline: isCustom ? `2px solid ${brand[600]}` : 'none', borderRadius: radius };
 }
 
 function pickerDay(day: string): Dayjs {

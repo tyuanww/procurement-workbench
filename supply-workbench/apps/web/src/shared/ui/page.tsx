@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
-import { Typography } from 'antd';
-import { bg, border, radiusCard, space, text } from '../../theme/tokens.js';
+import { Flex, Typography } from 'antd';
+import { bg, border, fontSize, radiusCard, space, text } from '../../theme/tokens.js';
 
 export function surfaceStyle(): {
   readonly background: string;
@@ -16,41 +16,30 @@ export function surfaceStyle(): {
   };
 }
 
-export function pageHeaderRowStyle(): {
-  readonly display: 'flex';
-  readonly alignItems: 'center';
-  readonly justifyContent: 'space-between';
-  readonly lineHeight: '32px';
-  readonly minHeight: 32;
-  readonly marginBottom: 16;
-} {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    lineHeight: '32px',
-    minHeight: 32,
-    marginBottom: space[3],
-  };
-}
+const accessibleTitleStyle: CSSProperties = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' };
 
 export function PageHeader(input: {
   readonly title: string;
   readonly browserTitle?: string;
   readonly secondary?: string;
   readonly action?: ReactNode;
+  readonly showIdentity?: boolean;
 }): ReactNode {
   usePageTitle(input.browserTitle ?? input.title);
+  const secondary = secondaryNode(input.secondary);
+  const actions = input.action ?? null;
+  const isIdentityVisible = input.showIdentity === true;
   return (
-    <div style={pageHeaderRowStyle()}>
-      <div style={titleClusterStyle()}>
-        <Typography.Title level={1} style={titleTextStyle()}>
-          {input.title}
-        </Typography.Title>
-        {secondaryNode(input.secondary)}
-      </div>
-      {input.action}
-    </div>
+    <>
+      {isIdentityVisible ? null : <Typography.Title level={1} style={accessibleTitleStyle}>{input.title}</Typography.Title>}
+      {isIdentityVisible || secondary !== null || actions !== null ? (
+        <Flex gap={space[2]} align="center" wrap style={{ marginBottom: space[2] }}>
+          {isIdentityVisible ? <Typography.Title level={1} style={{ margin: 0, color: text.primary, fontSize: fontSize.body }}>{input.title}</Typography.Title> : null}
+          {secondary}
+          {actions === null ? null : <div style={{ marginInlineStart: 'auto' }}>{actions}</div>}
+        </Flex>
+      ) : null}
+    </>
   );
 }
 
@@ -65,12 +54,13 @@ export function WorkbenchPage(input: {
   readonly browserTitle?: string;
   readonly secondary?: string;
   readonly action?: ReactNode;
+  readonly showIdentity?: boolean;
   readonly maxWidth?: number;
   readonly children: ReactNode;
 }): ReactNode {
   return (
     <section className="shell-page" style={shellPageStyle(input.maxWidth)}>
-      <PageHeader title={input.title} {...(input.browserTitle === undefined ? {} : { browserTitle: input.browserTitle })} {...headerExtras(input)} />
+      <PageHeader title={input.title} showIdentity={input.showIdentity === true} {...(input.browserTitle === undefined ? {} : { browserTitle: input.browserTitle })} {...headerExtras(input)} />
       {input.children}
     </section>
   );
@@ -94,12 +84,4 @@ function headerExtras(input: { readonly secondary?: string; readonly action?: Re
 function secondaryNode(secondary: string | undefined): ReactNode {
   if (secondary === undefined || secondary === '') return null;
   return <Typography.Text type="secondary">{secondary}</Typography.Text>;
-}
-
-function titleClusterStyle(): CSSProperties {
-  return { display: 'flex', alignItems: 'baseline', gap: space[1], minWidth: 0 };
-}
-
-function titleTextStyle(): CSSProperties {
-  return { margin: 0, color: text.primary };
 }

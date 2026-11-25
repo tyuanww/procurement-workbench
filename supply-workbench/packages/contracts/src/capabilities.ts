@@ -96,7 +96,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
       '/api/v1/factory-reports',
     ],
     webFeature: 'follow-up',
-    navLabel: '跟进台',
+    navLabel: '跟进中心',
     dependsOn: ['master-data'],
   },
   {
@@ -105,7 +105,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     writePermissions: [],
     routePrefixes: ['/api/v1/today'],
     webFeature: 'today',
-    navLabel: '今日',
+    navLabel: '今日事项',
     dependsOn: [],
   },
   {
@@ -130,7 +130,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     id: 'reporting',
     readPermissions: ['reports.read', 'dashboard.read'],
     writePermissions: ['reports.generate', 'reports.export'],
-    routePrefixes: ['/api/v1/reports', '/api/v1/dashboard/management-meeting'],
+    routePrefixes: ['/api/v1/reports', '/api/v1/dashboard/management-meeting', '/api/v1/dashboard/director'],
     webFeature: 'reporting',
     navLabel: null,
     dependsOn: ['platform', 'performance'],

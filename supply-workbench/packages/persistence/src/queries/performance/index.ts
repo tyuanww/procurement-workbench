@@ -8,13 +8,13 @@ import { partyAliases, parties, users } from '../../schema/platform.js';
 import { bomLines, products } from '../../schema/archive.js';
 import { effectiveFactoryLinks, type EffectiveFactoryLink } from '../factory-links/line-association.js';
 import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
-import { toBatch } from './batch.js';
+import { toBatchFacts } from './batch.js';
 
 type Clock = { today(): LocalDate };
 
 export function performanceQueries({ db, clock, timeZone }: { readonly db: AppDatabase; readonly clock: Clock; readonly timeZone: string }): PerformanceReadModel {
   return {
-    load: (query) => loadFacts(db, { clock, timeZone, lane: query.lane, from: query.from, to: query.to }),
+    load: (query, options) => loadFacts(db, { clock, timeZone, lane: query.lane, from: query.from, to: query.to, includeBatchDelivery: options?.includeBatchDelivery === true }),
     stuck: notUsed,
     suppliers: notUsed,
     buyers: notUsed,
@@ -25,7 +25,7 @@ function notUsed(): never {
   throw new Error('看板计算在用例里');
 }
 
-async function loadFacts(db: AppDatabase, ctx: { readonly clock: Clock; readonly timeZone: string; readonly lane: Lane | undefined; readonly from: LocalDate; readonly to: LocalDate }) {
+async function loadFacts(db: AppDatabase, ctx: { readonly clock: Clock; readonly timeZone: string; readonly lane: Lane | undefined; readonly from: LocalDate; readonly to: LocalDate; readonly includeBatchDelivery: boolean }) {
   const [batchRows, lineRows, orderRows, receiptRows, shipmentRows, noteRows, changeRows, exceptionRows, factoryLinkRows, followRows, partyRows, userRows, aliasRows, productRows, bomRows] = await Promise.all([
     db.select().from(deliveryBatches),
     db.select().from(orderLines),
@@ -45,7 +45,8 @@ async function loadFacts(db: AppDatabase, ctx: { readonly clock: Clock; readonly
   ]);
   const lines = new Map(lineRows.map((row) => [row.id, row]));
   const orders = new Map(orderRows.map((row) => [row.id, row]));
-  const batches = batchRows.flatMap((row) => toBatch({ row, lines, orders, receiptRows, shipmentRows, noteRows, lane: ctx.lane }));
+  const batchSources = batchRows.flatMap((row) => toBatchFacts({ row, lines, orders, receiptRows, shipmentRows, noteRows, lane: ctx.lane, includeBatchDelivery: ctx.includeBatchDelivery }));
+  const batches = batchSources.map(({ kpi }) => kpi);
   const batchesById = new Map<string, (typeof batches)[number]>(batches.map((batch) => [batch.id, batch]));
   return {
     kpi: kpiOf({ ctx, batches, batchesById, lineRows, changeRows, exceptionRows, lines, orders }),
@@ -53,6 +54,7 @@ async function loadFacts(db: AppDatabase, ctx: { readonly clock: Clock; readonly
     partyNames: Object.fromEntries(partyRows.map((row) => [row.id, row.displayName])),
     buyerNames: Object.fromEntries(userRows.map((row) => [row.id, row.name])),
     batchLabels: Object.fromEntries(batchRows.flatMap((row) => labelOf({ row, lines, orders }))),
+    ...(ctx.includeBatchDelivery ? { batchDelivery: Object.fromEntries(batchSources.flatMap(({ kpi, delivery }) => delivery === undefined ? [] : [[kpi.id, delivery]])) } : {}),
     linkedFactoryOrderLineIds: linkedFactoryLineIds(factoryLinkRows),
     unlinkedFactoryOrderLineIds: unlinkedFactoryLineIds(factoryLinkRows),
     openExceptionOrderLineIds: openExceptionLineIds(exceptionRows),
@@ -179,5 +181,5 @@ function labelOf({ row, lines, orders }: { readonly row: typeof deliveryBatches.
   const line = lines.get(row.orderLineId);
   const order = line === undefined ? undefined : orders.get(line.purchaseOrderId);
   if (line === undefined || order === undefined) return [];
-  return [[row.id, { poRaw: order.poRaw, nameRaw: line.nameRaw, orderLineId: line.id }]];
+  return [[row.id, { seq: row.seq, poRaw: order.poRaw, nameRaw: line.nameRaw, orderLineId: line.id }]];
 }

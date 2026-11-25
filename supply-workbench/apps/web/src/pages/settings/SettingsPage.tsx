@@ -1,6 +1,7 @@
+import { settingsSection, settingsSectionLabels } from './settings-section.js';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Alert, Button, Result, Skeleton, Tabs } from 'antd';
+import { Alert, Button, Result, Skeleton } from 'antd';
 import {
   AuditEntryViewSchema,
   SettingsSchema,
@@ -13,6 +14,7 @@ import {
 import { apiErrorMessage, apiGet, asArray } from '../../shared/api/client.js';
 import type { UiNotice } from '../../shared/ui/notice.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
+import { ContentTabs } from '../../shared/ui/view-switch.js';
 import { space } from '../../theme/tokens.js';
 import { AuditPanel, ThresholdPanel, UsersPanel } from './SettingsPanels.js';
 import { settingsFormCss } from './settings-form-css.js';
@@ -47,18 +49,18 @@ type SettingsLoadState =
   | { readonly kind: 'ready' }
   | { readonly kind: 'error'; readonly message: string };
 
-function SettingsContent(input: SettingsTabsProps & { readonly message: UiNotice | null; readonly loadState: SettingsLoadState; readonly onRetry: () => void }) {
+function SettingsContent(input: SettingsSectionsProps & { readonly message: UiNotice | null; readonly loadState: SettingsLoadState; readonly onRetry: () => void }) {
   return (
     <>
       {input.message === null ? null : <Alert style={{ marginBottom: space[4] }} type={input.message.kind} showIcon title={input.message.text} />}
       {input.loadState.kind === 'loading' ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
       {input.loadState.kind === 'error' ? <Result status="error" title="设置没有读出来" subTitle={input.loadState.message} extra={<Button type="primary" onClick={input.onRetry}>重试</Button>} /> : null}
-      {input.loadState.kind === 'ready' ? <SettingsTabs {...input} /> : null}
+      {input.loadState.kind === 'ready' ? <SettingsSections {...input} /> : null}
     </>
   );
 }
 
-type SettingsTabsProps = {
+type SettingsSectionsProps = {
   readonly users: readonly UserView[];
   readonly refresh: () => void;
   readonly setMessage: (message: UiNotice | null) => void;
@@ -69,37 +71,35 @@ type SettingsTabsProps = {
   readonly setOpenId: (id: string | null) => void;
 };
 
-function SettingsTabs(input: SettingsTabsProps) {
+function SettingsSections(input: SettingsSectionsProps) {
+  const [params, setParams] = useSearchParams();
+  const { activeKey, defaultSection } = settingsSection(params);
   return (
-    <Tabs
-      defaultActiveKey="users"
+    <ContentTabs
+      aria-label="设置内容"
+      activeKey={activeKey}
+      onChange={(key) => setParams((previous) => {
+        const next = new URLSearchParams(previous);
+        if (key === defaultSection) next.delete('section');
+        else next.set('section', key);
+        return next;
+      })}
       items={[
         {
           key: 'users',
-          label: '用户',
-          children: (
-            <UsersPanel
-              users={input.users}
-              onRefresh={input.refresh}
-              setMessage={input.setMessage}
-            />
-          ),
+          label: settingsSectionLabels.users,
+          children: <UsersPanel users={input.users} onRefresh={input.refresh} setMessage={input.setMessage} />,
         },
         {
           key: 'settings',
-          label: '阈值',
-          children:
-            input.settings === null ? null : (
-              <ThresholdPanel
-                settings={input.settings}
-                onDone={input.setSettings}
-                setMessage={input.setMessage}
-              />
-            ),
+          label: settingsSectionLabels.settings,
+          children: input.settings === null ? null : (
+            <ThresholdPanel settings={input.settings} onDone={input.setSettings} setMessage={input.setMessage} />
+          ),
         },
         {
           key: 'audit',
-          label: '审计',
+          label: settingsSectionLabels.audit,
           children: (
             <AuditPanel audit={input.audit} openId={input.openId} setOpenId={input.setOpenId} />
           ),

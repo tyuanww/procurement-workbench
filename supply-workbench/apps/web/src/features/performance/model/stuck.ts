@@ -11,6 +11,7 @@ export type StuckDistributionInput = StuckDashboard['distribution'][number];
 
 export type StuckTableRow = {
   readonly batchId: string;
+  readonly batchSeq: number | undefined;
   readonly stageLabel: string;
   readonly daysInStage: number;
   readonly po: string;
@@ -62,6 +63,7 @@ export function stuckView(input: {
 function toRow(item: StuckItem): StuckTableRow {
   return {
     batchId: item.batchId,
+    batchSeq: item.batchSeq,
     stageLabel: batchStatusLabel(item.stage),
     daysInStage: item.daysInStage,
     po: textOrDash(item.poRaw),

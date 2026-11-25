@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Alert, Button, Collapse, Flex, Form, Select, Typography, Upload } from 'antd';
 import { DetectResponseSchema, ImportBatchSummarySchema, type DetectResponse } from '@sw/contracts';
 import type { TemplateId } from '@sw/domain';
@@ -9,10 +9,10 @@ import { ImportDetectionDetails, ImportTypeChoices } from './import-type-choice.
 import { useCanWrite } from '../../shared/actor.js';
 import { loadPartyOptions } from '../../features/master-data/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
-import { ImportReviewNav } from '../../shared/ui/import-review-nav.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { space } from '../../theme/tokens.js';
 import { ImportBatchHistory } from './ImportBatchHistory.js';
+import { ImportWorkflow } from './import-workflow.js';
 
 type FactoryLoad =
   | { readonly kind: 'idle' }
@@ -30,7 +30,6 @@ export function ImportCenter() {
   const canImport = useCanWrite('imports.write');
   return (
     <WorkbenchPage title="导入中心">
-      <ImportReviewNav />
       {canImport ? <ImportUploadForm /> : null}
       <ImportBatchHistory />
     </WorkbenchPage>
@@ -40,6 +39,7 @@ export function ImportCenter() {
 // eslint-disable-next-line max-lines-per-function, complexity
 function ImportUploadForm() {
   const navigate = useNavigate();
+  const { search } = useLocation();
   const canWriteRecords = useCanWrite('records.write');
   const [detectLoad, setDetectLoad] = useState<DetectLoad>({ kind: 'idle' });
   const [manualChoice, setManualChoice] = useState<TemplateId | null>(null);
@@ -91,9 +91,16 @@ function ImportUploadForm() {
   };
   return (
     <>
+      <ImportWorkflow stage={detectLoad.kind === 'idle' ? 'choose' : detectLoad.kind === 'failed' || error !== '' ? 'failed' : 'parse'} />
       <div id="import-file" tabIndex={-1}>
         <SectionGroup title="选择文件" meta="支持 CSV 和 XLSX">
-          <FilePick fileName={detectLoad.kind === 'idle' ? null : detectLoad.fileName} isStarting={isStarting} onFile={selectFile} />
+          <Flex vertical gap={space[2]}>
+            <FilePick fileName={detectLoad.kind === 'idle' ? null : detectLoad.fileName} isStarting={isStarting} onFile={selectFile} />
+            <Flex gap={space[2]} wrap>
+              <Button href="/api/v1/templates/po-master-v1.xlsx">下载采购订单总表模板</Button>
+              <Button href="/api/v1/templates/factory-progress-v1.xlsx">下载代工厂空白模板 v1</Button>
+            </Flex>
+          </Flex>
         </SectionGroup>
       </div>
       <SectionGroup title="解析设置">
@@ -110,10 +117,9 @@ function ImportUploadForm() {
             if (detectLoad.kind !== 'ready' || detectLoad.generation !== generation.current || chosen === null || !canStart || isStarting) return;
             setStarting(true);
             setError('');
-            void start({ detected: detectLoad.value, template: chosen, factoryPartyId, navigate, setError }).finally(() => setStarting(false));
+            void start({ detected: detectLoad.value, template: chosen, factoryPartyId, navigate: (pathname) => { void navigate({ pathname, search }); }, setError })
+              .finally(() => setStarting(false));
           }}>开始解析</Button>
-          <Button href="/api/v1/templates/po-master-v1.xlsx">下载采购订单总表模板</Button>
-          <Button href="/api/v1/templates/factory-progress-v1.xlsx">下载代工厂空白模板 v1</Button>
         </Flex>
         {error === '' ? null : <Alert type="error" showIcon title={error} />}
         {detected === null ? null : <ImportDetectionDetails candidates={detected.candidates} />}
@@ -130,16 +136,24 @@ function DetectStatus({ load }: { readonly load: DetectLoad }) {
 }
 
 function FilePick(props: { readonly fileName: string | null; readonly isStarting: boolean; readonly onFile: (file: File) => void }) {
+  const id = useId();
   return (
     <Upload.Dragger
+      id={id}
       accept=".csv,.xlsx"
       maxCount={1}
       disabled={props.isStarting}
+      hasControlInside openFileDialogOnClick={false}
       showUploadList={false}
-      beforeUpload={(file) => { props.onFile(file); return false; }}
+      beforeUpload={(file) => { props.onFile(file); return Upload.LIST_IGNORE; }}
     >
-      <p className="ant-upload-text" style={{ overflowWrap: 'anywhere' }}>{props.fileName ?? '点击选择文件或拖到这里'}</p>
-      {props.fileName === null ? null : <p className="ant-upload-hint">点击或拖入其他文件可更换</p>}
+      <Flex vertical align="center" gap={space[1]}>
+        <Button disabled={props.isStarting} onClick={() => { document.getElementById(id)?.click(); }}>
+          {props.fileName === null ? '选择文件' : '更换文件'}
+        </Button>
+        {props.fileName === null ? <Typography.Text type="secondary">也可以把文件拖到这里</Typography.Text>
+          : <Typography.Text role="status" style={{ overflowWrap: 'anywhere' }}>已选文件 {props.fileName}</Typography.Text>}
+      </Flex>
     </Upload.Dragger>
   );
 }
@@ -196,7 +210,7 @@ export function FactorySelect(props: {
         id="import-factory"
         aria-required="true"
         placeholder="选择代工厂"
-        style={{ width: 160, maxWidth: '100%' }}
+        style={{ width: '100%' }}
         loading={factoryLoading(props.factories)}
         value={factoryValue({ ready, factoryPartyId: props.factoryPartyId })}
         options={factoryOptions(ready)}

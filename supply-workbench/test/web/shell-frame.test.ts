@@ -20,7 +20,7 @@ const server = requireWeb('react-dom/server');
 const router = requireWeb('react-router');
 const rows: readonly NavRow[] = [
   { to: '/progress', label: '管理店铺', matchPaths: ['/progress'], badge: { kind: 'none' } },
-  { to: '/lines', label: '跟进台', matchPaths: ['/lines'], badge: { kind: 'count', value: 7 } },
+  { to: '/lines', label: '跟进中心', matchPaths: ['/lines'], badge: { kind: 'count', value: 7 } },
 ];
 
 describe('视口探针', () => {
@@ -41,32 +41,32 @@ describe('视口探针', () => {
 });
 
 describe('壳标记', () => {
-  it('1279 的壳收起侧栏，菜单不用 inline-collapsed', () => {
+  it('1279 的壳让侧栏和分组菜单同时收起', () => {
     installMedia([shellQuery.max1279, shellQuery.atLeast768]);
     const html = inRouter(h(Shell, { view: buyerView() }));
     expect(html).toContain('ant-layout-sider-collapsed');
-    expect(html).not.toContain('ant-menu-inline-collapsed');
+    expect(html).toContain('ant-menu-inline-collapsed');
   });
 
   it('收起的侧栏保留图标并隐藏计数角标', () => {
     const html = inRouter(h(ShellSider, { chrome: sider(true), nav: rows, onToggle: () => undefined }));
     expect(anchor(html, '/progress')).toContain('aria-label="管理店铺"');
-    expect(anchor(html, '/lines')).toContain('aria-label="跟进台"');
-    expect(anchor(html, '/progress')).toContain('<svg');
-    expect(anchor(html, '/lines')).toContain('<svg');
+    expect(anchor(html, '/lines')).toContain('aria-label="跟进中心"');
+    expect(html).toContain('data-icon="field-time"');
+    expect(html).toContain('data-icon="profile"');
     expect(anchor(html, '/lines')).not.toContain('>7<');
     expect(anchor(html, '/lines')).not.toContain('ant-badge');
     expect(html).toContain(onBrand.solid);
     expect(html).not.toContain('«');
     expect(html).not.toContain('»');
     expect(html).not.toContain('#fff');
-    expect(html).not.toContain('ant-menu-inline-collapsed');
+    expect(html).toContain('ant-menu-inline-collapsed');
     for (const row of rows) expect(html).toContain(`href="${row.to}"`);
   });
 
   it('展开的侧栏在链接里写出名称', () => {
     const html = inRouter(h(ShellSider, { chrome: sider(false), nav: rows, onToggle: () => undefined }));
-    expect(anchor(html, '/lines')).toContain('跟进台');
+    expect(anchor(html, '/lines')).toContain('跟进中心');
     expect(anchor(html, '/progress')).toContain('管理店铺');
   });
 
@@ -77,16 +77,16 @@ describe('壳标记', () => {
     vi.stubGlobal('navigator', { platform });
     onTestFinished(() => { vi.unstubAllGlobals(); });
     const html = inRouter(h(ShellTop, {
-      freshness: { headline: '数据', chips: [] },
       account: { entries: [] },
       onSearch: () => undefined,
       contentInset: 24,
       menuButton: null,
+      startContent: '今日事项 / 行动板',
     }));
     expect(html).toMatch(/z-index:10(?!\d)/);
     expect(html).toContain('position:sticky');
     expect(html).toMatch(/top:0(?!\d)/);
-    expect(html).toContain('SHINEMAGE 供应链工作台');
+    expect(html).toContain('今日事项 / 行动板');
     expect(html).not.toContain('开发登录');
     const searchButton = html.match(/<button\b[^>]*aria-label="搜索单号、品名、供应商"[^>]*>.*?<\/button>/)?.[0];
     expect(searchButton).toContain(`aria-keyshortcuts="${ariaKeys}"`);
@@ -112,11 +112,11 @@ describe('壳标记', () => {
 });
 
 describe('页标题', () => {
-  it('进度是壳页面的唯一标题', () => {
+  it('当前进度保留唯一的语义标题，标题行不占版面', () => {
     const html = inRouter(h(ProgressPage, null));
     expect(headingCount(html)).toBe(1);
     expect(html).toContain('shell-page');
-    expect(html).toContain('>管理店铺<');
+    expect(html).toMatch(/<h1[^>]*clip-path:inset\(50%\)[^>]*>当前进度<\/h1>/);
   });
 
   it('登录保留一级标题，不进壳页面', () => {
@@ -129,7 +129,7 @@ describe('页标题', () => {
     const today = inRouter(h(TodayPage, null));
     const printed = inRouter(h(ReportPrintPage, null));
     expect(headingCount(today)).toBe(1);
-    expect(today).toContain('>今日<');
+    expect(today).toContain('>今日事项<');
     expect(today).not.toContain('shell-page');
     expect(headingCount(printed)).toBe(1);
     expect(printed).toContain('>周报<');
@@ -138,10 +138,10 @@ describe('页标题', () => {
 
   it('手机顶栏只留菜单、搜索和账号，不塞新鲜度和产品名', () => {
     const html = inRouter(h(ShellTop, {
-      freshness: { headline: '数据', chips: [{ key: 'a', text: '采购订单总表 11-04 12:58', tooltip: '采购订单总表 2026-11-04 12:58', isStale: false }] },
       account: { entries: [] },
       onSearch: () => undefined,
       contentInset: 16,
+      startContent: null,
       menuButton: { toggleName: '打开菜单', hitPx: 44, isOpen: false, onToggle: () => undefined },
     }));
     expect(html).toContain('aria-label="打开菜单"');
@@ -158,7 +158,7 @@ describe('页标题', () => {
     expect(html).toContain('>订单行<');
   });
 
-  it('跟进台首次进入是骨架，不再锁 480 高', () => {
+  it('跟进中心首次进入是骨架，不再锁 480 高', () => {
     const html = inRouter(h(LineListPage, null));
     expect(html).not.toContain('max-height:480');
     expect(html).toContain('ant-skeleton');
@@ -177,8 +177,7 @@ function buyerView(): ShellView {
     user: { name: '用户', roles: ['buyer'] },
     queue: { kind: 'unknown' },
     today: { kind: 'pending' },
-    freshness: { kind: 'pending' },
-    now: '2026-10-18T00:00:00.000Z',
+    procurementDate: null,
     navRoutes: NAV_ROUTES,
   });
 }

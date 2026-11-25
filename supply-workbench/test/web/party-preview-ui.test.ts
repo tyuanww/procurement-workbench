@@ -173,7 +173,6 @@ function DeskScreen() {
       total: 1,
       search,
       setParams,
-      isUpdating: false,
       density: 'small',
       hiddenKeys: [],
       now: new Date('2026-11-17T00:00:00Z'),

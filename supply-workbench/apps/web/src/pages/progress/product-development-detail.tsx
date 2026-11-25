@@ -1,10 +1,10 @@
-import { Card, Drawer, Space, Tag, Typography } from 'antd';
+import { Card, Descriptions, Drawer, Empty, Space, Tag, Timeline, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { ProductDevelopment, ProductDevelopmentBatch, ProductDevelopmentNode, ProductDevelopmentProject } from '@sw/contracts';
 import { DEVELOPMENT_DESTINATION_LABELS } from '@sw/domain';
 import { workItemStatusLabel } from '../../features/today/index.js';
-import { space } from '../../theme/tokens.js';
+import { drawerWide, space } from '../../theme/tokens.js';
 import { DevelopmentEditModal } from './development-edit-modal.js';
 import { NodePlanForm, ReplyForm } from './product-development-forms.js';
 import { DevelopmentLinkForm } from './product-development-link.js';
@@ -14,7 +14,8 @@ export function DevelopmentDetail({ node, project, users, onClose, onChanged }: 
   readonly node: ProductDevelopmentNode; readonly project: ProductDevelopmentProject; readonly users: ProductDevelopment['users'];
   readonly onClose: () => void; readonly onChanged: () => void;
 }): ReactNode {
-  return <Drawer title={node.title} size="large" open onClose={onClose}
+  return <Drawer title={node.title} size={`min(${drawerWide}px, 100vw)`} open onClose={onClose}
+    focusable={{ trap: true, focusTriggerAfterClose: true }}
     extra={<DetailActions node={node} project={project} users={users} onChanged={onChanged} />}>
     <Space orientation="vertical" size="large" style={{ display: 'flex' }}>
       <NodeOverview node={node} />
@@ -49,9 +50,11 @@ function NodeOverview({ node }: { readonly node: ProductDevelopmentNode }): Reac
       <Tag>{workItemStatusLabel(node.status)}</Tag>
       {node.daysUntilRequired === null ? null : <Tag>{countdownOf(node)}</Tag>}
     </Space>
-    <Typography.Text>节点负责人 {node.ownerName ?? '未分配'}</Typography.Text>
-    <Typography.Text>跟进采购 {node.buyerName ?? '未分派'}</Typography.Text>
-    <Typography.Text>计划开始 {node.plannedStart}</Typography.Text>
+    <Descriptions size="small" column={1} items={[
+      { key: 'owner', label: '节点负责人', children: node.ownerName ?? '未分配' },
+      { key: 'buyer', label: '跟进采购', children: node.buyerName ?? '未分派' },
+      { key: 'start', label: '计划开始', children: node.plannedStart },
+    ]} />
     <Typography.Text strong>项目要求 {node.plannedEnd}</Typography.Text>
     <Typography.Text strong>供应商承诺 {node.latestReply?.promisedOn ?? '暂无新品阶段回复'}</Typography.Text>
   </Space>;
@@ -59,13 +62,15 @@ function NodeOverview({ node }: { readonly node: ProductDevelopmentNode }): Reac
 
 function ReplyHistory({ node }: { readonly node: ProductDevelopmentNode }): ReactNode {
   return <Card title="新品阶段采购回复" size="small">
-    {node.replies.length === 0 ? <Typography.Text type="secondary">暂无采购回复</Typography.Text> : <Space orientation="vertical" style={{ display: 'flex' }}>
-      {node.replies.map((reply) => <div key={reply.id}>
-        <Typography.Text strong>{reply.promisedOn}</Typography.Text>
-        <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{reply.evidence}</Typography.Paragraph>
-        <Typography.Text type="secondary">{reply.actorName ?? '采购账号'} · {reply.recordedAt.slice(0, 10)}</Typography.Text>
-      </div>)}
-    </Space>}
+    {node.replies.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无采购回复" /> :
+      <Timeline items={node.replies.map((reply) => ({
+        key: reply.id,
+        content: <>
+          <Typography.Text strong>{reply.promisedOn}</Typography.Text>
+          <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{reply.evidence}</Typography.Paragraph>
+          <Typography.Text type="secondary">{reply.actorName ?? '采购账号'} · {reply.recordedAt.slice(0, 10)}</Typography.Text>
+        </>,
+      }))} />}
   </Card>;
 }
 

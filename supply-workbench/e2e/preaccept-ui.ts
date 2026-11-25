@@ -9,10 +9,14 @@ import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
-import { checkEmptyProductArchive, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
-import { checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
+import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
+import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
+import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
+import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
-import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample } from './procurement-today-acceptance.ts';
+import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
+import { checkRedReview } from './red-review-acceptance.ts';
+import { sidebarGroup, sidebarLink } from './sidebar.ts';
 
 const workbook = new URL('../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
 const workbookName = 'po-master-procurement.xlsx';
@@ -83,12 +87,17 @@ async function procurementAcceptance(): Promise<void> {
   seedChaseSample();
   const { page: buyer, entry, devtools: buyerDevtools } = await open('buyer', '/', '/today');
   await checkShell(buyer, entry);
-  await buyer.getByRole('heading', { name: '今日', exact: true }).waitFor();
+  await buyer.getByRole('heading', { name: '行动板', exact: true }).waitFor();
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
-  const { page: manager } = await open('manager', '/', '/dashboard');
-  await manager.getByRole('heading', { name: '管理看板', exact: true }).waitFor();
+  const { page: manager } = await open('manager', '/', '/home');
+  await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
+  const directorMenu = manager.locator('aside');
+  const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
+  const today = await sidebarLink(directorMenu, '今日事项', '行动板');
+  const todayBox = await today.boundingBox();
+  assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);
   await checkEmptyProductArchive(manager, origin, false);
   result.checks.productArchiveImportLink = { buyer: true, manager: false };
@@ -102,11 +111,14 @@ async function procurementAcceptance(): Promise<void> {
 
   const deep = '/lines?lane=material&q=' + componentPo + '#batch';
   const { page: deepBuyer } = await open('buyer', deep);
-  await deepBuyer.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await deepBuyer.getByRole('heading', { name: '跟进中心', exact: true }).waitFor();
   await deepBuyer.getByRole('link', { name: componentPo, exact: true }).waitFor();
   await buyer.goto(new URL('/reports', origin).href);
   await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
-  result.checks.procurementHome = { buyer: '/today', manager: '/dashboard', restoredDeepLink: deep, forbiddenReports: true };
+  await buyer.goto(new URL('/home', origin).href);
+  await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
+  assert.equal(await buyer.locator('aside').getByRole('link', { name: '首页', exact: true }).count(), 0);
+  result.checks.procurementHome = { buyer: '/today', manager: '/home', restoredDeepLink: deep, forbiddenReports: true, forbiddenHome: true };
   result.checks.orderLineNote = await checkOrderLineNote({ page: buyer, manager, origin, out });
 
   const { page: reviewer, devtools } = await open('reviewer', '/', '/master');
@@ -115,16 +127,17 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.productDevelopment = await checkProductDevelopment({ buyer, reviewer, buyerId: users.buyer, reviewerId: users.reviewer, origin, out });
   const meeting = await checkManagementMeeting({ page: manager, origin, out, materialPo: componentPo });
   result.checks.managementMeeting = meeting;
+  result.checks.pageStories = await checkPageStories({ buyer, manager });
   const { page: lead } = await open('lead', '/', '/reports');
   result.checks.managementNavigation = await checkManagementNavigation({ manager, lead, buyer, reviewer, reportPath: meeting.frozenReport });
-  const badge = reviewer.locator('aside').getByRole('link', { name: '导入与审核', exact: true }).locator('.ant-badge');
+  const badge = sidebarGroup(reviewer.locator('aside'), '导入与审核').locator('.ant-badge');
   await badge.waitFor();
   const visibleCount = (await badge.innerText()).trim();
   assert.match(visibleCount, /^[1-9]\d*\+?$/);
   await devtools.send('Accessibility.enable');
   const { nodes } = await devtools.send('Accessibility.getFullAXTree');
-  const reviewLink = nodes.find((node) => node.role?.value === 'link' && node.name?.value === '导入与审核');
-  assert.equal(reviewLink?.description?.value, visibleCount);
+  const reviewGroup = nodes.find((node) => node.role?.value === 'menuitem' && node.name?.value === '导入与审核');
+  assert.equal(reviewGroup?.description?.value, `${visibleCount} 项待办`);
   const queueReads = result.network.filter((row) => row.path === queuePath);
   assert.ok(queueReads.length > 0 && queueReads.every(({ role, status }) => role === 'reviewer' && status === 200));
   result.checks.reviewQueue = { home: '/master', accessibleName: '导入与审核', describedCount: visibleCount, reads: queueReads.length };
@@ -133,6 +146,74 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.poMasterTemplate = await checkPoMasterTemplate({ page: buyer, origin, out, xlsx });
   result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse });
   result.checks.factoryLinkBoard = await checkFactoryLinkBoard({ reviewer, openAdmin: async () => (await open('admin', '/master?tab=factory-link')).page, origin, out });
+  seedDemoFixture(new URL('../fixtures/demo/frontend-closeout.sql', import.meta.url));
+  result.checks.importFactoryDetail = await checkImportFactoryDetail(admin, origin);
+  result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
+  result.checks.redReview = await checkRedReview({ page: admin, origin });
+  result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
+  result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
+}
+
+async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
+  await buyer.goto(new URL('/progress?view=development&store=dafuyan', origin).href);
+  const progress = buyer.locator('aside');
+  const development = await sidebarLink(progress, '管理店铺', '新品开发进度');
+  assert.equal(await development.getAttribute('aria-current'), 'page');
+  await progress.getByRole('link', { name: '当前进度', exact: true }).press('Enter');
+  await buyer.waitForURL(new URL('/progress/current?store=dafuyan', origin).href);
+  const main = buyer.getByRole('main');
+  assert.equal(await main.getByRole('tab').count(), 0);
+  const heading = main.getByRole('heading', { name: '当前进度', level: 1, exact: true });
+  assert.equal(await heading.evaluate((node) => getComputedStyle(node).clipPath), 'inset(50%)');
+  assert.equal(await (await sidebarLink(progress, '管理店铺', '总排期')).getAttribute('href'), '/progress/schedule?store=dafuyan');
+
+  const stuckUrl = new URL('/dashboard?preset=custom&from=2025-01-01&to=2025-02-28&lane=finished', origin);
+  await manager.goto(stuckUrl.href);
+  const stuckTrigger = manager.getByRole('button', { name: /^查看卡点明细 HZ09-/ }).first();
+  await stuckTrigger.press('Enter');
+  const stuck = manager.getByRole('dialog', { name: '卡点批次明细', exact: true });
+  await stuck.getByText('交付等待方', { exact: true }).waitFor();
+  assert.equal(manager.url(), stuckUrl.href);
+  await manager.keyboard.press('Escape');
+  await stuck.waitFor({ state: 'hidden' });
+  await stuckTrigger.click();
+  const orderLine = stuck.getByRole('link', { name: '打开订单行', exact: true });
+  const batchHref = new URL(await orderLine.getAttribute('href') ?? '', origin);
+  assert.match(batchHref.pathname, /^\/lines\/[^/]+$/);
+  assert.ok(batchHref.searchParams.get('focusBatch'));
+  await orderLine.click();
+  await manager.waitForURL(batchHref.href);
+  await manager.getByRole('region', { name: '批次', exact: true }).locator('li:focus').waitFor();
+  await manager.goto(stuckUrl.href);
+
+  const sidebar = manager.locator('aside');
+  const suppliers = await sidebarLink(sidebar, '管理看板', '供应商表现');
+  await suppliers.click();
+  assert.equal(new URL(manager.url()).searchParams.get('from'), '2025-01-01');
+  assert.equal(new URL(manager.url()).searchParams.get('lane'), 'finished');
+  const supplier = manager.getByRole('button', { name: '合成催货甲厂', exact: true });
+  await supplier.click();
+  const supplierDetails = manager.getByRole('dialog', { name: '合成催货甲厂 · 2025-01-01 至 2025-02-28', exact: true });
+  await supplierDetails.getByRole('columnheader', { name: '最后实收日', exact: true }).waitFor();
+  assert.equal(new URL(manager.url()).searchParams.get('view'), 'suppliers');
+  await manager.keyboard.press('Escape');
+  await supplierDetails.waitFor({ state: 'hidden' });
+  await (await sidebarLink(sidebar, '管理看板', '采购负荷')).click();
+  await manager.getByRole('heading', { name: '采购负荷', level: 1, exact: true }).waitFor();
+  await (await sidebarLink(sidebar, '管理看板', '项目进度')).click();
+  await manager.getByRole('heading', { name: '项目进度', level: 1, exact: true }).waitFor();
+  await manager.setViewportSize({ width: 320, height: 780 });
+  await manager.goto(stuckUrl.href);
+  await stuckTrigger.waitFor();
+  const firstBatch = await stuckTrigger.boundingBox();
+  assert.ok(firstBatch && firstBatch.y >= 0 && firstBatch.y + firstBatch.height <= 780, '手机首屏应能查看第一批卡点');
+  assert.equal(await manager.getByRole('radiogroup', { name: '期间', exact: true }).count(), 0);
+  await stuckTrigger.click();
+  await stuck.getByText('交付等待方', { exact: true }).waitFor();
+  await manager.keyboard.press('Escape');
+  await stuck.waitFor({ state: 'hidden' });
+  await manager.setViewportSize({ width: 1440, height: 900 });
+  return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], focusedStuckBatch: true, phoneWidth: 320 };
 }
 
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {
@@ -203,17 +284,18 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
   readonly reviewer: Page;
   readonly reportPath: string;
 }) {
+  await manager.goto(new URL(reportPath, origin).href);
   const sidebar = manager.locator('aside');
-  const selected = sidebar.locator('.ant-menu-item-selected').getByRole('link', { name: '管理看板', exact: true });
-  await selected.waitFor();
-  assert.equal(await sidebar.getByRole('link', { name: '周报', exact: true }).count(), 0);
-  const management = manager.getByRole('navigation', { name: '管理视图' });
-  await management.getByRole('link', { name: '看板', exact: true }).click();
+  const current = sidebar.locator('[aria-current="page"]');
+  const bottlenecks = await sidebarLink(sidebar, '管理看板', '卡点');
+  await bottlenecks.click();
   await manager.waitForURL(new URL('/dashboard', origin).href);
-  await selected.waitFor();
-  await management.getByRole('link', { name: '周报', exact: true }).click();
+  await bottlenecks.and(current).waitFor();
+  const weekly = sidebar.getByRole('link', { name: '周报（待开发）', exact: true });
+  await weekly.click();
   await manager.waitForURL(new URL('/reports', origin).href);
-  await selected.waitFor();
+  await weekly.and(current).waitFor();
+  assert.equal(await manager.getByRole('main').getByRole('tab').count(), 0);
   await manager.getByRole('button', { name: '生成全店周报', exact: true }).waitFor();
 
   await lead.locator(`a[href="${reportPath}"]`).waitFor();
@@ -225,8 +307,8 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
   await lead.setViewportSize({ width: 320, height: 780 });
   await lead.getByRole('button', { name: '打开菜单', exact: true }).click();
   const menu = lead.getByRole('dialog', { name: '导航', exact: true });
-  await menu.locator('.ant-menu-item-selected').getByRole('link', { name: '管理看板', exact: true }).waitFor();
-  assert.equal(await menu.getByRole('link', { name: '周报', exact: true }).count(), 0);
+  const phoneReport = menu.getByRole('link', { name: '周报（待开发）', exact: true }).and(menu.locator('[aria-current="page"]'));
+  await phoneReport.waitFor();
   await lead.goto(new URL(reportPath + '/print', origin).href);
   await lead.getByRole('heading', { name: '管理周会 · 达肤妍', exact: true }).waitFor();
   assert.equal(await lead.getByRole('navigation', { name: '管理视图' }).count(), 0);
@@ -242,7 +324,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {
   const header = page.getByRole('banner');
-  await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
+  await header.getByRole('navigation', { name: '当前位置' }).getByText('行动板', { exact: true }).and(page.locator('[aria-current="page"]')).waitFor();
   assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
   const search = page.getByRole('button', { name: searchLabel });
   const mac = process.platform === 'darwin';
@@ -405,7 +487,7 @@ async function downloadLineHeaders(page: Page, link: Locator): Promise<string[]>
 async function checkNavigation(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(new URL('/progress', origin).href);
-  await page.locator('aside').getByRole('link', { name: '跟进台', exact: true }).waitFor();
+  await page.locator('aside').getByRole('link', { name: '跟进中心', exact: true }).waitFor();
   await page.setViewportSize({ width: 320, height: 780 });
   const toggle = page.getByRole('button', { name: '打开菜单', exact: true });
   await toggle.waitFor();
@@ -413,19 +495,19 @@ async function checkNavigation(page: Page) {
   assert.ok(target && target.width >= 44 && target.height >= 44);
   await toggle.press('Enter');
   const navigation = page.getByRole('dialog', { name: '导航', exact: true });
-  const link = navigation.getByRole('link', { name: '跟进台', exact: true });
+  const link = navigation.getByRole('link', { name: '跟进中心', exact: true });
   await link.waitFor();
-  const item = await navigation.getByRole('menuitem', { name: '跟进台', exact: true }).boundingBox();
+  const item = await navigation.getByRole('menuitem', { name: '跟进中心', exact: true }).boundingBox();
   assert.ok(item && item.width >= 44 && item.height >= 44);
   await page.screenshot({ path: join(out, 'mobile-navigation.png'), animations: 'disabled' });
   const hasFocus = () => link.evaluate((node: BrowserElement) => node.ownerDocument.activeElement === node);
   for (let step = 0; step < 24 && !await hasFocus(); step++) await page.keyboard.press('Tab');
-  assert.ok(await hasFocus(), 'Tab 可聚焦手机菜单中的跟进台');
+  assert.ok(await hasFocus(), 'Tab 可聚焦手机菜单中的跟进中心');
   await page.keyboard.press('Enter');
   await page.waitForURL(new URL('/lines', origin).href);
-  await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '跟进中心', exact: true }).waitFor();
   await navigation.waitFor({ state: 'hidden' });
-  result.checks.navigation = { accessibleName: '跟进台', touch: [target.width, target.height], itemTouch: [item.width, item.height], keyboardNavigated: true };
+  result.checks.navigation = { accessibleName: '跟进中心', touch: [target.width, target.height], itemTouch: [item.width, item.height], keyboardNavigated: true };
 }
 
 async function checkPartyOrderNavigation(page: Page) {
@@ -434,10 +516,10 @@ async function checkPartyOrderNavigation(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(new URL('/parties/' + partyId, origin).href);
   await page.getByRole('heading', { name: '主体 ' + partyName, exact: true }).waitFor();
-  await page.getByRole('tab', { name: '别名', exact: true }).waitFor();
-  await page.getByRole('tab', { name: '指标', exact: true }).click();
+  await page.getByRole('heading', { name: '别名', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '指标', exact: true }).waitFor();
   await page.getByText(/近一个月/).waitFor();
-  assert.equal(await page.getByRole('tab', { name: /^(订单|代工厂)$/ }).count(), 0);
+  assert.equal(await page.getByRole('main').getByRole('tab').count(), 0);
 
   await page.getByRole('link', { name: '查看供应商订单', exact: true }).press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines'
@@ -449,7 +531,7 @@ async function checkPartyOrderNavigation(page: Page) {
   await page.getByRole('link', { name: '查看代工厂相关订单', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/lines'
     && url.searchParams.get('lane') === 'all' && url.searchParams.get('factoryPartyId') === partyId);
-  await page.getByRole('heading', { name: '跟进台', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '跟进中心', exact: true }).waitFor();
   await page.getByRole('link', { name: 'HZ09-0251', exact: true }).waitFor();
   const factoryOrders = await page.getByRole('link', { name: /^HZ09-\d{4}$/ }).allTextContents();
   assert.deepEqual(factoryOrders, ['HZ09-0251']);
@@ -548,12 +630,12 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   const importBatchId = decodeURIComponent(importPath.slice('/imports/'.length));
   const matchesScope = (url: URL) => url.searchParams.get('importBatchId') === importBatchId;
   const batchCountBefore = readDeliveryBatchCount();
-  const [list, summary] = await Promise.all([
+  const [list] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
     orderLink.click(),
   ]);
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('lane') === 'all' && matchesScope(url));
+  const summary = await openOrderSummary(page);
   for (const response of [list, summary]) {
     assert.ok(response.ok() && matchesScope(new URL(response.url())));
     assert.equal(response.request().method(), 'GET');
@@ -581,14 +663,23 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true };
 }
 
+async function openOrderSummary(page: Page) {
+  const [response] = await Promise.all([
+    page.waitForResponse((item) => new URL(item.url()).pathname === '/api/v1/lines/summary'),
+    page.getByRole('button', { name: '筛选结果概览', exact: true, expanded: false }).click(),
+  ]);
+  await page.getByRole('group', { name: '跟进中心筛选结果指标', exact: true }).waitFor();
+  return response;
+}
+
 async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
-  const noBatch = page.locator('.ant-radio-group').getByText('未建要货', { exact: true });
-  const [list, summary] = await Promise.all([
+  const noBatch = page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true });
+  const [list] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
     noBatch.click(),
   ]);
   await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch' && matchesScope(url));
+  const summary = await openOrderSummary(page);
   for (const response of [list, summary]) assert.ok(response.ok() && matchesScope(new URL(response.url())));
   const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
   assert.ok(matchesScope(new URL(await exportLink.getAttribute('href') ?? '', origin)));
@@ -626,7 +717,7 @@ async function fits(field: Locator) {
   return field.evaluate((node: BrowserElement) => {
     const range = node.ownerDocument.createRange();
     range.selectNodeContents(node);
-    const cell = node.closest('td');
+    const cell = node.closest('th, td');
     if (cell === null) return false;
     const bounds = cell.getBoundingClientRect();
     let top = bounds.top;

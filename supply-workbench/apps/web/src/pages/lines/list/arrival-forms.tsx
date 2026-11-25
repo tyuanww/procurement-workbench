@@ -142,7 +142,7 @@ export function RollbackArrivalForm({ arrival, isSaving, onSubmit, onInvalid }: 
     else onInvalid();
   }}>
     <TextField label="撤销原因" name="reason" maxLength={500} />
-    <Button danger htmlType="submit" loading={isSaving}>撤销整份分配</Button>
+    <Button danger type="primary" htmlType="submit" loading={isSaving}>撤销整份分配</Button>
   </Form>;
 }
 

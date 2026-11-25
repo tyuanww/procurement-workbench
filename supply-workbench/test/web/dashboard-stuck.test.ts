@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { StuckDashboard } from '../../packages/contracts/src/index.js';
 import { localDate } from '../../packages/domain/src/index.js';
 import { DashboardPage } from '../../apps/web/src/pages/dashboard/DashboardPage.js';
+import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
 import { stuckItem } from './w07-rows.js';
 
@@ -50,6 +51,64 @@ it('卡点翻页和卡片下钻沿用所选线别并显示服务端匹配清单'
   await respond('lane=finished&stage=awaiting_date', { ...base, total: 1, items: [pending] });
   expect(textOf('tbody')).toContain('待确认的最新批次');
   expect(calls.every((call) => call.url.startsWith('/api/v1/dashboard/bottlenecks?'))).toBe(true);
+});
+
+it('同单同品同日的要货批次按序号区分，抽屉链接定位所选批次', async () => {
+  installMatchMedia();
+  installFetch();
+  page = mount(memoryRouter(element(ActorRoles, { roles: ['manager'], children: element(DashboardPage) }), '/dashboard?lane=finished'));
+  const shared = { ...older, poRaw: 'PO-01', nameRaw: '面膜', orderLineId: 'line-01', dateBuyerConfirmed: localDate('2026-10-20') };
+  await respond('lane=finished', { ...base, total: 2, items: [
+    { ...shared, batchId: 'batch-1', batchSeq: 1 },
+    {
+      ...shared, batchId: 'batch-2', batchSeq: 2,
+      waitingOn: { kind: 'internal', partyId: null, displayName: null, reason: 'internal_note' },
+      fulfillment: {
+        unit: '件', unshippedQty: 0, inTransitQty: 1234.5678, receivedQty: 0, verifiedShippedQty: 1234.5678, verifiedReceivedQty: 0,
+        overShippedQty: 0, overReceivedQty: 0, receiptWithoutShipmentQty: 0, reviewCount: 0,
+      },
+    },
+  ] });
+
+  expect(button('查看卡点明细 PO-01 第 1 批').textContent).toContain('第 1 批');
+  click(button('查看卡点明细 PO-01 第 2 批'));
+  const dialog = '[role="dialog"]';
+  await waitFor(() => textOf(dialog).includes('第 2 批'));
+  expect(textOf(dialog)).toContain('要货批次');
+  expect(textOf(dialog)).toContain('内部（等回单）');
+  expect(textOf(dialog)).toContain('内部负责人');
+  expect(textOf(dialog)).toContain('未发 0 件');
+  expect(textOf(dialog)).toContain('在途 1,234.5678 件');
+  expect(textOf(dialog)).toContain('实收 0 件');
+  const detail = document.querySelector(`${dialog} a`);
+  expect(detail?.textContent).toBe('打开订单行');
+  expect(detail?.getAttribute('href')).toBe('/lines/line-01?focusBatch=batch-2');
+  click(button('Close'));
+  await waitFor(() => document.querySelector('.ant-drawer-open') === null);
+  click(button('查看卡点明细 PO-01 第 1 批'));
+  await waitFor(() => textOf(dialog).includes('第 1 批'));
+  expect(textOf(dialog)).toContain('数量待核');
+  expect(textOf(dialog)).toContain('未发 —');
+});
+
+it('手机卡点先显示具体批次，旧链接的报表期间不参与当日快照', async () => {
+  installMatchMedia();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.startsWith('(max-width'), addEventListener: () => undefined, removeEventListener: () => undefined,
+  }));
+  installFetch();
+  page = mount(memoryRouter(element(DashboardPage), '/dashboard?lane=finished&from=2025-01-01&to=2025-02-01'));
+  const request = calls.find(({ url }) => url.startsWith('/api/v1/dashboard/stuck?'));
+  const search = new URLSearchParams(request?.url.split('?')[1]);
+  expect(search.get('from')).not.toBe('2025-01-01');
+  expect(search.get('from')).toBe(search.get('to'));
+  await respond('lane=finished', { ...base, total: 1, items: [{ ...older, poRaw: 'PO-01', batchSeq: 3 }] });
+
+  expect(textOf('thead')).toContain('采购单 / 批次');
+  expect(button('查看卡点明细 PO-01 第 3 批').textContent).toContain('第 3 批');
+  expect(document.querySelector('.ant-collapse [aria-expanded="false"]')?.textContent).toContain('卡点指标与原因筛选');
+  expect(document.querySelector('[aria-label="期间"]')).toBeNull();
+  expect(calls.some(({ url }) => url === '/api/v1/dashboard/bottlenecks?from=2026-10-12&to=2026-10-12')).toBe(true);
 });
 
 async function respond(filter: string, body: StuckDashboard): Promise<void> {

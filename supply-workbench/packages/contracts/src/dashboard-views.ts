@@ -5,6 +5,7 @@ import { BatchStatusSchema, LaneSchema, WaitingOnKindSchema } from './enums.js';
 import { KpiFigureSchema } from './master-views.js';
 import { nullable, optional, strictObject } from './shape.js';
 import { LocalDateSchema } from './values.js';
+import { BatchFulfillmentSchema } from './fulfillment.js';
 
 const namedPerson = strictObject({ id: z.string(), name: nullable(z.string()) });
 
@@ -32,6 +33,8 @@ export const StuckQuerySchema: z.ZodType<StuckQuery> = strictObject({
 
 export const StuckItemSchema: z.ZodType<StuckItem> = strictObject({
   batchId: z.string(),
+  batchSeq: optional(z.int()),
+  orderLineId: optional(z.string().min(1)),
   stage: BatchStatusSchema,
   daysInStage: z.number(),
   poRaw: nullable(z.string()),
@@ -40,7 +43,9 @@ export const StuckItemSchema: z.ZodType<StuckItem> = strictObject({
     kind: WaitingOnKindSchema,
     partyId: nullable(z.string()),
     displayName: nullable(z.string()),
+    reason: optional(z.enum(['supplier_date', 'supplier_shipment', 'internal_note', 'internal_review', 'receiver_arrival'])),
   }),
+  fulfillment: optional(BatchFulfillmentSchema),
   buyer: nullable(namedPerson),
   dateBuyerConfirmed: nullable(LocalDateSchema),
   factoryLinked: z.boolean(),

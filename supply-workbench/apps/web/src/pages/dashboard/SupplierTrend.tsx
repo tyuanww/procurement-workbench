@@ -1,12 +1,13 @@
 import { Alert, Button, Drawer, Flex, Select, Skeleton, Table, Typography } from 'antd';
 import { addDays, LOW_SAMPLE_THRESHOLD, parseLocalDate, type LocalDate } from '@sw/domain';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import type { DashboardLoad, DashboardQuery } from '../../features/performance/index.js';
 import { fetchSupplierWeek } from '../../shared/api/catalog.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
 import { Sparkline } from '../../shared/ui/analytics.js';
 import { SectionGroup } from '../../shared/ui/section.js';
-import { space } from '../../theme/tokens.js';
+import { drawerWide, space } from '../../theme/tokens.js';
 
 type Supplier = DashboardLoad['suppliers'][number];
 type Week = Supplier['weekly'][number];
@@ -21,7 +22,7 @@ export function SupplierTrend({ suppliers, lane }: { readonly suppliers: readonl
   if (supplier === undefined) return null;
   return <SectionGroup title="近 8 周准时率">
     <Flex align="center" wrap gap={space[2]}>
-      <Select aria-label="趋势供应商" value={supplier.partyId} options={suppliers.map((item) => ({ value: item.partyId, label: item.displayName ?? item.partyId }))}
+      <Select aria-label="趋势供应商" value={supplier.partyId} showSearch={{ optionFilterProp: 'label' }} options={suppliers.map((item) => ({ value: item.partyId, label: item.displayName ?? item.partyId }))}
         onChange={(id) => { setPartyId(id); setWeekStart(undefined); }} style={{ minWidth: 140, maxWidth: '100%' }} />
       <Typography.Text type="secondary">按首次确认日归周 · 纵轴 0% 至 100%</Typography.Text>
     </Flex>
@@ -34,8 +35,9 @@ export function SupplierTrend({ suppliers, lane }: { readonly suppliers: readonl
         }}>{weekCaption(week)}</Button>
       ))}
     </Flex>
-    {weekStart === undefined ? null : <WeekResults key={JSON.stringify([supplier.partyId, lane, weekStart])}
-      supplier={supplier} lane={lane} week={weekStart} onClose={() => setWeekStart(undefined)} />}
+    {weekStart === undefined ? null : <SupplierBatchDrawer key={JSON.stringify([supplier.partyId, lane, weekStart])}
+      partyId={supplier.partyId} name={supplier.displayName ?? supplier.partyId}
+      lane={lane} from={weekStart} to={addDays(weekStart, 6)} onClose={() => setWeekStart(undefined)} />}
   </SectionGroup>;
 }
 
@@ -51,18 +53,20 @@ function weekCaption(week: Week): string {
   return `${label} · ${rate} · ${ratio}`;
 }
 
-function WeekResults({ supplier, lane, week, onClose }: { readonly supplier: Supplier; readonly lane: Lane; readonly week: LocalDate; readonly onClose: () => void }) {
+export function SupplierBatchDrawer({ partyId, name, lane, from, to, profile, onClose }: {
+  readonly partyId: string; readonly name: string; readonly lane: Lane; readonly from: LocalDate; readonly to: LocalDate;
+  readonly profile?: string; readonly onClose: () => void;
+}) {
   const [detail, setDetail] = useState<Detail>({ kind: 'loading' });
-  const partyId = supplier.partyId;
-  const end = addDays(week, 6);
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ from: week, to: end, partyId });
+    const params = new URLSearchParams({ from, to, partyId });
     if (lane !== 'all') params.set('lane', lane);
     fetchSupplierWeek(params, controller.signal).then(
       (value) => {
         if (!controller.signal.aborted) setDetail(value.detail === undefined
-          ? { kind: 'error', message: '没有可用的周批次明细。' }
+          ? { kind: 'error', message: '没有可用的批次明细。' }
           : { kind: 'ready', rows: value.detail });
       },
       (error: unknown) => {
@@ -72,18 +76,21 @@ function WeekResults({ supplier, lane, week, onClose }: { readonly supplier: Sup
       },
     );
     return () => controller.abort();
-  }, [partyId, week, end, lane]);
-  return <Drawer open title={`${supplier.displayName ?? partyId} · ${week} 至 ${end}`} onClose={onClose} size="large">
-    <WeekTable detail={detail} />
+  }, [partyId, from, to, lane, revision]);
+  return <Drawer open title={`${name} · ${from} 至 ${to}`} onClose={onClose} size={`min(${drawerWide}px, 100vw)`}
+    focusable={{ trap: true, focusTriggerAfterClose: true }}
+    extra={profile === undefined ? undefined : <Link to={profile}>查看主体档案</Link>}>
+    <WeekTable detail={detail} onRetry={() => { setDetail({ kind: 'loading' }); setRevision((value) => value + 1); }} />
   </Drawer>;
 }
 
-function WeekTable({ detail }: { readonly detail: Detail }) {
+function WeekTable({ detail, onRetry }: { readonly detail: Detail; readonly onRetry: () => void }) {
   if (detail.kind === 'loading') return <Skeleton active />;
-  if (detail.kind === 'error') return <Alert type="error" showIcon title={detail.message} />;
-  return <Table<BatchResult> size="small" rowKey="batchId" dataSource={detail.rows} scroll={{ x: 'max-content' }} columns={[
+  if (detail.kind === 'error') return <Alert type="error" showIcon title={detail.message} action={<Button onClick={onRetry}>重试</Button>} />;
+  return <Table<BatchResult> size="small" rowKey="batchId" dataSource={detail.rows} scroll={{ x: 'max-content' }}
+    locale={{ emptyText: '所选周期没有可核对的到货批次' }} columns={[
     { title: '采购单', render: (_, row) => row.orderLineId === null ? row.poRaw ?? '—'
-      : <a href={`/lines/${encodeURIComponent(row.orderLineId)}?focusBatch=${encodeURIComponent(row.batchId)}`}>{row.poRaw ?? '打开订单'}</a> },
+      : <Link to={`/lines/${encodeURIComponent(row.orderLineId)}?focusBatch=${encodeURIComponent(row.batchId)}`}>{row.poRaw ?? '打开订单'}</Link> },
     { title: '品名', dataIndex: 'nameRaw', render: (name: string | null) => name ?? '—' },
     { title: '首次确认日', dataIndex: 'firstConfirmedDate', render: (date: string | null) => date ?? '—' },
     { title: '最后实收日', dataIndex: 'lastReceivedOn', render: (date: string | null) => date ?? '—' },

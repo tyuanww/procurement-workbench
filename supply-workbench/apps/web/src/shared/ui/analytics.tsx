@@ -1,5 +1,5 @@
 import { CheckOutlined } from '@ant-design/icons';
-import { Button, Card, Statistic, Typography } from 'antd';
+import { Button, Card, Col, Progress, Row, Statistic, Typography } from 'antd';
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { bg, border, brand, controlBorder, fontSize, radius, space, statusColor, text } from '../../theme/tokens.js';
 import { formatQuantity } from './format.js';
@@ -40,16 +40,20 @@ const labeledBarCss = `.stacked-bar-values{display:grid;grid-template-columns:re
 
 export function MetricStrip(input: { readonly items: readonly MetricItem[]; readonly ariaLabel: string }): ReactNode {
   return (
-    <div role="group" aria-label={input.ariaLabel} style={metricGridStyle()}>
-      {input.items.map((item) => <MetricCard key={item.key} item={item} />)}
-    </div>
+    <Row gutter={[space[2], space[2]]} role="group" aria-label={input.ariaLabel}>
+      {input.items.map((item) => (
+        <Col key={item.key} flex="1 1 min(100%, 144px)" style={{ display: 'flex', minWidth: 0 }}>
+          <MetricCard item={item} />
+        </Col>
+      ))}
+    </Row>
   );
 }
 
 function MetricCard(input: { readonly item: MetricItem }): ReactNode {
   if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} />;
   return (
-    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ borderTop: `2px solid ${toneColor(input.item.tone)}` }}>
+    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ width: '100%', borderTop: metricBorder(input.item) }}>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
       <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
       {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
@@ -61,7 +65,7 @@ function MetricButton({ item, action }: { readonly item: MetricItem; readonly ac
   return (
     <Button block aria-pressed={action.isActive} onClick={action.select} style={{
       display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: space[2],
-      borderTop: `2px solid ${toneColor(item.tone)}`,
+      borderTop: metricBorder(item),
       background: action.isActive ? brand[100] : bg.surface,
       borderInlineColor: action.isActive ? brand[600] : border, borderBottomColor: action.isActive ? brand[600] : border,
     }}>
@@ -99,13 +103,12 @@ export function StackedBarChart(input: {
 
 export function RateBars(input: { readonly rows: readonly { readonly key: string; readonly label: string; readonly rate: number; readonly hint?: string }[]; readonly ariaLabel: string }): ReactNode {
   return (
-    <div role="img" aria-label={input.ariaLabel} style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
+    <div role="group" aria-label={input.ariaLabel} style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
       {input.rows.map((row) => (
         <div key={row.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(96px, 180px) minmax(0, 1fr) 52px', gap: space[1], alignItems: 'center' }}>
           <Typography.Text ellipsis={{ tooltip: row.hint }} style={{ fontSize: fontSize.table }}>{row.label}</Typography.Text>
-          <div style={{ height: 12, borderRadius: radius, background: statusColor.neutral.bg, overflow: 'hidden' }}>
-            <div style={{ width: `${Math.max(0, Math.min(1, row.rate)) * 100}%`, height: '100%', background: rateTone(row.rate) }} />
-          </div>
+          <Progress aria-hidden="true" percent={Math.max(0, Math.min(1, row.rate)) * 100} showInfo={false}
+            status="normal" size={['100%', 12]} strokeColor={rateTone(row.rate)} railColor={statusColor.neutral.bg} />
           <Typography.Text style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: fontSize.table }}>{Math.round(row.rate * 100)}%</Typography.Text>
         </div>
       ))}
@@ -296,12 +299,13 @@ function rateTone(rate: number): string {
   return statusColor.danger.text;
 }
 
-function metricGridStyle(): CSSProperties {
-  return { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: space[2] };
+function metricBorder(item: MetricItem): string {
+  const hasAccent = item.tone !== undefined && item.tone !== 'neutral' && item.value !== 0;
+  return `2px solid ${hasAccent ? toneColor(item.tone) : border}`;
 }
 
 function metricValueStyle(): CSSProperties {
-  return { fontSize: fontSize.page, color: text.primary, fontVariantNumeric: 'tabular-nums' };
+  return { fontSize: fontSize.metric, lineHeight: 1.25, color: text.primary, fontVariantNumeric: 'tabular-nums' };
 }
 
 function barLineStyle(): CSSProperties {

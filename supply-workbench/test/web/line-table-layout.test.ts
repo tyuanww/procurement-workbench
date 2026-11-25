@@ -11,7 +11,6 @@ import { NARROW_PHONE_MAX_WIDTH, exportAddress, lineTableLayout, readDesk, rende
 import { viewportSnapshot } from '../../apps/web/src/features/shell/model/chrome.js';
 import { readViewport, shellQuery, subscribeViewport } from '../../apps/web/src/features/shell/use-viewport.js';
 import { LineTable, type LineTableProps } from '../../apps/web/src/pages/lines/list/line-table.js';
-import { lineMobileColumns } from '../../apps/web/src/pages/lines/list/lines-mobile.js';
 
 const columns = readDesk('lane=finished').columns;
 const now = new Date('2026-10-13T00:00:00.000Z');
@@ -196,10 +195,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-it('手机表格列和同一解析结果的键与顺序相同', () => {
-  const shown = renderedLineColumns({ columns, hiddenKeys: ['buyer'], layout: 'narrow' });
-  const table = lineMobileColumns({ columns, shown, repeatedIdentityIds: new Set(), layout: 'narrow', now, search: '', setParams: () => undefined });
-  expect(table.map((column) => column.key)).toEqual(shown.map((column) => column.key));
+it('桌面与手机的数据行和列标题同表，手机将单号和品名合为行标题', async () => {
+  const window = new Window();
+  try {
+    const root = window.document.createElement('div');
+    for (const width of [320, 390, 1440]) {
+      root.innerHTML = renderTableAt({
+        columns, rows: [sampleRow()], picked: [], setPicked: () => undefined, page: 1, pageSize: 20, total: 1,
+        search: '', setParams: () => undefined, density: 'small', hiddenKeys: [], now,
+      }, width);
+      const table = root.querySelector('table');
+      expect(root.querySelectorAll('table')).toHaveLength(1);
+      expect([...table?.querySelectorAll('thead th[scope="col"]') ?? []].map((header) => header.textContent)).toContain(width < 768 ? '采购单号 / 品名' : '采购单号');
+      expect(table?.querySelector('tbody th[scope="row"]')?.textContent).toContain('PO-LAYOUT');
+      expect(table?.querySelector('tbody td')).not.toBeNull();
+    }
+  } finally {
+    await window.happyDOM.close();
+  }
 });
 
 it('手机同单同名且编码或条码相同的订单行显示完整 ID，勾选也能区分', async () => {
@@ -217,10 +230,10 @@ it('手机同单同名且编码或条码相同的订单行显示完整 ID，勾�
   const window = new Window();
   try {
     const root = window.document.createElement('div');
-    root.innerHTML = renderTableAt320({
+    root.innerHTML = renderTableAt({
       columns, rows, picked: [], setPicked: () => undefined, page: 1, pageSize: 20, total: rows.length,
-      search: '', setParams: () => undefined, isUpdating: false, density: 'small', hiddenKeys: [], now,
-    });
+      search: '', setParams: () => undefined, density: 'small', hiddenKeys: [], now,
+    }, 320);
     const renderedRows = root.querySelectorAll('tr[data-row-key]');
     expect([...renderedRows].map((row) => row.querySelector('.line-mobile-identifier')?.textContent)).toEqual([
       expect.stringMatching(/商品编码 SKU-01\s*订单行 line-sku-1$/),
@@ -238,7 +251,7 @@ it('手机同单同名且编码或条码相同的订单行显示完整 ID，勾�
   }
 });
 
-function renderTableAt320(props: LineTableProps): string {
+function renderTableAt(props: LineTableProps, width: number): string {
   const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
   const react: unknown = requireWeb('react');
   const server: unknown = requireWeb('react-dom/server');
@@ -246,7 +259,7 @@ function renderTableAt320(props: LineTableProps): string {
     throw new Error('web 渲染模块不齐');
   }
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'matchMedia');
-  Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: media({ value: 320 }, new Map()) });
+  Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: media({ value: width }, new Map()) });
   try {
     const html: unknown = server.renderToStaticMarkup(react.createElement(LineTable, props));
     if (typeof html !== 'string') throw new Error('没有渲染成字符串');

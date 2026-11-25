@@ -121,6 +121,7 @@ export default tseslint.config(
             'packages/domain/src/type-assertion.violation.ts',
             'packages/application/src/reads-clock.violation.ts',
             'apps/web/src/pages/direct-fetch.violation.ts',
+            'apps/web/src/pages/raw-view-switch.violation.ts',
             'test/architecture/conventions/long-function.ts',
             'test/architecture/conventions/many-params.ts',
             'test/architecture/conventions/uses-any.ts',
@@ -178,6 +179,18 @@ export default tseslint.config(
   {
     files: ['scripts/**/*.ts'],
     rules: { 'max-lines': 'off', 'no-magic-numbers': 'off' },
+  },
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/shared/ui/view-switch.tsx'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { regex: '^antd(?:/(?:es|lib)(?:/index(?:\\.js)?)?)?/?$', importNames: ['Tabs', 'Segmented'], message: '内容页签使用 ContentTabs，视图选择使用 ViewSwitch。' },
+          { regex: '^antd/(es|lib)/(tabs|segmented)(/|$)', message: '通过 shared/ui/view-switch 使用页签和视图选择。' },
+        ],
+      }],
+    },
   },
   {
     files: [

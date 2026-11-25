@@ -1,4 +1,4 @@
-import type { BatchStatus } from '@sw/domain';
+import type { BatchStatus, WaitingOnKind } from '@sw/domain';
 import type { TodoRow } from './group.js';
 
 export type BoardItem = TodoRow & {
@@ -6,6 +6,7 @@ export type BoardItem = TodoRow & {
   readonly productName: string | null;
   readonly qty: number | null;
   readonly batchStatus: BatchStatus | null;
+  readonly waitingKind?: WaitingOnKind;
   readonly inTransit?: { readonly qty: number; readonly unit: string };
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
@@ -28,7 +29,7 @@ export type RowFace = {
   readonly date: string;
   readonly remaining?: string;
   readonly inTransit?: string;
-  readonly factory?: string;
+  readonly waiting?: string;
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;
@@ -64,6 +65,6 @@ export type TodayBoard = {
   readonly group: GroupMode;
   readonly chips: readonly ReasonChip[];
   readonly body:
-    | { readonly kind: 'empty'; readonly text: '今天没有需要处理的事。下一步：去跟进台看看。' }
+    | { readonly kind: 'empty'; readonly text: '今天没有需要处理的事。下一步：去跟进中心看看。' }
     | { readonly kind: 'groups'; readonly groups: readonly BoardGroup[]; readonly rows: readonly BoardRow[] };
 };

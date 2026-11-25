@@ -1,12 +1,12 @@
-import { Button, ConfigProvider, Drawer, Layout, Menu, Typography } from 'antd';
+import { Button, ConfigProvider, Drawer, Layout, Menu } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
-import { matchPath, useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
-import { bg, border, brand, fontSize, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
-import { navMenuItems } from './shell-nav.js';
-import { AccountMenu, FreshnessLink } from './shell-session.js';
+import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
+import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
+import { AccountMenu } from './shell-session.js';
 
 export const searchTrackPx = 280;
 const searchLabel = '搜索单号、品名、供应商';
@@ -16,18 +16,13 @@ export function menuWidth(input: { readonly isCollapsed: boolean }): typeof navC
   return navWidth;
 }
 
-export function siderMenuCss(isCollapsed: boolean): string {
-  if (!isCollapsed) return '';
-  return '.shell-sider .ant-menu-item{margin-inline:0!important;padding-inline:6px!important}';
-}
-
 export function onBrandIconColor(): CSSProperties {
   return { color: onBrand.solid };
 }
 
 export function headerGridColumns(input: { readonly isPhone: boolean }): string {
   if (input.isPhone) return 'auto minmax(0, 1fr) auto';
-  return `minmax(0, 1fr) minmax(0, ${searchTrackPx}px) minmax(0, 1fr)`;
+  return `minmax(0, 1fr) minmax(0, ${searchTrackPx}px) auto`;
 }
 
 export function headerBarStyle(input: { readonly contentInset: 16 | 24; readonly isPhone: boolean }): CSSProperties {
@@ -63,39 +58,6 @@ export function drawerFrame(input: { readonly width: typeof navWidth }): {
   readonly size: typeof navWidth;
 } {
   return { placement: 'left', size: input.width };
-}
-
-export function headerClusterStyle(input: { readonly edge: 'start' | 'end' }): CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    justifySelf: 'stretch',
-    justifyContent: edgeJustify(input.edge),
-    minWidth: 0,
-    overflow: 'hidden',
-    gap: space[2],
-  };
-}
-
-export function headerTitleStyle(): CSSProperties {
-  return {
-    color: brand[800],
-    fontSize: fontSize.body,
-    fontWeight: 600,
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  };
-}
-
-export function accountSlotStyle(): CSSProperties {
-  return { flexShrink: 0 };
-}
-
-function edgeJustify(edge: 'start' | 'end'): 'flex-start' | 'flex-end' {
-  if (edge === 'start') return 'flex-start';
-  return 'flex-end';
 }
 
 export function searchButtonStyle(): CSSProperties {
@@ -136,7 +98,6 @@ export function ShellSider(input: {
       style={siderBarStyle()}
       styles={{ body: siderBodyStyle() }}
     >
-      <style>{siderMenuCss(input.chrome.isCollapsed)}</style>
       <SiderLogo isCollapsed={input.chrome.isCollapsed} />
       <div style={menuRegionStyle()}>
         <ShellMenu rows={input.nav} isCollapsed={input.chrome.isCollapsed} onNavigate={noop} />
@@ -147,23 +108,18 @@ export function ShellSider(input: {
 }
 
 export function ShellTop(input: {
-  readonly freshness: ShellView['freshness'];
   readonly account: ShellView['account'];
   readonly onSearch: () => void;
   readonly contentInset: 16 | 24;
   readonly menuButton: MenuButton | null;
+  readonly startContent: ReactNode;
 }): ReactNode {
   const isPhone = input.menuButton !== null;
   return (
-    <Layout.Header style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
-      <HeaderStart menuButton={input.menuButton} />
+    <Layout.Header className="shell-header" style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
+      <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
       <SearchButton onSearch={input.onSearch} />
-      <div style={headerClusterStyle({ edge: 'end' })}>
-        {isPhone ? null : <FreshnessLink freshness={input.freshness} />}
-        <div style={accountSlotStyle()}>
-          <AccountMenu account={input.account} />
-        </div>
-      </div>
+      <AccountMenu account={input.account} />
     </Layout.Header>
   );
 }
@@ -198,15 +154,20 @@ function ShellMenu(input: {
   readonly onNavigate: () => void;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const active = navigationSelection(input.rows, location);
+  const selected = active?.destination?.to ?? active?.row.to;
+  const group = active?.row.destinations === undefined ? undefined : groupKey(active.row.to);
   return (
     <Menu
+      key={group ?? 'main'}
       theme="dark"
       mode="inline"
-      inlineCollapsed={false}
-      tooltip={false}
-      selectedKeys={[selectedKey({ pathname: location.pathname, rows: input.rows })]}
+      inlineCollapsed={input.isCollapsed}
+      defaultOpenKeys={group === undefined ? [] : [group]}
+      selectedKeys={selected === undefined ? [] : [selected]}
       style={{ background: brand[800], width: menuWidth({ isCollapsed: input.isCollapsed }) }}
-      items={navMenuItems(input)}
+      items={navMenuItems({ ...input, location, selected, navigate })}
     />
   );
 }
@@ -223,18 +184,17 @@ function CollapseButton(input: {
       aria-label={input.name}
       onClick={input.onToggle}
       icon={input.isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-      style={{ ...onBrandIconColor(), width: input.hitPx, height: input.hitPx, flexShrink: 0 }}
+      style={{ ...onBrandIconColor(), width: input.hitPx, height: input.hitPx, flexShrink: 0, alignSelf: input.isCollapsed ? 'center' : 'flex-start' }}
     />
   );
 }
 
-function HeaderStart(input: { readonly menuButton: MenuButton | null }) {
-  if (input.menuButton !== null) return <div style={headerClusterStyle({ edge: 'start' })}><HeaderMenuButton button={input.menuButton} /></div>;
-  return (
-    <div style={headerClusterStyle({ edge: 'start' })}>
-      <Typography.Text style={headerTitleStyle()}>SHINEMAGE 供应链工作台</Typography.Text>
-    </div>
-  );
+function HeaderStart(input: {
+  readonly menuButton: MenuButton | null;
+  readonly startContent: ReactNode;
+}) {
+  if (input.menuButton !== null) return <HeaderMenuButton button={input.menuButton} />;
+  return <div style={{ minWidth: 0, overflow: 'hidden' }}>{input.startContent}</div>;
 }
 
 function DrawerCloseButton({ onClose }: { readonly onClose: () => void }) {
@@ -277,14 +237,6 @@ function SiderLogo({ isCollapsed }: { readonly isCollapsed: boolean }) {
   );
 }
 
-function selectedKey(input: { readonly pathname: string; readonly rows: readonly NavRow[] }): string {
-  const matched = input.rows.flatMap((row) => row.matchPaths
-    .filter((path) => matchPath({ path, end: false }, input.pathname) !== null)
-    .map((path) => ({ path, to: row.to })));
-  const best = matched.sort((left, right) => right.path.length - left.path.length)[0];
-  return best?.to ?? input.pathname;
-}
-
 function siderBodyStyle(): CSSProperties {
   return { display: 'flex', flexDirection: 'column', height: '100%' };
 }
@@ -300,7 +252,8 @@ function logoStyle(isCollapsed: boolean): CSSProperties {
     color: onBrand.solid,
     fontWeight: 600,
     flexShrink: 0,
-    paddingInline: isCollapsed ? space[1] : space[3],
+    paddingInline: isCollapsed ? 0 : space[3],
+    textAlign: isCollapsed ? 'center' : 'start',
   };
 }
 

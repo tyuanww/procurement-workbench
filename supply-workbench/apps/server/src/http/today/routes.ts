@@ -17,6 +17,7 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
     }
     const input = parse(TodayPageQuerySchema, {
       ...common, page: { number: raw.page, size: raw.pageSize }, sort: sortQuery(raw),
+      ...(raw.work === undefined ? {} : { work: raw.work }),
       ...(raw.focusId === undefined ? {} : { focusId: raw.focusId }),
     });
     return wire(TodayPageResponseSchema, await api.getToday.page(input, actor));
@@ -27,6 +28,7 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
     const input = parse(TodayChaseQuerySchema, {
       ...(reasons === undefined ? {} : { reasons }),
       sort: sortQuery(raw),
+      ...(raw.work === undefined ? {} : { work: raw.work }),
       ...(raw.factoryId === undefined ? {} : { factoryId: raw.factoryId }),
       ...(raw.itemId === undefined ? {} : { itemId: raw.itemId }),
     });
@@ -35,7 +37,7 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
 }
 
 function isPaged(raw: Record<string, unknown>): boolean {
-  return raw.page !== undefined || raw.pageSize !== undefined || raw.sort !== undefined || raw.unit !== undefined || raw.focusId !== undefined;
+  return raw.page !== undefined || raw.pageSize !== undefined || raw.sort !== undefined || raw.unit !== undefined || raw.focusId !== undefined || raw.work !== undefined;
 }
 
 function rawQuery(req: FastifyRequest): Record<string, unknown> {

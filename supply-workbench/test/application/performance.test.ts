@@ -71,7 +71,7 @@ function facts(input: KpiInput, extra: Partial<PerformanceFacts> = {}): Performa
     followUps: [{ buyerUserId: entityId('buyer-1'), on: day('2026-10-10') }],
     partyNames: { supplier: '宜侬', warehouse: '上海仓' },
     buyerNames: {},
-    batchLabels: { overdue: { poRaw: 'PO1', nameRaw: '面膜', orderLineId: 'line-1' } },
+    batchLabels: { overdue: { seq: 1, poRaw: 'PO1', nameRaw: '面膜', orderLineId: 'line-1' } },
     linkedFactoryOrderLineIds: new Set<string>(),
     unlinkedFactoryOrderLineIds: new Set<string>(),
     openExceptionOrderLineIds: new Set<string>(),

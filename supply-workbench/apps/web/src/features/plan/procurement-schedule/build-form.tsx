@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Alert, Button, Input, InputNumber, Space, Typography } from 'antd';
+import { useId, useState } from 'react';
+import { Alert, Button, Form, Input, InputNumber, Space, Typography } from 'antd';
 import { BuildProcurementScheduleRequestSchema, BuildProcurementScheduleResultSchema, type OrderLineDetail, type ProcurementStore } from '@sw/contracts';
 import { MAX_PROCUREMENT_PHASE_DAYS, PROCUREMENT_SCHEDULE_STAGES, PROCUREMENT_STAGE_LABELS, diffDays, procurementDraft, type LocalDate } from '@sw/domain';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
@@ -76,14 +76,19 @@ function useBuildForm({ schedule, orderLineId, store, onBuilt }: {
 }
 
 function BuildFields({ fields, releasedOn }: { readonly fields: ReturnType<typeof useBuildForm>['fields']; readonly releasedOn: LocalDate }) {
+  const fieldId = useId();
   return <>
     <Space wrap align="start">
-      <label>计划下单日 <Input aria-label="计划下单日" type="date" min={releasedOn} value={fields.orderOn} onChange={(event) => fields.setOrderOn(event.target.value)} /></label>
+      <Form.Item label="计划下单日" htmlFor={`${fieldId}-order`} layout="vertical" style={{ marginBottom: 0 }}>
+        <Input id={`${fieldId}-order`} type="date" min={releasedOn} value={fields.orderOn} onChange={(event) => fields.setOrderOn(event.target.value)} />
+      </Form.Item>
       <DayInput label="下单至齐料（天）" value={fields.materialsDays} onChange={fields.setMaterialsDays} min={0} />
       <DayInput label="生产周期（天）" value={fields.productionDays} onChange={fields.setProductionDays} min={1} />
       <DayInput label="生产结束至交付（天）" value={fields.deliveryDays} onChange={fields.setDeliveryDays} min={0} />
     </Space>
-    <label>周期依据 <Input aria-label="周期依据" value={fields.basis} maxLength={500} placeholder="填写适用工厂及已核实的资料或记录" onChange={(event) => fields.setBasis(event.target.value)} /></label>
+    <Form.Item label="周期依据" htmlFor={`${fieldId}-basis`} layout="vertical" style={{ marginBottom: 0 }}>
+      <Input id={`${fieldId}-basis`} value={fields.basis} maxLength={500} placeholder="填写适用工厂及已核实的资料或记录" onChange={(event) => fields.setBasis(event.target.value)} />
+    </Form.Item>
   </>;
 }
 
@@ -98,7 +103,10 @@ function DraftPreview({ preview, target }: { readonly preview: ReturnType<typeof
 }
 
 function DayInput(props: { readonly label: string; readonly value: number | null; readonly onChange: (value: number | null) => void; readonly min: number }) {
-  return <label style={{ display: 'grid' }}>{props.label}<InputNumber aria-label={props.label} value={props.value} min={props.min} max={MAX_PROCUREMENT_PHASE_DAYS} precision={0} onChange={props.onChange} /></label>;
+  const id = useId();
+  return <Form.Item label={props.label} htmlFor={id} layout="vertical" style={{ marginBottom: 0 }}>
+    <InputNumber id={id} value={props.value} min={props.min} max={MAX_PROCUREMENT_PHASE_DAYS} precision={0} onChange={props.onChange} />
+  </Form.Item>;
 }
 
 function draftPreview(input: Parameters<typeof procurementDraft>[0]) {

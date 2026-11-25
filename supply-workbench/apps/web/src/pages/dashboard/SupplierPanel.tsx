@@ -1,14 +1,17 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
-import { Table, Tooltip, type TableColumnType } from 'antd';
-import type { MouseEvent } from 'react';
+import { Button, Table, Tooltip, type TableColumnType } from 'antd';
+import { useState } from 'react';
 import { KPI_COPY } from '@sw/domain';
 import {
   EM_DASH,
+  type DashboardQuery,
   type SupplierCell,
   type SupplierColumnKey,
   type SupplierTableRow,
 } from '../../features/performance/index.js';
-import { brand, fontSize, space, text } from '../../theme/tokens.js';
+import { SectionGroup } from '../../shared/ui/section.js';
+import { fontSize, space, text, topBar } from '../../theme/tokens.js';
+import { SupplierBatchDrawer } from './SupplierTrend.js';
 
 const COLUMN_KEYS: readonly SupplierColumnKey[] = [
   'dueBatches',
@@ -30,29 +33,34 @@ const SUPPLIER_COPY = {
   openExceptions: KPI_COPY.k7,
 } satisfies Record<SupplierColumnKey, { readonly name: string; readonly definition: string }>;
 
-export function SupplierPanel(props: { readonly rows: readonly SupplierTableRow[] }) {
+export function SupplierPanel({ rows, from, to, lane }: Pick<DashboardQuery, 'from' | 'to' | 'lane'> & {
+  readonly rows: readonly SupplierTableRow[];
+}) {
+  const [selected, setSelected] = useState<SupplierTableRow>();
   return (
-    <Table<SupplierTableRow>
-      size="small"
-      pagination={false}
-      rowKey="partyId"
-      columns={supplierColumns()}
-      dataSource={[...props.rows]}
-      scroll={{ x: 'max-content' }}
-      onRow={(row) => ({
-        onClick: (event) => openParty(event, row.href),
-        style: { cursor: 'pointer' },
-      })}
-    />
+    <>
+      <SectionGroup title="交付与延期" meta={`${rows.length} 家主体`}>
+        <Table<SupplierTableRow>
+          size="small"
+          sticky={{ offsetHeader: topBar }}
+          pagination={{ defaultPageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
+          rowKey="partyId"
+          columns={[
+            { title: '主体', fixed: 'left', rowScope: 'row', render: (_value, row) =>
+              <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setSelected(row)}>{row.name}</Button> },
+            ...COLUMN_KEYS.map(kpiColumn),
+            weekColumn(),
+          ]}
+          dataSource={[...rows]}
+          scroll={{ x: 'max-content' }}
+          locale={{ emptyText: '所选范围内暂无已归属的供应商批次' }}
+        />
+      </SectionGroup>
+      {selected === undefined ? null : <SupplierBatchDrawer key={JSON.stringify([selected.partyId, from, to, lane])}
+        partyId={selected.partyId} name={selected.name} from={from} to={to} lane={lane}
+        profile={selected.href} onClose={() => setSelected(undefined)} />}
+    </>
   );
-}
-
-function supplierColumns(): TableColumnType<SupplierTableRow>[] {
-  return [nameColumn(), ...COLUMN_KEYS.map(kpiColumn), weekColumn()];
-}
-
-function nameColumn(): TableColumnType<SupplierTableRow> {
-  return { title: '主体', dataIndex: 'name', render: (_value, row) => <PartyName row={row} /> };
 }
 
 function kpiColumn(key: SupplierColumnKey): TableColumnType<SupplierTableRow> {
@@ -72,7 +80,7 @@ function KpiTitle(props: { readonly column: SupplierColumnKey }) {
   return (
     <span>
       {copy.name}
-      <Tooltip title={copy.definition}>
+      <Tooltip title={copy.definition} trigger={['hover', 'focus']}>
         <InfoCircleOutlined
           aria-label={copy.definition}
           tabIndex={0}
@@ -81,20 +89,6 @@ function KpiTitle(props: { readonly column: SupplierColumnKey }) {
       </Tooltip>
     </span>
   );
-}
-
-function PartyName(props: { readonly row: SupplierTableRow }) {
-  const color = props.row.name === EM_DASH ? text.tertiary : brand[600];
-  return (
-    <a href={props.row.href} style={{ color }}>
-      {props.row.name}
-    </a>
-  );
-}
-
-function openParty(event: MouseEvent<HTMLElement>, href: string): void {
-  if (event.target instanceof Element && event.target.closest('a') !== null) return;
-  window.location.assign(href);
 }
 
 function KpiCell(props: { readonly row: SupplierTableRow; readonly column: SupplierColumnKey }) {

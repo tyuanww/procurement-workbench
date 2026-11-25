@@ -1,15 +1,19 @@
-import { Button, Empty, Segmented, Space, Typography } from 'antd';
+import { Empty, Flex } from 'antd';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { ProductDevelopmentNode, ProductDevelopmentProject } from '@sw/contracts';
 import { DEVELOPMENT_DESTINATION_LABELS, type LocalDate } from '@sw/domain';
-import { scheduleBarOf, scheduleDays, scheduleWindow, shiftScheduleWindow, todayPercent, type ScheduleScale, type Timeline } from '../../features/progress/index.js';
+import { scheduleBarOf, scheduleDays, scheduleWindow, todayPercent, type ScheduleScale, type Timeline } from '../../features/progress/index.js';
 import { workItemStatusLabel } from '../../features/today/index.js';
-import { ScheduleTimeline } from './progress-timeline.js';
+import { useShellViewport } from '../../features/shell/index.js';
+import { space } from '../../theme/tokens.js';
+import { ScheduleList, ScheduleTimeline } from './progress-timeline.js';
+import { ScheduleWindowControls } from './schedule-window-controls.js';
 
 export function DevelopmentTimeline({ project, businessDate, onOpen }: {
   readonly project: ProductDevelopmentProject; readonly businessDate: LocalDate; readonly onOpen: (nodeId: string) => void;
 }): ReactNode {
+  const isPhone = useShellViewport().band === 'phone';
   const [scale, setScale] = useState<ScheduleScale>('month');
   const [anchor, setAnchor] = useState(businessDate);
   const window = scheduleWindow({ scale, anchor });
@@ -26,18 +30,12 @@ export function DevelopmentTimeline({ project, businessDate, onOpen }: {
       })),
     }],
   };
-  return <Space orientation="vertical" size="middle" style={{ display: 'flex' }}>
-    <Space wrap>
-      <Segmented value={scale} options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }]}
-        onChange={(value) => setScale(value === 'week' ? 'week' : 'month')} />
-      <Button onClick={() => setAnchor(shiftScheduleWindow({ scale, window, direction: -1 }).from)}>上一期</Button>
-      <Button onClick={() => setAnchor(businessDate)}>本期</Button>
-      <Button onClick={() => setAnchor(shiftScheduleWindow({ scale, window, direction: 1 }).from)}>下一期</Button>
-      <Typography.Text type="secondary">{window.from} 至 {window.to}</Typography.Text>
-    </Space>
+  return <Flex vertical gap={space[2]}>
+    <ScheduleWindowControls label="开发排期刻度" scale={scale} window={window} today={businessDate} onScale={setScale} onAnchor={setAnchor} />
     {visible.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本期暂无开发节点" /> :
-      <ScheduleTimeline timeline={timeline} scale={scale} columnLabel="开发节点 · 交付目的 · 负责人" hint="点击任务条查看节点详情。" onOpen={onOpen} />}
-  </Space>;
+      isPhone ? <ScheduleList timeline={timeline} onOpen={onOpen} /> :
+        <ScheduleTimeline timeline={timeline} scale={scale} columnLabel="开发节点 · 交付目的 · 负责人" hint="点击任务条查看节点详情。" onOpen={onOpen} />}
+  </Flex>;
 }
 
 export function countdownOf(node: ProductDevelopmentNode): string {

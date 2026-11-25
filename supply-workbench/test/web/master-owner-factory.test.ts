@@ -252,9 +252,10 @@ it('工厂操作有确认、加载态和禁用，仍用 antd 按钮', () => {
   expect(busy).toContain('ant-btn-loading');
 });
 
-it('主数据页只给工厂关联保留一个入口，旧链接打开当前待处理', () => {
+it('旧工厂待处理链接和两个诊断视图各自显示业务范围', () => {
   const all = renderMasterRoute('/master');
-  for (const label of ['别名审核', '一号多名', '负责人映射', '工厂关联']) expect(all).toContain(label);
+  expect(all).toContain('>别名审核</h1>');
+  expect(all).not.toContain('role="tab"');
   expect(all).not.toContain('未关联上报');
   expect(all).not.toContain('重跑工厂关联');
   const factory = renderMasterRoute('/master?tab=factory-link');
@@ -262,6 +263,11 @@ it('主数据页只给工厂关联保留一个入口，旧链接打开当前待�
   expect(factory).toContain('回填供应商主体');
   const legacy = renderMasterRoute('/master?tab=unlinked');
   expect(legacy).toContain('当前待处理上报');
+  for (const [scope, title] of [['active', '当前关联诊断'], ['historical', '历史关联诊断']]) {
+    const diagnostic = renderMasterRoute(`/master?tab=factory-link&scope=${scope}`);
+    expect(diagnostic).toContain(`>${title}</h1>`);
+    expect(diagnostic).not.toContain('重跑工厂关联');
+  }
 });
 
 function render(type: unknown, props: unknown): string {

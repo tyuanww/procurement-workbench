@@ -138,7 +138,7 @@ function PartyPreviewFooter(props: { readonly partyId: string; readonly onClose:
   return (
     <Flex justify="flex-end" gap={12} wrap>
       <Button href={`/parties/${encodeURIComponent(props.partyId)}`}>打开主体详情</Button>
-      <Button type="primary" autoFocus autoInsertSpace={false} onClick={props.onClose}>关闭</Button>
+      <Button autoFocus autoInsertSpace={false} onClick={props.onClose}>关闭</Button>
     </Flex>
   );
 }

@@ -34,12 +34,12 @@ describe('导入按钮和问题分组', () => {
       kind: 'committed',
       steps: [
         { to: '/master', label: '去审核 4 个新主体' },
-        { to: '/lines', label: '去跟进台' },
+        { to: '/lines', label: '去跟进中心' },
       ],
     });
     expect(stepLabels(factory).join('')).not.toContain('行');
     expect(stepLabels(factory).join('')).not.toContain('按总表');
-    expect(stepLabels(continuationOf(summary({ template: 'factory-progress-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual(['去跟进台']);
+    expect(stepLabels(continuationOf(summary({ template: 'factory-progress-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual(['去跟进中心']);
     expect(stepLabels(continuationOf(summary({ template: 'product-archive-v1', status: 'committed', pendingAliases: 2, unresolvedConflicts: 0, error: null })))).toEqual(['去审核 2 个新主体', '去产品档案']);
     expect(stepLabels(continuationOf(summary({ template: 'product-archive-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual(['去产品档案']);
     expect(stepLabels(continuationOf(summary({ template: 'bom-v1', status: 'committed', pendingAliases: 3, unresolvedConflicts: 0, error: null })))).toEqual(['去审核 3 个新主体']);

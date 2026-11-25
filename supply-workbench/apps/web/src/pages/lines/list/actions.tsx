@@ -2,64 +2,20 @@ import { DownOutlined } from '@ant-design/icons';
 import { Alert, Button, Dropdown, Grid } from 'antd';
 import { useState, type CSSProperties } from 'react';
 import { useCanWrite } from '../../../shared/actor.js';
-import { HintBatchResultSchema, UpdatedCountSchema, type OrderLineRow } from '@sw/contracts';
+import { HintBatchResultSchema, UpdatedCountSchema } from '@sw/contracts';
 import { apiDownload, apiErrorMessage, apiSend } from '../../../shared/api/client.js';
-import { read } from '../../../shared/api/reads.js';
 import { hintSkipText, saveView } from '../../../features/follow-up/index.js';
 import { brand, radius } from '../../../theme/tokens.js';
 import { OwnerControls } from './owners.js';
 
-export type ListGate = {
-  start(): number;
-  isLatest(ticket: number): boolean;
-};
-
-export function createListGate(): ListGate {
-  let current = 0;
-  return {
-    start() {
-      current += 1;
-      return current;
-    },
-    isLatest(ticket) {
-      return ticket === current;
-    },
-  };
-}
-
-type DeskLoad = {
-  readonly query: string;
-  readonly gate: ListGate;
-  readonly setRows: (rows: readonly OrderLineRow[]) => void;
-  readonly setTotal: (total: number) => void;
-};
-
-type DeskWriters = DeskLoad & {
+type DeskWriters = {
+  readonly onReload: () => void | Promise<void>;
   readonly setMessage: (message: string) => void;
 };
 
-async function readDeskLines(query: string): Promise<{ readonly rows: readonly OrderLineRow[]; readonly total: number }> {
-  const listed = await read({ name: 'lines', query });
-  return { rows: listed.items, total: listed.page.total };
-}
-
-export async function loadDeskList(input: DeskLoad): Promise<void> {
-  const ticket = input.gate.start();
-  try {
-    const listed = await readDeskLines(input.query);
-    if (!input.gate.isLatest(ticket)) return;
-    input.setRows(listed.rows);
-    input.setTotal(listed.total);
-  } catch (error) {
-    if (!input.gate.isLatest(ticket)) return;
-    throw error;
-  }
-}
-
-export async function assignLines(input: DeskWriters & {
+async function assignLines(input: DeskWriters & {
   readonly lineIds: readonly string[];
   readonly buyerUserId: string;
-  readonly query: string;
 }) {
   if (input.lineIds.length === 0 || input.buyerUserId === '') {
     input.setMessage('先勾选订单行，再选择负责人。');
@@ -73,7 +29,7 @@ export async function assignLines(input: DeskWriters & {
       schema: UpdatedCountSchema,
     });
     input.setMessage(`已分配 ${input.lineIds.length} 行`);
-    await loadDeskList(input);
+    await input.onReload();
   } catch (error) {
     const message = apiErrorMessage(error);
     if (message === undefined) throw error;
@@ -83,7 +39,6 @@ export async function assignLines(input: DeskWriters & {
 
 export async function hintBatches(input: DeskWriters & {
   readonly lineIds: readonly string[];
-  readonly query: string;
   readonly setSkips: (lines: readonly string[]) => void;
 }) {
   if (input.lineIds.length === 0) {
@@ -99,7 +54,7 @@ export async function hintBatches(input: DeskWriters & {
     });
     input.setSkips(hintSkipText(result.skipped));
     input.setMessage(`新建 ${result.created} 个批次`);
-    await loadDeskList(input);
+    await input.onReload();
   } catch (error) {
     const message = apiErrorMessage(error);
     if (message === undefined) throw error;
@@ -107,31 +62,25 @@ export async function hintBatches(input: DeskWriters & {
   }
 }
 
-export function saveCurrent(input: { readonly userId: string; readonly search: string; readonly setMessage: (message: string) => void }): string | undefined {
-  const label = window.prompt('视图名称');
-  if (input.userId === '' || label === null || label.trim() === '') return undefined;
-  const id = label.trim();
+export function saveCurrent(input: { readonly userId: string; readonly search: string; readonly label: string; readonly setMessage: (message: string) => void }): string | undefined {
+  const id = input.label.trim();
+  if (input.userId === '' || id === '') return undefined;
   saveView({ storage: window.localStorage, userId: input.userId, view: { id, label: id, query: input.search } });
   input.setMessage(`已保存视图 ${id}`);
   return id;
 }
 
-export function LineBulkBar(props: {
+export function LineBulkBar(props: DeskWriters & {
   readonly users: readonly { readonly id: string; readonly name: string }[];
   readonly isOwnerVisible: boolean;
   readonly buyerId: string;
   readonly setBuyerId: (id: string) => void;
   readonly picked: readonly string[];
-  readonly query: string;
-  readonly setRows: (rows: readonly OrderLineRow[]) => void;
-  readonly setTotal: (total: number) => void;
-  readonly gate: ListGate;
-  readonly setMessage: (message: string) => void;
   readonly setSkips: (lines: readonly string[]) => void;
 }) {
   const canAssign = useCanWrite('lines.write');
   const generateBatches = canAssign ? () => {
-    void hintBatches({ lineIds: props.picked, query: props.query, gate: props.gate, setRows: props.setRows, setTotal: props.setTotal, setSkips: props.setSkips, setMessage: props.setMessage });
+    void hintBatches({ ...props, lineIds: props.picked });
   } : undefined;
   return (
     <div style={bulkBarStyle()}>
@@ -141,7 +90,7 @@ export function LineBulkBar(props: {
         owners={props.users}
         buyerId={props.buyerId}
         onBuyer={props.setBuyerId}
-        onAssign={() => { void assignLines({ lineIds: props.picked, buyerUserId: props.buyerId, query: props.query, gate: props.gate, setRows: props.setRows, setTotal: props.setTotal, setMessage: props.setMessage }); }}
+        onAssign={() => { void assignLines({ ...props, lineIds: props.picked, buyerUserId: props.buyerId }); }}
       />
       <LineBatchActions picked={props.picked} setMessage={props.setMessage} onGenerate={generateBatches} />
     </div>

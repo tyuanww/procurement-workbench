@@ -28,8 +28,11 @@ it('41 行的函数、4 个位置参数、any 会被 eslint 拦住', () => {
   expect(output).toContain('no-explicit-any');
 });
 
-it('页面里直接 fetch 会被 eslint 拦住', () => {
-  const output = fails(process.execPath, [eslint,'--no-ignore', 'apps/web/src/pages/direct-fetch.violation.ts']);
+it('页面直接 fetch 或绕过共享切换组件会被 eslint 拦住', () => {
+  const output = fails(process.execPath, [eslint, '--no-ignore',
+    'apps/web/src/pages/direct-fetch.violation.ts', 'apps/web/src/pages/raw-view-switch.violation.ts']);
+  expect(output).toMatch(/'Tabs' import.*no-restricted-imports/);
+  expect(output).toMatch(/'Segmented' import.*no-restricted-imports/);
   expect(output).toContain('no-restricted-syntax');
   expect(output).toContain('页面里不要直接 fetch');
 });

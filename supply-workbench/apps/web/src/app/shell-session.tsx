@@ -1,23 +1,21 @@
-import { Badge, Button, Dropdown, Menu, Tag, Tooltip, Typography, type MenuProps } from 'antd';
-import { LogoutOutlined, QuestionCircleOutlined, SettingOutlined, UserOutlined, WarningOutlined } from '@ant-design/icons';
-import { useId, useRef, useState, type CSSProperties, type Ref } from 'react';
+import { Badge, Button, Dropdown, Menu, Tag, Typography, type MenuProps } from 'antd';
+import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
+import { useId, useRef, useState, type Ref } from 'react';
 import { Link } from 'react-router';
-import { useCan } from '../shared/actor.js';
 import { SETTINGS_PATH } from '../shared/page-manifest.js';
 import {
   endSession,
   type AccountEntry,
   type BadgeMark,
-  type FreshnessChip,
   type ShellView,
 } from '../features/shell/index.js';
-import { bg, brand, space, statusColor, text } from '../theme/tokens.js';
+import { bg, brand, space } from '../theme/tokens.js';
 
-export function NavBadge({ mark, compact, id }: { readonly mark: BadgeMark; readonly compact: boolean; readonly id: string }) {
+export function NavBadge({ mark, compact }: { readonly mark: BadgeMark; readonly compact: boolean }) {
   switch (mark.kind) {
     case 'count':
       if (compact) return null;
-      return <Badge id={id} count={mark.value} color={brand[100]} styles={{ indicator: { color: brand[800] } }} />;
+      return <Badge count={mark.value} color={brand[100]} styles={{ indicator: { color: brand[800] } }} />;
     case 'missing':
       return <span style={{ color: brand[100] }}>—</span>;
     case 'none':
@@ -27,18 +25,6 @@ export function NavBadge({ mark, compact, id }: { readonly mark: BadgeMark; read
     default:
       return unreachable(mark);
   }
-}
-
-export function FreshnessLink({ freshness }: { readonly freshness: ShellView['freshness'] }) {
-  const canReadImports = useCan('imports.read');
-  const body =
-    freshness.chips.length === 0 ? (
-      <span style={{ color: text.secondary }}>{freshness.headline}</span>
-    ) : (
-      freshness.chips.map((chip) => <FreshnessChipView key={chip.key} chip={chip} />)
-    );
-  const style = freshnessLinkStyle();
-  return canReadImports ? <Link to="/imports" style={style}>{body}</Link> : <div style={style}>{body}</div>;
 }
 
 export function AccountMenu({ account }: { readonly account: ShellView['account'] }) {
@@ -81,32 +67,6 @@ export function AccountMenu({ account }: { readonly account: ShellView['account'
       {logoutError === '' ? null : <Typography.Text type="danger">{logoutError}</Typography.Text>}
     </div>
   );
-}
-
-export function freshnessLinkStyle(): { readonly minWidth: 0; readonly flex: string; readonly overflow: 'hidden'; readonly display: 'flex'; readonly gap: number; readonly alignItems: 'center' } {
-  return { minWidth: 0, flex: '0 1 auto', overflow: 'hidden', display: 'flex', gap: space[1], alignItems: 'center' };
-}
-
-export function freshnessChipBoxStyle(status: FreshnessChip['status'] | boolean): CSSProperties {
-  const normalized = typeof status === 'boolean' ? (status ? 'stale' : 'fresh') : status;
-  return { ...chipStyle(normalized), flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-}
-
-function FreshnessChipView({ chip }: { readonly chip: FreshnessChip }) {
-  return (
-    <Tooltip title={chip.tooltip}>
-      <span style={freshnessChipBoxStyle(chip.status)}>
-        {chip.status === 'stale' ? <WarningOutlined /> : chip.status === 'unknown' ? <QuestionCircleOutlined /> : null}
-        {chip.text}
-      </span>
-    </Tooltip>
-  );
-}
-
-function chipStyle(status: FreshnessChip['status']): { readonly color: string; readonly background?: string } {
-  if (status === 'fresh') return { color: text.secondary };
-  if (status === 'unknown') return { color: statusColor.warning.text };
-  return { color: statusColor.warning.text, background: statusColor.warning.bg };
 }
 
 function AccountPanel(input: { readonly id: string; readonly panelRef: Ref<HTMLDivElement>; readonly entries: readonly AccountEntry[]; readonly onClose: () => void; readonly onFail: () => void }) {

@@ -1,5 +1,5 @@
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Alert, Button, Empty, Result, Segmented, Select, Skeleton, Typography } from 'antd';
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
+import { Alert, Button, Card, Collapse, Empty, Flex, Result, Select, Skeleton, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
@@ -11,16 +11,17 @@ import { useCan } from '../../shared/actor.js';
 import { businessToday } from '../../features/follow-up/index.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import {
-  applyScheduleFilters, emptyScheduleFilters, readScheduleQuery, scheduleKpi, scheduleOptions, scheduleWindow, scheduleWindowLabel,
-  shiftScheduleWindow, statusOptions, timelineOf, writeScheduleQuery,
+  applyScheduleFilters, emptyScheduleFilters, readScheduleQuery, scheduleKpi, scheduleOptions, scheduleWindow,
+  statusOptions, timelineOf, writeScheduleQuery,
   type ScheduleOptions, type ScheduleQuery, type ScheduleScale, type ScheduleWindow, type Timeline,
 } from '../../features/progress/index.js';
 import { taskIdOf, taskParam, type WorkItem } from '../../features/today/index.js';
 import { MetricStrip } from '../../shared/ui/analytics.js';
-import { bg, border, fontSize, radius, space, text } from '../../theme/tokens.js';
+import { fontSize, space } from '../../theme/tokens.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import { ProcurementSchedulePanel } from './procurement-schedule-panel.js';
 import { ScheduleList, ScheduleTimeline } from './progress-timeline.js';
+import { ScheduleWindowControls } from './schedule-window-controls.js';
 
 type ScheduleView = z.output<typeof ScheduleViewSchema>;
 
@@ -29,8 +30,9 @@ type ScheduleLoad =
   | { readonly kind: 'ready'; readonly view: ScheduleView; readonly isLoading: boolean; readonly notice: string }
   | { readonly kind: 'error'; readonly message: string };
 
-export function ProgressSchedule({ store }: { readonly store: ProcurementStore }): ReactNode {
+export function ProgressSchedule({ store, filters }: { readonly store: ProcurementStore; readonly filters: ReactNode }): ReactNode {
   const [params, setParams] = useSearchParams();
+  const isPhone = useShellViewport().band === 'phone';
   const today = localDate(businessToday());
   const query = readScheduleQuery(params.toString(), today);
   const window = scheduleWindow(query);
@@ -51,42 +53,46 @@ export function ProgressSchedule({ store }: { readonly store: ProcurementStore }
     else next.set('drawer', id.startsWith('task:') ? id : taskParam(id));
     setParams(next);
   };
-  const selectOrder = (id: string | null) => {
-    const next = new URLSearchParams(params);
-    if (id === null) next.delete('scheduleLine');
-    else next.set('scheduleLine', id);
-    setParams(next);
-  };
+  const metrics = load.kind === 'ready' ? <ScheduleKpis items={items} scale={query.scale} /> : null;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <ProcurementSchedulePanel store={store} selected={params.get('scheduleLine')} onSelect={selectOrder}
-        search={params.toString()} onTimelineChanged={scheduleLoad.reload} onAnchor={(anchor) => write({ ...query, anchor })} />
-      <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} />
-      <ScheduleKpis items={items} scale={query.scale} />
+    <Flex vertical gap={space[3]}>
+      <ScheduleFiltersBar query={query} window={window} today={today} options={options} onQuery={write} isPhone={isPhone} filters={filters} />
       <ScheduleBody load={load} timeline={timeline} scale={query.scale} onOpen={writeDrawer} onRetry={scheduleLoad.reload} onClear={() => write({ ...query, filters: emptyScheduleFilters() })} />
+      {metrics}
+      <ProcurementSchedulePanel key={store} store={store} selected={params.get('scheduleLine')} onSelect={(id) => setParams(withScheduleLine(params, id))}
+        search={params.toString()} onTimelineChanged={scheduleLoad.reload} onAnchor={(anchor) => write({ ...query, anchor })} />
       <TaskDrawer workItemId={drawerId} isOpen={drawerId !== null} onClose={() => writeDrawer(null)} onChanged={scheduleLoad.reload} />
-    </div>
+    </Flex>
   );
 }
 
+function withScheduleLine(params: URLSearchParams, id: string | null): URLSearchParams {
+  const next = new URLSearchParams(params);
+  if (id === null) next.delete('scheduleLine');
+  else next.set('scheduleLine', id);
+  return next;
+}
+
 function useScheduleLoad(window: ScheduleWindow, store: ProcurementStore): { readonly load: ScheduleLoad; readonly reload: () => void } {
-  const [load, setLoad] = useState<ScheduleLoad>({ kind: 'loading' });
+  const [result, setResult] = useState<{ readonly store: ProcurementStore; readonly load: ScheduleLoad }>({ store, load: { kind: 'loading' } });
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let isActive = true;
-    setLoad((current) => (current.kind === 'ready' ? { ...current, isLoading: true, notice: '' } : { kind: 'loading' }));
+    setResult((current) => ({ store, load: current.store === store && current.load.kind === 'ready'
+      ? { ...current.load, isLoading: true, notice: '' } : { kind: 'loading' } }));
     void read({ name: 'planSchedule', from: window.from, to: window.to, store })
-      .then((view) => { if (isActive) setLoad({ kind: 'ready', view, isLoading: false, notice: '' }); })
+      .then((view) => { if (isActive) setResult({ store, load: { kind: 'ready', view, isLoading: false, notice: '' } }); })
       .catch((error: unknown) => {
         if (!isActive) return;
         const failure = readFailureOf(error);
         if (failure === null) return;
         const message = failureText(failure);
-        setLoad((current) => (current.kind === 'ready' ? { ...current, isLoading: false, notice: message } : { kind: 'error', message }));
+        setResult((current) => ({ store, load: current.load.kind === 'ready'
+          ? { ...current.load, isLoading: false, notice: message } : { kind: 'error', message } }));
       });
     return () => { isActive = false; };
   }, [window.from, window.to, store, reload]);
-  return { load, reload: () => setReload((value) => value + 1) };
+  return { load: result.store === store ? result.load : { kind: 'loading' }, reload: () => setReload((value) => value + 1) };
 }
 
 function ScheduleFiltersBar(props: {
@@ -95,26 +101,42 @@ function ScheduleFiltersBar(props: {
   readonly today: LocalDate;
   readonly options: ScheduleOptions;
   readonly onQuery: (query: ScheduleQuery) => void;
+  readonly isPhone: boolean;
+  readonly filters: ReactNode;
 }): ReactNode {
-  const { query, window, today, options, onQuery } = props;
-  const filters = query.filters;
+  const { query, window, today, options, onQuery, isPhone, filters } = props;
+  const extra = <ScheduleSecondaryFilters query={query} options={options} onQuery={onQuery} />;
+  const applied = Object.values(query.filters).filter((value) => value !== null).length;
   return (
-    <div style={filterBarStyle()}>
-      <Segmented
-        value={query.scale}
-        options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }]}
-        onChange={(value) => onQuery({ ...query, scale: scaleOf(value), anchor: window.from })}
-      />
-      <Button icon={<LeftOutlined />} aria-label={`上一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: -1 }).from })} />
-      <Button icon={<RightOutlined />} aria-label={`下一${scaleWord(query.scale)}`} onClick={() => onQuery({ ...query, anchor: shiftScheduleWindow({ scale: query.scale, window, direction: 1 }).from })} />
-      <Typography.Text style={rangeStyle()}>{scheduleWindowLabel({ window, today })}</Typography.Text>
-      <FilterSelect label="负责人" value={filters.ownerUserId} options={options.owners} onChange={(value) => onQuery({ ...query, filters: { ...filters, ownerUserId: value } })} />
-      <FilterSelect label="供应商" value={filters.supplierPartyId} options={options.suppliers} onChange={(value) => onQuery({ ...query, filters: { ...filters, supplierPartyId: value } })} />
-      <FilterSelect label="工厂" value={filters.factoryPartyId} options={options.factories} onChange={(value) => onQuery({ ...query, filters: { ...filters, factoryPartyId: value } })} />
-      <FilterSelect label="状态" value={filters.status} options={[...statusOptions()]} onChange={(value) => onQuery({ ...query, filters: { ...filters, status: statusOf(value) } })} />
-      <Button type="link" onClick={() => onQuery({ ...query, filters: emptyScheduleFilters() })}>清空</Button>
-    </div>
+    <Card size="small">
+      <Flex vertical gap={space[2]}>
+        <Flex wrap align="center" gap={space[2]}>{filters}{isPhone ? null : extra}<ProcurementCutoff /></Flex>
+        {isPhone ? <Collapse ghost size="small" items={[{
+          key: 'filters',
+          label: applied === 0 ? '更多筛选' : `更多筛选（${applied}）`,
+          children: <Flex wrap align="center" gap={space[2]}>{extra}</Flex>,
+        }]} /> : null}
+        <ScheduleWindowControls label="排期刻度" scale={query.scale} window={window} today={today}
+          onScale={(scale) => onQuery({ ...query, scale })}
+          onAnchor={(anchor) => onQuery({ ...query, anchor })} />
+      </Flex>
+    </Card>
   );
+}
+
+function ScheduleSecondaryFilters({ query, options, onQuery }: {
+  readonly query: ScheduleQuery;
+  readonly options: ScheduleOptions;
+  readonly onQuery: (query: ScheduleQuery) => void;
+}) {
+  const filters = query.filters;
+  return <>
+    <FilterSelect label="负责人" value={filters.ownerUserId} options={options.owners} onChange={(value) => onQuery({ ...query, filters: { ...filters, ownerUserId: value } })} />
+    <FilterSelect label="供应商" value={filters.supplierPartyId} options={options.suppliers} onChange={(value) => onQuery({ ...query, filters: { ...filters, supplierPartyId: value } })} />
+    <FilterSelect label="工厂" value={filters.factoryPartyId} options={options.factories} onChange={(value) => onQuery({ ...query, filters: { ...filters, factoryPartyId: value } })} />
+    <FilterSelect label="状态" value={filters.status} options={statusOptions()} onChange={(value) => onQuery({ ...query, filters: { ...filters, status: statusOf(value) } })} />
+    {Object.values(filters).some((value) => value !== null) ? <Button onClick={() => onQuery({ ...query, filters: emptyScheduleFilters() })}>清空筛选</Button> : null}
+  </>;
 }
 
 function FilterSelect(props: {
@@ -165,10 +187,11 @@ function ScheduleBody(props: {
   const notice = props.load.kind === 'ready' && props.load.notice !== ''
     ? <Alert type="error" showIcon title="总排期没有读出来" description={props.load.notice} />
     : null;
-  if (props.timeline.total === 0) return <EmptySchedule total={props.load.view.total} scale={props.scale} onClear={props.onClear} />;
+  if (props.timeline.total === 0) return <>{notice}<EmptySchedule total={props.load.view.total} scale={props.scale} onClear={props.onClear} /></>;
   return (
     <div>
       {notice}
+      {props.load.isLoading ? <Typography.Paragraph role="status" type="secondary">正在更新排期</Typography.Paragraph> : null}
       <div style={timelineHeadStyle()}>
         <Typography.Text strong>{props.scale === 'week' ? '本周排期' : '本月排期'}</Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{props.timeline.total} 条 · 按负责人分组</Typography.Text>
@@ -189,24 +212,8 @@ function EmptySchedule(props: { readonly total: number; readonly scale: Schedule
   return <Empty description="筛选后没有任务。下一步：清空筛选。"><Button onClick={props.onClear}>清空筛选</Button></Empty>;
 }
 
-function scaleOf(value: string | number): ScheduleScale {
-  return value === 'month' ? 'month' : 'week';
-}
-
-function scaleWord(scale: ScheduleScale): string {
-  return scale === 'week' ? '周' : '月';
-}
-
 function statusOf(value: string | null): ScheduleQuery['filters']['status'] {
   return value === 'planned' || value === 'in_progress' || value === 'blocked' ? value : null;
-}
-
-function filterBarStyle(): CSSProperties {
-  return { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space[1], padding: space[2], background: bg.surface, border: `1px solid ${border}`, borderRadius: radius };
-}
-
-function rangeStyle(): CSSProperties {
-  return { minWidth: 128, color: text.primary, fontVariantNumeric: 'tabular-nums' };
 }
 
 function timelineHeadStyle(): CSSProperties {

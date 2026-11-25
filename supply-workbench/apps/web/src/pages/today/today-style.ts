@@ -2,37 +2,16 @@ import type { CSSProperties } from 'react';
 import { bg, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import type { RowFace } from '../../features/today/index.js';
 
-const [tiny, small, medium, regular] = space;
+const [tiny, small, , regular] = space;
 
 export function screenStyle(): CSSProperties {
   return { display: 'flex', flexDirection: 'column', gap: regular, background: bg.page };
-}
-
-export function chipRowStyle(): CSSProperties {
-  return { display: 'flex', flexWrap: 'wrap', gap: small, alignItems: 'center' };
-}
-
-export function groupStyle(): CSSProperties {
-  return { marginBottom: medium };
-}
-
-export function headStyle(): CSSProperties {
-  return { display: 'flex', flexWrap: 'wrap', gap: small, alignItems: 'center', paddingBottom: small, borderBottom: `1px solid ${statusColor.neutral.border}` };
-}
-
-export function titleStyle(): CSSProperties {
-  return { color: text.primary, fontSize: fontSize.section, fontWeight: 600 };
-}
-
-export function countStyle(): CSSProperties {
-  return { color: text.secondary, fontSize: fontSize.body };
 }
 
 export function rowStyle(input: { readonly isFocused: boolean; readonly isFading: boolean }): CSSProperties {
   return {
     background: 'transparent',
     borderBottom: `1px solid ${statusColor.neutral.border}`,
-    cursor: 'pointer',
     outline: input.isFocused ? `2px solid ${brand[600]}` : 'none',
     opacity: input.isFading ? 0 : 1,
     padding: `${small}px 0`,
@@ -50,11 +29,11 @@ export function todayMotionCss(): string {
       .today-metric-summary { display: flex; flex-wrap: wrap; gap: ${tiny}px ${small}px; }
     }
     @media (any-pointer: coarse) {
-      .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable {
+      .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label {
         min-block-size: 44px;
         min-inline-size: 44px;
       }
-      .today-touch .ant-tag-checkable { display: inline-flex; align-items: center; }
+      .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label { display: inline-flex; align-items: center; justify-content: center; }
     }
     @media (prefers-reduced-motion: reduce) { .today-row { transition: none; } }
   `;
