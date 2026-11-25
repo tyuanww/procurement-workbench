@@ -18,7 +18,7 @@ import {
 import { matchesShortcut, searchShortcut, type Shortcut } from '../shared/hooks/shortcuts.js';
 import { bg } from '../theme/tokens.js';
 import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-frame.js';
-import { WorkspaceBreadcrumb } from './shell-nav.js';
+import { WorkspaceBreadcrumb } from './workspace-breadcrumb.js';
 
 export function Shell(props: {
   readonly view: ShellView;
@@ -52,20 +52,21 @@ function ShellColumns(input: {
   readonly onClose: () => void;
   readonly onSearch: () => void;
 }) {
+  const isBreadcrumbInHeader = input.chrome.kind === 'sider';
   return (
     <>
       <FrameSlot chrome={input.chrome} nav={input.view.nav} onToggle={input.onToggle} onClose={input.onClose} />
       <Layout style={{ background: bg.page }}>
         <ShellTop
-          freshness={input.view.freshness}
           account={input.view.account}
           onSearch={input.onSearch}
           contentInset={input.viewport.contentInset}
           menuButton={menuButtonOf(input)}
+          startContent={isBreadcrumbInHeader ? <WorkspaceBreadcrumb rows={input.view.nav} inline /> : null}
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
-          <WorkspaceBreadcrumb rows={input.view.nav} />
-          <Outlet />
+          {isBreadcrumbInHeader ? null : <WorkspaceBreadcrumb rows={input.view.nav} />}
+          <Outlet context={input.view} />
         </Layout.Content>
       </Layout>
     </>

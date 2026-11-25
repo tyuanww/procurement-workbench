@@ -1,12 +1,12 @@
-import { Button, Empty, Flex, Tag, Spin, Alert, Typography } from 'antd';
-import type { ReactNode } from 'react';
-import { CopyOutlined } from '@ant-design/icons';
+import { Alert, Button, Collapse, Dropdown, Empty, Flex, Spin, Tag, Typography } from 'antd';
+import { useRef, useState, type ReactNode } from 'react';
+import { CopyOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoardGroup, BoardRow, GroupMode, QuickAction, ReasonChip, TodayBoard, TodayInsight, TodayKpiItem } from '../../features/today/index.js';
 import { todayPageKpi } from '../../features/today/index.js';
 import { MetricStrip, type MetricItem, type MetricTone } from '../../shared/ui/analytics.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { actionIcon, FaceBlock } from './TodayDrawer.js';
-import { ActionControls, ActionPagination, ChaseControls, type ActionPageControls } from './ActionControls.js';
+import { ActionControls, ActionPagination, ActionResult, ChaseControls, type ActionPageControls } from './ActionControls.js';
 import { TodayGroup, TodayGrouping } from './TodayGroup.js';
 import { rowStyle } from './today-style.js';
 
@@ -16,10 +16,13 @@ const ACTION_MODES: readonly { readonly id: GroupMode; readonly label: string }[
   { id: 'date', label: '日期' },
 ];
 
+type BatchSequence = (rowId: string) => number | undefined;
+
 export type ActionBoardProps = {
   readonly board: TodayBoard;
   readonly page: ActionPageControls | undefined;
-  readonly hasPendingBatch: boolean;
+  readonly hasOtherWork: boolean;
+  readonly batchSeqOf?: BatchSequence | undefined;
   readonly insight: TodayInsight;
   readonly focus: string | null;
   readonly fading: string | null;
@@ -31,35 +34,63 @@ export type ActionBoardProps = {
 };
 
 export function ActionBoard(props: ActionBoardProps): ReactNode {
+  const { board, page } = props;
   return (
-    <>
-      <Typography.Title level={2} style={{ margin: 0 }}>要催货</Typography.Title>
-      {props.page === undefined ? null : <ChaseControls page={props.page} />}
-      <ActionMetrics insight={props.insight} />
-      <search className="today-touch" aria-label="行动板筛选">
-        <Flex vertical align="flex-start" gap="small">
-          {props.page?.sort.kind === 'bulk' ? null : <TodayGrouping label="行动板分组" modes={ACTION_MODES} group={props.board.group} onGroup={props.onGroup} />}
-          <ReasonChips chips={props.board.chips} onToggle={props.onToggleReason} />
+    <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="行动板待办">
+      <Flex vertical gap="small">
+        <ActionHeading page={page} />
+        <Flex className="today-touch" align="center" gap="small" wrap>
+          {page?.sort.kind === 'bulk' ? null : <TodayGrouping label="行动板分组" modes={ACTION_MODES} group={board.group} onGroup={props.onGroup} />}
+          {page === undefined ? null : <ActionControls page={page} />}
         </Flex>
-      </search>
-      {props.page === undefined ? null : (
-        <>
-          <ActionControls page={props.page} />
-          <ActionPagination page={props.page} />
-          {props.page.loadError === '' ? null : <Alert type="error" title={props.page.loadError} action={<Button size="small" onClick={props.page.onRetry}>重试</Button>} />}
-        </>
-      )}
-      <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="行动板待办">
-        {props.page === undefined ? <ActionGroups {...props} /> : (
-          <Spin spinning={props.page.isLoading}>
-            <div aria-busy={props.page.isLoading} inert={!props.page.isSettled}>
-              <ActionGroups {...props} />
-            </div>
-          </Spin>
-        )}
-      </section>
-    </>
+        <ActionOptions {...props} />
+        {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+      </Flex>
+    </section>
   );
+}
+
+function ActionHeading({ page }: { readonly page: ActionBoardProps['page'] }) {
+  const work = page?.work;
+  const title = work === 'factory_chase' ? '要催货' : work === 'internal_note' ? '内部等回单' : '行动清单';
+  return <Flex className="today-touch" align="center" gap="small" wrap>
+    <Typography.Title level={2} style={{ margin: 0 }}>{title}</Typography.Title>
+    {page === undefined || work === undefined ? null : <Button size="small" onClick={(event) => {
+      event.currentTarget.closest('section')?.focus({ preventScroll: true });
+      page.onWork();
+    }}>查看全部待办</Button>}
+  </Flex>;
+}
+
+function ActionOptions({ board, insight, page, onToggleReason }: ActionBoardProps) {
+  const selected = board.chips.filter((chip) => chip.isSelected);
+  const label = page === undefined ? '筛选与指标' : '筛选、指标与复制催单';
+  return <Collapse size="small" items={[{
+    key: 'options',
+    label: selected.length === 0 ? label : `${label}（${selected.map((chip) => chip.label).join('、')}）`,
+    children: <Flex vertical gap="small">
+      <search className="today-touch" aria-label="行动板筛选">
+        <ReasonChips chips={board.chips} onToggle={onToggleReason} />
+      </search>
+      <ActionMetrics insight={insight} />
+      {page === undefined ? null : <ChaseControls page={page} />}
+    </Flex>,
+  }]} />;
+}
+
+function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageControls }) {
+  const { page } = props;
+  return <>
+    <ActionResult page={page} />
+    {page.copyNotice === '' ? null : <Typography.Text role="status">{page.copyNotice}</Typography.Text>}
+    {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
+    <Spin spinning={page.isLoading}>
+      <div aria-busy={page.isLoading} inert={!page.isSettled}>
+        <ActionGroups {...props} />
+      </div>
+    </Spin>
+    <ActionPagination page={page} />
+  </>;
 }
 
 function ActionMetrics({ insight }: { readonly insight: TodayInsight }): ReactNode {
@@ -95,15 +126,15 @@ function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly on
 
 function ActionGroups(props: ActionBoardProps): ReactNode {
   if (props.board.body.kind === 'empty') {
-    if (props.page?.sort.kind === 'bulk' || props.board.chips.some((chip) => chip.isSelected)) return <Empty description="当前筛选没有待办" />;
-    if (props.hasPendingBatch) return null;
+    if (props.page?.isFiltered === true || props.board.chips.some((chip) => chip.isSelected)) return <Empty description="当前筛选没有待办" />;
+    if (props.hasOtherWork) return null;
     return <Empty description={props.board.body.text}><Button href="/lines">去跟进中心</Button></Empty>;
   }
   return (
     <>
       {props.board.body.groups.map((group) => (
         <GroupBlock key={group.key} group={group} focus={props.focus} fading={props.fading} onOpen={props.onOpen} onQuick={props.onQuick}
-          page={props.page} copy={groupCopy({ group, page: props.page, onCopy: props.onCopy })} />
+          page={props.page} batchSeqOf={props.batchSeqOf} copy={groupCopy({ group, page: props.page, onCopy: props.onCopy })} />
       ))}
     </>
   );
@@ -137,11 +168,13 @@ function GroupBlock(props: {
   readonly onQuick: (input: { readonly id: string; readonly kind: QuickAction['kind'] }) => void;
   readonly copy: CopyAction | null;
   readonly page: ActionBoardProps['page'];
+  readonly batchSeqOf?: BatchSequence | undefined;
 }): ReactNode {
   return (
     <TodayGroup name={props.group.name} counts={props.group.counts} action={props.copy === null ? null :
       <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={props.copy.disabled} onClick={props.copy.run}>{props.copy.label}</Button>}>
-      <ActionRows group={props.group} focus={props.focus} fading={props.fading} onOpen={props.onOpen} onQuick={props.onQuick} page={props.page} />
+      <ActionRows group={props.group} focus={props.focus} fading={props.fading} onOpen={props.onOpen} onQuick={props.onQuick}
+        page={props.page} batchSeqOf={props.batchSeqOf} />
     </TodayGroup>
   );
 }
@@ -151,6 +184,7 @@ function ActionRows(props: {
   readonly focus: string | null;
   readonly fading: string | null;
   readonly page: ActionBoardProps['page'];
+  readonly batchSeqOf?: BatchSequence | undefined;
   readonly onOpen: (id: string) => void;
   readonly onQuick: (input: { readonly id: string; readonly kind: QuickAction['kind'] }) => void;
 }): ReactNode {
@@ -158,7 +192,8 @@ function ActionRows(props: {
     <div>
       {props.group.rows.map((row) => (
         <TodayRow key={`${props.group.key}:${row.id}`} row={row} isFocused={props.focus === row.id} isFading={props.fading === row.id}
-          copy={batchCopy(props.page, row.id)} onOpen={() => props.onOpen(row.id)} onQuick={(kind) => props.onQuick({ id: row.id, kind })} />
+          batchSeq={props.batchSeqOf?.(row.id)} copy={batchCopy(props.page, row.id)} onOpen={() => props.onOpen(row.id)}
+          onQuick={(kind) => props.onQuick({ id: row.id, kind })} />
       ))}
     </div>
   );
@@ -168,31 +203,62 @@ function TodayRow(props: {
   readonly row: BoardRow;
   readonly isFocused: boolean;
   readonly isFading: boolean;
+  readonly batchSeq: number | undefined;
   readonly copy: CopyAction | null;
   readonly onOpen: () => void;
   readonly onQuick: (kind: QuickAction['kind']) => void;
 }): ReactNode {
   return (
     <Flex className="today-row" vertical gap="small" style={rowStyle({ isFocused: props.isFocused, isFading: props.isFading })}>
-      <FaceBlock face={props.row.face} />
-      <Flex className="today-touch" align="center" gap="small" wrap>
-        {props.copy === null ? null : <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={props.copy.disabled} onClick={props.copy.run}>{props.copy.label}</Button>}
-        <Button size="small" onClick={props.onOpen} aria-label={`查看详情 ${props.row.face.orderNo} · ${props.row.face.productName}`}>查看详情</Button>
-        <RowActions actions={props.row.actions} onQuick={props.onQuick} />
-      </Flex>
+      <FaceBlock face={props.row.face} batchSeq={props.batchSeq} />
+      <RowActions {...props} />
     </Flex>
   );
 }
 
-function RowActions(props: { readonly actions: readonly QuickAction[]; readonly onQuick: (kind: QuickAction['kind']) => void }): ReactNode {
+function RowActions({ row, batchSeq, copy, onOpen, onQuick }: {
+  readonly row: BoardRow;
+  readonly batchSeq: number | undefined;
+  readonly copy: CopyAction | null;
+  readonly onOpen: () => void;
+  readonly onQuick: (kind: QuickAction['kind']) => void;
+}): ReactNode {
   const canRecord = useCanWrite('records.write');
-  if (!canRecord) return null;
+  const actions = canRecord ? row.actions : [];
+  const preferred = actions[0];
+  const isCopyPrimary = copy !== null && preferred?.kind !== 'date';
+  const primary = isCopyPrimary ? undefined : preferred;
+  const remaining = actions.filter((action) => action !== primary);
+  const { orderNo, productName } = row.face;
+  const batch = batchSeq === undefined ? '' : ` · 第 ${batchSeq} 批`;
+  const identity = `${orderNo} · ${productName}${batch}`;
   return (
-    <>
-      {props.actions.map((action) => (
-        <Button key={action.kind} size="small" icon={actionIcon(action.kind)} onClick={() => props.onQuick(action.kind)}>{action.label}</Button>
-      ))}
-    </>
+    <Flex className="today-touch" align="center" gap="small" wrap>
+      {primary === undefined ? null : <Button type="primary" size="small" icon={actionIcon(primary.kind)} onClick={() => onQuick(primary.kind)}>{primary.label}</Button>}
+      {copy === null ? null : <CopyButton copy={copy} primary={isCopyPrimary} />}
+      <Button type={primary === undefined && !isCopyPrimary ? 'primary' : 'text'} size="small" onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
+      <RowMenu actions={remaining} identity={identity} onQuick={onQuick} />
+    </Flex>
   );
+}
+
+function RowMenu({ actions, identity, onQuick }: {
+  readonly actions: readonly QuickAction[];
+  readonly identity: string;
+  readonly onQuick: (kind: QuickAction['kind']) => void;
+}) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [isOpen, setOpen] = useState(false);
+  if (actions.length === 0) return null;
+  return <Dropdown trigger={['click']} autoFocus open={isOpen} onOpenChange={setOpen} menu={{ items: actions.map((action) => ({
+    key: action.kind, label: action.label, icon: actionIcon(action.kind),
+    onClick: () => { trigger.current?.focus(); onQuick(action.kind); },
+  })) }}>
+    <Button ref={trigger} type="text" size="small" aria-haspopup="menu" aria-expanded={isOpen} aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
+  </Dropdown>;
+}
+
+function CopyButton({ copy, primary }: { readonly copy: CopyAction; readonly primary: boolean }) {
+  return <Button type={primary ? 'primary' : 'text'} size="small" icon={<CopyOutlined aria-hidden />} disabled={copy.disabled} onClick={copy.run}>{copy.label}</Button>;
 }
 

@@ -70,9 +70,10 @@ describe('到货日期列', () => {
 });
 
 describe('表格模板约束', () => {
-  it('跟进台表头吸在顶栏下，勾选列和采购单号列固定在左', async () => {
+  it('跟进台在原生表格内固定表头，保留横向滚动和固定列', async () => {
     const source = await readFile(new URL('../../apps/web/src/pages/lines/list/line-table.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('sticky={{ offsetHeader: topBar }}');
+    expect(source).toContain("position: 'sticky', top: 0");
+    expect(source).toContain("position: 'sticky', top: topBar");
     expect(source).toContain("fixed: 'left'");
     expect(source).toContain("x: 'max-content'");
     expect(source).not.toContain('scroll: { y');

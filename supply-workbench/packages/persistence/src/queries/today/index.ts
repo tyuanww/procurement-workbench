@@ -1,5 +1,5 @@
 import { and, desc, eq, isNotNull, ne, notExists } from 'drizzle-orm';
-import { BATCH_STATUSES, LANES, LINE_STAGES, PO_FORMATS, batchFulfillment, businessDay, compareDates, countsInRecordedQuantity, isOpenBatch, localDate, noteStatus, overdueDays, type LocalDate, type NoteStatus } from '@sw/domain';
+import { BATCH_STATUSES, LANES, LINE_STAGES, PO_FORMATS, businessDay, compareDates, countsInRecordedQuantity, isOpenBatch, localDate, overdueDays, type LocalDate } from '@sw/domain';
 import type { PendingBatchSource, TodayCatalog, TodoBatchSource, TodoBatchView, TodoExceptionSource, TodoLineView } from '../../../../application/src/today/views.js';
 import type { TodayReadModel, UncommittedImport } from '../../../../application/src/ports/today-read-model.js';
 import type { AppDatabase } from '../../client.js';
@@ -9,6 +9,7 @@ import { instant } from '../../mappers/time.js';
 import { parties, partyAliases, itemCodes, codeLinks } from '../../schema/platform.js';
 import { deliveryBatches, deliveryNotes, exceptions, followUps, orderLines, orderLineSnapshots, purchaseOrders, receipts, shipments } from '../../schema/orders.js';
 import { importBatches } from '../../schema/archive.js';
+import { batchFulfillmentOf, batchNoteStatus } from '../batch-delivery.js';
 
 export function todayQueries({ db, timeZone }: { readonly db: AppDatabase; readonly timeZone: string }): TodayReadModel {
   return {
@@ -136,11 +137,7 @@ type ChildRows = {
 };
 
 function fulfillmentOf(head: typeof deliveryBatches.$inferSelect, child: ChildRows) {
-  return batchFulfillment({
-    batch: { plannedQty: Number(head.plannedQty), plannedUnit: head.plannedUnit },
-    shipments: rowsOf(child.shipped, head.id).map((row) => ({ ...row, qty: Number(row.qty) })),
-    receipts: rowsOf(child.received, head.id).map((row) => ({ ...row, qty: Number(row.qty) })),
-  });
+  return batchFulfillmentOf({ batch: head, sent: rowsOf(child.shipped, head.id), received: rowsOf(child.received, head.id) });
 }
 
 function batchView(input: {
@@ -159,7 +156,7 @@ function batchView(input: {
     seq: input.head.seq,
     plannedQty: Number(input.head.plannedQty),
     status,
-    noteStatus: noteOf(rowsOf(input.child.notes, input.head.id)),
+    noteStatus: batchNoteStatus(rowsOf(input.child.notes, input.head.id)),
     dateBuyerConfirmed: dayOrNull(input.head.dateBuyerConfirmed),
     firstConfirmedDate: dayOrNull(input.head.firstConfirmedDate),
     dateFactoryRequired: dayOrNull(input.head.dateFactoryRequired),
@@ -200,7 +197,7 @@ function batchSource(input: {
 }): TodoBatchSource[] {
   const line = input.lineOf.get(input.head.orderLineId);
   if (line === undefined) return [];
-  const note = noteOf(rowsOf(input.child.notes, input.head.id));
+  const note = batchNoteStatus(rowsOf(input.child.notes, input.head.id));
   if (!listed(input.head.status)) return [];
   const confirmed = dayOrNull(input.head.dateBuyerConfirmed);
   const factory = dayOrNull(input.head.dateFactoryRequired);
@@ -233,12 +230,6 @@ function listed(status: string): boolean {
 
 function rowsOf<T>(grouped: ReadonlyMap<string, readonly T[]>, batchId: string): readonly T[] {
   return grouped.get(batchId) ?? [];
-}
-
-function noteOf(notes: readonly (typeof deliveryNotes.$inferSelect)[]): NoteStatus {
-  const row = notes.find((item) => item.voidedAt === null);
-  if (row === undefined || row.status === 'missing') return 'missing';
-  return noteStatus({ status: row.status === 'verified' ? 'verified' : 'returned', voidedAt: null });
 }
 
 function activeShipments(rows: readonly (typeof shipments.$inferSelect)[]) {

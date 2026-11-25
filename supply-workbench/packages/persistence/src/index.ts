@@ -1,3 +1,4 @@
+export { directorBrands } from './queries/store-progress/director-brands.js';
 export { createDb } from './client.js';
 export { requireDatabase } from './require-database.js';
 export type { AppDatabase, AppHandle, SqlExec } from './client.js';
