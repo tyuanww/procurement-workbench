@@ -85,7 +85,7 @@ describe('今日视图各自渲染', () => {
   it('清单把分组和原因筛选放在初始收起的同一折叠区', () => {
     const html = render(ActionBoard, todayProps({ board: boardWith([], 'waiting') }));
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('分组、筛选（缺确认日期）');
+    expect(html).toContain('当前筛选 · 缺确认日期');
     expect(html).not.toContain('aria-label="清单分组"');
     expect(html).not.toContain('aria-label="今日关键指标"');
     expect(html).not.toContain('今天到期');

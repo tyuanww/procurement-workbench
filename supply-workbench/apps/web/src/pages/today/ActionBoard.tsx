@@ -1,38 +1,24 @@
-import { Alert, Button, Card, Collapse, Dropdown, Empty, Flex, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Dropdown, Empty, Flex, Spin, Typography } from 'antd';
 import { useRef, useState, type ReactNode } from 'react';
 import { CopyOutlined, DownOutlined } from '@ant-design/icons';
-import { ACTION_LANES, actionIcon, FaceBlock, rowStyle, type BoardGroup, type BoardRow, type GroupMode, type QuickAction, type ReasonChip, type TodayBoard } from '../../features/today/index.js';
+import { ACTION_LANES, actionIcon, FaceBlock, rowStyle, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
-import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { fontSize } from '../../theme/tokens.js';
-import { ActionControls, ActionPagination, ActionResult, ChaseControls, type ActionPageControls } from './ActionControls.js';
+import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
+import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import { ReceiptAction, ReceiptFacts, type ReceiptWork } from './TodayAgenda.js';
-import { TodayGroup, TodayGrouping } from './TodayGroup.js';
+import { TodayGroup } from './TodayGroup.js';
 import { workspaceRowId } from './today-focus.js';
 
-const LIST_GROUPS: readonly { readonly id: GroupMode; readonly label: string }[] = [
-  { id: 'priority', label: '不分组' },
-  { id: 'waiting', label: '等待方' },
-  { id: 'reason', label: '原因' },
-  { id: 'date', label: '日期' },
-];
-
 type BatchSequence = (rowId: string) => number | undefined;
-export type ActionBoardProps = {
-  readonly board: TodayBoard;
-  readonly page: ActionPageControls | undefined;
+export type ActionBoardProps = ActionToolbarProps & {
   readonly batchSeqOf?: BatchSequence | undefined;
   readonly receiptOf?: ((rowId: string) => ReceiptWork | undefined) | undefined;
   readonly arrivalFocusId?: string | null | undefined;
   readonly internalCards?: readonly ReactNode[] | undefined;
   readonly internalPagination?: ReactNode;
-  readonly viewControls?: ReactNode;
-  readonly utilityLinks?: ReactNode;
-  readonly calendar?: ReactNode;
   readonly focus: string | null;
   readonly fading: string | null;
-  readonly onToggleReason: (code: string) => void;
-  readonly onGroup: (group: GroupMode) => void;
   readonly onOpen: (id: string) => void;
   readonly onQuick: (input: { readonly id: string; readonly kind: QuickAction['kind'] }) => void;
   readonly onCopy: (text: string) => void;
@@ -43,12 +29,7 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
   return (
     <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
       <Flex vertical gap="small">
-        <Flex className="today-touch" align="center" gap="small" wrap>
-          {props.viewControls}
-          <ActionControls page={page} utilityLinks={props.utilityLinks} />
-          <ProcurementCutoff />
-        </Flex>
-        <ActionOptions {...props} />
+        <ActionToolbar {...props} />
         {props.calendar}
         {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
       </Flex>
@@ -56,50 +37,10 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
   );
 }
 
-function ActionOptions({ board, page, onGroup, onToggleReason, calendar, utilityLinks }: ActionBoardProps) {
-  const selected = board.chips.filter((chip) => chip.isSelected);
-  const canGroupList = calendar === undefined && board.group !== 'kanban' && page?.sort.kind !== 'bulk';
-  const canCopy = page?.inbox === 'today';
-  return <Collapse size="small" items={[{
-    key: 'options',
-    label: optionLabel({ canGroupList, canCopy, selected }),
-    children: <Flex vertical gap="small">
-      <ActionControls page={page} utilityLinks={utilityLinks} isNarrow />
-      {canGroupList ? <Flex className="today-touch" align="center" gap="small" wrap>
-        <Typography.Text>清单分组</Typography.Text>
-        <TodayGrouping label="清单分组" modes={LIST_GROUPS} group={board.group} onGroup={onGroup} />
-      </Flex> : null}
-      <search className="today-touch" aria-label="行动板筛选">
-        <ReasonChips chips={board.chips} onToggle={onToggleReason} />
-      </search>
-      {canCopy ? <ChaseOptions page={page} /> : null}
-    </Flex>,
-  }]} />;
-}
-
-function optionLabel({ canGroupList, canCopy, selected }: { readonly canGroupList: boolean; readonly canCopy: boolean; readonly selected: readonly ReasonChip[] }) {
-  const filter = canCopy ? '筛选与复制催单' : '筛选';
-  const label = canGroupList ? `分组、${filter}` : filter;
-  return selected.length === 0 ? label : `${label}（${selected.map((chip) => chip.label).join('、')}）`;
-}
-
-function ChaseOptions({ page }: { readonly page: ActionPageControls }) {
-  const isAllUnshipped = page.work === 'all_unshipped';
-  return <>
-    <Button size="small" style={{ alignSelf: 'flex-start' }} aria-pressed={isAllUnshipped}
-      onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>全部未发</Button>
-    <ChaseControls page={page} />
-  </>;
-}
-
 function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageControls }) {
   const { page } = props;
   return <>
     <ActionResult page={page} />
-    {page.isFiltered ? <Button size="small" style={{ alignSelf: 'flex-start' }} onClick={(event) => {
-      event.currentTarget.closest('section')?.focus({ preventScroll: true });
-      page.onWork();
-    }}>清除筛选</Button> : null}
     {page.copyNotice === '' ? null : <Typography.Text role="status">{page.copyNotice}</Typography.Text>}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
     <Spin spinning={page.isLoading}>
@@ -109,16 +50,6 @@ function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageContro
     </Spin>
     <ActionPagination page={page} />
   </>;
-}
-
-function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly onToggle: (code: string) => void }): ReactNode {
-  return (
-    <Flex align="center" gap="small" wrap>
-      {props.chips.map((chip) => (
-        <Tag.CheckableTag key={chip.code} checked={chip.isSelected} onChange={() => props.onToggle(chip.code)}>{chip.label} {chip.count}</Tag.CheckableTag>
-      ))}
-    </Flex>
-  );
 }
 
 function ActionGroups(props: ActionBoardProps): ReactNode {

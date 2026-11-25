@@ -156,7 +156,7 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   await groups.waitFor({ state: 'hidden' });
   await list.press('Space');
   await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('page') === '11');
-  const filters = page.getByRole('button', { name: /分组、筛选与复制催单/ });
+  const filters = page.getByRole('button', { name: '筛选与复制催单', exact: true });
   if (await filters.getAttribute('aria-expanded') !== 'true') await filters.click();
   await groups.getByRole('radio', { name: '日期', exact: true, checked: true }).waitFor({ state: 'attached' });
 }

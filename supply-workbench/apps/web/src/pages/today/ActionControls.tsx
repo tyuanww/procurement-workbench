@@ -140,25 +140,31 @@ function actionResultMessage(page: ActionPageControls): string {
   if (page.loadError !== '') return '工作台待办更新失败';
   const { paging } = page;
   const hasPages = paging.total > paging.pageSize;
-  if (!page.isFiltered && !hasPages && page.calendar === undefined) return '';
+  if (!page.isFiltered && !hasPages) return '';
   const unit = page.work === undefined ? (page.inbox === 'scheduled' ? '批已约跟进' : '项批次与跟进待办') : WORK_RESULT_UNITS[page.work];
   return `共 ${paging.total} ${unit}${hasPages ? ` · 第 ${paging.page} 页` : ''}`;
 }
 
 const WORK_RESULT_UNITS: Record<TodayWorkFilter, string> = { factory_chase: '批待催货', internal_note: '批等回单', all_unshipped: '批未发' };
 
+export const workFilterLabels: Readonly<Record<TodayWorkFilter, string>> = {
+  factory_chase: '要催货',
+  internal_note: '内部等回单',
+  all_unshipped: '全部未发',
+};
+
 export function BatchLinks({ page }: { readonly page: ActionPageControls }) {
-  const scopes: readonly { key: TodayWorkFilter; label: string; count: number | undefined }[] = [
-    { key: 'factory_chase', label: '要催货', count: page.paging.chaseCounts?.all },
-    { key: 'internal_note', label: '内部等回单', count: page.paging.internalNoteCount },
+  const scopes: readonly { key: TodayWorkFilter; count: number | undefined }[] = [
+    { key: 'factory_chase', count: page.paging.chaseCounts?.all },
+    { key: 'internal_note', count: page.paging.internalNoteCount },
   ];
   const due = page.paging.followUpCounts?.due ?? 0;
   return <>
-    {scopes.filter(({ key, count }) => count !== undefined && (count > 0 || page.work === key)).map(({ key, label, count }) => (
+    {scopes.filter(({ key, count }) => count !== undefined && (count > 0 || page.work === key)).map(({ key, count }) => (
       <Button key={key} size="small" aria-pressed={page.work === key} onClick={() => {
         page.onWork(key);
         focusSection('today-chase');
-      }}>{label} {count} 批</Button>
+      }}>{workFilterLabels[key]} {count} 批</Button>
     ))}
     {due === 0 ? null : <Button size="small" onClick={() => {
       page.onFollowUp('follow_up_due');

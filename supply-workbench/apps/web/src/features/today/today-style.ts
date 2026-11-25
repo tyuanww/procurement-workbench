@@ -28,6 +28,10 @@ export function todayMotionCss(): string {
     .today-row-facts { gap: ${tiny}px; }
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
+    #today-chase { container: today-action / inline-size; }
+    @container today-action (max-width: 22rem) {
+      .today-filter-copy-label { display: none; }
+    }
     .today-controls-wide { display: contents; }
     .today-controls-narrow { display: none; }
     @media (max-width: 520px) {

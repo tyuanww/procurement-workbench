@@ -128,16 +128,19 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     await act(() => { fulfill({ urlPart: 'work=factory_chase', status: 200, body: result(factories) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(2);
     expect(textOf('#today-chase')).toContain('共 2 批待催货');
+    expect(textOf('#today-chase')).toContain('当前筛选 · 要催货');
     expect(document.activeElement?.id).toBe('today-chase');
 
     click(button('内部等回单1批'));
     await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
     expect(textOf('#today-chase')).toContain('共 1 批等回单');
+    expect(textOf('#today-chase')).toContain('当前筛选 · 内部等回单');
     click(button('清除筛选'));
     await act(() => { fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
     expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
+    expect(document.activeElement?.getAttribute('aria-expanded')).toBe('false');
   } finally {
     act(() => { root.unmount(); });
     resetDom();
