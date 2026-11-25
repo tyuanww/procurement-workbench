@@ -1,3 +1,4 @@
+export { SCHEDULE_MILESTONES, DirectorProjectSchema, DirectorScheduleSchema, DirectorBrandsSchema, type DirectorProject } from './director-projects.js';
 export {
   BatchStatusSchema,
   ChannelMatchSchema,

@@ -1,3 +1,4 @@
+import { productSection, productSectionLabels } from './product-section.js';
 import { Button, Descriptions, Empty, Flex, Image, Modal, Result, Select, Skeleton, Table, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -36,16 +37,16 @@ type ProductDetailInput = {
 export function ProductDetailBody({ id, overview, search, patch }: ProductDetailInput) {
   const path = `/api/v1/products/${encodeURIComponent(id)}`;
   const items = [
-    { key: 'archive', label: '档案', children: <ArchivePanel overview={overview} /> },
-    { key: 'purchases', label: '采购', children: <PurchaseTab path={path} search={search} patch={patch} /> },
-    { key: 'stock', label: '库存', children: <ProductPanel path={`${path}/stock`} schema={ProductStockSchema}>
+    { key: 'archive', label: productSectionLabels.archive, children: <ArchivePanel overview={overview} /> },
+    { key: 'purchases', label: productSectionLabels.purchases, children: <PurchaseTab path={path} search={search} patch={patch} /> },
+    { key: 'stock', label: productSectionLabels.stock, children: <ProductPanel path={`${path}/stock`} schema={ProductStockSchema}>
       {(stock) => <StockPanel overview={overview} stock={stock} />}
     </ProductPanel> },
-    { key: 'materials', label: '组成物料', children: <ProductPanel path={`${path}/materials`} schema={ProductMaterialsSchema}>
+    { key: 'materials', label: productSectionLabels.materials, children: <ProductPanel path={`${path}/materials`} schema={ProductMaterialsSchema}>
       {(materials) => <MaterialsPanel materials={materials} />}
     </ProductPanel> },
   ];
-  const activeKey = items.find(({ key }) => key === search.get('card'))?.key ?? 'archive';
+  const activeKey = productSection(search);
   return <Flex vertical gap={space[2]}>
     <ProductPackaging product={overview.product} />
     <ContentTabs aria-label="产品详情内容" destroyOnHidden items={items} activeKey={activeKey}

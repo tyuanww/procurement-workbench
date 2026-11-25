@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Card, Collapse, Empty, Flex, Result, Select, Skeleton, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -109,7 +110,7 @@ function ScheduleFiltersBar(props: {
   return (
     <Card size="small">
       <Flex vertical gap={space[2]}>
-        <Flex wrap align="center" gap={space[2]}>{filters}{isPhone ? null : extra}</Flex>
+        <Flex wrap align="center" gap={space[2]}>{filters}{isPhone ? null : extra}<ProcurementCutoff /></Flex>
         {isPhone ? <Collapse ghost size="small" items={[{
           key: 'filters',
           label: applied === 0 ? '更多筛选' : `更多筛选（${applied}）`,
