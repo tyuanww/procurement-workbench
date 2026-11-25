@@ -2,7 +2,7 @@ import { Flex, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { border, space, text } from '../../theme/tokens.js';
 
-export function SectionGroup(input: { readonly title: string; readonly meta?: string; readonly children: ReactNode }): ReactNode {
+export function SectionGroup(input: { readonly title: string; readonly meta?: ReactNode; readonly children: ReactNode }): ReactNode {
   return (
     <section style={{ marginBottom: space[5] }}>
       <Flex align="baseline" gap={space[1]} style={{ marginBottom: space[2] }}>

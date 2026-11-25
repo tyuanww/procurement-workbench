@@ -109,14 +109,14 @@ function destinationHref({ row, destination, location }: { readonly row: NavRow;
   return next.size === 0 ? destination.to : `${path}?${next}`;
 }
 
-export function WorkspaceBreadcrumb({ rows }: { readonly rows: readonly NavRow[] }) {
+export function WorkspaceBreadcrumb({ rows, inline = false }: { readonly rows: readonly NavRow[]; readonly inline?: boolean }) {
   const location = useLocation();
   const active = navigationSelection(rows, location);
   const canReadSettings = useCan('admin');
   const group = active?.row.label ?? (canReadSettings && matchPath(SETTINGS_PATH, location.pathname) !== null ? '系统设置' : undefined);
   if (group === undefined) return null;
   const items = active?.destination === undefined ? [{ title: group }] : [{ title: group }, { title: active.destination.label }];
-  return <Breadcrumb aria-label="当前位置" items={items} style={{ marginBottom: space[3] }} />;
+  return <Breadcrumb aria-label="当前位置" items={items} style={inline ? { lineHeight: 'normal', whiteSpace: 'nowrap' } : { marginBottom: space[3] }} />;
 }
 
 function navGlyph(path: NavPath): ReactNode {

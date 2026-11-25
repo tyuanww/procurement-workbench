@@ -146,11 +146,12 @@ export function ShellTop(input: {
   readonly onSearch: () => void;
   readonly contentInset: 16 | 24;
   readonly menuButton: MenuButton | null;
+  readonly startContent?: ReactNode;
 }): ReactNode {
   const isPhone = input.menuButton !== null;
   return (
     <Layout.Header style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
-      <HeaderStart menuButton={input.menuButton} />
+      <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
       <SearchButton onSearch={input.onSearch} />
       <div style={headerClusterStyle({ edge: 'end' })}>
         {isPhone ? null : <FreshnessLink freshness={input.freshness} />}
@@ -227,11 +228,11 @@ function CollapseButton(input: {
   );
 }
 
-function HeaderStart(input: { readonly menuButton: MenuButton | null }) {
+function HeaderStart(input: { readonly menuButton: MenuButton | null; readonly startContent: ReactNode }) {
   if (input.menuButton !== null) return <div style={headerClusterStyle({ edge: 'start' })}><HeaderMenuButton button={input.menuButton} /></div>;
   return (
     <div style={headerClusterStyle({ edge: 'start' })}>
-      <Typography.Text style={headerTitleStyle()}>SHINEMAGE 供应链工作台</Typography.Text>
+      {input.startContent ?? <Typography.Text style={headerTitleStyle()}>SHINEMAGE 供应链工作台</Typography.Text>}
     </div>
   );
 }
