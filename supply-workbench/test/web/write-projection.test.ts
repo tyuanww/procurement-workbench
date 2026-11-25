@@ -65,7 +65,6 @@ function showNote(role: Role): string {
 function showShip(role: Role): string {
   return roleMarkup({ role, type: ActionBoard, props: {
     board: shipBoard(),
-    insight: { total: 1, urgent: 0, overdue: 0, missingDate: 0 },
     focus: null,
     fading: null,
     onToggleReason: () => undefined,

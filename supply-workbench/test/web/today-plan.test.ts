@@ -83,21 +83,21 @@ function idOf(prefix: string, name: string | null | undefined): string | null {
 }
 
 describe('今日分组参数', () => {
-  it('新增排期、负责人和供应商分组，默认仍是等待方', () => {
-    expect(readGroup('')).toBe('waiting');
+  it('排期、负责人和供应商分组保留独立参数，默认进入行动看板', () => {
+    expect(readGroup('')).toBe('kanban');
     expect(readGroup('group=reason')).toBe('reason');
     expect(readGroup('group=date')).toBe('date');
     expect(readGroup('group=schedule')).toBe('schedule');
     expect(readGroup('group=owner')).toBe('owner');
     expect(readGroup('group=supplier')).toBe('supplier');
-    expect(readGroup('group=bogus')).toBe('waiting');
+    expect(readGroup('group=bogus')).toBe('kanban');
     expect(isPlanGroupMode('schedule')).toBe(true);
     expect(isPlanGroupMode('waiting')).toBe(false);
   });
 
-  it('切换分组写 URL，等待方删参数，其它分组保留原筛选', () => {
+  it('切换分组保留原筛选，默认行动看板移除 group', () => {
     expect(withGroup({ search: '?reasons=overdue', group: 'schedule' })).toBe('reasons=overdue&group=schedule');
-    expect(withGroup({ search: 'reasons=overdue&group=schedule', group: 'waiting' })).toBe('reasons=overdue');
+    expect(withGroup({ search: 'reasons=overdue&group=schedule', group: 'kanban' })).toBe('reasons=overdue');
     expect(withGroup({ search: '', group: 'owner' })).toBe('group=owner');
   });
 });

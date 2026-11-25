@@ -4,6 +4,7 @@ import type { TodoRow } from './group.js';
 export type BoardItem = TodoRow & {
   readonly poRaw: string | null;
   readonly productName: string | null;
+  readonly isUnassigned?: boolean;
   readonly qty: number | null;
   readonly batchStatus: BatchStatus | null;
   readonly waitingKind?: WaitingOnKind;
@@ -13,7 +14,7 @@ export type BoardItem = TodoRow & {
   readonly nextFollowUpAt?: string;
 };
 
-export type GroupMode = 'waiting' | 'reason' | 'date' | 'schedule' | 'owner' | 'supplier';
+export type GroupMode = 'kanban' | 'priority' | 'waiting' | 'reason' | 'date' | 'schedule' | 'owner' | 'supplier';
 
 export type QuickAction = {
   readonly kind: 'receipt' | 'ship' | 'date' | 'note';
@@ -26,6 +27,7 @@ export type RowFace = {
   readonly overdueTone: 'danger' | 'quiet';
   readonly orderNo: string;
   readonly productName: string;
+  readonly isUnassigned?: boolean;
   readonly date: string;
   readonly remaining?: string;
   readonly inTransit?: string;

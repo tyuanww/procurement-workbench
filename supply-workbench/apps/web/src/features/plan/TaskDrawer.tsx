@@ -8,7 +8,7 @@ import {
   ownerText,
   plannedRangeText,
   supplierText,
-  taskParam,
+  TodayOrderLink, taskParam,
   workItemSourceLabel,
   type WorkItemDetail,
   type WorkItemStatus,
@@ -146,7 +146,7 @@ function lineNode(item: WorkItemDetail['item']): ReactNode {
   return (
     <Flex justify="space-between" gap={space[2]} wrap>
       <span>{item.orderLine.poRaw ?? '—'} · {item.orderLine.nameRaw ?? '—'}</span>
-      <Link to={`/lines/${item.orderLine.id}`}>打开订单行</Link>
+      <TodayOrderLink order={{ lineId: item.orderLine.id, ...(item.batch === null ? {} : { batchId: item.batch.id }) }}>打开订单行</TodayOrderLink>
     </Flex>
   );
 }

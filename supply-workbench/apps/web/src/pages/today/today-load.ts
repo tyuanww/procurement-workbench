@@ -3,16 +3,24 @@ import type { TodayPageResponse, TodayResponse, TodoItemView } from '@sw/contrac
 import { isOpenBatch } from '@sw/domain';
 import { fetchTodayPage } from '../../shared/api/catalog.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import type { BoardItem } from '../../features/today/index.js';
+import type { BoardItem, TodayOrderRef } from '../../features/today/index.js';
 import { actionPageSearch, actionQuery, type ActionQuery } from './action-query.js';
 import { toBoardItem } from './card.js';
 import type { NoteRef, Target } from './TodayForms.js';
 
+export type ActionDetail =
+  | { readonly kind: 'order'; readonly order: TodayOrderRef; readonly exception: TodoItemView['exception'] }
+  | { readonly kind: 'review' }
+  | { readonly kind: 'import'; readonly batchId: string };
+
 export type TodayLoad = {
+  readonly asOf: TodayPageResponse['asOf'];
   readonly items: readonly BoardItem[];
   readonly targets: Readonly<Record<string, Target>>;
   readonly noteRefs: Readonly<Record<string, NoteRef>>;
+  readonly details: Readonly<Record<string, ActionDetail>>;
   readonly buyerName: string;
+  readonly buyerId: string | null;
   readonly arrivalMemos: TodayResponse['arrivalMemos'];
   readonly counts: TodayPageResponse['counts'];
   readonly paging: TodayPageResponse['paging'];
@@ -110,21 +118,40 @@ function todayLoadError(error: unknown): string {
 }
 
 export async function loadToday(query = actionPageSearch(actionQuery('')), signal?: AbortSignal): Promise<TodayLoad> {
-  const [today, buyerName] = await Promise.all([
+  const [today, buyer] = await Promise.all([
     fetchTodayPage(query, signal),
-    read({ name: 'me', ...(signal === undefined ? {} : { signal }) }).then((me) => me.name, () => ''),
+    read({ name: 'me', ...(signal === undefined ? {} : { signal }) }).catch(() => null),
   ]);
   return {
+    asOf: today.asOf,
     ...collect(today.items), pendingBatch: today.pendingBatch ?? [], arrivalMemos: today.arrivalMemos,
-    counts: today.counts, paging: today.paging, buyerName,
+    counts: today.counts, paging: today.paging, buyerName: buyer?.name ?? '', buyerId: buyer?.id ?? null,
   };
 }
 
-function collect(items: readonly TodoItemView[]): Pick<TodayLoad, 'items' | 'targets' | 'noteRefs'> {
+function collect(items: readonly TodoItemView[]): Pick<TodayLoad, 'items' | 'targets' | 'noteRefs' | 'details'> {
   const targets: Record<string, Target> = {};
   const noteRefs: Record<string, NoteRef> = {};
   const rows = items.map((item) => remember({ item, targets, noteRefs }));
-  return { items: rows, targets, noteRefs };
+  return { items: rows, targets, noteRefs, details: collectDetails(items) };
+}
+
+function collectDetails(items: readonly TodoItemView[]): Record<string, ActionDetail> {
+  const details: Record<string, ActionDetail> = {};
+  for (const item of items) {
+    const detail = actionDetail(item);
+    if (detail !== undefined) details[item.id] = detail;
+  }
+  return details;
+}
+
+function actionDetail(item: TodoItemView): ActionDetail | undefined {
+  if (item.subject === 'review') return { kind: 'review' };
+  if (item.refs.importBatchId !== undefined) return { kind: 'import', batchId: item.refs.importBatchId };
+  const lineId = item.line?.id ?? item.refs.orderLineId;
+  if (lineId === undefined) return undefined;
+  const batchId = item.batch?.id ?? item.refs.batchId;
+  return { kind: 'order', order: { lineId, ...(batchId === undefined ? {} : { batchId }) }, exception: item.exception };
 }
 
 function remember(input: { readonly item: TodoItemView; readonly targets: Record<string, Target>; readonly noteRefs: Record<string, NoteRef> }): BoardItem {

@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { BatchViewSchema, ExceptionViewSchema, FollowUpViewSchema, ReceiptViewSchema, type TodaySort } from '@sw/contracts';
+import { useLocation, useSearchParams } from 'react-router';
+import { BatchViewSchema, ExceptionViewSchema, ReceiptViewSchema, type TodaySort } from '@sw/contracts';
 import { apiDelete, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { businessToday, postReceipt, postShipment } from '../../features/follow-up/index.js';
 import {
-  readGroup, todayBoard, todayInsights, todayViewOf, withGroup,
-  type BoardItem, type GroupMode, type TodayBoard,
+  todayBoard, todayViewOf, withGroup,
+  type BoardItem, type TodayBoard,
 } from '../../features/today/index.js';
 import { confirmedDateBody, formErrors, type NoteRef, type OpenForm, type Target, type Undo } from './TodayForms.js';
 import { actionQuery, actionReasonParams } from './action-query.js';
-import { reminderChangeOf } from './follow-up-time.js';
+import { saveTodayNote } from './save-today-note.js';
 import { useTodayActionPage } from './use-today-action-page.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, handleKey, rowsSettled } from './today-keys.js';
 import { openQuick } from './today-open.js';
-import { useAppliedPage, useTodaySession } from './today-session.js';
+import { arrivalReturnId, pendingReturnId, screenView, useAppliedPage, useTodaySession } from './today-session.js';
 import { TodayScreen, type TodayScreenProps } from './TodayBoard.js';
 import { sessionRows, useTodayPlan } from './use-today-plan.js';
 import { useUndoMessage } from './use-undo-message.js';
@@ -24,14 +24,10 @@ export function TodayPage() {
   return <TodayScreen {...useTodayScreen()} />;
 }
 
-function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
-  if (params.get('view') === 'arrivals') return { group: 'waiting', arrivalsView: { focusBatch: params.get('focusBatch') } };
-  return { group: readGroup(params.toString()), arrivalsView: undefined };
-}
-
 function useTodayScreen(): TodayScreenProps {
   const [params, setParams] = useSearchParams();
   const search = params.toString();
+  const returnState: unknown = useLocation().state;
   const query = actionQuery(search);
   const today = useTodayData(query);
   const state = useTodayState(today);
@@ -39,7 +35,7 @@ function useTodayScreen(): TodayScreenProps {
   const board = boardOf({ state, group, reasons: query.reasons, sort: query.sort });
   const isPlanMode = todayViewOf(group) === 'schedule';
   const actionBoard = isPlanMode ? boardOf({ state, group: 'waiting', reasons: query.reasons, sort: query.sort }) : board;
-  const plan = useTodayPlan(group);
+  const plan = useTodayPlan({ group, ownerId: state.buyerId, isMine: params.get('mine') === '1', shouldLoad: arrivalsView === undefined });
   const visible = sessionRows({ board, plan });
   const loadedPage = today.isLoadedForQuery ? state.paging?.page : undefined;
   useAppliedPage({ loadedPage, requested: query.page, search, setParams });
@@ -58,11 +54,11 @@ function useTodayScreen(): TodayScreenProps {
   });
   useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession });
   useUndoMessage({ undo: state.undo, onRestore: () => { void restore(state); } });
-  return { ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }), actionPage, arrivalsView };
+  return { ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }), search, actionPage, arrivalsView, pendingFocusId: pendingReturnId(returnState), arrivalFocusId: arrivalReturnId(returnState), isMyPlan: params.get('mine') === '1' };
 }
 
-const EMPTY_PAGE: Omit<TodayLoad, 'counts' | 'paging'> & { readonly paging: undefined } = {
-  items: [], arrivalMemos: [], pendingBatch: [], targets: {}, noteRefs: {}, buyerName: '', paging: undefined,
+const EMPTY_PAGE: Omit<TodayLoad, 'counts' | 'paging' | 'asOf'> & { readonly paging: undefined; readonly asOf: undefined } = {
+  items: [], arrivalMemos: [], pendingBatch: [], targets: {}, noteRefs: {}, details: {}, buyerName: '', buyerId: null, paging: undefined, asOf: undefined,
 };
 
 function useTodayState(today: ReturnType<typeof useTodayData>) {
@@ -78,17 +74,12 @@ function useTodayState(today: ReturnType<typeof useTodayData>) {
   const snapshot = data ?? EMPTY_PAGE;
   return {
     ...snapshot,
-    insight: data === null ? todayInsights([]) : insightOf(data),
     isReady: data !== null || today.loadError !== '',
     loadError: data === null ? today.loadError : '',
     refresh: today.refresh,
     retry: today.retry,
     focus, setFocus, drawerId, setDrawerId, undo, setUndo, isHelpOpen, setHelp, draft, setDraft, saveError, setSaveError, notice, setNotice, isSaving, setSaving,
   };
-}
-
-function insightOf(data: TodayLoad) {
-  return { total: data.paging.total, urgent: data.paging.urgent, overdue: data.counts.overdue, missingDate: data.counts.missing_date };
 }
 
 function boardOf({ state, sort, group, reasons }: {
@@ -99,6 +90,7 @@ function boardOf({ state, sort, group, reasons }: {
 }): TodayBoard {
   return todayBoard({
     items: state.items, reasons, group, buyerName: state.buyerName,
+    receiptActionIds: new Set(state.arrivalMemos.filter((memo) => memo.status !== 'in_transit').map((memo) => 'batch:' + memo.batchId)),
     ...(state.paging === undefined ? {} : { page: { reasonCounts: state.paging.reasonCounts, sort } }),
   });
 }
@@ -154,14 +146,16 @@ type ScreenInput = {
 function screenProps(input: ScreenInput): TodayScreenProps {
   const { state, board, actionBoard, search, setParams, plan, closeSession } = input;
   return {
-    board,
+    board, asOf: state.asOf,
     arrivalMemos: state.arrivalMemos,
     pendingBatch: state.pendingBatch,
     onPendingBatchChanged: () => applyNextToday(state),
     actionBoard,
     batchSeqOf: (rowId) => state.targets[rowId]?.batchSeq,
     fulfillmentOf: (rowId) => state.targets[rowId]?.fulfillment,
-    insight: state.insight,
+    buyerName: state.buyerName,
+    detailOf: (id) => state.details[id],
+    myPlan: plan.mine,
     plan: plan.load,
     onRetryPlan: plan.reload,
     onTaskChanged: plan.reload,
@@ -284,8 +278,7 @@ async function saveNote(input: SaveInput): Promise<Undo> {
   if (input.draft.kind !== 'note') throw new Error('缺少批次');
   const ids = input.target ?? input.note;
   if (ids === undefined) throw new Error('缺少批次');
-  const reminder = reminderChangeOf(input.draft.nextFollowUpLocal, input.target?.nextFollowUpAt);
-  const saved = await apiSend({ path: '/api/v1/follow-ups', method: 'POST', body: { orderLineId: ids.lineId, batchId: ids.batchId, kind: input.draft.followKind, text: input.draft.text.trim(), ...reminder }, schema: FollowUpViewSchema });
+  const saved = await saveTodayNote({ draft: input.draft, target: ids, nextFollowUpAt: input.target?.nextFollowUpAt });
   return { kind: 'note', id: saved.id, label: '已记跟进' };
 }
 

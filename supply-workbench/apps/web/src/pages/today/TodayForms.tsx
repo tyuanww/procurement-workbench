@@ -95,7 +95,7 @@ function draftFor({ kind, target, today }: { readonly kind: OpenForm['kind']; re
   return { kind, note: '', type: 'delay' };
 }
 
-function noteDraft(target: Target): OpenForm {
+export function noteDraft(target: Pick<Target, 'canScheduleFollowUp' | 'nextFollowUpAt'>): Extract<OpenForm, { readonly kind: 'note' }> {
   return {
     kind: 'note', text: '', followKind: 'call',
     ...(target.canScheduleFollowUp === true ? { nextFollowUpLocal: localFollowUpTime(target.nextFollowUpAt) } : {}),

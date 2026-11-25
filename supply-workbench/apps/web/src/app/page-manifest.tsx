@@ -14,6 +14,7 @@ import { ProgressPage } from '../pages/progress/ProgressPage.js';
 import { ReportDetailPage, ReportListPage, ReportPrintPage } from '../pages/reports/ReportPages.js';
 import { SettingsPage } from '../pages/settings/SettingsPage.js';
 import { TodayPage } from '../pages/today/TodayPage.js';
+import { PersonalWorkspacePage } from '../pages/personal-workspace/PersonalWorkspacePage.js';
 import { destinations } from './navigation-destinations.js';
 
 type NavPageEntry = {
@@ -42,6 +43,7 @@ export type PageManifestEntry = (NavPageEntry | OtherPageEntry) & {
 export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/home', nav: { label: '首页' }, gate: 'oversight', element: <DirectorHomePage /> },
   { path: '/today', nav: { label: '今日事项' }, gate: 'always', element: <TodayPage /> },
+  { path: '/today/personal', nav: null, gate: 'always', menuParent: '/today', element: <PersonalWorkspacePage /> },
   { path: '/progress', nav: { label: '管理店铺' }, gate: 'always', element: <ProgressPage /> },
   { path: '/progress/current', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="current" /> },
   { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="schedule" /> },

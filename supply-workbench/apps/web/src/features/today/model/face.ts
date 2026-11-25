@@ -10,6 +10,7 @@ export function faceOf(item: BoardItem): RowFace {
     overdueTone: toneOf(overdueDays),
     orderNo: missingGlyph(item.poRaw),
     productName: missingGlyph(item.productName),
+    ...(item.isUnassigned === true ? { isUnassigned: true } : {}),
     date: item.dueDate === null ? MISSING : item.dueDate,
     waiting: item.waitingKind === 'internal' && item.reasons.includes('note_missing') ? `${item.waitingName}（等回单）` : item.waitingName,
     ...quantitiesOf(item),

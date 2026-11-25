@@ -60,7 +60,7 @@ function Workbench({ user }: { readonly user: SessionUser }) {
   if (isHomeGate(pathname)) return <HomeGate home={view.home} />;
   return (
     <ReviewQueueProvider refresh={loaded.refreshReviewQueue}>
-      <Shell view={view} />
+      <Shell view={{ ...view, userId: user.id }} />
     </ReviewQueueProvider>
   );
 }

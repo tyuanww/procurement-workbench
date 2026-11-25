@@ -12,6 +12,7 @@ import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
+import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
 import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
@@ -38,6 +39,7 @@ assert.ok(['chrome', 'msedge'].includes(channel));
 const users = {
   admin: '0199f0a0-0000-7000-8000-000000000001',
   buyer: '0199f0a0-0000-7000-8000-000000000002',
+  buyerPeer: '0199f0a0-0000-7000-8000-000000000003',
   reviewer: '0199f0a0-0000-7000-8000-000000000004',
   manager: '0199f0a0-0000-7000-8000-000000000005',
   lead: '0199f0a0-0000-7000-8000-000000000006',
@@ -152,6 +154,8 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.redReview = await checkRedReview({ page: admin, origin });
   result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
   result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
+  const { page: peer } = await open('buyerPeer', '/', '/today');
+  result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {

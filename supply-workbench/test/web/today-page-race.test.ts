@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import type { TodoItemView } from '../../packages/contracts/src/index.js';
 import { TodayPage } from '../../apps/web/src/pages/today/TodayPage.js';
+import { BatchProgress } from '../../apps/web/src/pages/today/batch-progress.js';
 import { actionQuery } from '../../apps/web/src/pages/today/action-query.js';
 import { handleKey, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { useTodayData } from '../../apps/web/src/pages/today/today-load.js';
@@ -54,7 +55,7 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
     expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
     expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
     expect(textOf('body')).not.toContain('截至今日');
-    expect(textOf('body')).not.toContain('2026-11-21');
+    expect(textOf('nav[aria-label="我的待办入口"]')).toContain('业务日 2026-11-21');
     expect(textOf('body')).not.toContain('用 j k 移动');
     pressTodayKey('?');
     expect(textOf('body')).toContain('j k 或方向键移动，Enter 打开');
@@ -70,6 +71,7 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
     pressTodayKey('Enter');
     await waitFor(() => textOf('[role="dialog"]').includes('第 2 批'));
     expect(textOf('[role="dialog"]')).not.toContain('第 1 批');
+    expect(textOf('[role="dialog"]')).toContain('批次交付数量待核实');
     expect(new URLSearchParams(textOf('output')).get('drawer')).toBe('batch:batch-2');
     pressTodayKey('Escape');
     await waitFor(() => !new URLSearchParams(textOf('output')).has('drawer'));
@@ -85,6 +87,21 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
 function pressTodayKey(key: string): void {
   act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key })); });
 }
+
+it('未发与在途数量待核时，详情仍列出已核实的实收数量', () => {
+  installMatchMedia();
+  const root = mount(element(BatchProgress, { facts: { unit: '件', unshippedQty: null, inTransitQty: null, receivedQty: 4000 } }));
+  try {
+    const numbers = textOf('[aria-label="批次交付数量"]');
+    expect(numbers).toContain('未发待核实');
+    expect(numbers).toContain('在途待收待核实');
+    expect(numbers).toContain('实收4,000 件');
+    expect(document.querySelector('canvas')).toBeNull();
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+  }
+});
 
 function keyboardRow(): string | null {
   const row = [...document.querySelectorAll<HTMLElement>('.today-row')].find((item) => item.style.outlineStyle === 'solid');

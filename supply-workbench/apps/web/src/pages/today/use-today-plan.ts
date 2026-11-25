@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  planBoard, todayViewOf,
-  type DailyPlan, type GroupMode, type PlanLoad, type TodayBoard,
+  planBoard, planRows, todayViewOf,
+  type DailyPlan, type GroupMode, type PlanLoad, type PlanRow, type TodayBoard,
 } from '../../features/today/index.js';
 import { loadDailyPlan, todayPlanDate } from '../../features/plan/index.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
@@ -12,12 +12,28 @@ type PlanViewLoad =
   | { readonly kind: 'ready'; readonly view: DailyPlan }
   | { readonly kind: 'error'; readonly message: string };
 
-export function useTodayPlan(group: GroupMode): { readonly load: PlanLoad; readonly reload: () => void } {
+export type MyPlan =
+  | { readonly kind: 'idle' | 'loading' }
+  | { readonly kind: 'ready'; readonly rows: readonly PlanRow[] }
+  | { readonly kind: 'error'; readonly message: string };
+
+export function useTodayPlan({ group, ownerId, isMine, shouldLoad }: {
+  readonly group: GroupMode;
+  readonly ownerId: string | null;
+  readonly isMine: boolean;
+  readonly shouldLoad: boolean;
+}) {
+  const state = useDailyPlan(shouldLoad);
+  const mine = myPlanOf(state.state, ownerId);
+  const load = planLoadOf({ state: state.state, group, ownerId: isMine ? ownerId ?? '' : null });
+  return { load, reload: state.reload, mine };
+}
+
+function useDailyPlan(isEnabled: boolean) {
   const [state, setState] = useState<PlanViewLoad>({ kind: 'idle' });
   const [reload, setReload] = useState(0);
-  const isSchedule = todayViewOf(group) === 'schedule';
   useEffect(() => {
-    if (!isSchedule) return;
+    if (!isEnabled) return;
     let isActive = true;
     setState((current) => (current.kind === 'ready' ? current : { kind: 'loading' }));
     void loadDailyPlan(todayPlanDate())
@@ -25,18 +41,37 @@ export function useTodayPlan(group: GroupMode): { readonly load: PlanLoad; reado
       .catch((error: unknown) => {
         if (!isActive) return;
         const failure = readFailureOf(error);
-        if (failure === null) return;
-        setState({ kind: 'error', message: failureText(failure) });
+        setState({ kind: 'error', message: failure === null ? '排期加载失败' : failureText(failure) });
       });
     return () => { isActive = false; };
-  }, [isSchedule, reload]);
-  return { load: planLoadOf({ state, group }), reload: () => setReload((value) => value + 1) };
+  }, [isEnabled, reload]);
+  return { state, reload: () => setReload((value) => value + 1) };
 }
 
-function planLoadOf(input: { readonly state: PlanViewLoad; readonly group: GroupMode }): PlanLoad {
-  if (todayViewOf(input.group) !== 'schedule') return { kind: 'idle' };
-  if (input.state.kind !== 'ready') return input.state;
-  return { kind: 'ready', board: planBoard({ view: input.state.view, group: planGroupOf(input.group) }) };
+function myPlanOf(state: PlanViewLoad, ownerId: string | null): MyPlan {
+  if (ownerId === null) return { kind: 'idle' };
+  if (state.kind !== 'ready') return state;
+  return { kind: 'ready', rows: planRows(state.view.items.filter((item) => item.ownerUserId === ownerId), state.view.date) };
+}
+
+function planLoadOf({ state, group, ownerId }: {
+  readonly state: PlanViewLoad;
+  readonly group: GroupMode;
+  readonly ownerId: string | null;
+}): PlanLoad {
+  if (todayViewOf(group) !== 'schedule') return { kind: 'idle' };
+  if (state.kind !== 'ready') return state;
+  const view = ownerId === null ? state.view : personalPlan(state.view, ownerId);
+  return { kind: 'ready', board: planBoard({ view, group: planGroupOf(group) }) };
+}
+
+function personalPlan(view: DailyPlan, ownerId: string): DailyPlan {
+  const forOwner = (groups: DailyPlan['byOwner']) => groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.ownerUserId === ownerId) }))
+    .filter((group) => group.items.length > 0);
+  const items = view.items.filter((item) => item.ownerUserId === ownerId);
+  return { ...view, items, total: items.length, overdueCount: items.filter((item) => item.overdueDays !== null).length,
+    byOwner: forOwner(view.byOwner), bySupplier: forOwner(view.bySupplier), byFactory: forOwner(view.byFactory) };
 }
 
 function planGroupOf(group: GroupMode): 'schedule' | 'owner' | 'supplier' {

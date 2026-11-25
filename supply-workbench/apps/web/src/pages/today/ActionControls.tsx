@@ -97,10 +97,18 @@ export function ActionPagination({ page }: { readonly page: ActionPageControls }
   );
 }
 
-export function ActionResult({ page }: { readonly page: ActionPageControls }) {
+export function ActionResult({ page, isKanban }: { readonly page: ActionPageControls; readonly isKanban: boolean }) {
+  const message = actionResultMessage(page, isKanban);
+  if (message === '') return null;
+  return <Typography.Text role="status" type="secondary">{message}</Typography.Text>;
+}
+
+function actionResultMessage(page: ActionPageControls, isKanban: boolean): string {
+  if (page.isLoading) return '正在更新行动板…';
+  if (page.loadError !== '') return '行动板更新失败';
   const { paging } = page;
+  const hasPages = paging.total > paging.pageSize;
+  if (isKanban && !page.isFiltered && !hasPages) return '';
   const unit = page.work === 'factory_chase' ? '批待催货' : page.work === 'internal_note' ? '批等回单' : '条待办';
-  return <Typography.Text role="status" type="secondary">
-    {page.isLoading ? '正在更新行动板…' : page.loadError === '' ? `共 ${paging.total} ${unit}${paging.total > paging.pageSize ? ` · 第 ${paging.page} 页` : ''}` : '行动板更新失败'}
-  </Typography.Text>;
+  return `共 ${paging.total} ${unit}${hasPages ? ` · 第 ${paging.page} 页` : ''}`;
 }

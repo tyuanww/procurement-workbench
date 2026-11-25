@@ -21,7 +21,7 @@ import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-fram
 import { WorkspaceBreadcrumb } from './workspace-breadcrumb.js';
 
 export function Shell(props: {
-  readonly view: ShellView;
+  readonly view: ShellView & { readonly userId: string };
 }) {
   const viewport = useShellViewport();
   const [frame, setFrame] = useState(() => initialFrame(viewport));

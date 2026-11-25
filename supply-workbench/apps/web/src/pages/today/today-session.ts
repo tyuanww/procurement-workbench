@@ -1,9 +1,19 @@
+import { readGroup, type GroupMode } from '../../features/today/index.js';
+import type { TodayScreenProps } from './TodayBoard.js';
 import { startTransition, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { actionPageParams } from './action-query.js';
 import { openQuick } from './today-open.js';
 import type { NoteRef, OpenForm, Target } from './TodayForms.js';
+
+export function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
+  if (params.get('view') === 'arrivals') {
+    const timing = params.get('timing');
+    return { group: 'waiting', arrivalsView: { focusBatch: params.get('focusBatch'), ...(timing === 'overdue' || timing === 'due_today' ? { timing } : {}) } };
+  }
+  return { group: readGroup(params.toString()), arrivalsView: undefined };
+}
 
 export type TodaySession = {
   readonly drawerId: string | null;
@@ -139,4 +149,14 @@ export function useAppliedPage({ loadedPage, requested, search, setParams }: {
     if (loadedPage === undefined || loadedPage === requested) return;
     setParams(actionPageParams(search, loadedPage), { replace: true });
   }, [loadedPage, requested, search, setParams]);
+}
+
+export function pendingReturnId(state: unknown): string | null {
+  return typeof state === 'object' && state !== null && 'todayPendingId' in state && typeof state.todayPendingId === 'string'
+    ? state.todayPendingId : null;
+}
+
+export function arrivalReturnId(state: unknown): string | null {
+  return typeof state === 'object' && state !== null && 'todayArrivalId' in state && typeof state.todayArrivalId === 'string'
+    ? state.todayArrivalId : null;
 }

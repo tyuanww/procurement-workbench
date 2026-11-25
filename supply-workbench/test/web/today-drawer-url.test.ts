@@ -72,7 +72,6 @@ function scheduleDrawerProps(): TodayScreenProps {
   return {
     board,
     actionBoard,
-    insight: { total: 1, urgent: 0, overdue: 0, missingDate: 1 },
     focus: null,
     fading: null,
     drawerId: 'todo-missing',

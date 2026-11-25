@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { localDate } from '../../packages/domain/src/index.js';
-import type { TodoItemView } from '../../packages/contracts/src/index.js';
+import type { TodayPaging, TodoItemView } from '../../packages/contracts/src/index.js';
 import { readGroup, readReasons, todayBoard, withGroup, withReason, type BoardItem, type TodayBoard } from '../../apps/web/src/features/today/index.js';
 import { toBoardItem } from '../../apps/web/src/pages/today/card.js';
 
@@ -69,7 +69,7 @@ const waitingItems = [
 
 describe('今日看板', () => {
   it('等待方沿用 b、a 在宜侬，c 在样例供应商34，表头计数没有原因码', () => {
-    const board = project({ items: waitingItems });
+    const board = project({ items: waitingItems, group: 'waiting' });
     expect(board.group).toBe('waiting');
     expect(names(board)).toEqual(['宜侬', '样例供应商34']);
     expect(memberIds(board)).toEqual([['b', 'a'], ['c']]);
@@ -80,6 +80,44 @@ describe('今日看板', () => {
       { label: '确认日为今天', count: 1 },
     ]);
     expect(board.body.groups[0]?.counts[0]).toEqual({ label: '未发逾期', count: 2 });
+  });
+
+  it('清单和大批优先都按服务端当前页顺序展示，键盘按同一顺序移动', () => {
+    const reasonCounts: TodayPaging['reasonCounts'] = {
+      overdue: 0, demand_before_confirmed: 0, due_today: 0, missing_date: 0, shipped_not_received: 0, note_missing: 0,
+      upcoming: 0, unshipped: 0, fulfillment_review: 0, follow_up_due: 0, follow_up_scheduled: 0,
+      exception_open: 0, review_pending: 0, import_pending: 0, unassigned: 0,
+    };
+    const board = todayBoard({
+      items: waitingItems, reasons: [], group: 'priority', buyerName: '采购甲',
+      page: { reasonCounts, sort: { kind: 'urgency' } },
+    });
+    expect(board.group).toBe('priority');
+    expect(memberIds(board)).toEqual([['a', 'b', 'c']]);
+    expect(flatIds(board)).toEqual(['a', 'b', 'c']);
+    const bulk = todayBoard({
+      items: [...waitingItems].reverse(), reasons: [], group: null, buyerName: '采购甲',
+      page: { reasonCounts, sort: { kind: 'bulk', unit: '件' } },
+    });
+    expect(names(bulk)).toEqual(['大批优先']);
+    expect(memberIds(bulk)).toEqual([['c', 'b', 'a']]);
+    expect(flatIds(bulk)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('默认按处理环节分栏，待发且待核收的同一批只出现一次，键盘按分栏走', () => {
+    const board = todayBoard({
+      items: [
+        row({ id: 'receipt', waitingKind: 'internal' }),
+        row({ id: 'both', waitingKind: 'supplier', batchStatus: 'partially_received' }),
+        row({ id: 'review', waitingKind: 'internal' }),
+      ],
+      reasons: [], group: null, buyerName: '采购甲',
+      receiptActionIds: new Set(['both', 'receipt']),
+    });
+    expect(board.group).toBe('kanban');
+    expect(names(board)).toEqual(['跟进发货', '核对收货', '内部待办']);
+    expect(memberIds(board)).toEqual([['both'], ['receipt'], ['review']]);
+    expect(flatIds(board)).toEqual(['both', 'receipt', 'review']);
   });
 
   it('原因模式一条进两组，筛选后只留逾期组，扁平行只出现一次', () => {
@@ -149,6 +187,7 @@ describe('今日看板', () => {
   it('无批次的逾期催办带采购前缀、逾期天数和破折号品名', () => {
     const board = project({
       buyerName: '采购甲',
+      group: 'waiting',
       items: [row({ id: 'b', waitingName: '宜侬', productName: null, poRaw: null, qty: null, overdueDays: 4, dueDate: '2026-10-07', reasons: ['overdue'], batchStatus: null })],
     });
     if (board.body.kind !== 'groups') throw new Error('expected groups');
@@ -159,13 +198,14 @@ describe('今日看板', () => {
     ].join('\n'));
     const unnamed = project({
       buyerName: '',
+      group: 'waiting',
       items: [row({ id: 'b', waitingName: '宜侬', productName: null, poRaw: null, qty: null, overdueDays: 4, dueDate: '2026-10-07', reasons: ['overdue'], batchStatus: null })],
     });
     if (unnamed.body.kind !== 'groups') throw new Error('expected groups');
     expect(unnamed.body.groups[0]?.nudgeText.endsWith('谢谢！')).toBe(true);
     expect(unnamed.body.groups[0]?.nudgeText).not.toContain('谢谢！—');
-    const noteOnly = project({ items: [row({ id: 'n', reasons: ['note_missing'], overdueDays: null })] });
-    const upcoming = project({ items: [row({ id: 'u', reasons: ['upcoming'], overdueDays: null, dueDate: '2026-10-20' })] });
+    const noteOnly = project({ group: 'waiting', items: [row({ id: 'n', reasons: ['note_missing'], overdueDays: null })] });
+    const upcoming = project({ group: 'waiting', items: [row({ id: 'u', reasons: ['upcoming'], overdueDays: null, dueDate: '2026-10-20' })] });
     if (noteOnly.body.kind !== 'groups' || upcoming.body.kind !== 'groups') throw new Error('expected groups');
     expect(noteOnly.body.groups[0]?.nudgeText).not.toContain('已确认未到');
     expect(upcoming.body.groups[0]?.nudgeText).toContain('已确认未到');
@@ -175,7 +215,7 @@ describe('今日看板', () => {
     expect(project({ items: [] }).body).toEqual({ kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进中心看看。' });
   });
 
-  it('原因参数可切换并保留分组，等待方会删掉 group', () => {
+  it('原因参数可切换并保留分组，回到默认清单时移除 group', () => {
     const selected = withReason({ search: '', code: 'overdue' });
     expect(selected).toContain('reasons=overdue');
     expect(withReason({ search: selected, code: 'overdue' })).not.toContain('reasons=');
@@ -189,13 +229,16 @@ describe('今日看板', () => {
     expect(dated).toContain('group=date');
     const waiting = withGroup({ search: dated, group: 'waiting' });
     expect(waiting).toContain('reasons=overdue');
-    expect(waiting).not.toContain('group=');
+    expect(waiting).toContain('group=waiting');
+    expect(withGroup({ search: waiting, group: 'priority' })).toBe('reasons=overdue&group=priority');
+    expect(withGroup({ search: waiting, group: 'kanban' })).toBe('reasons=overdue');
     expect(readReasons('reasons=overdue,due_today')).toEqual(['overdue', 'due_today']);
     expect(readReasons('')).toEqual([]);
     expect(readGroup('group=date')).toBe('date');
     expect(readGroup('group=reason')).toBe('reason');
-    expect(readGroup('')).toBe('waiting');
-    expect(readGroup('group=nope')).toBe('waiting');
+    expect(readGroup('group=waiting')).toBe('waiting');
+    expect(readGroup('')).toBe('kanban');
+    expect(readGroup('group=nope')).toBe('kanban');
   });
 
   it('空行、空批次、空显示名映射为工厂未分组，不把条码或品号当成品名', () => {

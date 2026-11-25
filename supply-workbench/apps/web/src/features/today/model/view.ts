@@ -18,5 +18,5 @@ export function todayViewFromKey(value: string): TodayView {
 
 export function groupForView(view: TodayView): GroupMode {
   if (view === 'schedule') return 'schedule';
-  return 'waiting';
+  return 'kanban';
 }

@@ -1,5 +1,6 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Empty, Flex, Result, Skeleton, Typography } from 'antd';
+import { Link, useInRouterContext } from 'react-router';
 import type { CSSProperties, ReactNode } from 'react';
 import type { GroupMode, PlanBoardGroup, PlanLoad, PlanRow } from '../../features/today/index.js';
 import { brand, fontSize, space, statusColor } from '../../theme/tokens.js';
@@ -14,6 +15,7 @@ const SCHEDULE_MODES: readonly { readonly id: GroupMode; readonly label: string 
 ];
 
 export type ScheduleViewProps = {
+  readonly isMine?: boolean;
   readonly group: GroupMode;
   readonly load: PlanLoad;
   readonly focus: string | null;
@@ -26,12 +28,26 @@ export function ScheduleView(props: ScheduleViewProps): ReactNode {
   return (
     <>
       <Flex className="today-touch" wrap align="center" gap={space[2]}>
+        <PlanScope isMine={props.isMine === true} group={props.group} />
         <TodayGrouping label="今日排期分组" modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} />
         <ProcurementCutoff />
       </Flex>
       <ScheduleBody load={props.load} focus={props.focus} onOpen={props.onOpen} onRetry={props.onRetry} />
     </>
   );
+}
+
+function PlanScope({ isMine, group }: { readonly isMine: boolean; readonly group: GroupMode }) {
+  const isRouted = useInRouterContext();
+  const query = new URLSearchParams({ group });
+  if (isMine) query.delete('mine');
+  else query.set('mine', '1');
+  if (!isRouted) return null;
+  return <Flex gap="small" align="center" wrap>
+    <Link to="/today">返回行动板</Link>
+    <Typography.Text strong>{isMine ? '我的到期排期' : '全部可见排期'}</Typography.Text>
+    <Link to={'/today?' + query}>{isMine ? '查看全部可见排期' : '只看我的到期排期'}</Link>
+  </Flex>;
 }
 
 function ScheduleBody(props: { readonly load: PlanLoad; readonly focus: string | null; readonly onOpen: (id: string) => void; readonly onRetry: () => void }): ReactNode {

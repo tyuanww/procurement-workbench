@@ -77,7 +77,6 @@ function todayProps(override: Record<string, unknown> = {}): Record<string, unkn
   const noop = () => undefined;
   return {
     board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有待办。下一步：去跟进中心看看。' } },
-    insight: { total: 0, urgent: 0, overdue: 0, missingDate: 0 },
     focus: null,
     fading: null,
     drawerId: null,

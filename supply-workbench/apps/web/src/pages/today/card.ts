@@ -13,11 +13,18 @@ export function toBoardItem(item: TodoItemView): BoardItem {
     waitingKind: item.waitingOn.kind,
     reasons: item.reasons,
     poRaw: item.line?.poRaw ?? null,
-    productName: item.line?.nameRaw ?? null,
+    productName: displayName(item),
+    ...(item.ownerUserId === null && item.subject !== 'review' ? { isUnassigned: true } : {}),
     batchStatus: item.batch?.status ?? null,
     ...fulfillmentOf(item),
     ...replyOf(item.batch),
   };
+}
+
+function displayName(item: TodoItemView): string | null {
+  if (item.subject === 'review') return '主数据审核';
+  if (item.subject === 'import') return '待确认导入批次';
+  return item.line?.nameRaw ?? null;
 }
 
 function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining' | 'inTransit'> {
