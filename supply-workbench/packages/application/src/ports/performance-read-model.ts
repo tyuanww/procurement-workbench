@@ -1,4 +1,4 @@
-import type { KpiFollowUp, KpiInput } from '@sw/domain';
+import type { BatchFulfillment, KpiFollowUp, KpiInput, NoteStatus } from '@sw/domain';
 import type { BuyerLoadDashboard, BuyerLoadQuery, PeriodQuery, StuckDashboard, StuckQuery, SupplierDashboard, SupplierQuery } from '../performance/views.js';
 
 export type BatchLabel = {
@@ -8,6 +8,12 @@ export type BatchLabel = {
   readonly orderLineId: string | null;
 };
 
+export type BatchDeliveryFacts = {
+  readonly fulfillment: BatchFulfillment;
+  readonly noteStatus: NoteStatus;
+  readonly isLineCancelled: boolean;
+};
+
 /** 读模型只给事实。K1–K9 由用例调 D04，不在适配器里再算一遍。 */
 export type PerformanceFacts = {
   readonly kpi: KpiInput;
@@ -15,6 +21,7 @@ export type PerformanceFacts = {
   readonly partyNames: Readonly<Record<string, string>>;
   readonly buyerNames: Readonly<Record<string, string>>;
   readonly batchLabels: Readonly<Record<string, BatchLabel>>;
+  readonly batchDelivery?: Readonly<Record<string, BatchDeliveryFacts>>;
   /** 有 linked/manual 工厂关联的订单行。卡点 missing_factory 用。 */
   readonly linkedFactoryOrderLineIds: ReadonlySet<string>;
   /** 有未关闭异常的订单行。卡点 exception_open 用。 */
@@ -28,7 +35,7 @@ export type PerformanceFacts = {
 };
 
 export interface PerformanceReadModel {
-  load(query: PeriodQuery): Promise<PerformanceFacts>;
+  load(query: PeriodQuery, options?: { readonly includeBatchDelivery: boolean }): Promise<PerformanceFacts>;
   stuck(query: StuckQuery): Promise<StuckDashboard>;
   suppliers(query: SupplierQuery): Promise<SupplierDashboard>;
   buyers(query: BuyerLoadQuery): Promise<BuyerLoadDashboard>;

@@ -147,7 +147,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
       <div style={phoneViewRowStyle()}>
         <ViewPicker search={props.search} views={props.views} setParams={props.setParams} />
         <div style={phoneActionsStyle()}>
-          <div style={viewClusterStyle()}>
+          <div role="group" aria-label="视图操作" style={viewClusterStyle()}>
             {actions}
           </div>
           <DisplayControl shown={shown} density={props.density} query={props.query} search={props.search} setParams={props.setParams} />
@@ -161,7 +161,7 @@ export function LineViewBar(props: ViewBarProps): ReactNode {
         <ViewPicker search={props.search} views={props.views} setParams={props.setParams} />
         {actions}
       </div>
-      <div style={viewRightStyle()}>
+      <div role="group" aria-label="列表工具" style={viewRightStyle()}>
         <ColumnControl columns={props.columns} hiddenKeys={props.hiddenKeys} search={props.search} setParams={props.setParams} />
         <DensityControl density={props.density} search={props.search} setParams={props.setParams} />
         <Button href={exportAddress({ query: props.query, columns: shown })}>导出 Excel</Button>

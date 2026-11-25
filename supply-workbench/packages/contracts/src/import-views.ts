@@ -37,6 +37,7 @@ export const FreshnessSourceSchema = strictObject({
 
 export const FreshnessResponseSchema: z.ZodType<FreshnessResponse> = strictObject({
   sources: z.array(FreshnessSourceSchema),
+  procurementUploadedAt: z.string().optional(),
 });
 
 export const DetectResponseSchema: z.ZodType<DetectResponse> = strictObject({

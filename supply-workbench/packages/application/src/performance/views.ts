@@ -1,4 +1,4 @@
-import type { BatchStatus, Lane, LocalDate, StuckBucket, StuckCause, WaitingOnKind } from '@sw/domain';
+import type { BatchFulfillment, BatchStatus, Lane, LocalDate, StuckBucket, StuckCause, WaitingOnKind } from '@sw/domain';
 import type { KpiFigure } from '../master-data/index.js';
 
 /** 姓名可以没有。没有就留 null，不用 id 冒充姓名。 */
@@ -10,6 +10,8 @@ export type NamedPerson = {
 export type StuckBuckets = Readonly<Record<StuckBucket, number>>;
 export type StuckCauseCounts = Readonly<Record<StuckCause, number>>;
 
+export type StuckWaitingReason = 'supplier_date' | 'supplier_shipment' | 'internal_note' | 'internal_review' | 'receiver_arrival';
+
 export type StuckItem = {
   readonly batchId: string;
   readonly batchSeq?: number;
@@ -18,7 +20,8 @@ export type StuckItem = {
   readonly daysInStage: number;
   readonly poRaw: string | null;
   readonly nameRaw: string | null;
-  readonly waitingOn: { readonly kind: WaitingOnKind; readonly partyId: string | null; readonly displayName: string | null };
+  readonly waitingOn: { readonly kind: WaitingOnKind; readonly partyId: string | null; readonly displayName: string | null; readonly reason?: StuckWaitingReason };
+  readonly fulfillment?: BatchFulfillment;
   readonly buyer: NamedPerson | null;
   readonly dateBuyerConfirmed: LocalDate | null;
   readonly factoryLinked: boolean;

@@ -2,8 +2,9 @@ import type { KpiBatch, KpiInput, Lane, OrderLineLoad } from '@sw/domain';
 import type { PerformanceFacts, PerformanceReadModel } from '../../ports/performance-read-model.js';
 import type { PeriodQuery } from '../views.js';
 
-export async function loadScoped(performance: PerformanceReadModel, query: PeriodQuery): Promise<PerformanceFacts> {
-  const facts = await performance.load(query);
+export async function loadScoped(performance: PerformanceReadModel, input: PeriodQuery & { readonly includeBatchDelivery?: boolean }): Promise<PerformanceFacts> {
+  const { includeBatchDelivery: shouldIncludeBatchDelivery = false, ...query } = input;
+  const facts = await performance.load(query, { includeBatchDelivery: shouldIncludeBatchDelivery });
   return {
     ...facts,
     kpi: {

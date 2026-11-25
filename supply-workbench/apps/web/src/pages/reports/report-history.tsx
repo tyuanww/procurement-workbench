@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Button, Card, Empty, Flex, Select, Table, Tag, Typography, type TableColumnsType } from 'antd';
 import { useState } from 'react';
 import type { WeeklyReportListItem } from '@sw/contracts';
@@ -14,7 +15,7 @@ type ReportVersion = typeof VERSION_OPTIONS[number]['value'];
 export function ReportHistory({ items, onFocusWeek }: { readonly items: readonly WeeklyReportListItem[]; readonly onFocusWeek?: () => void }) {
   const [week, setWeek] = useState<string | null>(null);
   const [version, setVersion] = useState<ReportVersion>('all');
-  if (items.length === 0) return <SectionGroup title="已生成周报">
+  if (items.length === 0) return <SectionGroup title="已生成周报" action={<ProcurementCutoff />}>
     <Empty description={onFocusWeek === undefined ? '还没有周报。' : '还没有周报。下一步：填写周一后生成。'}>
       {onFocusWeek === undefined ? null : <Button onClick={onFocusWeek}>去填周一</Button>}
     </Empty>
@@ -31,6 +32,7 @@ export function ReportHistory({ items, onFocusWeek }: { readonly items: readonly
           <Select<string> aria-label="报告周" allowClear placeholder="全部报告周" value={week} options={weeks}
             onChange={(value) => setWeek(value ?? null)} style={{ minWidth: 194, maxWidth: '100%' }} />
           <Select<ReportVersion> aria-label="周报版本" value={version} options={[...VERSION_OPTIONS]} onChange={setVersion} style={{ minWidth: 112 }} />
+          <ProcurementCutoff />
         </Flex>
       </Card>
       <Table<WeeklyReportListItem> key={JSON.stringify([week, version])} rowKey="id" size="small" dataSource={filtered}
