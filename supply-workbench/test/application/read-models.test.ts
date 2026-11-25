@@ -55,5 +55,8 @@ it('周报、今日、搜索、看板、审核计数的顶层字段和 05 一致
   lock<StuckDashboard>()(['asOf', 'kpis', 'distribution', 'causeCounts', 'total', 'page', 'pageSize', 'items']);
   lock<ReviewCounts>()(['aliases', 'codes', 'links', 'multiName']);
   lock<MultiNameView>()(['codeId', 'codeRaw', 'names']);
-  lock<FreshnessResponse>()(['sources']);
+});
+
+it('来源状态保留原有来源并提供已生效采购总表的上传时间', () => {
+  lock<FreshnessResponse>()(['sources', 'procurementUploadedAt']);
 });

@@ -86,7 +86,7 @@ describe('产品表格列宽', () => {
     expect(PRODUCT_COLUMN_SPECS.every((spec) => spec.width >= spec.minWidth && spec.minWidth > 0)).toBe(true);
   });
 
-  it('手机端保留品名、条码，其余基础字段在展开行', () => {
+  it('手机端保留品名和条码两列', () => {
     const hidden = PRODUCT_COLUMN_SPECS.filter((spec) => spec.isPhoneHidden).map((spec) => spec.key);
     expect(hidden).toEqual(['filingName', 'netContent', 'casePack', 'spec']);
   });
@@ -131,6 +131,7 @@ describe('产品卡片渲染', () => {
   it('没有缩略图时是占位，不出现破图地址', () => {
     const html = markup(h(ProductCards, { items: [BASE] }));
     expect(html).toContain('aria-label="海葡萄面膜 无图"');
+    expect(html).toContain('标准规格');
     expect(html).toContain('备案名 待补充');
     expect(html).not.toContain('/files/');
     expect(html).toContain('href="/products/product-1"');

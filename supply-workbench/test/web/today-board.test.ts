@@ -121,6 +121,7 @@ describe('今日看板', () => {
       orderNo: '—',
       productName: '—',
       date: '2026-10-07',
+      waiting: '宜侬',
     });
     expect(blank.body.rows[0]?.face.productName).toBe('—');
     expect(blank.body.rows[0]?.face.overdue).toBe('—');

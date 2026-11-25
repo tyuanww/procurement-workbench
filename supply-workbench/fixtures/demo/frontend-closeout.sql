@@ -22,10 +22,11 @@ FROM preview_orders
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO order_lines (id, created_at, updated_at, purchase_order_id, lane, barcode_raw, name_raw, qty_ordered, unit,
-  buyer_user_id, receiver_party_id, origin, missing_in_latest_import, latest_import_presence, stage, stage_changed_at)
+  buyer_user_id, receiver_party_id, origin, missing_in_latest_import, latest_import_presence, stage, stage_changed_at, next_due_batch_id, next_due_date)
 SELECT 'ui-demo-line-' || key, now(), now(), 'ui-demo-po-' || key, 'finished', barcode, product_name, quantity, '件',
   '0199f0a0-0000-7000-8000-000000000' || user_suffix, '0199f0a0-0000-7000-8000-000000000010',
-  'manual', false, 'not_applicable', stage, now()
+  'manual', false, 'not_applicable', stage, now(),
+  CASE WHEN batch_status IS NOT NULL THEN 'ui-demo-batch-' || key END, business_day + confirmed_offset
 FROM preview_orders
 ON CONFLICT (id) DO NOTHING;
 

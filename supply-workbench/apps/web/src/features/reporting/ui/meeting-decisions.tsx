@@ -2,7 +2,7 @@ import { Alert, DatePicker, Form, Input, Modal, Select, type FormInstance } from
 import { ManagementDecisionSchema, type ManagementDecision, type ManagementMeeting, type MeetingMaterial } from '@sw/contracts';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
-import { apiErrorMessage, apiSend } from '../../shared/api/client.js';
+import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 
 export const MEETING_PATH = '/api/v1/dashboard/management-meeting';
 
@@ -24,7 +24,7 @@ export function MeetingDecisionEditor({ editor, meeting, onClose, onSaved }: {
   readonly editor: DecisionEditor;
   readonly meeting: ManagementMeeting;
   readonly onClose: () => void;
-  readonly onSaved: () => void;
+  readonly onSaved: (decision: ManagementDecision) => void;
 }) {
   const [form] = Form.useForm<Fields>();
   const [isPending, setPending] = useState(false);
@@ -34,8 +34,8 @@ export function MeetingDecisionEditor({ editor, meeting, onClose, onSaved }: {
     setPending(true);
     setError(undefined);
     try {
-      await apiSend({ method: 'POST', schema: ManagementDecisionSchema, ...submission({ editor, meeting, fields }) });
-      onSaved();
+      const saved = await apiSend({ method: 'POST', schema: ManagementDecisionSchema, ...submission({ editor, meeting, fields }) });
+      onSaved(saved);
     } catch (caught: unknown) {
       setError(apiErrorMessage(caught) ?? '决定没有保存，请重试。');
     } finally {

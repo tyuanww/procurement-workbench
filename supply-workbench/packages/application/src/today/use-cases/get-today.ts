@@ -23,7 +23,8 @@ export function makeGetToday(deps: GetTodayDeps): GetToday {
     chase: async (input: TodayChaseQuery, actor: Actor): Promise<readonly TodayChaseRow[]> => {
       const read = await load({ deps, input: { scope: 'mine' }, actor });
       const candidates = input.itemId === undefined ? read.projected : read.projected.filter((item) => item.id === input.itemId);
-      return chaseRows({ items: selectItems(matchReasons(candidates, input.reasons), input.sort), read, factoryId: input.factoryId });
+      const matched = matchWork({ items: candidates, work: input.work, read });
+      return chaseRows({ items: selectItems(matchReasons(matched, input.reasons), input.sort), read, factoryId: input.factoryId });
     },
   });
 }
@@ -90,7 +91,8 @@ function responseOf({ read, matched, shown }: {
 }
 
 function pageOf({ read, input }: { readonly read: TodayRead; readonly input: TodayPageQuery }): TodayPageResponse {
-  const candidates = matchReasons(read.projected, input.reasons);
+  const work = matchWork({ items: read.projected, work: input.work, read });
+  const candidates = matchReasons(work, input.reasons);
   const matched = selectItems(candidates, input.sort);
   const { number, size } = input.page;
   const total = matched.length;
@@ -106,17 +108,28 @@ function pageOf({ read, input }: { readonly read: TodayRead; readonly input: Tod
     paging: {
       page, pageSize: size, total,
       urgent: matched.filter((item) => item.severity >= HIGH_PRIORITY).length,
-      reasonCounts: input.sort.kind === 'urgency' ? counts : countsOf(selectItems(read.projected, input.sort)),
+      reasonCounts: countsOf(selectItems(work, input.sort)),
       followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled },
       units: comparisonUnits(candidates),
       factories: chase.factories,
       chaseCounts: {
-        all: input.reasons === undefined && input.sort.kind === 'urgency' ? chase.ids.size : read.projected.filter((item) => chaseEligibility(item, read) !== null).length,
+        all: read.projected.filter((item) => chaseEligibility(item, read) !== null).length,
         filtered: chase.ids.size,
       },
+      internalNoteCount: read.projected.filter(isInternalNote).length,
       chaseItemIds: shown.filter((item) => chase.ids.has(item.id)).map((item) => item.id),
     },
   };
+}
+
+function matchWork({ items, work, read }: { readonly items: readonly Projected[]; readonly work: TodayPageQuery['work']; readonly read: TodayRead }): readonly Projected[] {
+  if (work === 'factory_chase') return items.filter((item) => chaseEligibility(item, read) !== null);
+  if (work === 'internal_note') return items.filter(isInternalNote);
+  return items;
+}
+
+function isInternalNote(item: Projected): boolean {
+  return item.subject === 'batch' && item.waitingOn.kind === 'internal' && item.reasons.includes('note_missing');
 }
 
 function comparisonUnits(items: readonly Projected[]): string[] {

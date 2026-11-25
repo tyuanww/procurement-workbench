@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
-import { Alert, Button, Flex, Typography } from 'antd';
+import { useState, type ReactNode } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { Alert, Button, Descriptions, Flex, Typography } from 'antd';
 import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
 import { IMPORT_ACTIONS, importActionLabel } from '@sw/domain';
 import { ApiError, apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
+import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { decisionsWithDateDecision, issueGroupText } from '../../features/imports/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
@@ -13,10 +14,11 @@ import { space } from '../../theme/tokens.js';
 import { ImportBatchBanner, ImportStatusTag } from './import-batch-banner.js';
 import { ImportConflictPortal } from './ImportConflictPortal.js';
 import { commitSummary, ImportCommitPanel, type CommitRequest } from './import-commit-panel.js';
-import { writeImportConflictDrawer } from './import-conflict-drawer-url.js';
+import { readImportConflictDrawer, writeImportConflictDrawer } from './import-conflict-drawer-url.js';
 import { ProcurementPreview } from './ProcurementPreview.js';
 import { ConfirmedArrivalPreview } from './ConfirmedArrivalPreview.js';
 import { useImportBatch } from './use-import-batch.js';
+import { ImportWorkflow } from './import-workflow.js';
 
 export function ImportBatchPage() {
   const { id = '' } = useParams();
@@ -24,8 +26,10 @@ export function ImportBatchPage() {
 }
 
 function ImportBatchContent({ id }: { readonly id: string }) {
-  const [search, setSearch] = useSearchParams();
-  const back = { pathname: '/imports', search: writeUrlState(search.toString(), { drawer: null }) };
+  const { pathname, state } = useLocation();
+  const [search, setParams] = useSearchParams();
+  const backSearch = writeUrlState(search.toString(), { drawer: null });
+  const back = <Link to={{ pathname: '/imports', search: backSearch }} state={detailReturnState(state, pathname)}>返回导入中心</Link>;
   const { load, retry, setSummary } = useImportBatch(id);
   const [request, setRequest] = useState<CommitRequest>({ kind: 'idle' });
   const [reasons, setReasons] = useState<readonly string[]>([]);
@@ -33,7 +37,7 @@ function ImportBatchContent({ id }: { readonly id: string }) {
   const canWriteRecords = useCanWrite('records.write');
   if (load.kind !== 'ready') {
     return (
-      <WorkbenchPage title="导入批次" action={<Link to={back}>返回导入中心</Link>}>
+      <WorkbenchPage title="导入批次" action={back}>
         {load.kind === 'loading' ? <p role="status">正在读取导入批次</p> : (
           <Alert type="error" title={load.message} action={<Button onClick={retry}>重试</Button>} />
         )}
@@ -45,7 +49,7 @@ function ImportBatchContent({ id }: { readonly id: string }) {
       id={id}
       back={back}
       search={search.toString()}
-      setSearch={setSearch}
+      setSearch={(value) => setParams(value, { state })}
       summary={load.summary}
       request={request}
       setSummary={setSummary}
@@ -59,9 +63,9 @@ function ImportBatchContent({ id }: { readonly id: string }) {
 
 type ImportBatchReadyProps = {
   readonly id: string;
-  readonly back: { readonly pathname: string; readonly search: string };
+  readonly back: ReactNode;
   readonly search: string;
-  readonly setSearch: ReturnType<typeof useSearchParams>[1];
+  readonly setSearch: (value: URLSearchParams) => void;
   readonly summary: ImportBatchSummary;
   readonly request: CommitRequest;
   readonly setSummary: (value: ImportBatchSummary) => void;
@@ -78,38 +82,54 @@ function ImportBatchReady(props: ImportBatchReadyProps) {
   const isReplay = summary.procurementReplayOf !== undefined;
   const canEdit = props.canImport && summary.status === 'parsed' && !isReplay;
   return (
-    <WorkbenchPage title="导入批次" browserTitle={`导入批次 · ${summary.file.originalName}`} action={<Link to={props.back}>返回导入中心</Link>}>
+    <WorkbenchPage title="导入批次" browserTitle={`导入批次 · ${summary.file.originalName}`} action={props.back}>
+      <ImportWorkflow stage={summary.status} />
       <Flex vertical gap={space[3]}>
-        <BatchOverview summary={summary} request={props.request} canReviewAliases={canReviewAliases} />
+        <BatchOverview summary={summary} />
         {summary.hasProcurementPreview === true ? <ProcurementPreview key={id} id={id} isFinalized={summary.status === 'committed' || summary.status === 'discarded'} /> : null}
         {isArrival ? <ConfirmedArrivalPreview key={id} id={id} revision={summary.revision} /> : null}
         <ImportBatchReview {...props} canEdit={canEdit} canReviewAliases={canReviewAliases} />
+        {summary.status === 'parsed' || isReplay ? null :
+          <ImportBatchReceipt summary={summary} request={props.request} canReviewAliases={canReviewAliases} />}
       </Flex>
-      {canEdit && !isArrival ? <ImportConflictPortal id={id} summary={summary} setSummary={props.setSummary} /> : null}
+      {canEdit && !isArrival ? <ImportConflictPortal id={id} summary={summary} setSummary={props.setSummary}
+        isOpen={readImportConflictDrawer(props.search)}
+        onClose={() => props.setSearch(writeImportConflictDrawer({ search: props.search, isOpen: false }))} /> : null}
     </WorkbenchPage>
   );
 }
 
-function BatchOverview({ summary, request, canReviewAliases }: {
+function BatchOverview({ summary }: { readonly summary: ImportBatchSummary }) {
+  return (
+    <div>
+      <Descriptions size="small" column={{ xs: 1, sm: 2 }} styles={{ content: { overflowWrap: 'anywhere' } }}
+        items={[
+          { key: 'file', label: '文件', children: <Typography.Text strong>{summary.file.originalName}</Typography.Text> },
+          ...(summary.factoryParty === null ? [] : [{ key: 'factory', label: '代工厂', children: summary.factoryParty.displayName }]),
+        ]} />
+      <ImportBatchBanner template={summary.template} createdAt={summary.createdAt} committedAt={summary.committedAt} coverage={summary.coverage ?? 'full_snapshot'} />
+      <BatchResult summary={summary} />
+      {summary.status === 'failed' ? <Alert type="error" showIcon title="解析失败" description={summary.error || undefined} /> : null}
+    </div>
+  );
+}
+
+function ImportBatchReceipt({ summary, request, canReviewAliases }: {
   readonly summary: ImportBatchSummary;
   readonly request: CommitRequest;
   readonly canReviewAliases: boolean;
 }) {
-  return (
-    <div>
-      <Typography.Paragraph strong style={{ overflowWrap: 'anywhere' }}>{summary.file.originalName}</Typography.Paragraph>
-      <ImportBatchBanner template={summary.template} createdAt={summary.createdAt} committedAt={summary.committedAt} coverage={summary.coverage ?? 'full_snapshot'} />
-      <BatchResult summary={summary} />
-      {summary.status === 'parsed' || summary.procurementReplayOf !== undefined ? null : <ImportCommitPanel summary={commitSummary(summary, canReviewAliases)} request={request} />}
-    </div>
-  );
+  if (summary.status === 'failed') return null;
+  return <SectionGroup title="提交结果">
+    <ImportCommitPanel summary={commitSummary(summary, canReviewAliases)} request={request} />
+  </SectionGroup>;
 }
 
 function BatchResult({ summary }: { readonly summary: ImportBatchSummary }) {
   const actions = IMPORT_ACTIONS.filter((action) => summary.stats.byAction[action] > 0)
     .map((action) => `${importActionLabel(action)} ${summary.stats.byAction[action]} 行`);
   return (
-    <Typography.Paragraph>
+    <Typography.Paragraph role="status">
       <ImportStatusTag status={summary.status} /> · 共 {summary.stats.rows} 行{actions.length === 0 ? '' : ` · ${actions.join(' · ')}`}
     </Typography.Paragraph>
   );

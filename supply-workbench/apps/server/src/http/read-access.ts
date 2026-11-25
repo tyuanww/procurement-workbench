@@ -46,6 +46,7 @@ const DRAFT_RULES: readonly DraftRule[] = [
   { prefix: '/api/v1/master', access: { kind: 'capability', capability: 'master-data', action: 'master.read' } },
   { prefix: '/api/v1/parties', access: { kind: 'capability', capability: 'master-data', action: 'data.read' } },
   { prefix: '/api/v1/items', access: { kind: 'capability', capability: 'master-data', action: 'data.read' } },
+  { prefix: '/api/v1/dashboard/director', access: { kind: 'capability', capability: 'reporting', action: 'dashboard.read' } },
   { prefix: '/api/v1/dashboard/management-meeting', access: { kind: 'capability', capability: 'reporting', action: 'dashboard.read' } },
   { prefix: '/api/v1/dashboard', access: { kind: 'capability', capability: 'performance' } },
   { prefix: '/api/v1/reports', access: { kind: 'capability', capability: 'reporting', action: 'reports.read' } },
