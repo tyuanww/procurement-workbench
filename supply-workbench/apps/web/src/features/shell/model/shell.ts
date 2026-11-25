@@ -1,8 +1,5 @@
 import { can, roleLabel, type Role } from '@sw/domain';
-import { freshnessView, type FreshnessChip, type FreshnessFacts } from './freshness.js';
 import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../../../shared/page-manifest.js';
-
-export type { FreshnessChip, FreshnessFacts, SourceFact } from './freshness.js';
 
 type KnownQueue = {
   readonly kind: 'known';
@@ -28,7 +25,7 @@ export type BadgeMark =
 
 export type { NavPath } from '../../../shared/page-manifest.js';
 
-export type HomePath = '/master' | '/dashboard' | '/reports' | typeof SETTINGS_PATH | '/today' | '/progress';
+export type HomePath = '/master' | '/home' | '/reports' | typeof SETTINGS_PATH | '/today' | '/progress';
 
 export type NavRow = {
   readonly to: NavPath;
@@ -47,7 +44,7 @@ export type AccountEntry = {
 export type ShellView = {
   readonly home: HomePath | undefined;
   readonly nav: readonly NavRow[];
-  readonly freshness: { readonly headline: string; readonly chips: readonly FreshnessChip[] };
+  readonly procurementDate: string | null;
   readonly account: { readonly entries: readonly AccountEntry[] };
 };
 
@@ -59,14 +56,13 @@ export function shellView(input: {
   readonly user: Person;
   readonly queue: QueueFacts;
   readonly today: TodayFacts;
-  readonly freshness: FreshnessFacts;
-  readonly now: string;
+  readonly procurementDate: string | null;
   readonly navRoutes: readonly NavRoute[];
 }): ShellView {
   return {
     home: homeOf({ roles: input.user.roles, queue: input.queue }),
     nav: navRows({ roles: input.user.roles, queue: input.queue, today: input.today, navRoutes: input.navRoutes }),
-    freshness: freshnessView({ facts: input.freshness, now: input.now }),
+    procurementDate: input.procurementDate,
     account: accountOf(input.user),
   };
 }
@@ -91,7 +87,7 @@ function homeOf(input: {
 }): HomePath | undefined {
   if (input.queue.kind === 'pending') return undefined;
   if (input.roles.includes('reviewer') && hasReviewWork(input.queue)) return '/master';
-  if (input.roles.includes('manager')) return '/dashboard';
+  if (input.roles.includes('manager')) return '/home';
   if (input.roles.includes('lead')) return '/reports';
   if (isSoleAdmin(input.roles)) return SETTINGS_PATH;
   if (input.roles.length === 1 && input.roles[0] === 'buyer') return '/today';

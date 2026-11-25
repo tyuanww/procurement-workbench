@@ -1,4 +1,4 @@
-import { addDays, compareDates, diffDays, isOpenBatch, type LocalDate, type Settings, type WaitingOnKind } from '@sw/domain';
+import { addDays, compareDates, diffDays, hasUnshippedBatch, isBatchNoteMissing, isOpenBatch, needsBatchFulfillmentReview, type LocalDate, type Settings, type WaitingOnKind } from '@sw/domain';
 import type { TodoBatchSource } from '../views.js';
 
 export type TodoContext = {
@@ -29,37 +29,37 @@ const internal = (): WaitingOn => ({ kind: 'internal', partyId: null });
 export const TODO_RULES: readonly TodoRule[] = [
   {
     reason: 'overdue',
-    applies: (batch) => hasUnshipped(batch) && batch.overdueDays !== null && batch.overdueDays > 0,
+    applies: (batch) => hasUnshippedBatch(batch) && batch.overdueDays !== null && batch.overdueDays > 0,
     severity: () => HIGH_SEVERITY,
     waitingOn: supplier,
   },
   {
     reason: 'demand_before_confirmed',
-    applies: (batch) => hasUnshipped(batch) && isBefore(batch.dateFactoryRequired, batch.dateBuyerConfirmed),
+    applies: (batch) => hasUnshippedBatch(batch) && isBefore(batch.dateFactoryRequired, batch.dateBuyerConfirmed),
     severity: () => HIGH_SEVERITY,
     waitingOn: supplier,
   },
   {
     reason: 'due_today',
-    applies: (batch, ctx) => hasUnshipped(batch) && batch.dateBuyerConfirmed === ctx.today,
+    applies: (batch, ctx) => hasUnshippedBatch(batch) && batch.dateBuyerConfirmed === ctx.today,
     severity: () => MID_SEVERITY,
     waitingOn: supplier,
   },
   {
     reason: 'missing_date',
-    applies: (batch) => hasUnshipped(batch) && batch.dateBuyerConfirmed === null,
+    applies: (batch) => hasUnshippedBatch(batch) && batch.dateBuyerConfirmed === null,
     severity: (batch, ctx) => (needsDateSoon(batch, ctx) ? MID_SEVERITY : 1),
     waitingOn: supplier,
   },
   {
     reason: 'note_missing',
-    applies: (batch) => isNoteMissing(batch),
+    applies: isBatchNoteMissing,
     severity: (batch, ctx) => (exceeds(noteAge(batch, ctx.today), ctx.settings.deliveryNoteAlertDays) ? MID_SEVERITY : 1),
-    waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
+    waitingOn: (batch) => hasUnshippedBatch(batch) ? supplier(batch) : internal(),
   },
   {
     reason: 'upcoming',
-    applies: (batch, ctx) => hasUnshipped(batch) && isSoon(batch, ctx),
+    applies: (batch, ctx) => hasUnshippedBatch(batch) && isSoon(batch, ctx),
     severity: () => 1,
     waitingOn: supplier,
   },
@@ -67,31 +67,26 @@ export const TODO_RULES: readonly TodoRule[] = [
     reason: 'follow_up_due',
     applies: (batch, ctx) => followUpTime(batch) <= ctx.now,
     severity: () => MID_SEVERITY,
-    waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
+    waitingOn: (batch) => hasUnshippedBatch(batch) ? supplier(batch) : internal(),
   },
   {
     reason: 'follow_up_scheduled',
     applies: (batch, ctx) => followUpTime(batch) > ctx.now,
     severity: () => 1,
-    waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
+    waitingOn: (batch) => hasUnshippedBatch(batch) ? supplier(batch) : internal(),
   },
-  { reason: 'unshipped', applies: hasUnshipped, severity: () => 1, waitingOn: supplier },
+  { reason: 'unshipped', applies: hasUnshippedBatch, severity: () => 1, waitingOn: supplier },
   {
     reason: 'fulfillment_review',
-    applies: (batch) => (isOpenBatch(batch.status) || batch.status === 'received') && (batch.fulfillment.unshippedQty === null || batch.fulfillment.reviewCount > 0),
+    applies: (batch) => (isOpenBatch(batch.status) || batch.status === 'received') && needsBatchFulfillmentReview(batch.fulfillment),
     severity: () => 1,
-    waitingOn: (batch) => hasUnshipped(batch) ? supplier(batch) : internal(),
+    waitingOn: (batch) => hasUnshippedBatch(batch) ? supplier(batch) : internal(),
   },
 ];
 
 function followUpTime(batch: TodoBatchSource): number {
   if (batch.isLineCancelled || !isOpenBatch(batch.status) || batch.nextFollowUpAt === undefined) return NaN;
   return Date.parse(batch.nextFollowUpAt);
-}
-
-function hasUnshipped(batch: TodoBatchSource): boolean {
-  const qty = batch.fulfillment.unshippedQty;
-  return !batch.isLineCancelled && isOpenBatch(batch.status) && qty !== null && qty > 0;
 }
 
 function isBefore(earlier: LocalDate | null, later: LocalDate | null): boolean {
@@ -109,10 +104,6 @@ function isSoon(batch: TodoBatchSource, ctx: TodoContext): boolean {
   if (batch.dateBuyerConfirmed === null) return false;
   const ahead = diffDays(batch.dateBuyerConfirmed, ctx.today);
   return ahead > 0 && ahead <= ctx.settings.upcomingDays;
-}
-
-function isNoteMissing(batch: TodoBatchSource): boolean {
-  return batch.noteStatus === 'missing' && (batch.status === 'shipped' || batch.status === 'partially_received' || batch.status === 'received');
 }
 
 function lastShipped(batch: TodoBatchSource): LocalDate | null {

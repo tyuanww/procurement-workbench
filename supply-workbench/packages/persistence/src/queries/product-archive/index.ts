@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
 import { LINE_ORIGINS, LINE_STAGES, PO_FORMATS, projectLatestImportPresence, type LocalDate } from '@sw/domain';
 import type { ProductQueries } from '../../../../application/src/ports/product-queries.js';
@@ -30,12 +30,19 @@ export function productQueries(db: AppDatabase, clock: Clock): ProductQueries {
 }
 
 async function listSources({ db, clock, query }: { readonly db: AppDatabase; readonly clock: Clock; readonly query: { readonly q?: string; readonly productLine?: string; readonly page?: number; readonly pageSize?: number } }) {
-  const rows = (await db.select().from(products)).filter((row) => (query.q === undefined || row.skuName.includes(query.q) || row.barcodeRaw.includes(query.q)) && (query.productLine === undefined || row.productLine === query.productLine));
+  const term = query.q;
+  const match = term ? sql`(strpos(${products.skuName}, ${term}) > 0 or strpos(${products.barcodeRaw}, ${term}) > 0)` : undefined;
+  const line = query.productLine === undefined ? undefined : eq(products.productLine, query.productLine);
+  const rank = term ? [desc(eq(products.barcodeRaw, term)), products.id] : [products.id];
+  const where = and(match, line);
   const page = query.page ?? 1;
   const pageSize = query.pageSize ?? 50;
-  const slice = rows.slice((page - 1) * pageSize, page * pageSize);
-  const images = await pageImages(db, slice.map((row) => row.id));
-  return { asOf: clock.now(), sources: slice.map((row) => sourceOf(row, coverFile(images.filter((image) => image.productId === row.id)))), page: { page, pageSize, total: rows.length } };
+  const { items, total } = await db.transaction(async (tx) => ({
+    total: await tx.$count(products, where),
+    items: await tx.select().from(products).where(where).orderBy(...rank).limit(pageSize).offset((page - 1) * pageSize),
+  }), { isolationLevel: 'repeatable read', accessMode: 'read only' });
+  const images = await pageImages(db, items.map((row) => row.id));
+  return { asOf: clock.now(), sources: items.map((row) => sourceOf(row, coverFile(images.filter((image) => image.productId === row.id)))), page: { page, pageSize, total } };
 }
 
 async function pageImages(db: AppDatabase, ids: readonly string[]) {

@@ -18,6 +18,28 @@ import { barcode, buyer, channels, demoArchive, demoBom, demoPo, importCsv, item
 const AT = '2026-10-12T00:00:00.000Z';
 const archiveFile = { fileName: 'archive.csv', bytes: demoArchive(), template: 'product-archive-v1' } as const;
 
+it('条码精确匹配排在分页之前，相关规格可翻到下一页', async () => {
+  const opened = await open();
+  try {
+    await opened.exec(`insert into products (id, sku_name, barcode_raw, barcode_base, field_sources, created_at, updated_at)
+      select 'variant-' || i, '合成相关规格', '780012-' || i, '780012', '{}', now(), now() from generate_series(1, 50) as i`);
+    await opened.exec(`insert into products (id, sku_name, barcode_raw, barcode_base, field_sources, created_at, updated_at)
+      values ('zz-exact-code', '合成精确条码', '780012', '780012', '{}', now(), now())`);
+    const cookie = await loginAs(opened.app, 'reviewer');
+    const list = (page: number) => opened.app.inject({ method: 'GET', url: `/api/v1/products?q=780012&page=${page}`, headers: { cookie } });
+    const first = (await list(1)).json();
+    const next = (await list(2)).json();
+    expect(first.page).toEqual({ page: 1, pageSize: 50, total: 51 });
+    expect(first.items[0].barcodeRaw).toEqual('780012');
+    expect(next.page.page).toEqual(2);
+    expect(next.items).toHaveLength(1);
+    expect(first.items).not.toContainEqual(next.items[0]);
+    expect((await list(0)).statusCode).toEqual(400);
+  } finally {
+    await opened.close();
+  }
+});
+
 it('产品采购可切换渠道范围，组成物料显示覆盖和无 BOM 两种状态', async () => {
   const opened = await open();
   try {

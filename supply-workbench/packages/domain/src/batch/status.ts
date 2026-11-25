@@ -1,4 +1,4 @@
-import { countsInRecordedQuantity, roundQuantity, sumQuantities, type FulfillmentEvidence } from './fulfillment.js';
+import { countsInRecordedQuantity, roundQuantity, sumQuantities, type BatchFulfillment, type FulfillmentEvidence } from './fulfillment.js';
 import type { BatchFacts } from '../entities/orders.js';
 import type { BatchStatus, NoteStatus } from '../vocabulary/index.js';
 
@@ -13,6 +13,23 @@ const OPEN_STATUSES = ['awaiting_date', 'confirmed', 'shipped', 'partially_recei
 
 export function isOpenBatch(status: BatchStatus): boolean {
   return OPEN_STATUSES.some((open) => open === status);
+}
+
+export function hasUnshippedBatch(batch: {
+  readonly status: BatchStatus;
+  readonly isLineCancelled: boolean;
+  readonly fulfillment: Pick<BatchFulfillment, 'unshippedQty'>;
+}): boolean {
+  const qty = batch.fulfillment.unshippedQty;
+  return !batch.isLineCancelled && isOpenBatch(batch.status) && qty !== null && qty > 0;
+}
+
+export function isBatchNoteMissing(batch: { readonly status: BatchStatus; readonly noteStatus: NoteStatus }): boolean {
+  return batch.noteStatus === 'missing' && (batch.status === 'shipped' || batch.status === 'partially_received' || batch.status === 'received');
+}
+
+export function needsBatchFulfillmentReview(fulfillment: Pick<BatchFulfillment, 'unshippedQty' | 'reviewCount'>): boolean {
+  return fulfillment.unshippedQty === null || fulfillment.reviewCount > 0;
 }
 
 export function deriveBatchStatus(facts: StatusInput): BatchStatus {

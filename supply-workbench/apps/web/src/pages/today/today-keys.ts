@@ -109,7 +109,7 @@ function isTyping(target: EventTarget | null): boolean {
 
 function isControl({ target, key }: KeyPress): boolean {
   if (typeof Element === 'undefined' || !(target instanceof Element)) return false;
-  const control = target.closest('button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [tabindex="0"]');
+  const control = target.closest('button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [role="menu"], [tabindex="0"]');
   if (control === null) return false;
   return !control.classList.contains('today-task-row') || key === 'Enter' || key === ' ';
 }

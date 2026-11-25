@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   CompleteManagementDecisionSchema,
-  EntityIdSchema,
+  EntityIdSchema, DirectorBrandsSchema, DirectorScheduleSchema,
   ManagementDecisionSchema,
   ManagementMeetingQuerySchema,
   ManagementMeetingSchema,
@@ -30,6 +30,8 @@ import { verifyPrintToken } from './token.js';
 const IdParams = z.object({ id: z.string().min(1) }).strict();
 
 export type ReportingApi = {
+  readonly schedule: () => Promise<z.output<typeof DirectorScheduleSchema>>;
+  readonly brands: () => Promise<z.output<typeof DirectorBrandsSchema>>;
   readonly generate: GenerateWeeklyReport;
   readonly managementMeeting?: ReturnType<typeof makeManagementMeeting>;
   readonly list: ListWeeklyReports;
@@ -45,6 +47,8 @@ export type ReportingApi = {
 };
 
 export function registerReportingRoutes(app: FastifyInstance, api: ReportingApi): void {
+  app.get('/api/v1/dashboard/director/brands', async () => wire(DirectorBrandsSchema, await api.brands()));
+  app.get('/api/v1/dashboard/director/schedule', async () => wire(DirectorScheduleSchema, await api.schedule()));
   if (api.managementMeeting !== undefined) registerManagementMeetingRoutes(app, api.managementMeeting);
   app.post('/api/v1/reports/weekly', async (req) => create(api, req));
   app.get('/api/v1/reports/weekly', async (req) => api.list(pageQuery(req), requireActor(req)));

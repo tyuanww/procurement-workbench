@@ -30,7 +30,7 @@ export function LineDetailPage() {
   const [params] = useSearchParams();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), state })} />;
+  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), state, lineId: id })} />;
 }
 
 function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {
@@ -44,7 +44,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
   const browserTitle = [title, detail?.line.nameRaw].filter(Boolean).join(' · ');
   return (
     <section style={{ maxWidth: 1440 }}>
-      {back === null ? null : <Link to={back.to}>{back.label}</Link>}
+      {back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}
       <PageHeader title={title} browserTitle={browserTitle} showIdentity />
       {detail === null ? null : <LineIdentity line={detail.line} />}
       {detail === null && isFailed ? (

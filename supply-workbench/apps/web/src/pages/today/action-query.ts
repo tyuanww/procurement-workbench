@@ -1,5 +1,5 @@
 import { TODO_REASONS, normalizeUnit, type TodoReason } from '@sw/domain';
-import type { TodaySort } from '@sw/contracts';
+import { TodayWorkFilterSchema, type TodaySort, type TodayWorkFilter } from '@sw/contracts';
 import { readReasons, taskIdOf, withReason } from '../../features/today/index.js';
 
 export const ACTION_PAGE_SIZE = 50;
@@ -9,6 +9,7 @@ export type ActionQuery = {
   readonly focusId: string | null;
   readonly reasons: readonly TodoReason[];
   readonly sort: TodaySort;
+  readonly work: TodayWorkFilter | undefined;
 };
 
 export type ChaseScope =
@@ -27,11 +28,13 @@ export function actionQuery(search: string): ActionQuery {
     focusId: drawer === '' || taskIdOf(drawer) !== null ? null : drawer,
     reasons: readReasons(search).filter((reason): reason is TodoReason => TODO_REASONS.some((code) => code === reason)),
     sort: params.get('sort') === 'bulk' && unit !== null ? { kind: 'bulk', unit } : { kind: 'urgency' },
+    work: TodayWorkFilterSchema.safeParse(params.get('work')).data,
   };
 }
 
 function actionFilters(query: ActionQuery): URLSearchParams {
   const params = new URLSearchParams();
+  if (query.work !== undefined) params.set('work', query.work);
   if (query.reasons.length > 0) params.set('reasons', query.reasons.join(','));
   if (query.sort.kind === 'bulk') {
     params.set('sort', 'bulk');
@@ -83,8 +86,16 @@ export function actionSortParams(search: string, sort: TodaySort): URLSearchPara
 export type FollowUpFilter = Extract<TodoReason, 'follow_up_due' | 'follow_up_scheduled'>;
 
 export function actionFollowUpParams(search: string, reason: FollowUpFilter): URLSearchParams {
-  const params = actionSortParams(search, { kind: 'urgency' });
+  const params = actionWorkParams(search);
   params.set('reasons', reason);
+  return params;
+}
+
+export function actionWorkParams(search: string, work?: TodayWorkFilter): URLSearchParams {
+  const params = actionSortParams(search, { kind: 'urgency' });
+  params.delete('reasons');
+  if (work === undefined) params.delete('work');
+  else params.set('work', work);
   return params;
 }
 

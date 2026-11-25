@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { createDb, fileStore, oauthStateRepository, userDirectory } from '@sw/persistence';
+import { workbookReader } from '@sw/importers';
 import { feishuOAuthClient } from '@sw/auth';
 import { authConfig, feishuApp, loadConfig } from './config.js';
 import { authProvider } from './auth-provider.js';
@@ -13,6 +14,7 @@ import { composeProductDevelopment } from './composition/product-development.js'
 import { composePlan } from './composition/plan.js';
 import { composePlatform, platformHealth } from './composition/platform.js';
 import { composeProductArchive, productAttachmentMaxBytes } from './composition/product-archive.js';
+import { directorSchedule } from './system/director-schedule.js';
 import { composeReporting } from './composition/reporting.js';
 import { composeSearch } from './composition/search.js';
 import { composeToday } from './composition/today.js';
@@ -98,6 +100,7 @@ async function httpApp({ config, db, api }: { readonly config: ReturnType<typeof
   const reporting = composeReporting({
     db,
     files: fileStore(config.UPLOAD_DIR),
+    schedule: () => directorSchedule(config.DEVELOPMENT_SCHEDULE_DIR, workbookReader({ engine: 'sheetjs' })),
     timeZone: config.TZ_BUSINESS,
     secret: config.SESSION_SECRET,
     printOrigin: () => `http://127.0.0.1:${config.PORT}`,

@@ -42,7 +42,7 @@ export function MetricStrip(input: { readonly items: readonly MetricItem[]; read
   return (
     <Row gutter={[space[2], space[2]]} role="group" aria-label={input.ariaLabel}>
       {input.items.map((item) => (
-        <Col key={item.key} flex="1 1 min(100%, 162px)" style={{ display: 'flex', minWidth: 0 }}>
+        <Col key={item.key} flex="1 1 min(100%, 144px)" style={{ display: 'flex', minWidth: 0 }}>
           <MetricCard item={item} />
         </Col>
       ))}
@@ -53,7 +53,7 @@ export function MetricStrip(input: { readonly items: readonly MetricItem[]; read
 function MetricCard(input: { readonly item: MetricItem }): ReactNode {
   if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} />;
   return (
-    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ width: '100%', borderTop: `2px solid ${toneColor(input.item.tone)}` }}>
+    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ width: '100%', borderTop: metricBorder(input.item) }}>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
       <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
       {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
@@ -65,7 +65,7 @@ function MetricButton({ item, action }: { readonly item: MetricItem; readonly ac
   return (
     <Button block aria-pressed={action.isActive} onClick={action.select} style={{
       display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: space[2],
-      borderTop: `2px solid ${toneColor(item.tone)}`,
+      borderTop: metricBorder(item),
       background: action.isActive ? brand[100] : bg.surface,
       borderInlineColor: action.isActive ? brand[600] : border, borderBottomColor: action.isActive ? brand[600] : border,
     }}>
@@ -299,8 +299,13 @@ function rateTone(rate: number): string {
   return statusColor.danger.text;
 }
 
+function metricBorder(item: MetricItem): string {
+  const hasAccent = item.tone !== undefined && item.tone !== 'neutral' && item.value !== 0;
+  return `2px solid ${hasAccent ? toneColor(item.tone) : border}`;
+}
+
 function metricValueStyle(): CSSProperties {
-  return { fontSize: fontSize.page, color: text.primary, fontVariantNumeric: 'tabular-nums' };
+  return { fontSize: fontSize.metric, lineHeight: 1.25, color: text.primary, fontVariantNumeric: 'tabular-nums' };
 }
 
 function barLineStyle(): CSSProperties {
