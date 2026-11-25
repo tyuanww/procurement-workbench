@@ -36,12 +36,13 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await progressStages.getByRole('button', { name: /^待建批次 /, pressed: true }).waitFor();
   assert.equal(new URL(manager.url()).searchParams.get('drill'), 'stage:no_batch');
   await select(stay, manager, '15+ 天');
-  await filters.getByText('15+ 天', { exact: true }).waitFor();
   await manager.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden' });
+  await filters.getByTitle('15+ 天', { exact: true }).waitFor();
   const selected = new URL(manager.url()).searchParams;
   assert.equal(selected.get('stay'), '15+');
   assert.equal(selected.get('drill'), 'stage:no_batch');
   const clear = filters.getByRole('button', { name: '清除下钻' });
+  await manager.bringToFront();
   await clear.focus();
   await manager.keyboard.press('Enter');
   await clear.and(manager.locator('[aria-disabled="true"]')).waitFor();
