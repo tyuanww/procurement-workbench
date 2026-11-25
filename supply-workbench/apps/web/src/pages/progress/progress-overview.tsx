@@ -14,7 +14,7 @@ const STAGE_COLOR: Partial<Record<ProgressStageCount['key'], string>> = {
   partially_received: '#e87ba4',
 };
 const percent = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 });
-const stayOptions = [{ value: '', label: '全部停留天数' }, ...PROGRESS_STAYS.map(({ bucket, label }) => ({ value: bucket, label }))];
+const stayOptions = [{ value: '', label: '全部停留' }, ...PROGRESS_STAYS.map(({ bucket, label }) => ({ value: bucket, label }))];
 
 export function ProgressFilters({ filters, lines, oa, stay, drill, overdue, onOa, onStay, onDrill }: {
   readonly filters: ReactNode;

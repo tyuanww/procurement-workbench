@@ -40,7 +40,7 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await clear.press('Enter');
   await manager.waitForURL((url) => !url.searchParams.has('drill') && url.searchParams.get('stay') === '15+');
   assert.equal(await clear.evaluate((button) => button === document.activeElement), true);
-  await select(stay, manager, '全部停留天数');
+  await select(stay, manager, '全部停留');
   await finished.waitFor();
   await select(manager.getByRole('combobox', { name: '店铺', exact: true }), manager, otherStoreName);
   await current.getByText('所选范围没有进行中的成品订单行。', { exact: true }).waitFor();
