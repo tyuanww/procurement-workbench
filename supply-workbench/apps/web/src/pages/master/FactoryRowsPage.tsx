@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Pagination, Skeleton, Space } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { listResponseSchema, type ListResponse } from '@sw/contracts';
@@ -32,7 +33,7 @@ export function FactoryRowsPage<T>({ title, read, disabled = false, controls, ch
   const { current, paging, page, changePage } = useFactoryRows(read);
   const meta = current?.kind === 'ready' ? { meta: `共 ${current.data.page.total} 条` } : {};
   return (
-    <SectionGroup title={title} {...meta}>
+    <SectionGroup title={title} {...meta} action={<ProcurementCutoff />}>
       {controls}
       <div aria-busy={current === null}>
         {renderRows({ current, title, children, retry: () => changePage(page) })}

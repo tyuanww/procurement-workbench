@@ -42,13 +42,16 @@ try {
     await page.waitForURL(origin + '/settings');
     await page.getByRole('heading', { name: '设置', exact: true }).waitFor();
     const header = page.getByRole('banner');
-    await header.getByText('SHINEMAGE 供应链工作台', { exact: true }).waitFor();
+    const breadcrumb = header.getByRole('navigation', { name: '当前位置' });
+    await breadcrumb.getByText('系统设置', { exact: true }).waitFor();
+    await breadcrumb.getByText('用户', { exact: true }).waitFor();
     assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
     const tabs = page.getByRole('tablist', { name: '设置内容' });
     assert.equal(await tabs.getByRole('tab', { name: '用户', exact: true }).getAttribute('aria-selected'), 'true');
     await tabs.getByRole('tab', { name: '用户', exact: true }).press('ArrowRight');
     await page.keyboard.press('Enter');
     await page.getByRole('tabpanel', { name: /阈值$/ }).getByRole('heading', { name: '提醒阈值' }).waitFor();
+    await breadcrumb.getByText('阈值', { exact: true }).waitFor();
     await page.reload();
     await page.getByRole('tabpanel', { name: '阈值', exact: true }).waitFor();
     await page.goto(origin + '/missing-page-smoke');

@@ -120,6 +120,7 @@ export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayRespon
     factories: z.array(todayFactory),
     followUpCounts: optional(strictObject({ due: z.int().nonnegative(), scheduled: z.int().nonnegative() })),
     chaseCounts: optional(strictObject({ all: z.int().nonnegative(), filtered: z.int().nonnegative() })),
+    internalNoteCount: optional(z.int().nonnegative()),
     chaseItemIds: optional(z.array(z.string())),
   }),
 });
@@ -136,18 +137,22 @@ const todayQuery = strictObject({
 });
 
 export const TodayQuerySchema: z.ZodType<TodayQuery> = todayQuery;
+export const TodayWorkFilterSchema = z.enum(['factory_chase', 'internal_note']);
+export type TodayWorkFilter = z.infer<typeof TodayWorkFilterSchema>;
 export const TodayPageQuerySchema: z.ZodType<TodayPageQuery> = todayQuery.extend({
   page: strictObject({
     number: z.coerce.number().int().positive().default(1),
     size: z.coerce.number().int().min(1).max(100).default(50),
   }),
   sort: todaySort,
+  work: optional(TodayWorkFilterSchema),
   focusId: optional(z.string().min(1)),
 });
 
 export const TodayChaseQuerySchema: z.ZodType<TodayChaseQuery> = strictObject({
   reasons: todayQuery.shape.reasons,
   sort: todaySort,
+  work: optional(TodayWorkFilterSchema),
   factoryId: optional(z.string().trim().min(1)),
   itemId: optional(z.string().min(1)),
 });
