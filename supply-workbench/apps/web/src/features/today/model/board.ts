@@ -38,7 +38,7 @@ function groupsOf(input: {
 }): BoardGroup[] {
   if (input.isBulk && (input.group === 'waiting' || input.group === 'reason' || input.group === 'date')) {
     if (input.items.length === 0) return [];
-    return [decorate({ key: 'bulk', name: '大批优先', items: input.items, buyerName: input.buyerName, showFactory: true })];
+    return [decorate({ key: 'bulk', name: '大批优先', items: input.items, buyerName: input.buyerName })];
   }
   if (input.group === 'waiting') return waitingGroups(input.items, input.buyerName);
   if (input.group === 'reason') return reasonGroups(input);
@@ -102,13 +102,13 @@ function datedGroup(input: { readonly key: string; readonly buckets: ReadonlyMap
   return [decorate({ key: input.key, name: input.key, items: members, buyerName: input.buyerName })];
 }
 
-function decorate(input: { readonly key: string; readonly name: string; readonly items: readonly BoardItem[]; readonly buyerName: string; readonly showFactory?: boolean }): BoardGroup {
+function decorate(input: { readonly key: string; readonly name: string; readonly items: readonly BoardItem[]; readonly buyerName: string }): BoardGroup {
   return {
     key: input.key,
     name: input.name,
     counts: countsOf(input.items),
-    nudgeText: input.showFactory === true ? '' : nudgeOf({ items: input.items, buyerName: input.buyerName }),
-    rows: input.items.map((item) => ({ id: item.id, face: { ...faceOf(item), ...(input.showFactory === true ? { factory: item.waitingName } : {}) }, actions: actionsOf(item) })),
+    nudgeText: input.key === 'bulk' ? '' : nudgeOf({ items: input.items, buyerName: input.buyerName }),
+    rows: input.items.map((item) => ({ id: item.id, face: faceOf(item), actions: actionsOf(item) })),
   };
 }
 

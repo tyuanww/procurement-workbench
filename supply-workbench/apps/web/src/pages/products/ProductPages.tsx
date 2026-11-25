@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import {
@@ -10,6 +11,7 @@ import { Button, Empty, Flex, Form, Input, Pagination, Result, Skeleton, Typogra
 import { apiGetWithSignal } from '../../shared/api/client.js';
 import { useActorRoles, useCan } from '../../shared/actor.js';
 import { canMaintain } from '../../features/product-archive/index.js';
+import { detailReturnState, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { PageHeader, surfaceStyle, WorkbenchPage } from '../../shared/ui/page.js';
 import { ViewSwitch } from '../../shared/ui/view-switch.js';
@@ -43,9 +45,10 @@ export function ProductListPage() {
   };
   return (
     <WorkbenchPage title="产品档案">
-      <div style={{ ...surfaceStyle(), padding: space[2], marginBottom: space[3] }}>
+      <Flex wrap align="center" gap={space[2]} style={{ ...surfaceStyle(), padding: space[2], marginBottom: space[3] }}>
         <ProductSearch query={query} onSearch={searchFor} />
-      </div>
+        <ProcurementCutoff />
+      </Flex>
       <section ref={results} tabIndex={-1} aria-label="产品查询结果" style={{ scrollMarginTop: topBar + space[2] }}>
         <ProductCatalog key={JSON.stringify([query, page])} query={query} page={page} view={view}
           onClear={() => searchFor('')} onView={(value) => update({ view: value })} onPage={changePage} />
@@ -86,6 +89,7 @@ function productPageOf(value: string | null): number {
 function ProductCatalog(props: CatalogProps) {
   const [state, setState] = useState<ProductListLoad>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  useDetailReturnFocus(state.kind === 'ready');
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams();
@@ -140,7 +144,7 @@ export function ProductDetailPage() {
 }
 
 function ProductDetail({ id }: { readonly id: string }) {
-  const locationState: unknown = useLocation().state;
+  const { pathname, state: locationState } = useLocation();
   const [search, setSearch] = useSearchParams();
   const setParams = (next: Parameters<typeof setSearch>[0]) => setSearch(next, { state: locationState });
   const [overview, setOverview] = useState<ProductOverview | null>(null);
@@ -160,7 +164,7 @@ function ProductDetail({ id }: { readonly id: string }) {
   }, [id, attempt]);
   return (
     <section style={{ maxWidth: 1440 }}>
-      <Typography.Paragraph><Link to={{ pathname: '/products', search: catalogSearchOf(locationState) }}>返回产品档案</Link></Typography.Paragraph>
+      <ProductCatalogReturn detailPath={pathname} locationState={locationState} />
       <PageHeader title={productHeading(overview)} showIdentity action={canEdit ? <Button onClick={() => setEdit(true)}>编辑</Button> : null} />
       {hasOverviewError ? <Result status="error" title="产品详情没有读出来。" extra={<Button type="primary" onClick={() => {
         setOverviewError(false);
@@ -173,6 +177,12 @@ function ProductDetail({ id }: { readonly id: string }) {
       {canEdit ? <ProductEditDrawer id={id} overview={overview} edited={isEdited} setEdited={setEdited} setOverview={setOverview} setMessage={setMessage} isOpen={readProductEdit(search.toString())} message={message} onClose={() => setEdit(false)} /> : null}
     </section>
   );
+}
+
+function ProductCatalogReturn({ detailPath, locationState }: { readonly detailPath: string; readonly locationState: unknown }) {
+  const search = catalogSearchOf(locationState);
+  return <Typography.Paragraph><Link to={{ pathname: '/products', search }}
+    state={detailReturnState(locationState, detailPath)}>返回产品档案</Link></Typography.Paragraph>;
 }
 
 function catalogSearchOf(state: unknown): string {

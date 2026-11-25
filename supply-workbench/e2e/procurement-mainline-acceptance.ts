@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarLink } from './sidebar.ts';
 
@@ -17,6 +18,40 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   const current = manager.getByRole('region', { name: '当前进度表', exact: true });
   const finished = current.getByRole('link', { name: finishedName, exact: true });
   await select(manager.getByRole('combobox', { name: '店铺', exact: true }), manager, storeName);
+  await finished.waitFor();
+  const breadcrumb = manager.locator('header').getByRole('navigation', { name: '当前位置' });
+  await breadcrumb.getByText('管理店铺', { exact: true }).waitFor();
+  await breadcrumb.getByText('当前进度', { exact: true }).waitFor();
+  const filters = manager.getByRole('group', { name: '当前进度筛选' });
+  const oa = await filters.getByRole('combobox', { name: 'OA 需求' }).boundingBox();
+  const stay = filters.getByRole('combobox', { name: '停留天数' });
+  const days = await stay.boundingBox();
+  const table = await current.getByRole('table').last().boundingBox();
+  const viewport = manager.viewportSize();
+  assert.ok(oa && days && table && viewport);
+  assert.ok(days.x > oa.x && table.y > days.y, 'OA、停留天数和表格的位置应从筛选条到结果');
+  assert.ok(table.x + table.width <= viewport.width, '当前进度表格应容纳在桌面可视范围');
+  assert.ok(table.y < viewport.height, '桌面首屏应能看到订单清单');
+  const progressStages = manager.getByRole('group', { name: '按进度阶段筛选' });
+  await progressStages.getByRole('button', { name: /^待建批次 / }).click();
+  await progressStages.getByRole('button', { name: /^待建批次 /, pressed: true }).waitFor();
+  assert.equal(new URL(manager.url()).searchParams.get('drill'), 'stage:no_batch');
+  await select(stay, manager, '15+ 天');
+  await manager.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden' });
+  await filters.getByTitle('15+ 天', { exact: true }).waitFor();
+  const selected = new URL(manager.url()).searchParams;
+  assert.equal(selected.get('stay'), '15+');
+  assert.equal(selected.get('drill'), 'stage:no_batch');
+  const clear = filters.getByRole('button', { name: '清除下钻' });
+  await manager.bringToFront();
+  await clear.focus();
+  await manager.keyboard.press('Enter');
+  await clear.and(manager.locator('[aria-disabled="true"]')).waitFor();
+  const cleared = new URL(manager.url()).searchParams;
+  assert.equal(cleared.get('drill'), null);
+  assert.equal(cleared.get('stay'), '15+');
+  assert.equal(await clear.evaluate((button) => button === document.activeElement), true);
+  await select(stay, manager, '全部停留');
   await finished.waitFor();
   await select(manager.getByRole('combobox', { name: '店铺', exact: true }), manager, otherStoreName);
   await current.getByText('所选范围没有进行中的成品订单行。', { exact: true }).waitFor();
@@ -248,6 +283,168 @@ export async function checkManagementMeeting({ page, origin, out, materialPo }: 
   return { store, weekStart, previousWeek, materialPo, ordered: 200_000, sourceReported: 158_000, sourceReportedGap: 42_000, decision, currentCompletion: evidence, frozenReport: new URL(frozenReport).pathname };
 }
 
+export async function checkDirectorHome({ page, buyer, lead, origin, out, materialPo, weekStart, warehouse }: Scenario & {
+  readonly page: Page;
+  readonly buyer: Page;
+  readonly lead: Page;
+  readonly materialPo: string;
+  readonly weekStart: string;
+  readonly warehouse: string;
+}) {
+  const params = new URLSearchParams({ store, weekStart });
+  const source = await page.request.get(new URL(`/api/v1/dashboard/management-meeting?${params}`, origin).href);
+  assert.ok(source.ok());
+  const meeting: { readonly materials: readonly { readonly poRef: string | null; readonly materialLineId: string }[] } = await source.json();
+  const material = meeting.materials.find(({ poRef }) => poRef === materialPo);
+  assert.ok(material);
+  const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+  const seeded = await buyer.request.post(new URL(`/api/v1/lines/${material.materialLineId}/batches`, origin).href, {
+    data: { plannedQty: 50, receiverPartyId: warehouse, dateBuyerConfirmed: yesterday },
+  });
+  assert.ok(seeded.ok(), `总监首页合成逾期批次 HTTP ${seeded.status()}: ${await seeded.text()}`);
+
+  const home = new URL('/home', origin).href;
+  await page.goto(home);
+  await page.getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u).waitFor();
+  assert.equal(await page.getByRole('banner').getByText(/采购订单总表|数据截止/u).count(), 0);
+  await checkDirectorRegister({ page, materialPo });
+  await checkDirectorProjects(page);
+  await checkDirectorViewport(page);
+  await page.screenshot({ path: join(out, 'director-home.png'), animations: 'disabled' });
+  const scope = page.getByRole('group', { name: '店铺范围' });
+  await scope.getByRole('button', { name: '合成新品牌' }).click();
+  await page.getByRole('region', { name: '新品开发进度' }).getByRole('button', { name: '合成新品牌试产项目' }).waitFor();
+  await page.getByRole('group', { name: '事项概览' }).getByRole('button', { name: /进行中事项.*0 *件/ }).waitFor();
+  await scope.getByRole('button', { name: otherStoreName }).click();
+  await page.getByText('当前店铺没有新品排期记录', { exact: true }).waitFor();
+  await scope.getByRole('button', { name: storeName }).click();
+  await page.getByRole('region', { name: '员工负责事项' }).getByRole('button', { name: /第 20 名/ }).waitFor();
+  await lead.goto(home);
+  await lead.getByRole('region', { name: '新品开发进度' }).waitFor();
+  assert.equal((await buyer.request.get(new URL('/api/v1/dashboard/director/schedule', origin).href)).status(), 403);
+  await page.setViewportSize({ width: 320, height: 780 });
+  await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  const projectFocus = await page.getByRole('region', { name: '新品开发进度' }).getByText(/^先跟这件/u).boundingBox();
+  assert.ok(projectFocus && projectFocus.y >= 0 && projectFocus.y + projectFocus.height <= 780);
+  await page.screenshot({ path: join(out, 'director-home-phone.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  return { home: '/home', projectRankDrill: true, newBrand: true, phoneWidth: 320, emptyStore: otherStoreName };
+
+}
+
+async function checkDirectorRegister({ page, materialPo }: { readonly page: Page; readonly materialPo: string }) {
+  const features = page.getByRole('navigation', { name: '可用功能' });
+  await features.getByRole('link', { name: '跟进中心', exact: true }).waitFor();
+  assert.equal(await features.getByRole('link', { name: /导入/ }).count(), 0);
+  const metrics = page.getByRole('group', { name: '事项概览' });
+  const risk = metrics.getByRole('button', { name: /^交期风险/ });
+  const position = await risk.boundingBox();
+  assert.ok(position && position.y < 500, '总监在首屏看到交期风险');
+  await risk.click();
+  const table = page.getByRole('region', { name: '事项跟踪明细' });
+  const originalCount = await table.getByRole('status').innerText();
+  const search = table.getByRole('textbox', { name: '搜索事项' });
+  assert.equal(await search.count(), 0);
+  const scope = table.getByRole('combobox', { name: '事项范围' });
+  const before = await scope.boundingBox();
+  await table.getByRole('button', { name: '展开事项搜索' }).click();
+  await search.and(page.locator(':focus')).waitFor();
+  await page.waitForFunction((x) => (document.querySelector('[aria-label="事项范围"]')?.getBoundingClientRect().x ?? Infinity) < x - 16, before?.x ?? 0);
+  await search.fill(materialPo);
+  const first = table.getByRole('row').filter({ hasText: materialPo }).first();
+  await first.getByText('已逾期', { exact: true }).waitFor();
+  const product = first.getByRole('button').first();
+  await product.click();
+  const drawer = page.getByRole('dialog');
+  await drawer.getByText('采购负责人', { exact: true }).waitFor();
+  await drawer.getByRole('link', { name: '打开订单跟进记录' }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await product.and(page.locator(':focus')).waitFor();
+  await search.fill('不存在的合成订单');
+  await table.getByText('当前条件没有匹配事项', { exact: true }).waitFor();
+  await search.press('Escape');
+  await table.getByRole('button', { name: '展开事项搜索' }).and(page.locator(':focus')).waitFor();
+  assert.equal(await search.count(), 0);
+  await table.getByRole('status').and(page.getByText(originalCount, { exact: true })).waitFor();
+  await table.getByRole('columnheader', { name: /下一到货日/ }).click();
+  await table.locator('th[aria-sort="ascending"]').waitFor();
+  await risk.click();
+}
+
+async function checkDirectorProjects(page: Page) {
+  const search = page.getByRole('button', { name: '搜索单号、品名、供应商' });
+  const account = page.locator('header button[aria-expanded]').last();
+  const left = await search.boundingBox();
+  const right = await account.boundingBox();
+  assert.ok(left && right && right.x >= left.x + left.width);
+  const ranking = page.getByRole('region', { name: '员工负责事项' });
+  const first = ranking.getByRole('button', { name: '第 1 名 · 项目经理 01 · 3 个项目' });
+  await first.click();
+  const list = page.getByRole('dialog', { name: '项目经理 01 · 负责项目' });
+  await list.getByText('共 3 个项目', { exact: true }).waitFor();
+  await list.getByRole('textbox', { name: '搜索负责项目' }).fill('保湿');
+  await list.getByText('共 1 个项目', { exact: true }).waitFor();
+  await list.getByRole('button', { name: '合成保湿面膜' }).click();
+  const detail = page.getByRole('dialog', { name: '合成保湿面膜' });
+  await detail.getByText('BOM表搭建情况').waitFor();
+  await detail.getByText('核对样品反馈').waitFor();
+  await page.keyboard.press('Escape');
+  await detail.waitFor({ state: 'hidden' });
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'hidden' });
+  await ranking.getByRole('button', { name: /第 20 名/u }).click();
+  await page.getByRole('dialog').getByText('共 1 个项目', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+}
+
+async function checkDirectorViewport(page: Page) {
+  await page.getByRole('group', { name: '事项概览' }).getByRole('button', { name: /^进行中事项/ }).click();
+  const shops = page.getByRole('group', { name: '店铺范围' });
+  const cutoff = shops.getByText(/^\*数据截止/u);
+  const lastBrand = shops.getByRole('button', { name: '未分店铺' });
+  const dev = page.getByRole('region', { name: '新品开发进度' });
+  const rank = page.getByRole('region', { name: '员工负责事项' });
+  const shortcuts = page.getByRole('navigation', { name: '可用功能' });
+  const details = page.getByRole('region', { name: '事项跟踪明细' });
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 1366, height: 768 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      window.scrollTo(0, 0);
+    });
+    const [brand, date, title, caption] = await Promise.all([
+      lastBrand.boundingBox(), cutoff.boundingBox(),
+      rank.getByText('员工负责事项', { exact: true }).boundingBox(),
+      rank.getByText('按项目对接人负责的新品数量排行', { exact: true }).boundingBox(),
+    ]);
+    assert.ok(date && brand && date.x >= brand.x + brand.width && date.y < brand.y + brand.height && brand.y < date.y + date.height,
+      `店铺筛选和截止日期应同行。宽度 ${viewport.width}，位置 ${JSON.stringify({ brand, date })}`);
+    assert.ok(title && caption && caption.x >= title.x + title.width && caption.y < title.y + title.height && title.y < caption.y + caption.height,
+      `排行口径应在标题右侧。宽度 ${viewport.width}，位置 ${JSON.stringify({ title, caption })}`);
+    const [navigation, projects, tracking, staff] = await Promise.all([
+      shortcuts.boundingBox(),
+      ...[dev, details, rank].map((panel) => panel.locator('.ant-card').first().boundingBox()),
+    ]);
+    assert.ok(navigation && projects && tracking && staff);
+    assert.ok(Math.abs(navigation.y - projects.y) < 1, '首页两列顶部对齐');
+    assert.ok(Math.abs(tracking.y + tracking.height - staff.y - staff.height) < 1, '首页两列底部对齐');
+    assert.ok(tracking.y + tracking.height <= viewport.height && staff.y + staff.height <= viewport.height, '首页卡片在桌面首屏完整可见');
+  }
+  await dev.getByRole('button', { name: '月份待确认 · 2 个产品' }).click();
+  const drawer = page.getByRole('dialog', { name: '月份待确认' });
+  await drawer.getByText('共 2 个项目').waitFor();
+  await drawer.getByRole('button', { name: 'BOM 表 · 已完成 2 个' }).click();
+  await drawer.getByRole('button', { name: '合成排期产品 24' }).click();
+  await page.getByRole('dialog', { name: '合成排期产品 24' }).getByText('待分配', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: '合成排期产品 24' }).waitFor({ state: 'hidden' });
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+}
+
 async function seedDevelopment(page: Page, origin: URL, resource: 'projects' | 'nodes', data: object) {
   const response = await page.request.post(new URL('/api/v1/product-development/' + resource, origin).href, { data });
   assert.ok(response.ok(), '合成新品 ' + resource + ' HTTP ' + response.status());
@@ -306,11 +503,13 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   assert.equal(await row.getByText(oldNote, { exact: true }).count(), 0);
 
   await page.setViewportSize({ width: 320, height: 800 });
-  await row.getByRole('button', { name: '展开行', exact: true }).click();
+  const mobileProduct = page.getByRole('link', { name: `${finishedPo} ${finishedName}`, exact: true });
+  const mobileRow = current.getByRole('row').filter({ has: mobileProduct });
+  await mobileRow.getByRole('button', { name: '展开行', exact: true }).click();
   await current.getByText(newNote, { exact: true }).scrollIntoViewIfNeeded();
   assert.equal(await current.getByRole('textbox').count(), 0);
   await page.screenshot({ path: join(out, 'order-line-note-mobile.png'), animations: 'disabled' });
-  await product.click();
+  await mobileProduct.click();
   await page.waitForURL(order.href);
   await note.getByText(newNote, { exact: true }).waitFor();
   await textbox.fill('这条草稿属于成品');

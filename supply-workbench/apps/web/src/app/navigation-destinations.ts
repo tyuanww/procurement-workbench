@@ -24,7 +24,7 @@ export const destinations: Partial<Record<NavPath, readonly NavDestination[]>> =
     { to: '/master?tab=multi', label: '一号多名', gate: 'review' },
     { to: '/master?tab=owner-map', label: '负责人映射', gate: 'review' },
     { to: '/master?tab=factory-link', label: '工厂待处理', gate: 'review', aliases: ['/master?tab=unlinked'] },
-    { to: '/master?tab=factory-link&scope=active', label: '当前关联诊断', gate: 'review' },
-    { to: '/master?tab=factory-link&scope=historical', label: '历史关联诊断', gate: 'review' },
+    { to: '/master?tab=factory-link&scope=active', label: '当前关联诊断', gate: 'review', aliases: ['/master?tab=unlinked&scope=active'] },
+    { to: '/master?tab=factory-link&scope=historical', label: '历史关联诊断', gate: 'review', aliases: ['/master?tab=unlinked&scope=historical'] },
   ],
 };

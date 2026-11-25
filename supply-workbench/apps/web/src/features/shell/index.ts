@@ -10,13 +10,10 @@ export type { ShellLoadState } from './use-shell.js';
 export type {
   AccountEntry,
   BadgeMark,
-  FreshnessChip,
-  FreshnessFacts,
   HomePath,
   NavPath,
   NavRow,
   QueueFacts,
   ShellView,
-  SourceFact,
   TodayFacts,
 } from './model/shell.js';

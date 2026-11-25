@@ -2,9 +2,12 @@ import {
   BATCH_STATUSES,
   currentlyOverdue,
   diffDays,
+  hasUnshippedBatch,
+  isBatchNoteMissing,
   isCurrentlyOverdue,
   isOpenBatch,
   localDate,
+  needsBatchFulfillmentReview,
   stuckBucket,
   stuckDistribution,
   type BatchStatus,
@@ -12,10 +15,9 @@ import {
   type KpiInput,
   type LocalDate,
   type StuckCause,
-  type WaitingOnKind,
 } from '@sw/domain';
 import type { GetStuckBatches, GetStuckBatchesDeps } from '../boundary.js';
-import type { PerformanceFacts } from '../../ports/performance-read-model.js';
+import type { BatchDeliveryFacts, PerformanceFacts } from '../../ports/performance-read-model.js';
 import type { NamedPerson, StuckBuckets, StuckDashboard, StuckItem, StuckQuery } from '../views.js';
 import { loadScoped } from './scope.js';
 import { authorize } from '../../shared/authorize.js';
@@ -38,7 +40,7 @@ export const makeGetStuckBatches =
   async (input, actor) => {
     authorize(actor, 'dashboard.read');
     // K4、K9 看今天仍开放的批次，不按期间裁。期间进供应商和采购负荷。线会裁。
-    return dashboardOf(await loadScoped(deps.performance, input), input);
+    return dashboardOf(await loadScoped(deps.performance, { ...input, includeBatchDelivery: true }), input);
   };
 
 function dashboardOf(facts: PerformanceFacts, query: StuckQuery): StuckDashboard {
@@ -130,7 +132,7 @@ function itemOf(batch: KpiBatch, facts: PerformanceFacts): StuckItem[] {
     daysInStage: days,
     poRaw: label?.poRaw ?? null,
     nameRaw: label?.nameRaw ?? null,
-    waitingOn: waitingOf(batch, facts.partyNames),
+    ...itemDelivery(batch, facts),
     buyer: person(batch.buyerUserId, facts.buyerNames),
     dateBuyerConfirmed: batch.dateBuyerConfirmed,
     factoryLinked: onOrderLine(orderLineId, facts.linkedFactoryOrderLineIds),
@@ -139,6 +141,14 @@ function itemOf(batch: KpiBatch, facts: PerformanceFacts): StuckItem[] {
     supplierAliasPending: onOrderLine(orderLineId, facts.pendingSupplierAliasOrderLineIds),
     bomMissing: onOrderLine(orderLineId, facts.bomMissingOrderLineIds),
   }];
+}
+
+function itemDelivery(batch: KpiBatch, facts: PerformanceFacts): Pick<StuckItem, 'waitingOn' | 'fulfillment'> {
+  const delivery = facts.batchDelivery?.[batch.id];
+  return {
+    waitingOn: waitingOf({ batch, delivery, names: facts.partyNames }),
+    ...(delivery === undefined ? {} : { fulfillment: delivery.fulfillment }),
+  };
 }
 
 function onOrderLine(orderLineId: string | null, ids: ReadonlySet<string>): boolean {
@@ -151,19 +161,30 @@ function stageDays(batch: KpiBatch, today: LocalDate): number | null {
   return diffDays(today, localDate(day));
 }
 
-function waitingOf(batch: KpiBatch, names: Readonly<Record<string, string>>): StuckItem['waitingOn'] {
-  if (batch.status === 'awaiting_date') return { kind: 'internal', partyId: null, displayName: null };
-  if (waitsOnReceiver(batch)) return partyWaiting({ kind: 'receiver', partyId: batch.receiverPartyId, names });
-  return partyWaiting({ kind: 'supplier', partyId: batch.supplierPartyId, names });
+function waitingOf({ batch, delivery, names }: {
+  readonly batch: KpiBatch;
+  readonly delivery: BatchDeliveryFacts | undefined;
+  readonly names: Readonly<Record<string, string>>;
+}): StuckItem['waitingOn'] {
+  const internal = { kind: 'internal', partyId: null, displayName: null } satisfies StuckItem['waitingOn'];
+  if (delivery === undefined) return internal;
+  const { fulfillment } = delivery;
+  if (hasUnshippedBatch({ ...delivery, status: batch.status })) {
+    return {
+      kind: 'supplier', partyId: batch.supplierPartyId, displayName: partyName(names, batch.supplierPartyId),
+      reason: batch.dateBuyerConfirmed === null ? 'supplier_date' : 'supplier_shipment',
+    };
+  }
+  if (isBatchNoteMissing({ status: batch.status, noteStatus: delivery.noteStatus })) return { ...internal, reason: 'internal_note' };
+  if (needsBatchFulfillmentReview(fulfillment)) return { ...internal, reason: 'internal_review' };
+  if (fulfillment.inTransitQty !== null && fulfillment.inTransitQty > 0) {
+    return { kind: 'receiver', partyId: batch.receiverPartyId, displayName: partyName(names, batch.receiverPartyId), reason: 'receiver_arrival' };
+  }
+  return internal;
 }
 
-function waitsOnReceiver(batch: KpiBatch): boolean {
-  if (batch.status === 'shipped' || batch.status === 'partially_received') return true;
-  return batch.shipments.some((row) => row.voidedAt === null);
-}
-
-function partyWaiting({ kind, partyId, names }: { readonly kind: WaitingOnKind; readonly partyId: string | null; readonly names: Readonly<Record<string, string>> }): StuckItem['waitingOn'] {
-  return { kind, partyId, displayName: partyId === null ? null : nameOf(names, partyId) };
+function partyName(names: Readonly<Record<string, string>>, id: string | null): string | null {
+  return id === null ? null : names[id]?.trim() || null;
 }
 
 function person(id: string | null, names: Readonly<Record<string, string>>): NamedPerson | null {
