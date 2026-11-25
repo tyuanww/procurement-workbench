@@ -24,6 +24,10 @@ export function todayMotionCss(): string {
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     .today-metric-summary { display: none; }
+    @media (min-width: 980px) {
+      .today-row.ant-flex-vertical { flex-direction: row; justify-content: space-between; align-items: center; }
+      .today-row > .today-touch { flex-shrink: 0; }
+    }
     @media (max-width: 480px) {
       .today-metric-cards { display: none; }
       .today-metric-summary { display: flex; flex-wrap: wrap; gap: ${tiny}px ${small}px; }
@@ -40,7 +44,7 @@ export function todayMotionCss(): string {
 }
 
 export function reasonStyle(): CSSProperties {
-  return { color: text.primary, fontSize: fontSize.section, fontWeight: 600 };
+  return { color: text.secondary, fontSize: fontSize.table };
 }
 
 export function overdueStyle(tone: RowFace['overdueTone']): CSSProperties {
@@ -48,7 +52,7 @@ export function overdueStyle(tone: RowFace['overdueTone']): CSSProperties {
     return {
       color: statusColor.danger.text,
       background: statusColor.danger.bg,
-      fontSize: fontSize.section,
+      fontSize: fontSize.meta,
       fontWeight: 600,
       padding: `0 ${tiny}px`,
     };

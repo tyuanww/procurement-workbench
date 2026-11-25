@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
+import { todayArrivalsPath } from '../../../features/today/index.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
   const isRouted = useInRouterContext();
@@ -9,8 +10,9 @@ export function LineDetailLink(props: { readonly href: string; readonly search: 
 
 export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } };
 
-export function lineDetailBack(input: { readonly progress: string | null; readonly state: unknown; readonly lineId: string }): DetailBack | null {
+export function lineDetailBack(input: { readonly progress: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
   if (input.progress !== null) return { to: `/progress?${new URLSearchParams(input.progress).toString()}`, label: '返回管理店铺' };
+  if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
   const to = lineDeskAddress(input.state);
   return to === null ? null : { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
 }

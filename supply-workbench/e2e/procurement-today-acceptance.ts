@@ -82,16 +82,23 @@ export async function checkChaseToday({ page, origin, out }: {
   await recordShipment(page, origin, 25_000);
   await page.reload();
   await order('HZ09-0501').getByText(/未发\s+5,000\s+件/).waitFor();
+  await order('HZ09-0501').getByText(/在途待收\s+25,000\s+件/).waitFor();
   assert.match((await sampleRows.first().innerText()), /HZ09-0001/);
-  const memos = page.locator('section').filter({ has: page.getByRole('heading', { name: '到仓备忘录', exact: true }) }).last();
+  await checkBatchProgressChart(page, order('HZ09-0501'), out);
+  const memos = arrivalMemos(page);
+  await page.getByRole('navigation', { name: '今日快捷入口' }).getByRole('link', { name: /在途待收/ }).click();
   await memos.getByText(/待收 25,000 件/).waitFor();
+  await page.goBack();
   const scheduled = await recordFollowUp(page, order('HZ09-0501'), '2099-01-11T10:00', '明早十点再联系供应商');
   assert.equal(scheduled.nextFollowUpAt, '2099-01-11T02:00:00.000Z');
   await page.reload();
   await order('HZ09-0501').getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
   await recordShipment(page, origin, 5_000);
   await page.reload();
+  await page.goto(new URL('/today?view=arrivals', origin).href);
   await memos.getByText(/待收 30,000 件/).waitFor();
+  await page.goBack();
+  await page.getByRole('region', { name: '行动板待办' }).waitFor();
   assert.equal(await order('HZ09-0501').count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: /筛选、指标与复制催单/ }).click();
@@ -105,6 +112,31 @@ export async function checkChaseToday({ page, origin, out }: {
   return { total: 501, lastPage: 11, allCopied: 501, factoryCopied: 500, oldDrawerLinkRestored: true, bulkFirst: 'HZ09-0501', batchCopied: 1, remainingAfterPartial: 5_000, inTransitAtEnd: 30_000,
     followUp: await checkFollowUpReminder({ page, origin, row: order('HZ09-0501'), out }),
   };
+}
+
+function arrivalMemos(page: Page): Locator {
+  return page.locator('section').filter({ has: page.getByRole('heading', { name: '待收批次', exact: true }) }).last();
+}
+
+async function checkBatchProgressChart(page: Page, row: Locator, out: string): Promise<void> {
+  const trigger = row.getByRole('button', { name: /^查看详情 HZ09-0501/ });
+  await trigger.press('Enter');
+  const drawer = page.getByRole('dialog');
+  const quantities = drawer.getByRole('group', { name: '批次交付数量', exact: true });
+  await quantities.getByText('5,000 件', { exact: true }).waitFor();
+  await quantities.getByText('25,000 件', { exact: true }).waitFor();
+  const canvas = drawer.locator('canvas');
+  await canvas.waitFor();
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.ant-drawer')?.querySelector('canvas');
+    const context = canvas?.getContext('2d');
+    return canvas != null && context != null && context.getImageData(0, 0, canvas.width, canvas.height).data
+      .some((value, index) => index % 4 === 3 && value > 0);
+  });
+  await page.screenshot({ path: join(out, 'procurement-today-batch-chart.png'), animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await trigger.and(page.locator(':focus')).waitFor();
 }
 
 async function recordFollowUp(page: Page, row: Locator, time: string, text: string) {
@@ -133,26 +165,27 @@ export async function checkKeyboardReceipt({ page, origin, out }: {
 }) {
   const today = new URL('/today?reasons=follow_up_due', origin);
   const row = page.getByRole('button', { name: /^查看详情 HZ09-0501/ });
-  const memo = page.locator('section').filter({ has: page.getByRole('heading', { name: '到仓备忘录', exact: true }) }).last();
+  const memo = arrivalMemos(page);
   const batchLink = memo.getByRole('link', { name: /HZ09-0501/ });
   const partial = '合成收货单 A · 第一车';
   const remaining = '合成收货单 B · 第二车';
   await page.goto(today.href);
   await row.waitFor();
-  await batchLink.waitFor();
   await recordKeyboardReceipt(page, { before: 30_000, recv: 12_000, evidence: partial });
-  await page.reload();
+  await page.goto(new URL('/today?view=arrivals', origin).href);
   await memo.getByText(/待收 18,000 件 · 实收 12,000 件/).waitFor();
   await batchLink.click();
   await page.getByText('未发 0 件 · 待收 18,000 件 · 实收 12,000 件', { exact: true }).waitFor();
   await page.getByText(/实收登记.*12,000 件.*合成收货单 A/).waitFor();
   await page.screenshot({ path: join(out, 'procurement-partial-receipt.png'), animations: 'disabled' });
+  await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
+  await batchLink.and(page.locator(':focus')).waitFor();
 
   await page.goto(today.href);
   await row.waitFor();
   await recordKeyboardReceipt(page, { before: 18_000, recv: 18_000, evidence: remaining });
-  await page.reload();
-  await page.getByRole('status').filter({ hasText: /共 \d+ 条待办/ }).waitFor();
+  await page.goto(new URL('/today?view=arrivals', origin).href);
+  await page.getByRole('heading', { name: '待收批次', exact: true }).or(page.getByText('当前没有在途待收批次。', { exact: true })).waitFor();
   assert.equal(await batchLink.count(), 0);
   await page.goto(new URL('/lines/hz09-line-501?focusBatch=' + batch, origin).href);
   await page.getByText('未发 0 件 · 待收 0 件 · 实收 30,000 件', { exact: true }).waitFor();

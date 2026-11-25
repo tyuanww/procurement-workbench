@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
+    "@antv/g2": "5.4.8",
     "@sw/contracts": "workspace:*",
     "@sw/domain": "workspace:*",
     "antd": "^6.6.5",

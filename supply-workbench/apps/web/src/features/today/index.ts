@@ -2,7 +2,7 @@ export { nextFocus, shortcutAction } from './model/group.js';
 export { nudgeOf } from './model/nudge.js';
 export { todayBoard } from './model/board.js';
 export { todayInsights, todayPageKpi, type TodayKpiItem, type TodayKpiKey } from './model/insights.js';
-export { groupForView, todayViewFromKey, todayViewOf, type TodayView } from './model/view.js';
+export { groupForView, todayArrivalsPath, todayViewFromKey, todayViewOf, type TodayView } from './model/view.js';
 export { isPlanGroupMode, planBoard, planInsight, planRows, sortPlanItems, type PlanBoard, type PlanBoardGroup, type PlanCount, type PlanGroupMode, type PlanInsight, type PlanLoad, type PlanRow } from './model/plan-board.js';
 export {
   canCancel, canSetStatus, drawerStatusOptions, dueTag, eventHistoryParts, eventPartyText, eventText, factoryText, isWorkItemStatus, isUnassigned, isUrgent,

@@ -19,6 +19,7 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await page.goto(new URL('/today', origin).href);
   await checkActionBoard(page);
   await page.screenshot({ path: join(out, 'closeout-action-board.png'), animations: 'disabled' });
+  await checkArrivals(page);
   await checkDailySchedule(page);
   await page.screenshot({ path: join(out, 'closeout-daily-schedule.png'), animations: 'disabled' });
 
@@ -26,7 +27,7 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await checkProductArchive(page, out);
   await checkProductSearch(page, origin);
   await checkProductPackagingReturn(page, origin);
-  return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次', '到仓待收'], dailySchedule: ['今日', '逾期', '前置阻塞'],
+  return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次'], arrivals: ['待收批次'], dailySchedule: ['今日', '逾期', '前置阻塞'],
     archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'] },
     savedFollowUpView: true };
 }
@@ -76,10 +77,15 @@ async function checkActionBoard(page: Page): Promise<void> {
   await board.getByText('UI-DEMO-001', { exact: false }).first().waitFor();
   await board.getByText('UI-DEMO-002', { exact: false }).first().waitFor();
   await page.locator('#today-pending-batches').getByText('UI-DEMO-003', { exact: false }).first().waitFor();
-  await page.locator('#today-arrival-memos').getByText('UI-DEMO-004', { exact: false }).first().waitFor();
   assert.equal(await board.getByText('UI-DEMO-005', { exact: false }).count(), 0);
   await board.getByRole('button', { name: /筛选、指标与复制催单/ }).click();
   assert.equal(await page.getByRole('button', { name: /复制全部催单/ }).isEnabled(), true);
+}
+
+async function checkArrivals(page: Page): Promise<void> {
+  await (await sidebarLink(page.locator('aside'), '今日事项', '在途待收')).click();
+  await page.getByRole('heading', { name: '待收批次', exact: true }).waitFor();
+  await page.getByText('UI-DEMO-004', { exact: false }).first().waitFor();
 }
 
 async function checkDailySchedule(page: Page): Promise<void> {

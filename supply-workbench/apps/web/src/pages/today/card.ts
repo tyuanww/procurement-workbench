@@ -27,7 +27,7 @@ function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining' 
   return {
     qty: unshippedQty,
     ...(item.reasons.includes('unshipped') ? { remaining: fulfillment } : {}),
-    ...(unshippedQty === 0 && inTransitQty !== null && inTransitQty > 0 && unit !== null ? { inTransit: { qty: inTransitQty, unit } } : {}),
+    ...(inTransitQty !== null && inTransitQty > 0 && unit !== null ? { inTransit: { qty: inTransitQty, unit } } : {}),
   };
 }
 

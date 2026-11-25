@@ -6,7 +6,7 @@ import { useCanWrite } from '../../shared/actor.js';
 import { businessToday, postReceipt, postShipment } from '../../features/follow-up/index.js';
 import {
   readGroup, todayBoard, todayInsights, todayViewOf, withGroup,
-  type BoardItem, type TodayBoard,
+  type BoardItem, type GroupMode, type TodayBoard,
 } from '../../features/today/index.js';
 import { confirmedDateBody, formErrors, type NoteRef, type OpenForm, type Target, type Undo } from './TodayForms.js';
 import { actionQuery, actionReasonParams } from './action-query.js';
@@ -24,13 +24,18 @@ export function TodayPage() {
   return <TodayScreen {...useTodayScreen()} />;
 }
 
+function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
+  if (params.get('view') === 'arrivals') return { group: 'waiting', arrivalsView: { focusBatch: params.get('focusBatch') } };
+  return { group: readGroup(params.toString()), arrivalsView: undefined };
+}
+
 function useTodayScreen(): TodayScreenProps {
   const [params, setParams] = useSearchParams();
   const search = params.toString();
   const query = actionQuery(search);
   const today = useTodayData(query);
   const state = useTodayState(today);
-  const group = readGroup(search);
+  const { group, arrivalsView } = screenView(params);
   const board = boardOf({ state, group, reasons: query.reasons, sort: query.sort });
   const isPlanMode = todayViewOf(group) === 'schedule';
   const actionBoard = isPlanMode ? boardOf({ state, group: 'waiting', reasons: query.reasons, sort: query.sort }) : board;
@@ -51,9 +56,9 @@ function useTodayScreen(): TodayScreenProps {
     rows: sessionRows({ board: actionBoard, plan }),
     isReady: isSettled || (isPlanMode && query.focusId === null),
   });
-  useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode, closeSession });
+  useTodayKeys({ state, visible: isSettled || isPlanMode ? visible : [], isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession });
   useUndoMessage({ undo: state.undo, onRestore: () => { void restore(state); } });
-  return { ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }), actionPage };
+  return { ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }), actionPage, arrivalsView };
 }
 
 const EMPTY_PAGE: Omit<TodayLoad, 'counts' | 'paging'> & { readonly paging: undefined } = {
@@ -102,11 +107,13 @@ function useTodayKeys(input: {
   readonly state: ReturnType<typeof useTodayState>;
   readonly visible: readonly { readonly id: string }[];
   readonly isPlanMode: boolean;
+  readonly isArrivalsView: boolean;
   readonly closeSession: ReturnType<typeof useTodaySession>;
 }): void {
-  const { state, visible, isPlanMode, closeSession } = input;
+  const { state, visible, isPlanMode, isArrivalsView, closeSession } = input;
   const canRecord = useCanWrite('records.write');
   useEffect(() => {
+    if (isArrivalsView) return;
     const onKey = (event: KeyboardEvent) => handleKey({
       event,
       rows: visible,
@@ -131,7 +138,7 @@ function useTodayKeys(input: {
     });
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state, visible, isPlanMode, closeSession, canRecord]);
+  }, [state, visible, isPlanMode, isArrivalsView, closeSession, canRecord]);
 }
 
 type ScreenInput = {
@@ -153,6 +160,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     onPendingBatchChanged: () => applyNextToday(state),
     actionBoard,
     batchSeqOf: (rowId) => state.targets[rowId]?.batchSeq,
+    fulfillmentOf: (rowId) => state.targets[rowId]?.fulfillment,
     insight: state.insight,
     plan: plan.load,
     onRetryPlan: plan.reload,

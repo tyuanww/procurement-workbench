@@ -1,8 +1,10 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { Button, Flex, Result, Skeleton, Typography } from 'antd';
+import { Button, Card, Empty, Flex, Result, Skeleton } from 'antd';
 import type { ReactNode } from 'react';
-import type { TodayResponse } from '@sw/contracts';
-import { ArrivalMemos, taskIdOf, todayViewOf, type BoardRow, type GroupMode, type PlanLoad, type QuickAction, type TodayBoard, type TodayInsight } from '../../features/today/index.js';
+import { Link } from 'react-router';
+import type { TodayResponse, TodayWorkFilter } from '@sw/contracts';
+import type { BatchFulfillment } from '@sw/domain';
+import { ArrivalMemos, taskIdOf, todayArrivalsPath, todayViewOf, type BoardRow, type GroupMode, type PlanLoad, type QuickAction, type TodayBoard, type TodayInsight } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { OpenForm } from './TodayForms.js';
 import type { ActionPageControls } from './ActionControls.js';
@@ -13,16 +15,20 @@ import { TodayDrawer } from './TodayDrawer.js';
 import { PageHeader } from '../../shared/ui/page.js';
 import { helpStyle, screenStyle, todayMotionCss } from './today-style.js';
 
-const HELP = 'j k 或方向键移动，Enter 打开，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭';
+const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
+const ACTION_HELP = `${NAVIGATION_HELP}，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭`;
+const SCHEDULE_HELP = `${NAVIGATION_HELP}，? 帮助，Esc 关闭`;
 
 export type TodayScreenProps = {
   readonly board: TodayBoard;
+  readonly arrivalsView?: { readonly focusBatch: string | null } | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
   readonly pendingBatch?: TodayResponse['pendingBatch'];
   readonly onPendingBatchChanged?: () => Promise<boolean>;
   readonly actionBoard?: TodayBoard;
   readonly actionPage?: ActionPageControls | undefined;
   readonly batchSeqOf?: ((rowId: string) => number | undefined) | undefined;
+  readonly fulfillmentOf?: ((rowId: string) => BatchFulfillment | undefined) | undefined;
   readonly insight: TodayInsight;
   readonly plan?: PlanLoad;
   readonly onRetryPlan?: () => void;
@@ -52,28 +58,29 @@ export type TodayScreenProps = {
 };
 
 export function TodayScreen(props: TodayScreenProps): ReactNode {
-  if (todayViewOf(props.board.group) === 'schedule') return <TodayReady {...props} />;
-  if (!props.isReady) return <TodayLoading />;
-  if (props.loadError !== '') return <TodayError {...props} />;
+  const title = props.arrivalsView === undefined ? '今日事项' : '在途待收';
+  if (props.arrivalsView === undefined && todayViewOf(props.board.group) === 'schedule') return <TodayReady {...props} />;
+  if (!props.isReady) return <TodayLoading title={title} />;
+  if (props.loadError !== '') return <TodayError {...props} title={title} />;
   return <TodayReady {...props} />;
 }
 
-function TodayLoading(): ReactNode {
+function TodayLoading({ title }: { readonly title: string }): ReactNode {
   return (
     <section style={screenStyle()}>
-      <PageHeader title="今日事项" />
+      <PageHeader title={title} />
       <Skeleton active paragraph={{ rows: 8 }} />
     </section>
   );
 }
 
-function TodayError(props: TodayScreenProps): ReactNode {
+function TodayError(props: TodayScreenProps & { readonly title: string }): ReactNode {
   return (
     <section style={screenStyle()}>
-      <PageHeader title="今日事项" />
+      <PageHeader title={props.title} />
       <Result
         status="error"
-        title="今日没有读出来"
+        title={props.arrivalsView === undefined ? '今日没有读出来' : '在途待收没有读出来'}
         subTitle={props.loadError}
         extra={[
           <Button key="retry" type="primary" onClick={props.onRetry}>重试</Button>,
@@ -86,24 +93,39 @@ function TodayError(props: TodayScreenProps): ReactNode {
 
 function TodayReady(props: TodayScreenProps): ReactNode {
   const view = todayViewOf(props.board.group);
+  if (props.arrivalsView !== undefined) return <ArrivalsPane memos={props.arrivalMemos ?? []} focusBatch={props.arrivalsView.focusBatch} />;
   return (
     <section style={screenStyle()}>
       <style>{todayMotionCss()}</style>
       <PageHeader title={view === 'schedule' ? '今日排期' : '行动板'} />
       {view === 'schedule' ? <SchedulePane {...props} /> : <ActionPane {...props} />}
       <PageDrawers {...props} />
-      {props.isHelpOpen ? <p style={helpStyle()}>{HELP}</p> : null}
-      {props.notice === '' ? null : <p style={helpStyle()}>{props.notice}</p>}
+      {props.isHelpOpen ? <p style={helpStyle()}>{view === 'schedule' ? SCHEDULE_HELP : ACTION_HELP}</p> : null}
+      <div role="status" style={helpStyle()}>{props.notice}</div>
     </section>
   );
+}
+
+function ArrivalsPane({ memos, focusBatch }: { readonly memos: TodayResponse['arrivalMemos']; readonly focusBatch: string | null }): ReactNode {
+  return <section style={screenStyle()}>
+    <PageHeader title="在途待收" />
+    <Flex align="center" gap="small" wrap><Link to="/today">返回行动板</Link><ProcurementCutoff /></Flex>
+    <Card size="small">
+      {memos.length === 0
+        ? <Empty description="当前没有在途待收批次。"><Button href="/lines">去跟进中心</Button></Empty>
+        : <ArrivalMemos memos={memos} today={{ focusBatch }} />}
+    </Card>
+  </section>;
 }
 
 function ActionPane(props: TodayScreenProps): ReactNode {
   const pending = props.pendingBatch ?? [];
   const arrivals = props.arrivalMemos ?? [];
   const hasOtherWork = pending.length > 0 || arrivals.length > 0;
-  const shouldShowOtherWorkFirst = hasOtherWork && props.board.body.kind === 'empty' && props.actionPage?.isFiltered !== true;
-  const otherWork = <OtherActionSections key="other" pending={pending} arrivals={arrivals} onChanged={props.onPendingBatchChanged} />;
+  const shouldShowOtherWorkFirst = pending.length > 0 && props.board.body.kind === 'empty' && props.actionPage?.isFiltered !== true;
+  const otherWork = pending.length === 0 ? null : <div key="pending" id="today-pending-batches" className="today-jump-target" tabIndex={-1}>
+    <PendingBatches rows={pending} onChanged={props.onPendingBatchChanged} />
+  </div>;
   const chase = <ActionBoard key="chase" board={props.board} page={props.actionPage}
     hasOtherWork={hasOtherWork} batchSeqOf={props.batchSeqOf} insight={props.insight} focus={props.focus} fading={props.fading}
     onToggleReason={props.onToggleReason} onGroup={props.onGroup} onOpen={props.onOpen} onQuick={props.onQuick} onCopy={props.onCopy} />;
@@ -116,47 +138,32 @@ function ActionPane(props: TodayScreenProps): ReactNode {
 }
 
 function ActionLinks({ pending, arrivals, page }: { readonly pending: number; readonly arrivals: number; readonly page: TodayScreenProps['actionPage'] }) {
-  const chaseCount = page?.paging.chaseCounts?.all;
-  const noteCount = page?.paging.internalNoteCount;
-  return <nav className="today-touch" aria-label="今日快捷入口">
+  return <Card size="small"><nav className="today-touch" aria-label="今日快捷入口">
     <Flex gap="small" align="center" wrap>
-      {page === undefined || chaseCount === undefined ? <SectionJump id="today-chase" name="行动清单" /> : <>
-        <Button size="small" aria-pressed={page.work === 'factory_chase'} onClick={() => {
-          page.onWork('factory_chase');
-          focusSection('today-chase');
-        }}>要催货 {chaseCount} 批</Button>
-        {noteCount === undefined ? null : <Button size="small" aria-pressed={page.work === 'internal_note'} onClick={() => {
-          page.onWork('internal_note');
-          focusSection('today-chase');
-        }}>内部等回单 {noteCount} 批</Button>}
-      </>}
-      <SectionJump id="today-pending-batches" name={`待建批次 ${pending} 行`} hasTarget={pending > 0} />
-      <SectionJump id="today-arrival-memos" name={`到仓待收 ${arrivals} 批`} hasTarget={arrivals > 0} />
+      <WorkLinks page={page} />
+      {pending === 0 ? null : <SectionJump id="today-pending-batches" name={`待建批次 ${pending} 行`} />}
+      {arrivals === 0 ? null : <Link to={todayArrivalsPath}>在途待收 {arrivals} 批</Link>}
       {page === undefined ? null : <FollowUpLinks page={page} />}
       <ProcurementCutoff />
     </Flex>
-  </nav>;
+  </nav></Card>;
 }
 
-function OtherActionSections({ pending, arrivals, onChanged }: {
-  readonly pending: NonNullable<TodayResponse['pendingBatch']>;
-  readonly arrivals: TodayResponse['arrivalMemos'];
-  readonly onChanged: TodayScreenProps['onPendingBatchChanged'];
-}) {
-  return (
-    <>
-      <div id="today-pending-batches" className="today-jump-target" tabIndex={-1}>
-        <PendingBatches rows={pending} onChanged={onChanged} />
-      </div>
-      <div id="today-arrival-memos" className="today-jump-target" tabIndex={-1}>
-        <ArrivalMemos memos={arrivals} />
-      </div>
-    </>
-  );
+function WorkLinks({ page }: { readonly page: TodayScreenProps['actionPage'] }) {
+  if (page?.paging.chaseCounts === undefined) return <SectionJump id="today-chase" name="行动清单" />;
+  const scopes: readonly { readonly key: TodayWorkFilter; readonly label: string; readonly count: number | undefined }[] = [
+    { key: 'factory_chase', label: '要催货', count: page.paging.chaseCounts.all },
+    { key: 'internal_note', label: '内部等回单', count: page.paging.internalNoteCount },
+  ];
+  return scopes.filter(({ key, count }) => count !== undefined && (count > 0 || page.work === key)).map(({ key, label, count }) => (
+    <Button key={key} size="small" aria-pressed={page.work === key} onClick={() => {
+      page.onWork(key);
+      focusSection('today-chase');
+    }}>{label} {count} 批</Button>
+  ));
 }
 
-function SectionJump({ id, name, hasTarget = true }: { readonly id: string; readonly name: string; readonly hasTarget?: boolean }) {
-  if (!hasTarget) return <Typography.Text type="secondary">{name}</Typography.Text>;
+function SectionJump({ id, name }: { readonly id: string; readonly name: string }) {
   return <Button size="small" href={`#${id}`} onClick={(event) => {
     if (focusSection(id)) event.preventDefault();
   }}>{name}</Button>;
@@ -205,6 +212,8 @@ function PageDrawers(props: TodayScreenProps): ReactNode {
       <TodayDrawer
         row={openRow(props.actionBoard ?? props.board, props.drawerId)}
         batchSeq={props.drawerId === null ? undefined : props.batchSeqOf?.(props.drawerId)}
+        fulfillment={props.drawerId === null ? undefined : props.fulfillmentOf?.(props.drawerId)}
+        onQuick={(kind) => { if (props.drawerId !== null) props.onQuick({ id: props.drawerId, kind }); }}
         isOpen={props.drawerId !== null && taskId === null}
         draft={props.draft}
         hadDate={props.hadDate}

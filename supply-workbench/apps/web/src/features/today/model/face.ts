@@ -23,7 +23,7 @@ function quantitiesOf(item: BoardItem): Pick<RowFace, 'remaining' | 'inTransit'>
   const remaining = item.qty === null ? MISSING : quantity.format(item.qty);
   return {
     ...(item.remaining === undefined ? {} : { remaining: `未发 ${remaining} ${item.remaining.unit ?? ''}`.trim() }),
-    ...(item.inTransit === undefined ? {} : { inTransit: `已全发 · 在途待收 ${quantity.format(item.inTransit.qty)} ${item.inTransit.unit}` }),
+    ...(item.inTransit === undefined ? {} : { inTransit: `${item.qty === 0 ? '已全发 · ' : ''}在途待收 ${quantity.format(item.inTransit.qty)} ${item.inTransit.unit}` }),
   };
 }
 
