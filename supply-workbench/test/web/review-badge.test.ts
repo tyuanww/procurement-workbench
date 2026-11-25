@@ -7,7 +7,6 @@ import { commitQueue, createQueueRace } from '../../apps/web/src/features/shell/
 import { approveAlias } from '../../apps/web/src/pages/master/MasterPage.js';
 
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
-const NOW = '2026-10-18T00:00:00.000Z';
 const ONES = { aliases: 1, codes: 0, links: 0, multiName: 0 };
 const ZEROS = { aliases: 0, codes: 0, links: 0, multiName: 0 };
 
@@ -106,8 +105,7 @@ function masterBadge(roles: readonly ['reviewer'] | readonly ['admin'], queue: Q
     user: { name: '用户', roles },
     queue,
     today: { kind: 'pending' },
-    freshness: { kind: 'pending' },
-    now: NOW,
+    procurementDate: null,
     navRoutes: NAV_ROUTES,
   });
   const row = view.nav.find((item) => item.to === '/imports');

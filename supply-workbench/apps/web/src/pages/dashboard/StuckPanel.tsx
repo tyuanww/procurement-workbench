@@ -279,8 +279,6 @@ function StuckDetails({ item, row, now, isOpen, onClose, onHidden }: {
   </Drawer>;
 }
 
-const batchQuantity = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
-
 function BatchQuantities({ fulfillment }: { readonly fulfillment: StuckItem['fulfillment'] }) {
   const unit = fulfillment?.unit;
   const quantities = [
@@ -290,7 +288,7 @@ function BatchQuantities({ fulfillment }: { readonly fulfillment: StuckItem['ful
   ];
   return <Flex gap={space[2]} wrap>
     {quantities.map(({ label, value }) => <span key={label} style={{ fontVariantNumeric: 'tabular-nums' }}>
-      {label} {value == null || unit == null ? EM_DASH : `${batchQuantity.format(value)} ${unit}`}
+      {label} {value == null || unit == null ? EM_DASH : `${formatQuantity(value)} ${unit}`}
     </span>)}
     {quantities.some(({ value }) => value == null) ? <Typography.Text type="secondary">数量待核</Typography.Text> : null}
   </Flex>;

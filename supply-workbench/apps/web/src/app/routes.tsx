@@ -49,13 +49,12 @@ function pageRoute(entry: PageManifestEntry, roles: SessionUser['roles']) {
 
 function Workbench({ user }: { readonly user: SessionUser }) {
   const { pathname } = useLocation();
-  const loaded = useShellLoad({ name: user.name, roles: user.roles });
+  const loaded = useShellLoad({ name: user.name, roles: user.roles, pathname });
   const view = shellView({
     user,
     queue: loaded.queue,
     today: loaded.today,
-    freshness: loaded.freshness,
-    now: loaded.now,
+    procurementDate: loaded.procurementDate,
     navRoutes: NAV_ROUTES,
   });
   if (isHomeGate(pathname)) return <HomeGate home={view.home} />;
