@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../../shared/ui/procurement-cutoff.js';
 import { useId, useState, type ReactNode } from 'react';
 import { Button, Card, Checkbox, Flex, Input, Select } from 'antd';
 import type { useSearchParams } from 'react-router';
@@ -41,6 +42,7 @@ export function LineFilters(props: { readonly search: string; readonly desk: Des
             <ImportScopeAction search={props.search} setParams={props.setParams} />
             {props.arrivalAction}
           </Flex>
+          <ProcurementCutoff />
         </Flex>
       </Card>
     </search>

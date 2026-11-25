@@ -16,7 +16,6 @@ import { matchesShortcut, searchShortcutHint, type Shortcut } from '../../apps/w
 import { antdTheme } from '../../apps/web/src/theme/antd.js';
 import { contrastRatio } from '../../apps/web/src/theme/contrast.js';
 import { drawerFrame, headerBarStyle, headerGridColumns, menuWidth, searchButtonStyle, searchTextStyle, siderBarStyle } from '../../apps/web/src/app/shell-frame.js';
-import { freshnessChipBoxStyle, freshnessLinkStyle } from '../../apps/web/src/app/shell-session.js';
 import { surfaceStyle } from '../../apps/web/src/shared/ui/page.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, radius, radiusCard, space } from '../../apps/web/src/theme/tokens.js';
 
@@ -207,11 +206,6 @@ describe('层、圆角和菜单对比', () => {
     expect(listeners.length).toBe(0);
     for (const run of listeners) run();
     expect(calls).toBe(4);
-  });
-
-  it('数据更新时间能收缩并省略，完整时间仍在 Tooltip', () => {
-    expect(freshnessLinkStyle()).toMatchObject({ flex: '0 1 auto', minWidth: 0, overflow: 'hidden' });
-    expect(freshnessChipBoxStyle(false)).toMatchObject({ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   });
 
   it('卡片无阴影', () => {

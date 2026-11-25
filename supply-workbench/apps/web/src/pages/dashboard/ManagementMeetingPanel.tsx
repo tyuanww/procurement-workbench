@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Card, DatePicker, Descriptions, Flex, Select, Skeleton, Statistic, Typography } from 'antd';
 import {
   MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementDecision, type ManagementMeeting, type ManagementMeetingStore,
@@ -62,6 +63,7 @@ function MeetingFilters({ selected, update, thisWeek }: {
       />
       <Button disabled={selected.weekStart >= thisWeek} onClick={() => update({ weekStart: addDays(selected.weekStart, WEEK_DAYS) })}>下周</Button>
       <Button href={`/reports?${reportQuery}`}>查看周报</Button>
+      <ProcurementCutoff />
     </Flex>
   </Card>;
 }

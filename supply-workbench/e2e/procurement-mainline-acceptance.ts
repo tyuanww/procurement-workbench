@@ -306,6 +306,7 @@ export async function checkDirectorHome({ page, buyer, lead, origin, out, materi
   const home = new URL('/home', origin).href;
   await page.goto(home);
   await page.getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u).waitFor();
+  assert.equal(await page.getByRole('banner').getByText(/采购订单总表|数据截止/u).count(), 0);
   await checkDirectorRegister({ page, materialPo });
   await checkDirectorProjects(page);
   await checkDirectorViewport(page);

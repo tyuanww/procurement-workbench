@@ -6,7 +6,7 @@ import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../fe
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
 import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
-import { AccountMenu, FreshnessLink } from './shell-session.js';
+import { AccountMenu } from './shell-session.js';
 
 export const searchTrackPx = 280;
 const searchLabel = '搜索单号、品名、供应商';
@@ -108,7 +108,6 @@ export function ShellSider(input: {
 }
 
 export function ShellTop(input: {
-  readonly freshness: ShellView['freshness'] | undefined;
   readonly account: ShellView['account'];
   readonly onSearch: () => void;
   readonly contentInset: 16 | 24;
@@ -118,7 +117,7 @@ export function ShellTop(input: {
   const isPhone = input.menuButton !== null;
   return (
     <Layout.Header className="shell-header" style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
-      <HeaderStart menuButton={input.menuButton} startContent={input.startContent} freshness={input.freshness} />
+      <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
       <SearchButton onSearch={input.onSearch} />
       <AccountMenu account={input.account} />
     </Layout.Header>
@@ -193,17 +192,9 @@ function CollapseButton(input: {
 function HeaderStart(input: {
   readonly menuButton: MenuButton | null;
   readonly startContent: ReactNode;
-  readonly freshness: ShellView['freshness'] | undefined;
 }) {
   if (input.menuButton !== null) return <HeaderMenuButton button={input.menuButton} />;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, overflow: 'hidden', gap: space[2] }}>
-      <div style={{ flexShrink: 0 }}>{input.startContent}</div>
-      {input.freshness === undefined ? null : (
-        <div style={{ minWidth: 0, marginInlineStart: 'auto' }}><FreshnessLink freshness={input.freshness} /></div>
-      )}
-    </div>
-  );
+  return <div style={{ minWidth: 0, overflow: 'hidden' }}>{input.startContent}</div>;
 }
 
 function DrawerCloseButton({ onClose }: { readonly onClose: () => void }) {
