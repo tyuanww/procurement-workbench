@@ -1,3 +1,4 @@
+import { procurementCutoff } from '../../apps/web/src/features/shell/model/freshness.js';
 import { NAV_ROUTES } from '../../apps/web/src/app/page-manifest.js';
 import { describe, expect, it } from 'vitest';
 import { roleLabel, type Role } from '../../packages/domain/src/index.js';
@@ -5,18 +6,14 @@ import {
   shellView,
   todayScope,
   type BadgeMark,
-  type FreshnessChip,
-  type FreshnessFacts,
   type NavPath,
   type QueueFacts,
   type ShellView,
-  type SourceFact,
   type TodayFacts,
 } from '../../apps/web/src/features/shell/index.js';
 
-const NOW = '2026-10-18T00:00:00.000Z';
-const HIDDEN = ['/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '今日事项,管理店铺,跟进中心,管理看板,产品档案,导入与审核';
+const HIDDEN = ['/home', '/master', '/settings', '/dashboard', '/reports'];
+const NAV_LABELS = '首页,今日事项,管理店铺,跟进中心,管理看板,产品档案,导入与审核';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;
@@ -28,14 +25,12 @@ function viewOf(input: {
   readonly roles: readonly Role[];
   readonly queue: QueueFacts;
   readonly today?: TodayFacts;
-  readonly freshness?: FreshnessFacts;
 }): ShellView {
   return shellView({
     user: { name: input.name ?? '用户', roles: input.roles },
     queue: input.queue,
     today: input.today ?? { kind: 'pending' },
-    freshness: input.freshness ?? { kind: 'pending' },
-    now: NOW,
+    procurementDate: null,
     navRoutes: NAV_ROUTES,
   });
 }
@@ -52,42 +47,6 @@ function badgeAt(view: ShellView, path: NavPath): BadgeMark {
 
 function todayBadge(today: TodayFacts): BadgeMark {
   return badgeAt(viewOf({ roles: ['buyer'], queue: { kind: 'unknown' }, today }), '/today');
-}
-
-function plant(times: readonly [string | null, string | null, string | null]): SourceFact {
-  const [lastCommittedAt, fileModifiedAt, factoryPartyId] = times;
-  return {
-    template: 'factory-progress-v1',
-    label: '代工厂进度',
-    lastCommittedAt,
-    fileModifiedAt,
-    factoryPartyId,
-  };
-}
-
-function master(times: readonly [string | null, string | null]): SourceFact {
-  const [lastCommittedAt, fileModifiedAt] = times;
-  return {
-    template: 'po-master-v1',
-    label: '采购订单总表',
-    lastCommittedAt,
-    fileModifiedAt,
-    factoryPartyId: null,
-  };
-}
-
-function shown(facts: FreshnessFacts): ShellView['freshness'] {
-  return viewOf({ roles: ['buyer'], queue: { kind: 'unknown' }, freshness: facts }).freshness;
-}
-
-function ready(sources: readonly SourceFact[]): FreshnessFacts {
-  return { kind: 'ready', sources };
-}
-
-function onlyChip(facts: FreshnessFacts): FreshnessChip {
-  const chip = shown(facts).chips[0];
-  if (chip === undefined) throw new Error('没有新鲜度');
-  return chip;
 }
 
 describe('首页和主数据角标', () => {
@@ -114,12 +73,12 @@ describe('首页和主数据角标', () => {
     expect(badgeAt(view, '/imports')).toEqual({ kind: 'missing' });
   });
 
-  it('审核人兼管理层在未知和空队列时都进看板', () => {
+  it('审核人兼管理层在未知和空队列时都进首页', () => {
     const unknown = home(['reviewer', 'manager'], { kind: 'unknown' });
     const empty = home(['reviewer', 'manager'], counts([0, 0, 0, 0]));
-    expect(unknown.home).toBe('/dashboard');
+    expect(unknown.home).toBe('/home');
     expect(badgeAt(unknown, '/imports')).toEqual({ kind: 'missing' });
-    expect(empty.home).toBe('/dashboard');
+    expect(empty.home).toBe('/home');
     expect(badgeAt(empty, '/imports')).toEqual({ kind: 'none' });
   });
 
@@ -170,7 +129,7 @@ describe('首页和主数据角标', () => {
   it('采购兼审核人按原队列和角色优先级选择首页', () => {
     expect(home(['buyer', 'reviewer'], counts([1, 0, 0, 0])).home).toBe('/master');
     expect(home(['buyer', 'reviewer'], counts([0, 0, 0, 0])).home).toBe('/progress');
-    expect(home(['buyer', 'manager'], counts([0, 0, 0, 0])).home).toBe('/dashboard');
+    expect(home(['buyer', 'manager'], counts([0, 0, 0, 0])).home).toBe('/home');
   });
 
   it('负责人进周报，侧栏共用管理看板入口', () => {
@@ -181,8 +140,8 @@ describe('首页和主数据角标', () => {
     expect(view.nav.map((item) => item.to)).not.toContain('/imports');
   });
 
-  it('管理层兼负责人进看板', () => {
-    expect(home(['manager', 'lead'], { kind: 'unknown' }).home).toBe('/dashboard');
+  it('管理层兼负责人进首页', () => {
+    expect(home(['manager', 'lead'], { kind: 'unknown' }).home).toBe('/home');
   });
 
   it('审核人在队列未完成时首页未定，角标保持 pending', () => {
@@ -226,92 +185,11 @@ describe('今日角标和范围', () => {
   });
 });
 
-describe('新鲜度', () => {
-  it('刚好 7 天不警告，再早 1 毫秒警告', () => {
-    const onTime = shown(ready([plant(['2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z', null])]));
-    const late = shown(ready([plant(['2026-10-10T23:59:59.999Z', '2026-10-11T00:00:00.000Z', null])]));
-    expect(onTime.chips[0]?.isStale).toBe(false);
-    expect(late.chips[0]?.isStale).toBe(true);
-  });
-
-  it('提交时间为空或无法解析时显示破折号且不警告', () => {
-    const missing = shown(ready([master([null, null])]));
-    const broken = shown(ready([master(['not-a-time', null])]));
-    expect(missing.chips[0]?.text).toBe('采购订单总表 —');
-    expect(missing.chips[0]?.isStale).toBe(false);
-    expect(missing.chips[0]?.status).toBe('unknown');
-    expect(broken.chips[0]?.text).toBe('采购订单总表 —');
-    expect(broken.chips[0]?.isStale).toBe(false);
-    expect(broken.chips[0]?.status).toBe('unknown');
-  });
-
-  it('代工厂同时显示导入时刻和文件时间', () => {
-    const view = shown(ready([plant(['2026-10-11T06:02:00.000Z', null, 'party-a'])]));
-    expect(view.chips[0]?.text).toBe('代工厂进度 10-11 14:02 文件时间 —');
-    expect(view.chips[0]?.text).not.toContain('party-a');
-  });
-
-  it('提交时间或文件时间过旧都会警告，缺文件时间为未知', () => {
-    const stale = shown(
-      ready([plant(['2026-10-10T00:00:00.000Z', '2026-10-17T06:02:00.000Z', null])]),
-    );
-    const staleFile = shown(ready([plant(['2026-10-12T00:00:00.000Z', '2026-01-01T00:00:00.000Z', null])]));
-    const unknownFile = shown(ready([plant(['2026-10-12T00:00:00.000Z', null, null])]));
-    expect(stale.chips[0]?.isStale).toBe(true);
-    expect(stale.chips[0]?.text).toBe('代工厂进度 10-10 08:00 文件时间 10-17 14:02');
-    expect(staleFile.chips[0]?.isStale).toBe(true);
-    expect(staleFile.chips[0]?.status).toBe('stale');
-    expect(staleFile.chips[0]?.text).toBe('代工厂进度 10-12 08:00 文件时间 01-01 08:00');
-    expect(unknownFile.chips[0]?.status).toBe('unknown');
-  });
-
-  it('总表忽略文件时间', () => {
-    const view = shown(ready([master(['2026-10-11T06:02:00.000Z', '2026-01-01T00:00:00.000Z'])]));
-    expect(view.chips[0]?.text).toBe('采购订单总表 10-11 14:02');
-    expect(view.chips[0]?.text).not.toContain('文件时间');
-  });
-
-  it('同年芯片不写年，提示始终带年，跨年才写在芯片上', () => {
-    const same = onlyChip(ready([master(['2026-10-11T06:02:00.000Z', null])]));
-    const prior = onlyChip(ready([master(['2025-10-11T06:02:00.000Z', null])]));
-    const turned = onlyChip(ready([master(['2025-12-31T16:00:00.000Z', null])]));
-    const still = onlyChip(ready([master(['2025-12-31T15:59:00.000Z', null])]));
-    const plantRow = onlyChip(ready([plant(['2026-10-11T06:02:00.000Z', '2025-01-01T00:00:00.000Z', null])]));
-    expect(same.text).toBe('采购订单总表 10-11 14:02');
-    expect(same.tooltip).toBe('采购订单总表 2026-10-11 14:02');
-    expect(prior.text).toBe('采购订单总表 2025-10-11 14:02');
-    expect(prior.tooltip).toBe(prior.text);
-    expect(turned.text).toBe('采购订单总表 01-01 00:00');
-    expect(turned.tooltip).toBe('采购订单总表 2026-01-01 00:00');
-    expect(still.text).toBe('采购订单总表 2025-12-31 23:59');
-    expect(still.tooltip).toBe(still.text);
-    expect(plantRow.text).toBe('代工厂进度 10-11 14:02 文件时间 2025-01-01 08:00');
-    expect(plantRow.tooltip).toBe('代工厂进度 2026-10-11 14:02 文件时间 2025-01-01 08:00');
-    const lines = [same, prior, turned, still, plantRow].flatMap((chip) => [chip.text, chip.tooltip]);
-    expect(lines.join(' ')).not.toContain('星期');
-  });
-
-  it('没有来源和失败都是缺失，加载中只写数据', () => {
-    const empty = shown(ready([]));
-    const failed = shown({ kind: 'failed' });
-    const pending = shown({ kind: 'pending' });
-    expect(empty).toEqual({ headline: '数据：—', chips: [] });
-    expect(empty.headline).not.toContain('总表');
-    expect(failed).toEqual({ headline: '数据：—', chips: [] });
-    expect(pending).toEqual({ headline: '数据', chips: [] });
-  });
-
-  it('同一标签的两家工厂用不同的 key，正文不写 id', () => {
-    const view = shown(
-      ready([
-        plant(['2026-10-11T06:02:00.000Z', null, 'party-a']),
-        plant(['2026-10-11T06:02:00.000Z', null, 'party-b']),
-      ]),
-    );
-    expect(view.chips[0]?.key).not.toBe(view.chips[1]?.key);
-    expect(view.chips[0]?.text).not.toContain('party-a');
-    expect(view.chips[1]?.text).not.toContain('party-b');
-  });
+it('上传日期按业务时区跨日，缺上传日期时不显示截止日期', () => {
+  expect(procurementCutoff('2026-11-24T16:00:00.000Z', 'Asia/Shanghai')).toBe('2026-11-25');
+  expect(procurementCutoff('2026-11-24T15:59:59.999Z', 'Asia/Shanghai')).toBe('2026-11-24');
+  expect(procurementCutoff(undefined)).toBeNull();
+  expect(procurementCutoff('not-a-time')).toBeNull();
 });
 
 describe('用户菜单', () => {

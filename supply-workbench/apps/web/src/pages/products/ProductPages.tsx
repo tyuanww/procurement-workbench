@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import {
@@ -44,9 +45,10 @@ export function ProductListPage() {
   };
   return (
     <WorkbenchPage title="产品档案">
-      <div style={{ ...surfaceStyle(), padding: space[2], marginBottom: space[3] }}>
+      <Flex wrap align="center" gap={space[2]} style={{ ...surfaceStyle(), padding: space[2], marginBottom: space[3] }}>
         <ProductSearch query={query} onSearch={searchFor} />
-      </div>
+        <ProcurementCutoff />
+      </Flex>
       <section ref={results} tabIndex={-1} aria-label="产品查询结果" style={{ scrollMarginTop: topBar + space[2] }}>
         <ProductCatalog key={JSON.stringify([query, page])} query={query} page={page} view={view}
           onClear={() => searchFor('')} onView={(value) => update({ view: value })} onPage={changePage} />

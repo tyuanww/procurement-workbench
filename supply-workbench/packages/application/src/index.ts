@@ -1,3 +1,4 @@
+export type { WorkbookReader, WorkbookLike } from './ports/workbook-reader.js';
 export * from './platform/index.js';
 export * from './imports/index.js';
 export * from './follow-up/index.js';

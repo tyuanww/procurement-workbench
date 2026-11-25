@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Button, Flex, Result, Skeleton, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import type { TodayResponse } from '@sw/contracts';
@@ -133,6 +134,7 @@ function ActionLinks({ pending, arrivals, page }: { readonly pending: number; re
       <SectionJump id="today-pending-batches" name={`待建批次 ${pending} 行`} hasTarget={pending > 0} />
       <SectionJump id="today-arrival-memos" name={`到仓待收 ${arrivals} 批`} hasTarget={arrivals > 0} />
       {page === undefined ? null : <FollowUpLinks page={page} />}
+      <ProcurementCutoff />
     </Flex>
   </nav>;
 }

@@ -13,7 +13,7 @@ import {
 import type { LocalDate } from '@sw/domain';
 import { browserRenderers, feishuPublisher, renderWeeklyPrintHtml, renderXlsx } from '@sw/report-renderers';
 import {
-  auditRepository,
+  auditRepository, directorBrands,
   createUnitOfWork,
   fileStore,
   freshnessQueries,
@@ -47,6 +47,7 @@ export function composeReporting(input: {
   readonly printOrigin?: () => string;
   readonly clock?: Clock;
   readonly feishu?: FeishuApp;
+  readonly schedule?: ReportingApi['schedule'];
   readonly loadDevelopment?: LoadManagementMeetingDevelopment;
 }): ReportingApi {
   const clock = input.clock ?? systemClock(input.timeZone);
@@ -65,6 +66,8 @@ export function composeReporting(input: {
   });
   return {
     ...apiOf({ input, clock, ids, reports, uow, generate, feishu: input.feishu }),
+    brands: () => directorBrands(input.db),
+    schedule: input.schedule ?? (async () => ({ brands: [], projects: [] })),
     managementMeeting: makeManagementMeeting({ uow, clock, ids, timeZone: input.timeZone }),
   };
 }
@@ -77,7 +80,7 @@ function apiOf(ctx: {
   readonly uow: ReturnType<typeof createUnitOfWork>;
   readonly generate: ReportingApi['generate'];
   readonly feishu: FeishuApp | undefined;
-}): ReportingApi {
+}): Omit<ReportingApi, 'brands' | 'schedule'> {
   return {
     generate: ctx.generate,
     list: makeListWeeklyReports({ reports: ctx.reports }),
