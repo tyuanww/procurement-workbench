@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { sidebarLink } from './sidebar.ts';
+import { sidebarEntries, sidebarLink } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
@@ -49,25 +49,26 @@ async function checkSaveFollowUpView(page: Page): Promise<void> {
 }
 
 async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
+  const entryCount = await sidebarEntries(page.locator('aside')).count();
   await page.getByRole('button', { name: '收起侧栏', exact: true }).click();
   const sidebar = page.locator('.ant-layout-sider-collapsed');
   await sidebar.waitFor();
   const toggle = sidebar.getByRole('button', { name: '展开侧栏', exact: true });
   await toggle.waitFor();
-  await page.waitForFunction(() => {
+  await page.waitForFunction((expectedIconCount) => {
     const sider = document.querySelector('.ant-layout-sider-collapsed');
     if (sider === null) return false;
     const { x, width } = sider.getBoundingClientRect();
     const icons = sider.querySelectorAll('ul.ant-menu-root > li > .ant-menu-item-icon svg, ul.ant-menu-root > li > .ant-menu-submenu-title > .ant-menu-item-icon svg, button[aria-label="展开侧栏"] svg');
-    return icons.length === 7 && [...icons].every((icon) => {
+    return icons.length === expectedIconCount && [...icons].every((icon) => {
       const bounds = icon.getBoundingClientRect();
       return bounds.width > 0 && Math.abs(bounds.x + bounds.width / 2 - x - width / 2) <= 1;
     });
-  });
+  }, entryCount + 1);
   await page.screenshot({ path: join(out, 'closeout-collapsed-sidebar.png'), animations: 'disabled' });
   await toggle.click();
   await sidebar.waitFor({ state: 'hidden' });
-  return 6;
+  return entryCount;
 }
 
 async function checkActionBoard(page: Page): Promise<void> {

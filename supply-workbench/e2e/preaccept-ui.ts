@@ -130,7 +130,6 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.pageStories = await checkPageStories({ buyer, manager });
   const { page: lead } = await open('lead', '/', '/reports');
   result.checks.managementNavigation = await checkManagementNavigation({ manager, lead, buyer, reviewer, reportPath: meeting.frozenReport });
-  result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
   const badge = sidebarGroup(reviewer.locator('aside'), '导入与审核').locator('.ant-badge');
   await badge.waitFor();
   const visibleCount = (await badge.innerText()).trim();
@@ -152,6 +151,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
   result.checks.redReview = await checkRedReview({ page: admin, origin });
   result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
+  result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
