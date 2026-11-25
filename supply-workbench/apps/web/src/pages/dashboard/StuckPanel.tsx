@@ -72,7 +72,6 @@ export function StuckPanel(props: {
   </Flex>;
   return (
     <Flex vertical gap={space[3]}>
-      <Typography.Text type="secondary">截至今日（{data.asOf}），按所选线别统计开放批次</Typography.Text>
       {isPhone ? <Collapse size="small" items={[{ key: 'filters', label: '卡点指标与原因筛选', children: filters }]} /> : filters}
       <StuckList ref={listRef} data={data} query={query} rows={stuck.rows} isUpdating={isUpdating} now={props.now} isPhone={isPhone}
         onSearch={onSearch} onClear={() => filterList(CLEAR_FILTERS)}

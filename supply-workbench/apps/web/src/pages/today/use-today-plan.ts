@@ -36,7 +36,7 @@ export function useTodayPlan(group: GroupMode): { readonly load: PlanLoad; reado
 function planLoadOf(input: { readonly state: PlanViewLoad; readonly group: GroupMode }): PlanLoad {
   if (todayViewOf(input.group) !== 'schedule') return { kind: 'idle' };
   if (input.state.kind !== 'ready') return input.state;
-  return { kind: 'ready', view: input.state.view, board: planBoard({ view: input.state.view, group: planGroupOf(input.group) }) };
+  return { kind: 'ready', board: planBoard({ view: input.state.view, group: planGroupOf(input.group) }) };
 }
 
 function planGroupOf(group: GroupMode): 'schedule' | 'owner' | 'supplier' {

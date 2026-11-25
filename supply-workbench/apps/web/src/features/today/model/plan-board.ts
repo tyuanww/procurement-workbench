@@ -39,7 +39,7 @@ export type PlanInsight = {
 export type PlanLoad =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly view: DailyPlan; readonly board: PlanBoard }
+  | { readonly kind: 'ready'; readonly board: PlanBoard }
   | { readonly kind: 'error'; readonly message: string };
 
 export type ViewGroup = DailyPlan['byOwner'][number];

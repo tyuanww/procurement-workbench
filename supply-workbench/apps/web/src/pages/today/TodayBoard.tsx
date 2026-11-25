@@ -17,7 +17,6 @@ const HELP = 'j k 或方向键移动，Enter 打开，d 改期，s 发货，r �
 
 export type TodayScreenProps = {
   readonly board: TodayBoard;
-  readonly asOf?: TodayResponse['asOf'] | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
   readonly pendingBatch?: TodayResponse['pendingBatch'];
   readonly onPendingBatchChanged?: () => Promise<boolean>;
@@ -93,7 +92,8 @@ function TodayReady(props: TodayScreenProps): ReactNode {
       <PageHeader title={view === 'schedule' ? '今日排期' : '行动板'} />
       {view === 'schedule' ? <SchedulePane {...props} /> : <ActionPane {...props} />}
       <PageDrawers {...props} />
-      <TodayStatus isHelpOpen={props.isHelpOpen} notice={props.notice} focus={props.focus} />
+      {props.isHelpOpen ? <p style={helpStyle()}>{HELP}</p> : null}
+      {props.notice === '' ? null : <p style={helpStyle()}>{props.notice}</p>}
     </section>
   );
 }
@@ -109,7 +109,6 @@ function ActionPane(props: TodayScreenProps): ReactNode {
     onToggleReason={props.onToggleReason} onGroup={props.onGroup} onOpen={props.onOpen} onQuick={props.onQuick} onCopy={props.onCopy} />;
   return (
     <>
-      {props.asOf === undefined ? null : <Typography.Text type="secondary">截至今日 <time dateTime={props.asOf}>{props.asOf}</time></Typography.Text>}
       <ActionLinks pending={pending.length} arrivals={arrivals.length} page={props.actionPage} />
       {shouldShowOtherWorkFirst ? [otherWork, chase] : [chase, otherWork]}
     </>
@@ -224,21 +223,6 @@ function PageDrawers(props: TodayScreenProps): ReactNode {
 function openRow(board: TodayBoard, drawerId: string | null): BoardRow | null {
   if (drawerId === null || board.body.kind !== 'groups') return null;
   return board.body.rows.find((row) => row.id === drawerId) ?? null;
-}
-
-function TodayStatus(props: { readonly isHelpOpen: boolean; readonly notice: string; readonly focus: string | null }): ReactNode {
-  return (
-    <>
-      {props.isHelpOpen ? <p style={helpStyle()}>{HELP}</p> : null}
-      {statusText(props.notice, props.focus) === '' ? null : <p style={helpStyle()}>{statusText(props.notice, props.focus)}</p>}
-    </>
-  );
-}
-
-function statusText(notice: string, focus: string | null): string {
-  if (notice !== '') return notice;
-  if (focus === null) return '用 j k 移动';
-  return '';
 }
 
 function noop(): void {

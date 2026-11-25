@@ -56,8 +56,8 @@ function useTodayScreen(): TodayScreenProps {
   return { ...screenProps({ state, board, actionBoard, plan, search, setParams, closeSession }), actionPage };
 }
 
-const EMPTY_PAGE: Omit<TodayLoad, 'asOf' | 'counts' | 'paging'> & { readonly asOf: undefined; readonly paging: undefined } = {
-  items: [], arrivalMemos: [], pendingBatch: [], targets: {}, noteRefs: {}, buyerName: '', asOf: undefined, paging: undefined,
+const EMPTY_PAGE: Omit<TodayLoad, 'counts' | 'paging'> & { readonly paging: undefined } = {
+  items: [], arrivalMemos: [], pendingBatch: [], targets: {}, noteRefs: {}, buyerName: '', paging: undefined,
 };
 
 function useTodayState(today: ReturnType<typeof useTodayData>) {
@@ -148,7 +148,6 @@ function screenProps(input: ScreenInput): TodayScreenProps {
   const { state, board, actionBoard, search, setParams, plan, closeSession } = input;
   return {
     board,
-    asOf: state.asOf,
     arrivalMemos: state.arrivalMemos,
     pendingBatch: state.pendingBatch,
     onPendingBatchChanged: () => applyNextToday(state),

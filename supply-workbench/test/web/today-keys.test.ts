@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { focusForRows, handleKey, rowsSettled, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { ScheduleView } from '../../apps/web/src/pages/today/ScheduleView.js';
 import type { PlanLoad } from '../../apps/web/src/features/today/index.js';
-import { localDate } from '../../packages/domain/src/index.js';
 
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
 
@@ -102,16 +101,6 @@ function readyPlan(rowIds: readonly string[]): PlanLoad {
   const rows = rowIds.map((id) => ({ id, workItemId: id, title: id, meta: '', tags: [] }));
   return {
     kind: 'ready',
-    view: {
-      date: localDate('2026-11-10'),
-      asOf: localDate('2026-11-10'),
-      total: rows.length,
-      overdueCount: 0,
-      items: [],
-      byOwner: [],
-      bySupplier: [],
-      byFactory: [],
-    },
     board: { kind: 'groups', groups: [{ key: 'due-today', name: '今天到期', counts: [], note: null, isUnassigned: false, rows }], rows },
   };
 }

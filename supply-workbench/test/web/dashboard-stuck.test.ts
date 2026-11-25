@@ -32,7 +32,8 @@ it('卡点翻页和卡片下钻沿用所选线别并显示服务端匹配清单'
   installFetch();
   page = mount(memoryRouter(element(DashboardPage), '/dashboard?lane=finished'));
   await respond('lane=finished', base);
-  expect(textOf('body')).toContain('截至今日（2026-10-12）');
+  expect(textOf('body')).not.toContain('截至今日');
+  expect(textOf('body')).toContain('开放批次');
   expect(textOf('tbody')).toContain('旧批次');
   expect(textOf('body')).toContain('卡点清单（201 批）');
 

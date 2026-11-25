@@ -23,10 +23,8 @@ export type ScheduleViewProps = {
 };
 
 export function ScheduleView(props: ScheduleViewProps): ReactNode {
-  const date = props.load.kind === 'ready' ? props.load.view.date : null;
   return (
     <>
-      {date === null ? null : <Typography.Text type="secondary">截至今日 <time dateTime={date}>{date}</time></Typography.Text>}
       <Flex className="today-touch" wrap align="center" gap={space[2]}>
         <TodayGrouping label="今日排期分组" modes={SCHEDULE_MODES} group={props.group} onGroup={props.onGroup} />
         <ProcurementCutoff />
