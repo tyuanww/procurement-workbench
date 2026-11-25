@@ -1,14 +1,12 @@
-import { TODO_REASONS, businessDay, can, normalizeUnit, type LocalDate, type TodoReason } from '@sw/domain';
+import { TODO_REASONS, type TodoReason } from '@sw/domain';
 import type { Actor } from '../../shared/actor.js';
-import { firstBatchReadiness, isOpenForFirstBatch } from '../../shared/first-batch.js';
 import type { GetToday, GetTodayDeps } from '../boundary.js';
-import { filterTodosForUser, projectTodos } from '../policies/index.js';
-import { arrivalMemos } from '../policies/arrival-memos.js';
-import type { PendingBatchRow, PendingBatchSource, PersonalTodayQuery, PersonalTodayResponse, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayQuery, TodayResponse, TodoBatchView, TodoBatchSource, TodoItemView, TodoLineView } from '../views.js';
+import { calendarOf, inboxCandidates, inboxFocus, isScheduled, projectInboxes } from '../policies/inboxes.js';
+import type { PersonalTodayQuery, PersonalTodayResponse, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodoBatchView, TodoItemView, TodoLineView } from '../views.js';
+import { load, readArrivals, type TodayRead } from './read-today.js';
 
 const ITEM_LIMIT = 500;
 const HIGH_PRIORITY = 2;
-const DATE_MONTH_PREFIX_LENGTH = 7;
 
 export function makeGetToday(deps: GetTodayDeps): GetToday {
   const get = async (input: TodayQuery, actor: Actor): Promise<TodayResponse> => {
@@ -18,111 +16,140 @@ export function makeGetToday(deps: GetTodayDeps): GetToday {
   };
   return Object.assign(get, {
     page: async (input: TodayPageQuery, actor: Actor): Promise<TodayPageResponse> => {
-      const read = await load({ deps, input, actor });
-      return pageOf({ read, input });
+      const read = await load({ deps, input, actor, isInbox: input.inbox !== undefined });
+      return pageOf({ read, input, timeZone: deps.timeZone });
     },
     personal: async (input: PersonalTodayQuery, actor: Actor): Promise<PersonalTodayResponse> => {
       const read = await load({ deps, input: { scope: 'mine' }, actor });
       return personalPage({ read, input, timeZone: deps.timeZone });
     },
     chase: async (input: TodayChaseQuery, actor: Actor): Promise<readonly TodayChaseRow[]> => {
-      const read = await load({ deps, input: { scope: 'mine' }, actor });
-      const candidates = input.itemId === undefined ? read.projected : read.projected.filter((item) => item.id === input.itemId);
-      const matched = matchWork({ items: candidates, work: input.work, read });
-      return chaseRows({ items: selectItems(matchReasons(matched, input.reasons), input.sort), read, factoryId: input.factoryId });
+      if (input.inbox !== undefined && input.inbox !== 'today') return [];
+      const read = await load({ deps, input: { scope: 'mine' }, actor, isInbox: input.inbox !== undefined });
+      const items = input.inbox === undefined ? read.projected : inboxCandidates(readInboxes(read), { ...input, inbox: input.inbox });
+      const candidates = input.itemId === undefined ? items : items.filter((item) => item.id === input.itemId);
+      const { matched } = matchPage({ items: candidates, input, read, timeZone: deps.timeZone });
+      return chaseRows({ items: matched, read, factoryId: input.factoryId });
     },
   });
 }
 
-async function load({ deps, input, actor }: { readonly deps: GetTodayDeps; readonly input: TodayQuery; readonly actor: Actor }) {
-  const now = deps.clock.now();
-  const asOf = deps.clock.today();
-  const settings = await deps.settings.get();
-  const pendingScope: TodayQuery['scope'] = input.scope === 'all' && can(actor, 'dashboard.read') ? 'all' : 'mine';
-  const [catalog, exceptions, reviewCounts, uncommittedImports, candidates] = await Promise.all([
-    deps.today.loadCatalog(asOf),
-    deps.today.loadOpenExceptions(),
-    deps.today.loadReviewCounts(),
-    deps.today.loadUncommittedImports(actor.id),
-    input.includePending === true ? deps.today.loadPendingBatch(pendingScope === 'mine' ? actor.id : null) : undefined,
-  ]);
-  const sources = catalog.sources.map((batch) => visibleReminder({ batch, actor, scope: pendingScope }));
-  const projected = filterTodosForUser({
-    todos: projectTodos({ input: { batches: sources, exceptions, reviewCounts, uncommittedImports }, today: asOf, now, settings }),
-    actor, scope: input.scope,
-  });
-  const lines = indexById(catalog.lines);
-  const batches = indexById(catalog.batches);
-  const names = new Map(catalog.parties.map((party) => [party.id, party.displayName]));
-  return { asOf, catalog, exceptions, candidates, pendingScope, projected, lines, batches, names, actor, scope: input.scope, warehouseId: settings.ownWarehousePartyId };
-}
-
-function visibleReminder({ batch, actor, scope }: { readonly batch: TodoBatchSource; readonly actor: Actor; readonly scope: TodayQuery['scope'] }): TodoBatchSource {
-  const { nextFollowUpAt, ...fields } = batch;
-  if (nextFollowUpAt === undefined || scope === 'all' || batch.ownerUserId === actor.id) return batch;
-  return fields;
-}
-
-type TodayRead = Awaited<ReturnType<typeof load>>;
 type Projected = TodayRead['projected'][number];
+
+function readInboxes(read: TodayRead) {
+  return projectInboxes({ projected: read.projected, sources: read.sources, actorId: read.actor.id, memos: readArrivals(read),
+    ctx: { today: read.asOf, now: Date.parse(read.now), settings: read.settings } });
+}
+
+function showsPending(input: TodayPageQuery): boolean {
+  return input.inbox === undefined || (input.inbox === 'today' && input.work === undefined
+    && input.reasons === undefined && input.calendar === undefined && input.sort.kind === 'urgency');
+}
 
 function matchReasons(items: readonly Projected[], reasons: TodayQuery['reasons']): readonly Projected[] {
   return reasons === undefined ? items : items.filter((item) => item.reasons.some((reason) => hasReason(reasons, reason)));
 }
 
-function selectItems(items: readonly Projected[], sort: TodayPageQuery['sort']): readonly Projected[] {
+function selectItems(items: readonly Projected[], { sort, inbox }: Pick<TodayPageQuery, 'sort' | 'inbox'>): readonly Projected[] {
   if (sort.kind === 'urgency') return items;
   return items.flatMap((item) => {
     const remaining = item.remaining;
     if (remaining?.unit !== sort.unit || remaining.unshippedQty === null) return [];
     return [{ item, qty: remaining.unshippedQty }];
-  }).sort((left, right) => right.qty - left.qty).map(({ item }) => item);
+  }).sort((left, right) => inbox === 'scheduled' ? 0 : right.qty - left.qty).map(({ item }) => item);
 }
 
-function responseOf({ read, matched, shown }: {
+function responseOf({ read, matched, shown, memos = readArrivals(read), includePending = true }: {
   readonly read: TodayRead;
   readonly matched: readonly Projected[];
   readonly shown: readonly Projected[];
+  readonly memos?: TodayResponse['arrivalMemos'];
+  readonly includePending?: boolean;
 }): TodayResponse {
-  const { asOf, catalog, exceptions, candidates, pendingScope, lines, batches, names, actor, scope, warehouseId } = read;
+  const { asOf, exceptions, pending, lines, batches, names } = read;
   return {
     asOf,
     counts: countsOf(matched),
     items: shown.map((item) => toView({ item, lines, batches, names, exceptions })),
-    ...(candidates === undefined ? {} : { pendingBatch: pendingBatch({ candidates, actor, scope: pendingScope, warehouseId }) }),
-    arrivalMemos: arrivalMemos({ sources: catalog.sources, batches, actor, scope, today: asOf, lines, names }),
+    ...(!includePending || pending === undefined ? {} : { pendingBatch: pending }),
+    arrivalMemos: memos,
     truncated: shown.length < matched.length,
   };
 }
 
-function pageOf({ read, input }: { readonly read: TodayRead; readonly input: TodayPageQuery }): TodayPageResponse {
-  const work = matchWork({ items: read.projected, work: input.work, read });
-  const candidates = matchReasons(work, input.reasons);
-  const matched = selectItems(candidates, input.sort);
+function pageOf({ read, input, timeZone }: { readonly read: TodayRead; readonly input: TodayPageQuery; readonly timeZone: string }): TodayPageResponse {
+  const { items, chaseScope, followUpCounts, extras, memos } = pageScope({ read, input, timeZone });
+  const { candidates, matched, reasonCounts, calendar } = matchPage({ items, input, read, timeZone });
   const { number, size } = input.page;
   const page = locatePage({ matched, number, size, focusId: input.focusId });
   const start = (page - 1) * size;
   const shown = matched.slice(start, start + size);
-  const chase = chaseSummary({ items: matched, read });
-  const counts = countsOf(read.projected);
+  const chase = chaseSummary({ items: input.inbox === 'scheduled' ? [] : matched, read });
   return {
-    ...responseOf({ read, matched, shown }),
+    ...responseOf({ read, matched, shown, memos: memos(shown), includePending: showsPending(input) }),
     truncated: false,
     paging: {
       page, pageSize: size, total: matched.length,
       urgent: matched.filter((item) => item.severity >= HIGH_PRIORITY).length,
-      reasonCounts: countsOf(selectItems(work, input.sort)),
-      followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled },
+      reasonCounts,
+      followUpCounts,
       units: comparisonUnits(candidates),
       factories: chase.factories,
       chaseCounts: {
-        all: read.projected.filter((item) => chaseEligibility(item, read) !== null).length,
+        all: chaseScope.filter((item) => chaseEligibility(item, read) !== null).length,
         filtered: chase.ids.size,
       },
-      internalNoteCount: read.projected.filter(isInternalNote).length,
+      internalNoteCount: items.filter(isInternalNote).length,
       chaseItemIds: shown.filter((item) => chase.ids.has(item.id)).map((item) => item.id),
+      ...(calendar === undefined ? {} : { calendar }),
+      ...extras,
     },
   };
+}
+
+function pageScope({ read, input, timeZone }: { readonly read: TodayRead; readonly input: TodayPageQuery; readonly timeZone: string }) {
+  const { inbox } = input;
+  if (inbox === undefined) {
+    const counts = countsOf(read.projected);
+    return { items: read.projected, chaseScope: read.projected, extras: {}, memos: () => readArrivals(read),
+      followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled } };
+  }
+  const inboxes = readInboxes(read);
+  const { today, scheduled, unassigned } = inboxes.rows;
+  const extras: Pick<TodayPaging, 'inboxCounts' | 'pendingCount' | 'focusInbox' | 'focusDay' | 'focusWork'> = {
+    inboxCounts: { today: today.length, scheduled: scheduled.length, unassigned: unassigned.length },
+    ...(read.pending === undefined ? {} : { pendingCount: read.pending.length }),
+    ...inboxFocus({ current: inbox, inboxes, focusId: input.focusId, asOf: read.asOf, timeZone }),
+  };
+  return {
+    items: inboxCandidates(inboxes, { ...input, inbox }), chaseScope: inbox === 'today' ? today : [], extras,
+    followUpCounts: { due: today.filter((item) => item.reasons.includes('follow_up_due')).length, scheduled: scheduled.length },
+    memos: (shown: readonly Projected[]) => inbox === 'scheduled' ? [] : shown.flatMap((item) => {
+      const memo = inboxes.arrivals.get(item.id);
+      return memo === undefined ? [] : [memo];
+    }),
+  };
+}
+
+function matchPage({ items, input, read, timeZone }: {
+  readonly items: readonly Projected[];
+  readonly input: TodayChaseQuery;
+  readonly read: TodayRead;
+  readonly timeZone: string;
+}) {
+  const { inbox, reasons, work } = input;
+  const workItems = matchWork({ items, work, read });
+  const sorted = selectItems(workItems, input);
+  const matching = matchReasons(sorted, reasons);
+  const candidates = matchReasons(workItems, reasons);
+  if (inbox === undefined || input.calendar === undefined) {
+    return { candidates, matched: matching, reasonCounts: countsOf(sorted), calendar: undefined };
+  }
+  const date = input.calendar === 'today' ? read.asOf : input.calendar;
+  const dateView = { date, asOf: read.asOf, timeZone };
+  const calendar = calendarOf({ ...dateView, candidates: matching });
+  const forCounts = reasons === undefined ? calendar.matched : calendarOf({ ...dateView, candidates: sorted }).matched;
+  return { candidates, matched: calendar.matched, reasonCounts: countsOf(forCounts), calendar: calendar.view };
 }
 
 function personalPage({ read, input, timeZone }: { readonly read: TodayRead; readonly input: PersonalTodayQuery; readonly timeZone: string }): PersonalTodayResponse {
@@ -130,7 +157,7 @@ function personalPage({ read, input, timeZone }: { readonly read: TodayRead; rea
   const scheduled = owned.filter(isScheduled).length;
   const candidates = input.scope === 'all' ? owned : owned.filter((item) => isScheduled(item) === (input.scope === 'scheduled'));
   const date = input.calendar === 'today' ? read.asOf : input.calendar;
-  const calendar = date === undefined ? undefined : personalCalendar({ candidates, date, asOf: read.asOf, timeZone });
+  const calendar = date === undefined ? undefined : calendarOf({ candidates, date, asOf: read.asOf, timeZone });
   const matched = calendar?.matched ?? candidates;
   const page = locatePage({ matched, number: input.page, size: input.pageSize, focusId: input.focusId });
   const start = (page - 1) * input.pageSize;
@@ -139,30 +166,6 @@ function personalPage({ read, input, timeZone }: { readonly read: TodayRead; rea
     items: matched.slice(start, start + input.pageSize).map((item) => toView({ ...read, item })),
     ...(calendar === undefined ? {} : { calendar: calendar.view }),
   };
-}
-
-function isScheduled(item: Projected): boolean {
-  return item.reasons.includes('follow_up_scheduled');
-}
-
-function personalCalendar({ candidates, date, asOf, timeZone }: {
-  readonly candidates: readonly Projected[];
-  readonly date: LocalDate;
-  readonly asOf: LocalDate;
-  readonly timeZone: string;
-}) {
-  const month = date.slice(0, DATE_MONTH_PREFIX_LENGTH);
-  const days = new Map<LocalDate, number>();
-  const matched: Projected[] = [];
-  for (const item of candidates) {
-    const day = isScheduled(item) && item.nextFollowUpAt !== undefined ? businessDay(item.nextFollowUpAt, timeZone) : asOf;
-    if (day.startsWith(month)) {
-      const count = days.get(day);
-      days.set(day, count === undefined ? 1 : count + 1);
-    }
-    if (day === date) matched.push(item);
-  }
-  return { matched, view: { date, days: [...days].map(([day, count]) => ({ date: day, count })) } };
 }
 
 function locatePage({ matched, number, size, focusId }: {
@@ -178,6 +181,7 @@ function locatePage({ matched, number, size, focusId }: {
 function matchWork({ items, work, read }: { readonly items: readonly Projected[]; readonly work: TodayPageQuery['work']; readonly read: TodayRead }): readonly Projected[] {
   if (work === 'factory_chase') return items.filter((item) => chaseEligibility(item, read) !== null);
   if (work === 'internal_note') return items.filter(isInternalNote);
+  if (work === 'all_unshipped') return items.filter((item) => item.ownerUserId === read.actor.id && item.reasons.includes('unshipped') && !isScheduled(item));
   return items;
 }
 
@@ -231,29 +235,6 @@ function chaseEligibility(item: Projected, read: TodayRead): ChaseEligibility | 
   return { factory: { id: waitingOn.partyId, name }, unshippedQty: qty, unit: remaining.unit };
 }
 
-function pendingBatch({ candidates, actor, scope, warehouseId }: {
-  readonly candidates: readonly PendingBatchSource[];
-  readonly actor: Actor;
-  readonly scope: TodayQuery['scope'];
-  readonly warehouseId: string | null;
-}): PendingBatchRow[] {
-  const canWrite = can(actor, 'lines.write');
-  return candidates.flatMap((line) => {
-    const isOwner = line.buyerUserId === actor.id;
-    if ((scope === 'mine' && !isOwner) || !isOpenForFirstBatch(line, line.reportedStatus)) return [];
-    const readiness = firstBatchReadiness({ line, warehouseId: line.receiverIsOwnWarehouse ? warehouseId : null });
-    return [{
-      orderLineId: line.orderLineId,
-      poRaw: line.poRaw,
-      nameRaw: line.nameRaw,
-      qtyOrdered: line.qtyOrdered,
-      unit: normalizeUnit(line.unit),
-      missingFields: readiness.kind === 'detail' ? readiness.missingFields : [],
-      action: isOwner && canWrite ? readiness.kind : 'detail',
-    }];
-  });
-}
-
 function toView(input: {
   readonly item: Projected;
   readonly lines: ReadonlyMap<string, TodoLineView>;
@@ -288,10 +269,6 @@ function partyOf(id: string | null, names: ReadonlyMap<string, string>): TodoIte
 function lookup<T>(id: string | undefined, rows: ReadonlyMap<string, T>): T | null {
   if (id === undefined) return null;
   return rows.get(id) ?? null;
-}
-
-function indexById<T extends { readonly id: string }>(rows: readonly T[]): ReadonlyMap<string, T> {
-  return new Map(rows.map((row) => [row.id, row]));
 }
 
 function knownReasons(reasons: readonly string[]): TodoReason[] {

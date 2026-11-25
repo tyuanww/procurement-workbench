@@ -93,13 +93,17 @@ export type PendingBatchRow = {
 
 export type TodaySort = { readonly kind: 'urgency' } | { readonly kind: 'bulk'; readonly unit: string };
 export type TodayFilter = { readonly reasons?: readonly TodoReason[]; readonly sort: TodaySort };
-export type TodayWorkFilter = 'factory_chase' | 'internal_note';
-export type TodayChaseQuery = TodayFilter & { readonly factoryId?: string; readonly itemId?: string; readonly work?: TodayWorkFilter };
+export type TodayWorkFilter = 'factory_chase' | 'internal_note' | 'all_unshipped';
+export type TodayInbox = 'today' | 'scheduled' | 'unassigned';
+type TodayCalendarQuery = LocalDate | 'today';
+type TodayCalendar = { readonly date: LocalDate; readonly days: readonly { readonly date: LocalDate; readonly count: number }[] };
+type TodayInboxQuery = { readonly inbox?: TodayInbox; readonly calendar?: TodayCalendarQuery };
+export type TodayChaseQuery = TodayFilter & TodayInboxQuery & { readonly factoryId?: string; readonly itemId?: string; readonly work?: TodayWorkFilter };
 export type TodayQuery = Omit<TodayFilter, 'sort'> & {
   readonly scope: 'mine' | 'all';
   readonly includePending?: boolean;
 };
-export type TodayPageQuery = TodayQuery & {
+export type TodayPageQuery = TodayQuery & TodayInboxQuery & {
   readonly page: { readonly number: number; readonly size: number };
   readonly sort: TodaySort;
   readonly work?: TodayWorkFilter;
@@ -118,6 +122,14 @@ export type TodayPaging = {
   readonly chaseCounts?: { readonly all: number; readonly filtered: number };
   readonly internalNoteCount?: number;
   readonly chaseItemIds?: readonly string[];
+  /** 三个工作范围各自分页和筛选前的办件数。同一批次可有今天核收和已约跟进。 */
+  readonly inboxCounts?: Readonly<Record<TodayInbox, number>>;
+  /** 本人待建首批的订单行数，独立于统一分页的办件。 */
+  readonly pendingCount?: number;
+  readonly calendar?: TodayCalendar;
+  readonly focusInbox?: TodayInbox;
+  readonly focusDay?: LocalDate;
+  readonly focusWork?: 'all_unshipped';
 };
 export type TodayPageResponse = TodayResponse & { readonly paging: TodayPaging };
 export type PersonalTodayScope = 'pending' | 'scheduled' | 'all';
@@ -126,7 +138,7 @@ export type PersonalTodayQuery = {
   readonly page: number;
   readonly pageSize: number;
   readonly focusId?: string;
-  readonly calendar?: LocalDate | 'today';
+  readonly calendar?: TodayCalendarQuery;
 };
 export type PersonalTodayResponse = {
   readonly asOf: LocalDate;
@@ -135,7 +147,7 @@ export type PersonalTodayResponse = {
   readonly page: number;
   readonly pageSize: number;
   readonly total: number;
-  readonly calendar?: { readonly date: LocalDate; readonly days: readonly { readonly date: LocalDate; readonly count: number }[] };
+  readonly calendar?: TodayCalendar;
 };
 export type TodayChaseRow = Pick<TodoItem, 'id' | 'dueDate' | 'overdueDays' | 'reasons'> & {
   readonly factory: TodayFactory;
@@ -181,6 +193,7 @@ export type TodoExceptionSource = {
   readonly type: string;
   readonly note: string;
   readonly openedBy: string;
+  readonly lineOwnerUserId?: string | null;
 };
 
 export type TodayCatalog = {

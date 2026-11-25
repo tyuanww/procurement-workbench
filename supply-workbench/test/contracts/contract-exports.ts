@@ -250,6 +250,8 @@ export const contractExportNames = [
   'TodayChaseResponseSchema',
   'TodayChaseRow',
   'TodayFactory',
+  'TodayInbox',
+  'TodayInboxSchema',
   'TodayPageQuery',
   'TodayPageQuerySchema',
   'TodayPageResponse',

@@ -1,4 +1,4 @@
-import type { PersonalTodayQuery, PersonalTodayResponse, PersonalTodayScope, SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodoItem, TodoItemView } from '@sw/application';
+import type { PersonalTodayQuery, PersonalTodayResponse, PersonalTodayScope, SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayInbox, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodoItem, TodoItemView } from '@sw/application';
 import { z } from 'zod';
 import { BatchStatusSchema, LaneSchema, NoteStatusSchema, PoFormatSchema, TodoReasonSchema, WaitingOnKindSchema } from './enums.js';
 import { nullable, optional, strictObject } from './shape.js';
@@ -109,6 +109,9 @@ const todayResponse = strictObject({
 export const TodayResponseSchema: z.ZodType<TodayResponse> = todayResponse;
 
 const todayFactory = strictObject({ id: z.string(), name: z.string() });
+export const TodayInboxSchema = z.enum(['today', 'scheduled', 'unassigned']);
+const calendarDate = z.union([LocalDateSchema, z.literal('today')]);
+const todayCalendar = strictObject({ date: LocalDateSchema, days: z.array(strictObject({ date: LocalDateSchema, count: z.int().positive() })) });
 export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayResponse.extend({
   paging: strictObject({
     page: z.int().positive(),
@@ -122,6 +125,12 @@ export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayRespon
     chaseCounts: optional(strictObject({ all: z.int().nonnegative(), filtered: z.int().nonnegative() })),
     internalNoteCount: optional(z.int().nonnegative()),
     chaseItemIds: optional(z.array(z.string())),
+    inboxCounts: optional(strictObject({ today: z.int().nonnegative(), scheduled: z.int().nonnegative(), unassigned: z.int().nonnegative() })),
+    pendingCount: optional(z.int().nonnegative()),
+    calendar: optional(todayCalendar),
+    focusInbox: optional(TodayInboxSchema),
+    focusDay: optional(LocalDateSchema),
+    focusWork: optional(z.literal('all_unshipped')),
   }),
 });
 
@@ -131,7 +140,7 @@ export const PersonalTodayQuerySchema: z.ZodType<PersonalTodayQuery> = strictObj
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
   focusId: optional(z.string().min(1)),
-  calendar: optional(z.union([LocalDateSchema, z.literal('today')])),
+  calendar: optional(calendarDate),
 });
 export const PersonalTodayResponseSchema: z.ZodType<PersonalTodayResponse> = strictObject({
   asOf: LocalDateSchema,
@@ -140,7 +149,7 @@ export const PersonalTodayResponseSchema: z.ZodType<PersonalTodayResponse> = str
   page: z.int().positive(),
   pageSize: z.int().positive(),
   total: z.int().nonnegative(),
-  calendar: optional(strictObject({ date: LocalDateSchema, days: z.array(strictObject({ date: LocalDateSchema, count: z.int().positive() })) })),
+  calendar: optional(todayCalendar),
 });
 
 const todaySort: z.ZodType<TodaySort> = z.discriminatedUnion('kind', [
@@ -155,9 +164,11 @@ const todayQuery = strictObject({
 });
 
 export const TodayQuerySchema: z.ZodType<TodayQuery> = todayQuery;
-export const TodayWorkFilterSchema = z.enum(['factory_chase', 'internal_note']);
+export const TodayWorkFilterSchema = z.enum(['factory_chase', 'internal_note', 'all_unshipped']);
 export type TodayWorkFilter = z.infer<typeof TodayWorkFilterSchema>;
 export const TodayPageQuerySchema: z.ZodType<TodayPageQuery> = todayQuery.extend({
+  inbox: optional(TodayInboxSchema),
+  calendar: optional(calendarDate),
   page: strictObject({
     number: z.coerce.number().int().positive().default(1),
     size: z.coerce.number().int().min(1).max(100).default(50),
@@ -168,6 +179,8 @@ export const TodayPageQuerySchema: z.ZodType<TodayPageQuery> = todayQuery.extend
 });
 
 export const TodayChaseQuerySchema: z.ZodType<TodayChaseQuery> = strictObject({
+  inbox: optional(TodayInboxSchema),
+  calendar: optional(calendarDate),
   reasons: todayQuery.shape.reasons,
   sort: todaySort,
   work: optional(TodayWorkFilterSchema),
@@ -225,4 +238,4 @@ export const SearchResultSchema: z.ZodType<SearchResult> = strictObject({
   parties: z.array(strictObject({ kind: z.literal('party'), id: z.string(), displayName: z.string() })),
 });
 
-export type { PersonalTodayQuery, PersonalTodayResponse, PersonalTodayScope, SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodoItem, TodoItemView };
+export type { PersonalTodayQuery, PersonalTodayResponse, PersonalTodayScope, SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayInbox, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodoItem, TodoItemView };

@@ -3,7 +3,7 @@ import type { Actor } from '../../shared/actor.js';
 import type { TodoItem, TodoInput } from '../views.js';
 import { TODO_RULES, MID_SEVERITY, type TodoContext, type TodoRule } from './rules.js';
 
-type Projected = Omit<TodoItem, 'reasons'> & {
+export type ProjectedTodo = Omit<TodoItem, 'reasons'> & {
   readonly reasons: readonly string[];
   readonly remaining?: BatchFulfillment;
   readonly nextFollowUpAt?: string;
@@ -15,7 +15,7 @@ export function projectTodos({ input, today, now, settings, rules = TODO_RULES }
   readonly now: string;
   readonly settings: Settings;
   readonly rules?: readonly TodoRule[];
-}): Projected[] {
+}): ProjectedTodo[] {
   const ctx = { today, now: Date.parse(now), settings };
   const batches = input.batches.flatMap((batch) => projectBatch({ batch, ctx, rules }));
   const exceptions = input.exceptions.map(projectException);
@@ -24,11 +24,11 @@ export function projectTodos({ input, today, now, settings, rules = TODO_RULES }
   return [...batches, ...exceptions, ...review, ...imports].sort(byUrgency);
 }
 
-export function filterTodosForUser({ todos, actor, scope }: { readonly todos: readonly Projected[]; readonly actor: Actor; readonly scope: 'mine' | 'all' }): Projected[] {
+export function filterTodosForUser({ todos, actor, scope }: { readonly todos: readonly ProjectedTodo[]; readonly actor: Actor; readonly scope: 'mine' | 'all' }): ProjectedTodo[] {
   return todos.filter((todo) => visible({ todo, actor, scope }));
 }
 
-function projectBatch({ batch, ctx, rules }: { readonly batch: TodoInput['batches'][number]; readonly ctx: TodoContext; readonly rules: readonly TodoRule[] }): Projected[] {
+export function projectBatch({ batch, ctx, rules }: { readonly batch: TodoInput['batches'][number]; readonly ctx: TodoContext; readonly rules: readonly TodoRule[] }): ProjectedTodo[] {
   const matched = rules.filter((rule) => rule.reason !== 'unassigned' && rule.applies(batch, ctx));
   if (matched.length === 0) return [];
   const reasons = matched.map((rule) => rule.reason);
@@ -53,7 +53,7 @@ function isFollowUpReason(code: string): boolean {
   return code === 'follow_up_due' || code === 'follow_up_scheduled';
 }
 
-function projectException(exception: TodoInput['exceptions'][number]): Projected {
+function projectException(exception: TodoInput['exceptions'][number]): ProjectedTodo {
   return {
     id: `exception:${exception.id}`,
     subject: 'exception',
@@ -67,7 +67,7 @@ function projectException(exception: TodoInput['exceptions'][number]): Projected
   };
 }
 
-function projectReview(counts: TodoInput['reviewCounts']): Projected[] {
+function projectReview(counts: TodoInput['reviewCounts']): ProjectedTodo[] {
   const pending = counts.aliases + counts.codes + counts.links + counts.multiName;
   if (pending === 0) return [];
   return [{
@@ -83,7 +83,7 @@ function projectReview(counts: TodoInput['reviewCounts']): Projected[] {
   }];
 }
 
-function projectImport(item: TodoInput['uncommittedImports'][number], today: LocalDate): Projected[] {
+function projectImport(item: TodoInput['uncommittedImports'][number], today: LocalDate): ProjectedTodo[] {
   const day = item.createdAt.split('T')[0];
   if (day === undefined || diffDays(today, localDate(day)) <= 1) return [];
   return [{
@@ -99,13 +99,13 @@ function projectImport(item: TodoInput['uncommittedImports'][number], today: Loc
   }];
 }
 
-function visible({ todo, actor, scope }: { readonly todo: Projected; readonly actor: Actor; readonly scope: 'mine' | 'all' }): boolean {
+function visible({ todo, actor, scope }: { readonly todo: ProjectedTodo; readonly actor: Actor; readonly scope: 'mine' | 'all' }): boolean {
   if (todo.subject === 'review' && !can(actor, 'master.review')) return false;
   if (scope === 'all') return true;
   return todo.ownerUserId === actor.id || todo.ownerUserId === null;
 }
 
-function byUrgency(left: Projected, right: Projected): number {
+export function byUrgency(left: ProjectedTodo, right: ProjectedTodo): number {
   if (left.severity !== right.severity) return right.severity - left.severity;
   const overdue = rank(right.overdueDays) - rank(left.overdueDays);
   if (overdue !== 0) return overdue;

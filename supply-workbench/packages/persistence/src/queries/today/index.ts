@@ -266,8 +266,10 @@ function oneStatus(value: string): TodoBatchSource['status'] {
 }
 
 async function loadOpenExceptions(db: AppDatabase): Promise<readonly TodoExceptionSource[]> {
-  const rows = await db.select().from(exceptions).where(eq(exceptions.status, 'open'));
-  return rows.map((row) => ({ id: row.id, orderLineId: row.orderLineId, batchId: row.batchId, type: row.type, note: row.note, openedBy: row.openedBy }));
+  return db.select({
+    id: exceptions.id, orderLineId: exceptions.orderLineId, batchId: exceptions.batchId,
+    type: exceptions.type, note: exceptions.note, openedBy: exceptions.openedBy, lineOwnerUserId: orderLines.buyerUserId,
+  }).from(exceptions).leftJoin(orderLines, eq(exceptions.orderLineId, orderLines.id)).where(eq(exceptions.status, 'open'));
 }
 
 async function loadReviewCounts(db: AppDatabase) {
