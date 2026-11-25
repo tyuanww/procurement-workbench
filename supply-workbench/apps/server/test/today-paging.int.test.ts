@@ -93,6 +93,19 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
     expect((await chase('reasons=unshipped')).some((item) => item.id === 'batch:hz09-batch-501')).toBe(false);
     expect(await chase(exactBatch)).toEqual([]);
 
+    const [factoryWork, internalWork, unfiltered, nonChase] = await Promise.all([
+      readPage(10, 'work=factory_chase'), readPage(1, 'work=internal_note'), readPage(1, ''),
+      readPage(1, 'reasons=fulfillment_review'),
+    ]);
+    expect(factoryWork.paging).toMatchObject({ total: 500, page: 10, chaseCounts: { all: 500, filtered: 500 }, internalNoteCount: 1 });
+    expect(factoryWork.items.map((item) => item.id)).toEqual(factoryWork.paging.chaseItemIds);
+    expect(internalWork.paging).toMatchObject({ total: 1, chaseCounts: { all: 500, filtered: 0 }, internalNoteCount: 1 });
+    expect(internalWork.items).toMatchObject([{ id: 'batch:hz09-batch-501', waitingOn: { kind: 'internal' }, reasons: ['note_missing'] }]);
+    expect(internalWork.arrivalMemos).toContainEqual(expect.objectContaining({ batchId: 'hz09-batch-501', inTransitQty: 40000 }));
+    expect(unfiltered.paging.total).toBe(502);
+    expect(nonChase.items.map((item) => item.id)).toEqual(['batch:hz09-batch-504']);
+    expect(await chase('work=internal_note')).toEqual([]);
+
     function ship(qty: number) {
       return app.inject({
         method: 'POST', url: '/api/v1/batches/hz09-batch-501/shipments', headers: { cookie },

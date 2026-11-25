@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Alert, Button, Card, Empty, Flex, Select, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
@@ -31,6 +32,7 @@ export function ProductDevelopmentPanel({ store, filters }: { readonly store: St
       {filters}
       {data === null ? null : <DevelopmentProjectControls data={data} store={store} projectId={selection.project?.id}
         onSelect={(id) => show(id, null)} onSaved={(id) => saved(id, null)} />}
+      <ProcurementCutoff />
     </Flex></Card>
     {load.kind === 'loading' ? <Skeleton active /> : null}
     {load.kind === 'error' ? <Alert type="error" showIcon title={load.message} action={<Button onClick={reload}>重试</Button>} /> : null}
