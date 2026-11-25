@@ -25,7 +25,7 @@ function displayedCell(sheet: Sheet, address: { row: number; col: number }) {
   const { row, col } = address;
   const merge = sheet.merges.find((m) => row >= m.r1 && row <= m.r2 && col >= m.c1 && col <= m.c2);
   const cell = sheet.cell(merge?.r1 ?? row, merge?.c1 ?? col);
-  return (cell?.displayText ?? cell?.text ?? '').trim();
+  return (cell?.displayText ?? cell?.richText ?? cell?.text ?? '').trim();
 }
 
 export function scheduleProjects(book: Workbook, brand: string): DirectorProject[] {
