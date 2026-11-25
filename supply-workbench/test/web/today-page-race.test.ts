@@ -124,6 +124,8 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
       fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) });
     });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
+    const filter = button('筛选与复制催单');
+    click(filter);
     click(button('要催货2批'));
     await act(() => { fulfill({ urlPart: 'work=factory_chase', status: 200, body: result(factories) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(2);
@@ -136,6 +138,7 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
     expect(textOf('#today-chase')).toContain('共 1 批等回单');
     expect(textOf('#today-chase')).toContain('当前筛选 · 内部等回单');
+    click(filter);
     click(button('清除筛选'));
     await act(() => { fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);

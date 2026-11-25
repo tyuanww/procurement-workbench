@@ -40,7 +40,6 @@ export type TodayScreenProps = {
   readonly actionPage?: ActionPageControls | undefined;
   readonly batchSeqOf?: ((rowId: string) => number | undefined) | undefined;
   readonly fulfillmentOf?: ((rowId: string) => BatchFulfillment | undefined) | undefined;
-  readonly buyerName?: string;
   readonly detailOf?: (id: string) => ActionDetail | undefined;
   readonly myPlan?: MyPlan | undefined;
   readonly plan?: PlanLoad;
@@ -154,7 +153,7 @@ function ActionPane(props: TodayScreenProps): ReactNode {
   });
   const receipts = arrivalWork(summary.arrivals, board.body.kind === 'groups' ? board.body.rows : []);
   return <>
-    <TodayLinks pending={pending.total} page={page} buyerName={summary.buyerName} asOf={props.asOf}
+    <TodayLinks pending={pending.total} page={page} asOf={props.asOf}
       myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
     <ActionBoard {...props} page={page} receiptOf={(id) => receipts.get(id)}
@@ -164,14 +163,13 @@ function ActionPane(props: TodayScreenProps): ReactNode {
   </>;
 }
 
-function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, arrivalMemos, buyerName, onRetryPlan, board, actionPage }: TodayScreenProps) {
+function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, arrivalMemos, onRetryPlan, board, actionPage }: TodayScreenProps) {
   const canShowInternal = isInternalWorkVisible ?? !isActionFiltered({ board, page: actionPage });
   return {
     tasks: canShowInternal && myPlan?.kind === 'ready' ? myPlan.rows : [],
     pendingRows: canShowInternal ? pendingBatch ?? [] : [],
     pendingFocusId: pendingFocusId ?? null,
     arrivals: arrivalMemos ?? [],
-    buyerName,
     onRetryPlan: onRetryPlan ?? noop,
   };
 }

@@ -150,7 +150,8 @@ function RowActions({ card, copy, arrivalFocusId, onOpen, onQuick }: Pick<RowPro
     {primary.kind === 'receipt' ? <ReceiptAction memo={primary.memo} isFocused={arrivalFocusId === primary.memo.batchId} /> : null}
     {primary.kind === 'quick' ? <Button type="primary" size="small" icon={actionIcon(primary.action.kind)} onClick={() => onQuick(primary.action.kind)}>{primary.action.label}</Button> : null}
     {copyAction === null ? null : <CopyButton copy={copyAction} primary={primary.kind === 'copy'} />}
-    <Button type={primary.kind === 'detail' ? 'primary' : 'text'} size="small" onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
+    <Button className="today-action-detail" type={primary.kind === 'detail' ? 'primary' : 'text'} size="small"
+      onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
     <RowMenu actions={card.overflow} identity={identity} onQuick={onQuick} />
   </Flex>;
 }
@@ -177,10 +178,12 @@ function RowMenu({ actions, identity, onQuick }: {
     key: action.kind, label: action.label, icon: actionIcon(action.kind),
     onClick: () => { trigger.current?.focus(); onQuick(action.kind); },
   })) }}>
-    <Button ref={trigger} type="text" size="small" aria-haspopup="menu" aria-expanded={isOpen} aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
+    <Button ref={trigger} className="today-action-more" type="text" size="small" aria-haspopup="menu" aria-expanded={isOpen}
+      aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
   </Dropdown>;
 }
 
 function CopyButton({ copy, primary }: { readonly copy: CopyAction; readonly primary: boolean }) {
-  return <Button type={primary ? 'primary' : 'text'} size="small" icon={<CopyOutlined aria-hidden />} disabled={copy.disabled} onClick={copy.run}>{copy.label}</Button>;
+  return <Button className="today-action-copy" type={primary ? 'primary' : 'text'} size="small" icon={<CopyOutlined aria-hidden />}
+    disabled={copy.disabled} onClick={copy.run}>{copy.label}</Button>;
 }

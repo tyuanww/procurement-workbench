@@ -3,7 +3,7 @@ import { FilterOutlined } from '@ant-design/icons';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import type { GroupMode, ReasonChip, TodayBoard } from '../../features/today/index.js';
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { ActionControls, ChaseControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
+import { ActionControls, BatchLinks, ChaseControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
 import { TodayGrouping } from './TodayGroup.js';
 
 export type ActionToolbarProps = {
@@ -88,8 +88,11 @@ function ActionOptions({ board, page, onGroup, onToggleReason, calendar, utility
 function ChaseOptions({ page }: { readonly page: ActionPageControls }) {
   const isAllUnshipped = page.work === 'all_unshipped';
   return <>
-    <Button size="small" style={{ alignSelf: 'flex-start' }} aria-pressed={isAllUnshipped}
-      onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>{workFilterLabels.all_unshipped}</Button>
+    <Flex className="today-touch" align="center" gap="small" wrap>
+      {isAllUnshipped ? null : <BatchLinks page={page} />}
+      <Button size="small" aria-pressed={isAllUnshipped}
+        onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>{workFilterLabels.all_unshipped}</Button>
+    </Flex>
     <ChaseControls page={page} />
   </>;
 }

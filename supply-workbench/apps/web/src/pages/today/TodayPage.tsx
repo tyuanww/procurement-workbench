@@ -211,7 +211,6 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     actionBoard,
     batchSeqOf: (rowId) => state.targets[rowId]?.batchSeq,
     fulfillmentOf: (rowId) => state.targets[rowId]?.fulfillment,
-    buyerName: state.buyerName,
     detailOf: (id) => state.details[id],
     plan: plan.load,
     onRetryPlan: plan.reload,

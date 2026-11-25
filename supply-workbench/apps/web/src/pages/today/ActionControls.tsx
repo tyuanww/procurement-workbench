@@ -33,12 +33,10 @@ export function ActionControls({ page, utilityLinks, isNarrow = false }: {
   readonly utilityLinks: ReactNode;
   readonly isNarrow?: boolean;
 }) {
-  const canFilterBatch = isNarrow && page?.inbox === 'today' && page.work !== 'all_unshipped';
   return <div className={isNarrow ? 'today-controls-narrow' : 'today-controls-wide'}>
     <Flex className="today-touch" gap="small" align="center" wrap>
       {utilityLinks}
       {page === undefined || page.inbox === 'scheduled' ? null : <SortControls page={page} />}
-      {canFilterBatch ? <BatchLinks page={page} /> : null}
     </Flex>
   </div>;
 }
@@ -71,7 +69,7 @@ function ChaseCopyButton({ copy, scope, label, count, disabled }: {
   readonly count: number | undefined;
   readonly disabled: boolean;
 }) {
-  return <Button icon={<CopyOutlined aria-hidden />} disabled={disabled || count === 0} onClick={() => copy({ kind: scope })}>
+  return <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={disabled || count === 0} onClick={() => copy({ kind: scope })}>
     {label}{count === undefined ? '' : `（${count} 批）`}
   </Button>;
 }

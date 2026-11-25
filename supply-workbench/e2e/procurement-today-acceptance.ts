@@ -82,8 +82,11 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.goto(bulk);
   await order('HZ09-0501').waitFor();
   await order('HZ09-0501').getByRole('button', { name: '复制本批催单' }).click();
-  await page.getByRole('status').filter({ hasText: '已复制 1 条催单' }).waitFor();
+  const copied = page.locator('.ant-message').getByRole('status').filter({ hasText: '已复制 1 条催单' });
+  await copied.waitFor();
   assert.deepEqual(purchaseOrders(await clipboardText(page)), ['HZ09-0501']);
+  assert.equal(await page.getByRole('region', { name: '工作台待办' }).getByText('已复制 1 条催单', { exact: true }).count(), 0);
+  await copied.waitFor({ state: 'hidden' });
   await page.screenshot({ path: join(out, 'procurement-bulk-mobile.png'), animations: 'disabled' });
   await recordShipment(page, origin, 25_000);
   await page.reload();
@@ -306,7 +309,8 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
   const shortcuts = page.getByRole('navigation', { name: '我的待办入口', exact: true });
   await page.goto(new URL('/today', origin).href);
   const scheduled = shortcuts.getByRole('button', { name: /^已约跟进\s*1/ });
-  const due = shortcuts.getByRole('button', { name: '到时跟进 1 批', exact: true });
+  const filters = page.getByRole('button', { name: '筛选与复制催单', exact: true });
+  const due = page.getByRole('button', { name: '到时跟进 1 批', exact: true });
   await scheduled.click();
   await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled' && !url.searchParams.has('unit'));
   await row.getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
@@ -315,6 +319,7 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
 
   const changed = await recordFollowUp(page, row, '2025-02-01T10:00', '改期，跟进收货进度');
   assert.equal(changed.nextFollowUpAt, '2025-02-01T02:00:00.000Z');
+  await filters.click();
   await due.click();
   await page.waitForURL((url) => url.searchParams.get('reasons') === 'follow_up_due');
   const dueTime = row.getByText('下次跟进 · 2025-02-01 10:00', { exact: true });
@@ -324,6 +329,8 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
   await page.screenshot({ path: join(out, 'procurement-follow-up-due.png'), animations: 'disabled' });
   await page.reload();
   await dueTime.waitFor();
+  await filters.click();
+  await due.waitFor();
 
   const cleared = await recordFollowUp(page, row, '', '跟进完成，取消提醒');
   assert.equal(cleared.nextFollowUpAt, null);

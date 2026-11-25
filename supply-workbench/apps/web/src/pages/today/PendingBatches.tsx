@@ -61,7 +61,7 @@ type PendingBatchView = ReturnType<typeof usePendingBatches>;
 export function pendingBatchCards(view: PendingBatchView) {
   return view.rows.map((row, index) => (
     <li key={`line:${row.orderLineId}`} {...(index === 0 ? jumpTarget : {})}>
-      <article><Card className="today-row" size="small"><PendingBatchItem row={row} view={view} /></Card></article>
+      <article><Card className="today-row today-work-card" size="small"><PendingBatchItem row={row} view={view} /></Card></article>
     </li>
   ));
 }
@@ -99,14 +99,15 @@ function PendingBatchItem({ row, view }: {
     restoredFocus.current = true;
     orderLink.current?.focus();
   }, [shouldFocus]);
+  const canCreate = row.action === 'create' && onCreate !== undefined;
   const actions = (
-    <Flex className="today-touch" align="center" gap="small" wrap onKeyDown={(event) => event.stopPropagation()}>
-      <TodayOrderLink order={{ lineId: row.orderLineId }} isPending focusRef={orderLink}>查看订单</TodayOrderLink>
-      {row.action === 'create' && onCreate !== undefined ? (
-        <Button size="small" loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
+    <Flex className="today-touch today-row-actions today-pending-actions" align="center" gap={space[0]} wrap onKeyDown={(event) => event.stopPropagation()}>
+      {canCreate ? (
+        <Button type="primary" size="small" loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
           生成首批次
         </Button>
       ) : null}
+      <TodayOrderLink order={{ lineId: row.orderLineId }} isPending focusRef={orderLink} primary={!canCreate}>查看订单</TodayOrderLink>
     </Flex>
   );
   const facts = <>
@@ -116,11 +117,13 @@ function PendingBatchItem({ row, view }: {
         {nextStep(row)}
       </Typography.Text>
   </>;
-  return <Flex vertical gap={space[1]}>
-    <Typography.Text type="secondary">待建批次</Typography.Text>
-    <div>{facts}</div>
+  return <div className="today-row-layout">
+    <div className="today-row-facts">
+      <Typography.Text type="secondary">待建批次</Typography.Text>
+      {facts}
+    </div>
     {actions}
-  </Flex>;
+  </div>;
 }
 
 function nextStep(row: PendingBatch) {

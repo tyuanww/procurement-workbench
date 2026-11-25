@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { TodayPaging, TodayResponse } from '@sw/contracts';
 import { todayArrivalsPath } from '../../features/today/index.js';
 import { MetricStrip } from '../../shared/ui/analytics.js';
-import { BatchLinks, type ActionPageControls } from './ActionControls.js';
+import type { ActionPageControls } from './ActionControls.js';
 import { focusSection } from './today-focus.js';
 import { PENDING_BATCH_TARGET } from './PendingBatches.js';
 import type { WorkspaceInbox } from './action-query.js';
@@ -30,7 +30,6 @@ const inboxes: readonly { readonly key: WorkspaceInbox; readonly label: string; 
 
 type TodayLinksProps = {
   readonly pending: number;
-  readonly buyerName: string | undefined;
   readonly asOf: TodayResponse['asOf'] | undefined;
   readonly page: ActionPageControls | undefined;
   readonly myPlan: MyPlan | undefined;
@@ -63,18 +62,18 @@ function workspaceCounts({ paging, planCount }: { readonly paging: TodayPaging |
   return { today, scheduled: counts?.scheduled, unassigned: counts?.unassigned };
 }
 
-function TodayShortcuts({ page, buyerName, asOf, myPlan, onRetryPlan, inbox, onInbox, pendingCount, planCount }: TodayLinksProps & {
+function TodayShortcuts({ page, asOf, myPlan, onRetryPlan, inbox, onInbox, pendingCount, planCount }: TodayLinksProps & {
   readonly pendingCount: number;
   readonly planCount: number | undefined;
 }) {
-  const isToday = inbox === 'today';
   const jump = useAgendaJump({ page, onReset: () => onInbox('today') });
   return <Flex gap="small" align="center" wrap>
-    {!buyerName || inbox === 'unassigned' ? null : <Typography.Text>{`负责人 · ${buyerName}`}</Typography.Text>}
-    {asOf === undefined ? null : <Typography.Text type="secondary">业务日 <time dateTime={asOf}>{asOf}</time></Typography.Text>}
-    {isToday ? <TodayOnlyShortcuts page={page} pendingCount={pendingCount} planCount={planCount} jump={jump} /> : null}
+    {inbox === 'today' ? <TodayOnlyShortcuts pendingCount={pendingCount} planCount={planCount} jump={jump} /> : null}
     <ReviewScopeNote page={page} />
     {myPlan?.kind === 'error' ? <Button size="small" onClick={onRetryPlan}>重试排期</Button> : null}
+    {asOf === undefined ? null : <Typography.Text type="secondary" style={{ marginInlineStart: 'auto' }}>
+      业务日 <time dateTime={asOf}>{asOf}</time>
+    </Typography.Text>}
   </Flex>;
 }
 
@@ -83,8 +82,7 @@ function ReviewScopeNote({ page }: { readonly page: ActionPageControls | undefin
   return <Typography.Text type="secondary">含共享主数据待审核</Typography.Text>;
 }
 
-function TodayOnlyShortcuts({ page, pendingCount, planCount, jump }: {
-  readonly page: ActionPageControls | undefined;
+function TodayOnlyShortcuts({ pendingCount, planCount, jump }: {
   readonly pendingCount: number;
   readonly planCount: number | undefined;
   readonly jump: (id: string) => void;
@@ -92,7 +90,6 @@ function TodayOnlyShortcuts({ page, pendingCount, planCount, jump }: {
   return <>
     {!planCount ? null : <JumpLink id={PLAN_TASK_TARGET} jump={jump}>我的到期排期 {planCount} 项</JumpLink>}
     {pendingCount === 0 ? null : <JumpLink id={PENDING_BATCH_TARGET} jump={jump}>待建批次 {pendingCount} 行</JumpLink>}
-    {page === undefined || page.work === 'all_unshipped' ? null : <div className="today-controls-wide"><BatchLinks page={page} /></div>}
   </>;
 }
 

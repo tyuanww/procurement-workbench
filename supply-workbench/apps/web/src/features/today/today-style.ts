@@ -73,7 +73,16 @@ function todayCardCss(): string {
     .today-row-actions { min-inline-size: 0; }
     @container today-card (min-width: 44rem) {
       .today-row-layout { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-      .today-row-actions { justify-content: flex-end; }
+      .today-row-actions {
+        display: grid;
+        grid-template-columns: repeat(2, 7.75rem) 4.75rem 4.25rem;
+      }
+      .today-row-actions > * { grid-row: 1; }
+      .today-row-actions > .today-action-copy { grid-column: 2; }
+      .today-row-actions > .today-action-detail, .today-pending-actions > a:not(.ant-btn-primary) { grid-column: 3; }
+      .today-row-actions > .today-action-more { grid-column: 4; }
+      .today-row-actions > .ant-btn-primary { grid-column: 1; }
+      .today-pending-actions > a:not(.ant-btn-primary) { text-align: center; }
       .today-row-follow-up { grid-column: 1 / -1; }
     }
   `;
