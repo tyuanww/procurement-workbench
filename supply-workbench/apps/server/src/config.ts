@@ -24,6 +24,7 @@ const shared = {
   IMPORT_COVERAGE_HMAC_SECRET: z.string({ error: coverageSecretMessage }).min(32, { error: coverageSecretMessage }).optional(),
   IMPORT_COVERAGE_ALLOWED_ISSUERS: z.string().optional(),
   WEEKLY_REPORT_CRON: z.string().optional(),
+  DEVELOPMENT_SCHEDULE_DIR: z.string().optional(),
   SERVE_WEB_DIR: z.string().optional(),
 };
 

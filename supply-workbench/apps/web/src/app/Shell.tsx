@@ -1,5 +1,5 @@
 import { Input, Layout, Modal, Typography } from 'antd';
-import { Link, Outlet, useNavigate } from 'react-router';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { SearchResultSchema } from '@sw/contracts';
 import { searchGroups, type SearchGroups } from '../features/search/hits.js';
 import { apiGet } from '../shared/api/client.js';
@@ -18,6 +18,7 @@ import {
 import { matchesShortcut, searchShortcut, type Shortcut } from '../shared/hooks/shortcuts.js';
 import { bg } from '../theme/tokens.js';
 import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-frame.js';
+import { ProcurementCutoff } from './shell-session.js';
 import { WorkspaceBreadcrumb } from './workspace-breadcrumb.js';
 
 export function Shell(props: {
@@ -52,13 +53,14 @@ function ShellColumns(input: {
   readonly onClose: () => void;
   readonly onSearch: () => void;
 }) {
+  const isHome = useLocation().pathname.replace(/\/$/u, '') === '/home';
   const isBreadcrumbInHeader = input.chrome.kind === 'sider';
   return (
     <>
       <FrameSlot chrome={input.chrome} nav={input.view.nav} onToggle={input.onToggle} onClose={input.onClose} />
       <Layout style={{ background: bg.page }}>
         <ShellTop
-          freshness={input.view.freshness}
+          home={isHome} freshness={input.view.freshness}
           account={input.view.account}
           onSearch={input.onSearch}
           contentInset={input.viewport.contentInset}
@@ -67,6 +69,7 @@ function ShellColumns(input: {
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
           {isBreadcrumbInHeader ? null : <WorkspaceBreadcrumb rows={input.view.nav} />}
+          {isHome && !isBreadcrumbInHeader ? <ProcurementCutoff freshness={input.view.freshness} /> : null}
           <Outlet context={input.view.nav} />
         </Layout.Content>
       </Layout>

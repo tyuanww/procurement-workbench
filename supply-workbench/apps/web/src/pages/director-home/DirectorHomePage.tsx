@@ -1,98 +1,66 @@
-import { Alert, Button, Collapse, Flex, Select, Skeleton } from 'antd';
-import { MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementDecision, type ManagementMeeting, type ManagementMeetingStore } from '@sw/contracts';
-import { businessDay, weekStart, type LocalDate } from '@sw/domain';
-import { useEffect, useState } from 'react';
-import { MEETING_PATH, MeetingDecisionEditor, meetingStoreLabels, type DecisionEditor } from '../../features/reporting/index.js';
-import { useCan } from '../../shared/actor.js';
+import { Alert, Button, Flex, Skeleton } from 'antd';
+import { DirectorBrandsSchema, DirectorScheduleSchema } from '@sw/contracts';
+import { businessDay } from '@sw/domain';
+import { useEffect, useMemo, useState } from 'react';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
+import { meetingStoreLabels } from '../../features/reporting/index.js';
 import { space } from '../../theme/tokens.js';
-import { deliveryRisks, openDecisions, type EditDecision, type HomeEdit } from './director-home.js';
 import { DirectorWorkBoard } from './DirectorWorkBoard.js';
-import { DirectorPriority } from './DirectorPriority.js';
-import { DirectorRiskBoard } from './DirectorRiskBoard.js';
+import { DirectorProjects } from './DirectorProjects.js';
+import { brandIndex, type BrandScope } from './project-register.js';
 
-type Scope = 'all' | ManagementMeetingStore;
-const STORES: { value: Scope; label: string }[] = [
-  { value: 'all', label: '全部店铺' },
-  ...MANAGEMENT_MEETING_STORES.map((value) => ({ value, label: meetingStoreLabels[value] })),
-];
-type Load =
-  | { readonly key: number; readonly kind: 'ready'; readonly meetings: readonly ManagementMeeting[] }
-  | { readonly key: number; readonly kind: 'error'; readonly message: string };
+const root = '/api/v1/dashboard/director';
+const readBrands = (signal: AbortSignal) => apiGetWithSignal({ path: root + '/brands', schema: DirectorBrandsSchema, signal });
+const readSchedule = (signal: AbortSignal) => apiGetWithSignal({ path: root + '/schedule', schema: DirectorScheduleSchema, signal });
+type Load<T> = { value: T; error?: never } | { value?: never; error: string };
 
-function useDirectorMeetings(monday: LocalDate) {
-  const [load, setLoad] = useState<Load>();
+function useDirectorRead<T>(read: (signal: AbortSignal) => Promise<T>) {
+  const [load, setLoad] = useState<Load<T>>();
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all(MANAGEMENT_MEETING_STORES.map((store) => {
-      const params = new URLSearchParams({ store, weekStart: monday });
-      return apiGetWithSignal({ path: `${MEETING_PATH}?${params}`, schema: ManagementMeetingSchema, signal: controller.signal });
-    })).then(
-      (meetings) => { if (!controller.signal.aborted) setLoad({ key: revision, kind: 'ready', meetings }); },
-      (caught: unknown) => {
-        if (!controller.signal.aborted) setLoad({ key: revision, kind: 'error', message: apiErrorMessage(caught) ?? '请检查连接后重试。' });
-      },
-    );
-    return () => controller.abort();
-  }, [monday, revision]);
-
-  function applySavedDecision(decision: ManagementDecision) {
-    setLoad((previous) => previous?.kind !== 'ready' ? previous : {
-      ...previous,
-      meetings: previous.meetings.map((meeting) => meeting.store !== decision.store ? meeting : {
-        ...meeting, decisions: [decision, ...meeting.decisions.filter((row) => row.id !== decision.id)],
-      }),
+    read(controller.signal).then((value) => {
+      if (!controller.signal.aborted) setLoad({ value });
+    }, (error: unknown) => {
+      if (!controller.signal.aborted) setLoad({ error: apiErrorMessage(error) ?? '暂时无法读取' });
     });
-  }
-  return { load: load?.key === revision ? load : undefined, applySavedDecision, retry: () => setRevision((current) => current + 1) };
+    return () => controller.abort();
+  }, [read, revision]);
+  return { load, retry: () => { setLoad(undefined); setRevision((previous) => previous + 1); } };
 }
 
 export function DirectorHomePage() {
   const [today] = useState(() => businessDay(new Date().toISOString(), businessTimeZone()));
-  const [scope, setScope] = useState<Scope>('all');
-  const [editing, setEditing] = useState<HomeEdit>();
-  const [receipt, setReceipt] = useState<ManagementDecision>();
-  const canWrite = useCan('reports.generate');
-  const { load, applySavedDecision, retry } = useDirectorMeetings(weekStart(today));
-  const startEdit = (editor: DecisionEditor, meeting: ManagementMeeting) => setEditing({ editor, meeting });
-  return <WorkbenchPage title="首页">
-    <Flex vertical gap={space[3]}>
-      <Flex justify="space-between" align="center" wrap gap={space[2]}>
-        <span>截至 {today}</span>
-        <Select<Scope> aria-label="店铺范围" options={STORES} value={scope} onChange={setScope} style={{ minWidth: 148 }} />
-      </Flex>
-      <DirectorWorkBoard key={scope} scope={scope} today={today}>
-        {load === undefined ? <Skeleton active paragraph={{ rows: 5 }} /> : load.kind === 'error'
-          ? <Alert type="error" showIcon title="周会数据暂未读出" description={load.message}
-            action={<Button onClick={retry}>重试</Button>} />
-          : <DirectorHomeContent meetings={load.meetings} scope={scope} today={today}
-            receipt={receipt} onEdit={canWrite ? startEdit : undefined} />}
-      </DirectorWorkBoard>
-      {editing === undefined ? null : <MeetingDecisionEditor {...editing} onClose={() => setEditing(undefined)} onSaved={(decision) => {
-        applySavedDecision(decision);
-        setReceipt(decision);
-        setEditing(undefined);
-      }} />}
-    </Flex>
-  </WorkbenchPage>;
+  const [scope, setScope] = useState<BrandScope>('all');
+  const brands = useDirectorRead(readBrands);
+  const schedule = useDirectorRead(readSchedule);
+  const memberships = useMemo(() => brandIndex(brands.load?.value ?? []), [brands.load]);
+  const names = brandNames(brands.load?.value, schedule.load?.value?.brands);
+  return <WorkbenchPage title="首页"><Flex vertical gap={space[3]}>
+    <BrandButtons names={names} scope={scope} onChange={setScope} />
+    {brands.load?.error ? <Alert type="error" title="采购店铺归属暂未读出" action={<Button onClick={brands.retry}>重试</Button>} /> : null}
+    <DirectorWorkBoard scope={scope} today={today} memberships={memberships} brandsReady={brands.load?.value !== undefined}>
+      {!schedule.load ? <Skeleton active /> : schedule.load.error !== undefined
+        ? <Alert type="error" title="新品开发排期暂未读出" description={schedule.load.error} action={<Button onClick={schedule.retry}>重试</Button>} />
+        : <DirectorProjects key={scope} schedule={schedule.load.value} scope={scope} />}
+    </DirectorWorkBoard>
+  </Flex></WorkbenchPage>;
 }
 
-function DirectorHomeContent({ meetings, scope, today, receipt, onEdit }: {
-  readonly meetings: readonly ManagementMeeting[];
-  readonly scope: Scope;
-  readonly today: LocalDate;
-  readonly receipt: ManagementDecision | undefined;
-  readonly onEdit: EditDecision | undefined;
+function brandNames(members: Awaited<ReturnType<typeof readBrands>> | undefined, sources: readonly string[] | undefined) {
+  const names = new Set([meetingStoreLabels.dafuyan, meetingStoreLabels.yiling, ...(sources ?? [])]);
+  for (const row of members ?? []) if (row.brand) names.add(row.brand);
+  return [...names];
+}
+
+function BrandButtons({ names, scope, onChange }: {
+  readonly names: string[]; readonly scope: BrandScope; readonly onChange: (value: BrandScope) => void;
 }) {
-  const scoped = meetings.filter((meeting) => scope === 'all' || meeting.store === scope);
-  const risks = deliveryRisks(scoped, today);
-  return <>
-    <DirectorPriority risks={risks} decisions={openDecisions(scoped)} today={today}
-      receipt={receipt !== undefined && (scope === 'all' || receipt.store === scope) ? receipt : undefined} onEdit={onEdit} />
-    <Collapse size="small" items={[{ key: 'batches', label: '按批次查看周会交付风险',
-      children: <DirectorRiskBoard risks={risks} onEdit={onEdit} /> }]} />
-  </>;
+  const choices: [BrandScope, string][] = [['all', '全部店铺'], ...names.map((name): [BrandScope, string] => [`brand:${name}`, name]), ['unassigned', '未分店铺']];
+  return <Flex role="group" aria-label="店铺范围" wrap gap={space[1]}>
+    {choices.map(([value, label]) => <Button key={value} aria-pressed={value === scope} type={value === scope ? 'primary' : 'default'}
+      onClick={() => onChange(value)}>{label}</Button>)}
+  </Flex>;
 }

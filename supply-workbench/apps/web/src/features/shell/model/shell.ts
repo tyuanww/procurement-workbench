@@ -1,5 +1,5 @@
 import { can, roleLabel, type Role } from '@sw/domain';
-import { freshnessView, type FreshnessChip, type FreshnessFacts } from './freshness.js';
+import { freshnessView, type FreshnessFacts } from './freshness.js';
 import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../../../shared/page-manifest.js';
 
 export type { FreshnessChip, FreshnessFacts, SourceFact } from './freshness.js';
@@ -47,7 +47,7 @@ export type AccountEntry = {
 export type ShellView = {
   readonly home: HomePath | undefined;
   readonly nav: readonly NavRow[];
-  readonly freshness: { readonly headline: string; readonly chips: readonly FreshnessChip[] };
+  readonly freshness: ReturnType<typeof freshnessView>;
   readonly account: { readonly entries: readonly AccountEntry[] };
 };
 

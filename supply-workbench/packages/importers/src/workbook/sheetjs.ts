@@ -48,6 +48,7 @@ function draftOf(cell: Record<string, unknown>): CellDraft {
     kind,
     value: storedValue(cell.v),
     text,
+    ...(kind === 'number' && typeof cell.w === 'string' && cell.w !== text ? { displayText: cell.w } : {}),
     ...(formula === undefined ? {} : { formula }),
     ...(richText === undefined ? {} : { richText }),
   };

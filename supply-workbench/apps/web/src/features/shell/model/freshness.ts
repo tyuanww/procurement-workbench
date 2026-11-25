@@ -1,4 +1,4 @@
-import type { TemplateId } from '@sw/domain';
+import { businessDay, type TemplateId } from '@sw/domain';
 import { businessTimeZone } from '../../../shared/business-time-zone.js';
 
 const STALE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -28,13 +28,16 @@ export type FreshnessChip = {
 export type FreshnessStatus = 'fresh' | 'stale' | 'unknown';
 
 export function freshnessView(input: { readonly facts: FreshnessFacts; readonly now: string; readonly timeZone?: string }): {
+  readonly procurementDate?: string;
   readonly headline: string;
   readonly chips: readonly FreshnessChip[];
 } {
   if (input.facts.kind === 'pending') return { headline: '数据', chips: [] };
   if (input.facts.kind !== 'ready') return { headline: '数据：—', chips: [] };
   if (input.facts.sources.length === 0) return { headline: '数据：—', chips: [] };
+  const committed = input.facts.sources.find((source) => source.template === 'po-master-v1')?.lastCommittedAt;
   return {
+    ...(committed && parseInstant(committed) !== null ? { procurementDate: businessDay(committed, input.timeZone ?? businessTimeZone()) } : {}),
     headline: '数据',
     chips: input.facts.sources.map((source) => chipOf({ source, now: input.now, timeZone: input.timeZone ?? businessTimeZone() })),
   };
