@@ -120,6 +120,23 @@ export type TodayPaging = {
   readonly chaseItemIds?: readonly string[];
 };
 export type TodayPageResponse = TodayResponse & { readonly paging: TodayPaging };
+export type PersonalTodayScope = 'pending' | 'scheduled' | 'all';
+export type PersonalTodayQuery = {
+  readonly scope: PersonalTodayScope;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly focusId?: string;
+  readonly calendar?: LocalDate | 'today';
+};
+export type PersonalTodayResponse = {
+  readonly asOf: LocalDate;
+  readonly counts: Readonly<Record<Exclude<PersonalTodayScope, 'all'>, number>>;
+  readonly items: readonly TodoItemView[];
+  readonly page: number;
+  readonly pageSize: number;
+  readonly total: number;
+  readonly calendar?: { readonly date: LocalDate; readonly days: readonly { readonly date: LocalDate; readonly count: number }[] };
+};
 export type TodayChaseRow = Pick<TodoItem, 'id' | 'dueDate' | 'overdueDays' | 'reasons'> & {
   readonly factory: TodayFactory;
   readonly poRaw: string | null;

@@ -1,13 +1,14 @@
-import { TODO_REASONS, can, normalizeUnit, type TodoReason } from '@sw/domain';
+import { TODO_REASONS, businessDay, can, normalizeUnit, type LocalDate, type TodoReason } from '@sw/domain';
 import type { Actor } from '../../shared/actor.js';
 import { firstBatchReadiness, isOpenForFirstBatch } from '../../shared/first-batch.js';
 import type { GetToday, GetTodayDeps } from '../boundary.js';
 import { filterTodosForUser, projectTodos } from '../policies/index.js';
 import { arrivalMemos } from '../policies/arrival-memos.js';
-import type { PendingBatchRow, PendingBatchSource, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayQuery, TodayResponse, TodoBatchView, TodoBatchSource, TodoItemView, TodoLineView } from '../views.js';
+import type { PendingBatchRow, PendingBatchSource, PersonalTodayQuery, PersonalTodayResponse, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayQuery, TodayResponse, TodoBatchView, TodoBatchSource, TodoItemView, TodoLineView } from '../views.js';
 
 const ITEM_LIMIT = 500;
 const HIGH_PRIORITY = 2;
+const DATE_MONTH_PREFIX_LENGTH = 7;
 
 export function makeGetToday(deps: GetTodayDeps): GetToday {
   const get = async (input: TodayQuery, actor: Actor): Promise<TodayResponse> => {
@@ -19,6 +20,10 @@ export function makeGetToday(deps: GetTodayDeps): GetToday {
     page: async (input: TodayPageQuery, actor: Actor): Promise<TodayPageResponse> => {
       const read = await load({ deps, input, actor });
       return pageOf({ read, input });
+    },
+    personal: async (input: PersonalTodayQuery, actor: Actor): Promise<PersonalTodayResponse> => {
+      const read = await load({ deps, input: { scope: 'mine' }, actor });
+      return personalPage({ read, input, timeZone: deps.timeZone });
     },
     chase: async (input: TodayChaseQuery, actor: Actor): Promise<readonly TodayChaseRow[]> => {
       const read = await load({ deps, input: { scope: 'mine' }, actor });
@@ -95,9 +100,7 @@ function pageOf({ read, input }: { readonly read: TodayRead; readonly input: Tod
   const candidates = matchReasons(work, input.reasons);
   const matched = selectItems(candidates, input.sort);
   const { number, size } = input.page;
-  const total = matched.length;
-  const focusIndex = input.focusId === undefined ? -1 : matched.findIndex((item) => item.id === input.focusId);
-  const page = focusIndex < 0 ? Math.min(number, Math.max(1, Math.ceil(total / size))) : Math.floor(focusIndex / size) + 1;
+  const page = locatePage({ matched, number, size, focusId: input.focusId });
   const start = (page - 1) * size;
   const shown = matched.slice(start, start + size);
   const chase = chaseSummary({ items: matched, read });
@@ -106,7 +109,7 @@ function pageOf({ read, input }: { readonly read: TodayRead; readonly input: Tod
     ...responseOf({ read, matched, shown }),
     truncated: false,
     paging: {
-      page, pageSize: size, total,
+      page, pageSize: size, total: matched.length,
       urgent: matched.filter((item) => item.severity >= HIGH_PRIORITY).length,
       reasonCounts: countsOf(selectItems(work, input.sort)),
       followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled },
@@ -120,6 +123,56 @@ function pageOf({ read, input }: { readonly read: TodayRead; readonly input: Tod
       chaseItemIds: shown.filter((item) => chase.ids.has(item.id)).map((item) => item.id),
     },
   };
+}
+
+function personalPage({ read, input, timeZone }: { readonly read: TodayRead; readonly input: PersonalTodayQuery; readonly timeZone: string }): PersonalTodayResponse {
+  const owned = read.projected.filter((item) => item.ownerUserId === read.actor.id && item.subject === 'batch' && item.reasons.includes('overdue'));
+  const scheduled = owned.filter(isScheduled).length;
+  const candidates = input.scope === 'all' ? owned : owned.filter((item) => isScheduled(item) === (input.scope === 'scheduled'));
+  const date = input.calendar === 'today' ? read.asOf : input.calendar;
+  const calendar = date === undefined ? undefined : personalCalendar({ candidates, date, asOf: read.asOf, timeZone });
+  const matched = calendar?.matched ?? candidates;
+  const page = locatePage({ matched, number: input.page, size: input.pageSize, focusId: input.focusId });
+  const start = (page - 1) * input.pageSize;
+  return {
+    asOf: read.asOf, counts: { pending: owned.length - scheduled, scheduled }, page, pageSize: input.pageSize, total: matched.length,
+    items: matched.slice(start, start + input.pageSize).map((item) => toView({ ...read, item })),
+    ...(calendar === undefined ? {} : { calendar: calendar.view }),
+  };
+}
+
+function isScheduled(item: Projected): boolean {
+  return item.reasons.includes('follow_up_scheduled');
+}
+
+function personalCalendar({ candidates, date, asOf, timeZone }: {
+  readonly candidates: readonly Projected[];
+  readonly date: LocalDate;
+  readonly asOf: LocalDate;
+  readonly timeZone: string;
+}) {
+  const month = date.slice(0, DATE_MONTH_PREFIX_LENGTH);
+  const days = new Map<LocalDate, number>();
+  const matched: Projected[] = [];
+  for (const item of candidates) {
+    const day = isScheduled(item) && item.nextFollowUpAt !== undefined ? businessDay(item.nextFollowUpAt, timeZone) : asOf;
+    if (day.startsWith(month)) {
+      const count = days.get(day);
+      days.set(day, count === undefined ? 1 : count + 1);
+    }
+    if (day === date) matched.push(item);
+  }
+  return { matched, view: { date, days: [...days].map(([day, count]) => ({ date: day, count })) } };
+}
+
+function locatePage({ matched, number, size, focusId }: {
+  readonly matched: readonly Projected[];
+  readonly number: number;
+  readonly size: number;
+  readonly focusId: string | undefined;
+}): number {
+  const index = focusId === undefined ? -1 : matched.findIndex((item) => item.id === focusId);
+  return index < 0 ? Math.min(number, Math.max(1, Math.ceil(matched.length / size))) : Math.floor(index / size) + 1;
 }
 
 function matchWork({ items, work, read }: { readonly items: readonly Projected[]; readonly work: TodayPageQuery['work']; readonly read: TodayRead }): readonly Projected[] {

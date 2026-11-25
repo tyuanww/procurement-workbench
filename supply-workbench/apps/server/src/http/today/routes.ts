@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { GetToday } from '@sw/application';
-import { TodayChaseQuerySchema, TodayChaseResponseSchema, TodayPageQuerySchema, TodayPageResponseSchema, TodayQuerySchema, TodayResponseSchema } from '@sw/contracts';
+import { PersonalTodayQuerySchema, PersonalTodayResponseSchema, TodayChaseQuerySchema, TodayChaseResponseSchema, TodayPageQuerySchema, TodayPageResponseSchema, TodayQuerySchema, TodayResponseSchema } from '@sw/contracts';
 import { requireActor } from '../app.js';
 import { parse } from '../parse.js';
 import { wire } from '../wire.js';
@@ -21,6 +21,11 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
       ...(raw.focusId === undefined ? {} : { focusId: raw.focusId }),
     });
     return wire(TodayPageResponseSchema, await api.getToday.page(input, actor));
+  });
+  app.get('/api/v1/today/personal', async (req) => {
+    const actor = requireActor(req);
+    const input = parse(PersonalTodayQuerySchema, rawQuery(req));
+    return wire(PersonalTodayResponseSchema, await api.getToday.personal(input, actor));
   });
   app.get('/api/v1/today/chase', async (req) => {
     const raw = rawQuery(req);

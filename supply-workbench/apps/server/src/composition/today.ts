@@ -12,5 +12,5 @@ export function register(): never {
 
 export function composeToday(input: { readonly db: AppDatabase; readonly timeZone: string; readonly clock?: Clock }): TodayApi {
   const clock = input.clock ?? systemClock(input.timeZone);
-  return { getToday: makeGetToday({ today: todayQueries({ db: input.db, timeZone: input.timeZone }), settings: settingsRepository(input.db), clock }) };
+  return { getToday: makeGetToday({ today: todayQueries({ db: input.db, timeZone: input.timeZone }), settings: settingsRepository(input.db), clock, timeZone: input.timeZone }) };
 }
