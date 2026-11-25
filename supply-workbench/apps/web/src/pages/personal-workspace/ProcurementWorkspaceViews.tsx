@@ -6,7 +6,7 @@ import 'dayjs/locale/zh-cn';
 import { useId, type CSSProperties } from 'react';
 import { formatDateTime } from '../../shared/ui/format.js';
 import { bg, border, brand, fontSize, radiusCard, space, statusColor, text } from '../../theme/tokens.js';
-import { toBoardItem } from '../today/card.js';
+import { toBoardItem } from '../../features/today/index.js';
 import type { WorkspaceView } from './personal-query.js';
 
 const scopeLabel = { pending: '待跟进', scheduled: '已约跟进' };

@@ -1,11 +1,10 @@
-import { readGroup, type GroupMode } from '../../features/today/index.js';
+import { readGroup, type GroupMode, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
 import type { TodayScreenProps } from './TodayBoard.js';
 import { startTransition, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { actionPageParams } from './action-query.js';
 import { openQuick } from './today-open.js';
-import type { NoteRef, OpenForm, Target } from './TodayForms.js';
 
 export function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
   if (params.get('view') === 'arrivals') {

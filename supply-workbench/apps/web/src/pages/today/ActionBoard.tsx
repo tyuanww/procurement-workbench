@@ -1,13 +1,11 @@
 import { Alert, Button, Card, Collapse, Dropdown, Empty, Flex, Spin, Tag, Typography } from 'antd';
 import { useRef, useState, type ReactNode } from 'react';
 import { CopyOutlined, DownOutlined } from '@ant-design/icons';
-import { ACTION_LANES, type BoardGroup, type BoardRow, type GroupMode, type QuickAction, type ReasonChip, type TodayBoard } from '../../features/today/index.js';
+import { ACTION_LANES, actionIcon, FaceBlock, rowStyle, type BoardGroup, type BoardRow, type GroupMode, type QuickAction, type ReasonChip, type TodayBoard } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { fontSize } from '../../theme/tokens.js';
-import { actionIcon, FaceBlock } from './TodayDrawer.js';
 import { ActionControls, ActionPagination, ActionResult, ChaseControls, type ActionPageControls } from './ActionControls.js';
 import { TodayGroup, TodayGrouping } from './TodayGroup.js';
-import { rowStyle } from './today-style.js';
 
 const ACTION_VIEWS: readonly { readonly id: GroupMode; readonly label: string }[] = [
   { id: 'kanban', label: '看板' },

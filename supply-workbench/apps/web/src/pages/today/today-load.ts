@@ -3,15 +3,8 @@ import type { TodayPageResponse, TodayResponse, TodoItemView } from '@sw/contrac
 import { isOpenBatch } from '@sw/domain';
 import { fetchTodayPage } from '../../shared/api/catalog.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import type { BoardItem, TodayOrderRef } from '../../features/today/index.js';
+import { toBoardItem, type ActionDetail, type BoardItem, type NoteRef, type Target } from '../../features/today/index.js';
 import { actionPageSearch, actionQuery, type ActionQuery } from './action-query.js';
-import { toBoardItem } from './card.js';
-import type { NoteRef, Target } from './TodayForms.js';
-
-export type ActionDetail =
-  | { readonly kind: 'order'; readonly order: TodayOrderRef; readonly exception: TodoItemView['exception'] }
-  | { readonly kind: 'review' }
-  | { readonly kind: 'import'; readonly batchId: string };
 
 export type TodayLoad = {
   readonly asOf: TodayPageResponse['asOf'];

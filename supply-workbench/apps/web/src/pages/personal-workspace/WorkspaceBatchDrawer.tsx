@@ -1,14 +1,9 @@
 import { App } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import type { TodoItemView } from '@sw/contracts';
-import { faceOf } from '../../features/today/index.js';
+import { faceOf, formErrors, localFollowUpTime, noteDraft, saveTodayNote, toBoardItem, TodayDrawer, type NoteRef, type OpenForm } from '../../features/today/index.js';
 import { fetchPersonalToday } from '../../shared/api/catalog.js';
 import { useCanWrite } from '../../shared/actor.js';
-import { TodayDrawer } from '../today/TodayDrawer.js';
-import { formErrors, noteDraft, type NoteRef, type OpenForm } from '../today/TodayForms.js';
-import { toBoardItem } from '../today/card.js';
-import { localFollowUpTime } from '../today/follow-up-time.js';
-import { saveTodayNote } from '../today/save-today-note.js';
 import { workspaceScopeOf } from './ProcurementWorkspaceViews.js';
 import type { SavedLocation } from './personal-query.js';
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import type { TodoItemView } from '../../packages/contracts/src/index.js';
 import { TodayPage } from '../../apps/web/src/pages/today/TodayPage.js';
-import { BatchProgress } from '../../apps/web/src/pages/today/batch-progress.js';
+import { BatchProgress } from '../../apps/web/src/features/today/batch-progress.js';
 import { actionQuery } from '../../apps/web/src/pages/today/action-query.js';
 import { handleKey, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { useTodayData } from '../../apps/web/src/pages/today/today-load.js';

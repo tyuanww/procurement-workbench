@@ -1,5 +1,4 @@
-import { shortcutAction } from '../../features/today/index.js';
-import type { OpenForm } from './TodayForms.js';
+import { shortcutAction, type OpenForm } from '../../features/today/index.js';
 
 type Move = 'down' | 'up';
 

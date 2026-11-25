@@ -1,5 +1,5 @@
 import type { TodoItemView } from '@sw/contracts';
-import type { BoardItem } from '../../features/today/index.js';
+import type { BoardItem } from './model/types.js';
 
 export function toBoardItem(item: TodoItemView): BoardItem {
   return {

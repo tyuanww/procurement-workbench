@@ -3,16 +3,22 @@ import { Link } from 'react-router';
 import { EXCEPTION_TYPE_LABELS, EXCEPTION_TYPES } from '@sw/domain';
 import { Alert, Button, Drawer, Flex, Typography } from 'antd';
 import { CalendarOutlined, FormOutlined, InboxOutlined, SendOutlined } from '@ant-design/icons';
+import type { TodoItemView } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
 import { businessToday } from '../../features/follow-up/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { formatDateTime } from '../../shared/ui/format.js';
 import { drawerWidth } from '../../theme/tokens.js';
-import { TodayOrderLink, type BoardRow, type QuickAction, type RowFace } from '../../features/today/index.js';
+import { TodayOrderLink, type TodayOrderRef } from './TodayOrderLink.js';
+import type { BoardRow, QuickAction, RowFace } from './model/types.js';
 import { ActionForm, formErrors, type OpenForm } from './TodayForms.js';
-import type { ActionDetail } from './today-load.js';
 import { BatchProgress } from './batch-progress.js';
 import { faceStackStyle, metaStyle, overdueStyle, reasonStyle } from './today-style.js';
+
+export type ActionDetail =
+  | { readonly kind: 'order'; readonly order: TodayOrderRef; readonly exception: TodoItemView['exception'] }
+  | { readonly kind: 'review' }
+  | { readonly kind: 'import'; readonly batchId: string };
 
 type TodayDrawerProps = {
   readonly row: BoardRow | null;
@@ -136,10 +142,10 @@ function FaceMeta({ face }: { readonly face: RowFace }) {
 }
 
 export function actionIcon(kind: QuickAction['kind']): ReactNode {
-  if (kind === 'receipt') return <InboxOutlined />;
-  if (kind === 'ship') return <SendOutlined />;
-  if (kind === 'date') return <CalendarOutlined />;
-  return <FormOutlined />;
+  if (kind === 'receipt') return <InboxOutlined aria-hidden />;
+  if (kind === 'ship') return <SendOutlined aria-hidden />;
+  if (kind === 'date') return <CalendarOutlined aria-hidden />;
+  return <FormOutlined aria-hidden />;
 }
 
 function drawerTitle(row: BoardRow | null): string {

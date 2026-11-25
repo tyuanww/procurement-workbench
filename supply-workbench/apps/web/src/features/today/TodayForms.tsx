@@ -4,7 +4,7 @@ import { EXCEPTION_TYPE_LABELS, EXCEPTION_TYPES, FOLLOW_UP_KIND_LABELS, FOLLOW_U
 import { businessToday, dateChangeErrors, exceptionErrors, followUpErrors, receiptDefaults, receiptErrors, shipmentDefaults, shipmentErrors, RecordForm, type RecordDraft } from '../../features/follow-up/index.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { followUpInstant, localFollowUpTime } from './follow-up-time.js';
-import type { BoardItem } from '../../features/today/index.js';
+import type { BoardItem } from './model/types.js';
 
 export type NoteRef = {
   readonly lineId: string;

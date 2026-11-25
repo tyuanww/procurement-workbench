@@ -1,4 +1,4 @@
-import { openDraft, type NoteRef, type OpenForm, type Target } from './TodayForms.js';
+import { openDraft, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
 
 export function openQuick(input: {
   readonly id: string;

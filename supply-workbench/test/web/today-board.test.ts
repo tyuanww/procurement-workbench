@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { localDate } from '../../packages/domain/src/index.js';
 import type { TodayPaging, TodoItemView } from '../../packages/contracts/src/index.js';
 import { readGroup, readReasons, todayBoard, withGroup, withReason, type BoardItem, type TodayBoard } from '../../apps/web/src/features/today/index.js';
-import { toBoardItem } from '../../apps/web/src/pages/today/card.js';
+import { toBoardItem } from '../../apps/web/src/features/today/card.js';
 
 const SHIP = [
   { kind: 'ship', label: '登记发货' },

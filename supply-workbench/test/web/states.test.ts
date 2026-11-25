@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { todayMotionCss } from '../../apps/web/src/pages/today/today-style.js';
+import { todayMotionCss } from '../../apps/web/src/features/today/today-style.js';
 import { MissingValue, StatusTag } from '../../apps/web/src/shared/ui/widgets.js';
 import { TodayScreen } from '../../apps/web/src/pages/today/TodayBoard.js';
 import { DashboardPage } from '../../apps/web/src/pages/dashboard/DashboardPage.js';

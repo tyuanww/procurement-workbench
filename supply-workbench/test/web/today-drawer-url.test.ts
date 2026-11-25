@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { ActionForm, openDraft, type OpenForm, type Target } from '../../apps/web/src/pages/today/TodayForms.js';
+import { ActionForm, openDraft, type OpenForm, type Target } from '../../apps/web/src/features/today/TodayForms.js';
 import { TodayScreen, type TodayScreenProps } from '../../apps/web/src/pages/today/TodayBoard.js';
 import type { BoardRow, TodayBoard } from '../../apps/web/src/features/today/index.js';
 import { readTodaySession, validTodaySession, writeTodaySession, type TodaySession } from '../../apps/web/src/pages/today/today-session.js';

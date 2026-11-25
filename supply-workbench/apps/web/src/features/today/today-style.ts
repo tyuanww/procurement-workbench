@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { bg, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
-import type { RowFace } from '../../features/today/index.js';
+import type { RowFace } from './model/types.js';
 
 const [tiny, small, , regular] = space;
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { drawerWide, drawerWidth } from '../../apps/web/src/theme/tokens.js';
-import { ActionForm, formErrors } from '../../apps/web/src/pages/today/TodayForms.js';
+import { ActionForm, formErrors } from '../../apps/web/src/features/today/TodayForms.js';
 
 const WEB_ROOT = fileURLToPath(new URL('../../apps/web', import.meta.url));
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
@@ -33,8 +33,8 @@ describe('页面只用 antd 控件', () => {
   });
 
   it('今日非记录表单也把确认按钮放在抽屉 footer 里', async () => {
-    const drawer = await readFile(path.join(WEB_ROOT, 'src/pages/today/TodayDrawer.tsx'), 'utf8');
-    const forms = await readFile(path.join(WEB_ROOT, 'src/pages/today/TodayForms.tsx'), 'utf8');
+    const drawer = await readFile(path.join(WEB_ROOT, 'src/features/today/TodayDrawer.tsx'), 'utf8');
+    const forms = await readFile(path.join(WEB_ROOT, 'src/features/today/TodayForms.tsx'), 'utf8');
     expect(drawer).toContain('footer={props.draft === null || !canRecord ? null : <RecordFooter');
     expect(forms).not.toContain('>确认</Button>');
     expect(forms).not.toContain('htmlType="submit"');

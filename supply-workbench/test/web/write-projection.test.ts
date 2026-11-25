@@ -4,7 +4,7 @@ import { can, type PermissionAction, type Role } from '../../packages/domain/src
 import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { TaskActionBar } from '../../apps/web/src/features/plan/TaskDrawer.js';
 import { ActionBoard } from '../../apps/web/src/pages/today/ActionBoard.js';
-import { RecordFooter } from '../../apps/web/src/pages/today/TodayDrawer.js';
+import { RecordFooter } from '../../apps/web/src/features/today/TodayDrawer.js';
 import { ConflictSaveBar, ImportConflictDrawerFields } from '../../apps/web/src/pages/imports/ImportConflictDrawer.js';
 import type { ImportRowView } from '../../packages/contracts/src/index.js';
 import { ImportCenter } from '../../apps/web/src/pages/imports/ImportCenter.js';

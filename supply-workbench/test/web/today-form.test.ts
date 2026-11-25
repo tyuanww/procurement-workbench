@@ -5,9 +5,9 @@ import { postReceipt, postShipment } from '../../apps/web/src/features/follow-up
 import { loadToday } from '../../apps/web/src/pages/today/today-load.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
 import { businessTimeZone, setBusinessTimeZone } from '../../apps/web/src/shared/business-time-zone.js';
-import { followUpInstant, localFollowUpTime, reminderChangeOf } from '../../apps/web/src/pages/today/follow-up-time.js';
+import { followUpInstant, localFollowUpTime, reminderChangeOf } from '../../apps/web/src/features/today/follow-up-time.js';
 import { openQuick } from '../../apps/web/src/pages/today/today-open.js';
-import { confirmedDateBody, formErrors, type OpenForm } from '../../apps/web/src/pages/today/TodayForms.js';
+import { confirmedDateBody, formErrors, type OpenForm } from '../../apps/web/src/features/today/TodayForms.js';
 
 import { pagedToday } from './today-page-fixture.js';
 
