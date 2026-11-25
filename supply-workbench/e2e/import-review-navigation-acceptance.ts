@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarGroup, sidebarLink } from './sidebar.ts';
 
 const GROUP_LABEL = '导入与审核';
@@ -130,8 +130,8 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
   await page.getByRole('button', { name: '开始解析', exact: true }).waitFor();
   assert.equal(await sidebarEntries(sidebar).count(), 5);
   assert.equal(await page.getByRole('navigation', { name: GROUP_LABEL }).count(), 0);
-  const headerLink = page.getByRole('banner').locator('a[href="/imports"]');
-  await headerLink.getByText(/总表/).waitFor();
+  const historyFilters = page.getByRole('search', { name: '导入批次历史筛选' });
+  await checkProcurementCutoff(page, historyFilters.getByText(/^\*数据截止/u), historyFilters.getByLabel('筛选批次状态'));
   await checkKeyboardFilePicker(page);
 
   await checkEmptySchedule(page, origin, true);
@@ -234,9 +234,7 @@ async function checkLegacyBatch(page: Page, legacyBatch: string, origin: URL, si
 async function checkWithoutImportAccess(page: Page, origin: URL, legacyBatch: string): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
   await checkEmptySchedule(page, origin, false);
-  const header = page.getByRole('banner');
-  await header.getByText(/总表/).waitFor();
-  assert.equal(await header.locator('a[href="/imports"]').count(), 0);
+  await checkProcurementCutoff(page, page.getByText(/^\*数据截止/u), page.getByRole('combobox', { name: '店铺', exact: true }));
   assert.equal(await page.locator('aside a[href="/imports"], aside a[href="/master"]').count(), 0);
 
   const batchPath = new URL(legacyBatch, origin).pathname;
@@ -247,6 +245,16 @@ async function checkWithoutImportAccess(page: Page, origin: URL, legacyBatch: st
   for (const path of ['/imports', batchPath, '/master/review-queue/counts']) {
     assert.equal((await page.request.get(new URL('/api/v1' + path, origin).href)).status(), 403);
   }
+}
+
+async function checkProcurementCutoff(page: Page, cutoff: Locator, filter: Locator) {
+  await cutoff.getByText(/^\d{4}-\d{2}-\d{2}$/u).waitFor();
+  const banner = page.getByRole('banner');
+  assert.equal(await banner.getByText(/采购订单总表|数据截止/u).count(), 0);
+  assert.equal(await banner.locator('a[href="/imports"]').count(), 0);
+  const [date, control] = await Promise.all([cutoff.boundingBox(), filter.boundingBox()]);
+  assert.ok(date && control && date.x >= control.x + control.width);
+  assert.ok(date.y < control.y + control.height && control.y < date.y + date.height, '截止日期和筛选控件在同一行');
 }
 
 async function checkEmptySchedule(page: Page, origin: URL, canReadImports: boolean): Promise<void> {
