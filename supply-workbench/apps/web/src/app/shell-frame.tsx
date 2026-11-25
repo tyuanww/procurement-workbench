@@ -22,7 +22,7 @@ export function onBrandIconColor(): CSSProperties {
 
 export function headerGridColumns(input: { readonly isPhone: boolean }): string {
   if (input.isPhone) return 'auto minmax(0, 1fr) auto';
-  return `minmax(0, 1fr) minmax(0, ${searchTrackPx}px) minmax(0, 1fr)`;
+  return `minmax(0, 1fr) minmax(0, ${searchTrackPx}px) auto`;
 }
 
 export function headerBarStyle(input: { readonly contentInset: 16 | 24; readonly isPhone: boolean }): CSSProperties {
@@ -58,27 +58,6 @@ export function drawerFrame(input: { readonly width: typeof navWidth }): {
   readonly size: typeof navWidth;
 } {
   return { placement: 'left', size: input.width };
-}
-
-export function headerClusterStyle(input: { readonly edge: 'start' | 'end' }): CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    justifySelf: 'stretch',
-    justifyContent: edgeJustify(input.edge),
-    minWidth: 0,
-    overflow: 'hidden',
-    gap: space[2],
-  };
-}
-
-export function accountSlotStyle(): CSSProperties {
-  return { flexShrink: 0 };
-}
-
-function edgeJustify(edge: 'start' | 'end'): 'flex-start' | 'flex-end' {
-  if (edge === 'start') return 'flex-start';
-  return 'flex-end';
 }
 
 export function searchButtonStyle(): CSSProperties {
@@ -129,8 +108,7 @@ export function ShellSider(input: {
 }
 
 export function ShellTop(input: {
-  readonly home?: boolean;
-  readonly freshness: ShellView['freshness'];
+  readonly freshness: ShellView['freshness'] | undefined;
   readonly account: ShellView['account'];
   readonly onSearch: () => void;
   readonly contentInset: 16 | 24;
@@ -139,16 +117,10 @@ export function ShellTop(input: {
 }): ReactNode {
   const isPhone = input.menuButton !== null;
   return (
-    <Layout.Header style={{ ...headerBarStyle({ contentInset: input.contentInset, isPhone }),
-      ...(input.home && !isPhone ? { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 280px) auto' } : {}) }}>
-      <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
+    <Layout.Header className="shell-header" style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
+      <HeaderStart menuButton={input.menuButton} startContent={input.startContent} freshness={input.freshness} />
       <SearchButton onSearch={input.onSearch} />
-      <div style={headerClusterStyle({ edge: 'end' })}>
-        {isPhone || input.home ? null : <FreshnessLink freshness={input.freshness} />}
-        <div style={accountSlotStyle()}>
-          <AccountMenu account={input.account} />
-        </div>
-      </div>
+      <AccountMenu account={input.account} />
     </Layout.Header>
   );
 }
@@ -218,11 +190,18 @@ function CollapseButton(input: {
   );
 }
 
-function HeaderStart(input: { readonly menuButton: MenuButton | null; readonly startContent: ReactNode }) {
-  if (input.menuButton !== null) return <div style={headerClusterStyle({ edge: 'start' })}><HeaderMenuButton button={input.menuButton} /></div>;
+function HeaderStart(input: {
+  readonly menuButton: MenuButton | null;
+  readonly startContent: ReactNode;
+  readonly freshness: ShellView['freshness'] | undefined;
+}) {
+  if (input.menuButton !== null) return <HeaderMenuButton button={input.menuButton} />;
   return (
-    <div style={headerClusterStyle({ edge: 'start' })}>
-      {input.startContent}
+    <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, overflow: 'hidden', gap: space[2] }}>
+      <div style={{ flexShrink: 0 }}>{input.startContent}</div>
+      {input.freshness === undefined ? null : (
+        <div style={{ minWidth: 0, marginInlineStart: 'auto' }}><FreshnessLink freshness={input.freshness} /></div>
+      )}
     </div>
   );
 }

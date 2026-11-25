@@ -31,7 +31,7 @@ function useWorkRegister(today: LocalDate) {
 function Shortcuts() {
   const { nav } = useOutletContext<ShellView>();
   const routes = nav.filter((row) => row.to !== '/home');
-  return <nav aria-label="可用功能" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 102px), 1fr))', gap: space[1] }}>
+  return <nav aria-label="可用功能" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 88px), 1fr))', gap: space[1] }}>
     {routes.map((row) => <Link key={row.to} to={row.destinations?.[0]?.to ?? row.to}
       style={{ background: bg.surface, border: `1px solid ${border}`, borderRadius: radiusCard, color: brand[800], paddingBlock: space[2] }}>
       <Flex vertical align="center" justify="center" gap={space[1]}>
@@ -53,7 +53,7 @@ export function DirectorWorkBoard({ scope, today, children, memberships, brandsR
     const includes = (id: string) => lineInScope(scope, memberships.get(id));
     return load.rows.filter((row) => includes(row.line.id)).map((row) => ({ ...row, related: row.related.filter((p) => includes(p.id)) }));
   }, [load, memberships, scope]);
-  return <Row className="director-board" gutter={[space[3], space[3]]}>
+  return <Row className="director-board" align="stretch" gutter={[space[3], space[3]]}>
     <Col xs={24} lg={16} style={{ minWidth: 0 }}><Flex vertical gap={space[3]}>
       <Shortcuts />
       {load === undefined || (scope !== 'all' && !brandsReady) ? <Skeleton active /> : load.kind === 'error'

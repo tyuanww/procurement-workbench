@@ -406,6 +406,8 @@ async function checkDirectorViewport(page: Page) {
   const lastBrand = shops.getByRole('button', { name: '未分店铺' });
   const dev = page.getByRole('region', { name: '新品开发进度' });
   const rank = page.getByRole('region', { name: '员工负责事项' });
+  const shortcuts = page.getByRole('navigation', { name: '可用功能' });
+  const details = page.getByRole('region', { name: '事项跟踪明细' });
   for (const viewport of [{ width: 1280, height: 720 }, { width: 1366, height: 768 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -415,10 +417,14 @@ async function checkDirectorViewport(page: Page) {
     const title = await rank.getByText('员工负责事项', { exact: true }).boundingBox();
     const caption = await rank.getByText('按项目对接人负责的新品数量排行', { exact: true }).boundingBox();
     assert.ok(title && caption && caption.x >= title.x + title.width && Math.abs(title.y - caption.y) < 8);
-    for (const card of [dev, rank, page.getByRole('region', { name: '事项跟踪明细' })]) {
-      const box = await card.boundingBox();
-      assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height, '首页卡片在桌面首屏完整可见');
-    }
+    const [navigation, projects, tracking, staff] = await Promise.all([
+      shortcuts.boundingBox(),
+      ...[dev, details, rank].map((panel) => panel.locator('.ant-card').first().boundingBox()),
+    ]);
+    assert.ok(navigation && projects && tracking && staff);
+    assert.ok(Math.abs(navigation.y - projects.y) < 1, '首页两列顶部对齐');
+    assert.ok(Math.abs(tracking.y + tracking.height - staff.y - staff.height) < 1, '首页两列底部对齐');
+    assert.ok(tracking.y + tracking.height <= viewport.height && staff.y + staff.height <= viewport.height, '首页卡片在桌面首屏完整可见');
   }
   await dev.getByRole('button', { name: '月份待确认 · 2 个产品' }).click();
   const drawer = page.getByRole('dialog', { name: '月份待确认' });

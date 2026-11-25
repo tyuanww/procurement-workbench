@@ -59,7 +59,7 @@ function ShellColumns(input: {
       <FrameSlot chrome={input.chrome} nav={input.view.nav} onToggle={input.onToggle} onClose={input.onClose} />
       <Layout style={{ background: bg.page }}>
         <ShellTop
-          home={isHome} freshness={input.view.freshness}
+          freshness={isHome ? undefined : input.view.freshness}
           account={input.view.account}
           onSearch={input.onSearch}
           contentInset={input.viewport.contentInset}

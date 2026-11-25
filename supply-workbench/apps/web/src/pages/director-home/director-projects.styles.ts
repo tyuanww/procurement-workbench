@@ -32,6 +32,13 @@ export const projectStyles = `
 @container (max-width: 420px) {
   .director-filters .ant-select { flex: 1 1 90px; width: auto; }
 }
+@media (min-width: 992px) {
+  .director-board > .ant-col { display: flex; flex-direction: column; }
+  .director-board > .ant-col > .ant-flex,
+  .director-board :is(.director-work-details, .director-staff),
+  .director-board :is(.director-work-details, .director-staff) > .ant-card { flex: 1 1 auto; }
+  .director-board :is(.director-work-details, .director-staff) { display: flex; flex-direction: column; }
+}
 @media (max-width: 991px) {
   .director-board.ant-row { margin-inline: 0 !important; flex-direction: column; }
   .director-board > .ant-col, .director-board > .ant-col > .ant-flex { display: contents; }
