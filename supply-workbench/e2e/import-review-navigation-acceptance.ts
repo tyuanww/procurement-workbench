@@ -57,7 +57,7 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await heading.waitFor();
   assert.equal(await page.locator('aside a[href="/settings"]').count(), 0);
 
-  await (await sidebarLink(page.getByRole('complementary'), '今日事项', '行动板')).click();
+  await (await sidebarLink(page.getByRole('complementary'), '今日事项', '个人工作台')).click();
   await page.waitForURL(new URL('/today', origin).href);
   await trigger.press('Enter');
   await settings.waitFor();
@@ -79,7 +79,7 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   assert.equal(await entries.count(), ADMIN_NAV_ENTRIES);
   await entries.first().getByRole('link', { name: '首页', exact: true }).waitFor();
   assert.equal(await drawer.locator('a[href="/settings"]').count(), 0);
-  await drawer.getByRole('link', { name: '行动板', exact: true }).click();
+  await drawer.getByRole('link', { name: '个人工作台', exact: true }).click();
   await drawer.waitFor({ state: 'hidden' });
   await trigger.click();
   await settings.click();

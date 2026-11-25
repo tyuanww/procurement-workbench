@@ -27,7 +27,7 @@ export async function checkChaseToday({ page, origin, out }: {
   readonly out: string;
 }) {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: origin.origin });
-  await page.goto(new URL('/today?reasons=unshipped', origin).href);
+  await page.goto(new URL('/today?view=board&reasons=unshipped', origin).href);
   const sampleRows = page.locator('.today-row').filter({ hasText: /HZ09-\d{4}/ });
   const order = (po: string) => sampleRows.filter({ hasText: po });
   await order('HZ09-0001').waitFor();
@@ -35,22 +35,22 @@ export async function checkChaseToday({ page, origin, out }: {
     await page.getByRole('region', { name: lane, exact: true }).waitFor();
   }
   assert.equal(await sampleRows.count(), 50);
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*条.*第\s*1\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*项.*第\s*1\s*页/ }).waitFor();
   await page.getByTitle('下一页', { exact: true }).click();
   await page.waitForURL((url) => url.searchParams.get('page') === '2');
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*条.*第\s*2\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*项.*第\s*2\s*页/ }).waitFor();
   await page.goto(new URL('/today?group=waiting&reasons=unshipped&page=11', origin).href);
   await order('HZ09-0501').waitFor();
   assert.equal(await sampleRows.count(), 1);
   await page.screenshot({ path: join(out, 'procurement-last-page.png'), animations: 'disabled' });
 
   await page.getByRole('button', { name: /筛选与复制催单/ }).click();
-  await page.getByRole('button', { name: /^复制全部催单/ }).click();
+  await page.getByRole('button', { name: /复制当前范围催单/ }).click();
   await page.getByRole('status').filter({ hasText: '已复制 501 条催单' }).waitFor();
   const allText = await clipboardText(page);
   assert.deepEqual(purchaseOrders(allText), sampleOrders(501));
   assert.ok(allText.includes('合成催货甲厂') && allText.includes('合成催货乙厂'));
-  await page.getByRole('button', { name: '复制合成催货甲厂催单（筛选结果）' }).click();
+  await page.getByRole('button', { name: /复制合成催货甲厂催单/ }).click();
   await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
   const factoryText = await clipboardText(page);
   assert.deepEqual(purchaseOrders(factoryText), sampleOrders(501).filter((po) => po !== 'HZ09-0250'));
@@ -73,9 +73,11 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.equal(await order('HZ09-0002').count(), 0);
   await page.setViewportSize({ width: 320, height: 800 });
   await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
-  await page.getByRole('navigation', { name: '我的待办入口' }).getByRole('button', { name: /要催货/ }).click();
+  await page.getByRole('button', { name: '清除筛选', exact: true }).click();
+  await page.getByRole('button', { name: /筛选与复制催单/ }).click();
+  await page.getByRole('main').getByRole('button', { name: /要催货/ }).click();
   await page.getByRole('status').filter({ hasText: /共\s*501\s*批待催货/ }).waitFor();
-  assert.ok(await page.getByRole('region', { name: '行动板待办' }).evaluate((list) => list === document.activeElement));
+  assert.ok(await page.getByRole('region', { name: '工作台待办' }).evaluate((list) => list === document.activeElement));
   assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
   await page.goto(bulk);
   await order('HZ09-0501').waitFor();
@@ -92,12 +94,14 @@ export async function checkChaseToday({ page, origin, out }: {
   await checkInlineReceiptLink(page, order('HZ09-0501'));
   const memos = arrivalMemos(page);
   const sourceSearch = new URL(page.url()).search;
-  await page.getByRole('navigation', { name: '我的待办入口' }).getByRole('link', { name: /到仓逾期/ }).click();
+  await page.getByRole('main').getByRole('link', { name: '在途待收', exact: true }).click();
   await page.getByText(/待收 25,000 件/).waitFor();
-  await page.getByRole('link', { name: '返回行动板', exact: true }).click();
+  await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/today' && url.search === sourceSearch);
   const scheduled = await recordFollowUp(page, order('HZ09-0501'), '2099-01-11T10:00', '明早十点再联系供应商');
   assert.equal(scheduled.nextFollowUpAt, '2099-01-11T02:00:00.000Z');
+  await page.getByRole('button', { name: /^已约跟进/ }).click();
+  await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled');
   await page.reload();
   await order('HZ09-0501').getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
   await recordShipment(page, origin, 5_000);
@@ -105,15 +109,18 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.goto(new URL('/today?view=arrivals', origin).href);
   await memos.getByText(/待收 30,000 件/).waitFor();
   await page.goBack();
-  await page.getByRole('region', { name: '行动板待办' }).waitFor();
+  await order('HZ09-0501').getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
+  await page.goto(bulk);
+  await page.getByRole('region', { name: '工作台待办' }).waitFor();
+  await order('HZ09-0001').waitFor();
   assert.equal(await order('HZ09-0501').count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: /筛选与复制催单/ }).click();
-  await page.getByRole('button', { name: /^复制筛选催单/ }).click();
+  await page.getByRole('button', { name: /复制当前范围催单/ }).click();
   await page.getByRole('status').filter({ hasText: '已复制 499 条催单' }).waitFor();
   const after = purchaseOrders(await clipboardText(page));
   assert.deepEqual(after, sampleOrders(501).filter((po) => po !== 'HZ09-0501' && po !== 'HZ09-0002'));
-  await page.getByRole('button', { name: /^复制全部催单/ }).click();
+  await page.getByRole('button', { name: /复制全部可催/ }).click();
   await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
   assert.deepEqual(purchaseOrders(await clipboardText(page)), sampleOrders(501).filter((po) => po !== 'HZ09-0501'));
   return { total: 501, lastPage: 11, allCopied: 501, factoryCopied: 500, oldDrawerLinkRestored: true, bulkFirst: 'HZ09-0501', batchCopied: 1, remainingAfterPartial: 5_000, inTransitAtEnd: 30_000,
@@ -122,11 +129,11 @@ export async function checkChaseToday({ page, origin, out }: {
 }
 
 async function checkActionViewSwitch(page: Page): Promise<void> {
-  const view = page.getByRole('radiogroup', { name: '行动板视图' });
-  const list = view.getByRole('radio', { name: '清单', exact: true });
+  const view = page.getByRole('radiogroup', { name: '工作台视图' });
+  const list = view.getByRole('radio', { name: '列表', exact: true });
   const kanban = view.getByRole('radio', { name: '看板', exact: true });
   const groups = page.getByRole('radiogroup', { name: '清单分组' });
-  assert.equal(await view.getByRole('radio').count(), 2);
+  assert.equal(await view.getByRole('radio').count(), 3);
   assert.equal(await list.isChecked(), true);
   assert.equal(await groups.getByRole('radio', { name: '等待方', exact: true }).isChecked(), true);
 
@@ -143,12 +150,14 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   }
 
   await kanban.press('Space');
-  await page.waitForURL((url) => !url.searchParams.has('group') && url.searchParams.get('reasons') === 'unshipped' && url.searchParams.get('page') === '11');
+  await page.waitForURL((url) => url.searchParams.get('view') === 'board' && url.searchParams.get('reasons') === 'unshipped' && url.searchParams.get('page') === '11');
   await page.getByRole('region', { name: '跟进发货', exact: true }).getByText('HZ09-0501', { exact: false }).first().waitFor();
   await groups.waitFor({ state: 'hidden' });
   await list.press('Space');
-  await page.waitForURL((url) => url.searchParams.get('group') === 'priority');
-  await groups.getByRole('radio', { name: '不分组', exact: true, checked: true }).waitFor({ state: 'attached' });
+  await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('page') === '11');
+  const filters = page.getByRole('button', { name: /分组、筛选与复制催单/ });
+  if (await filters.getAttribute('aria-expanded') !== 'true') await filters.click();
+  await groups.getByRole('radio', { name: '日期', exact: true, checked: true }).waitFor({ state: 'attached' });
 }
 
 async function checkInlineReceiptLink(page: Page, row: Locator): Promise<void> {
@@ -157,7 +166,7 @@ async function checkInlineReceiptLink(page: Page, row: Locator): Promise<void> {
   await receipt.click();
   await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501' && url.searchParams.get('focusBatch') === batch);
   await page.getByText(/待收 25,000 件/).first().waitFor();
-  await page.getByRole('link', { name: '返回行动板', exact: true }).click();
+  await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/today' && url.search === search);
   await receipt.and(page.locator(':focus')).waitFor();
 }
@@ -188,7 +197,7 @@ async function checkBatchProgressChart(page: Page, row: Locator, out: string): P
 }
 
 async function recordFollowUp(page: Page, row: Locator, time: string, text: string) {
-  await page.getByRole('region', { name: '行动板待办' }).locator('[aria-busy="false"]:not([aria-live], [inert])').filter({ has: row }).waitFor();
+  await page.getByRole('region', { name: '工作台待办' }).locator('[aria-busy="false"]:not([aria-live], [inert])').filter({ has: row }).waitFor();
   const direct = row.getByRole('button', { name: /记跟进|跟进工厂/ });
   if (await direct.count() !== 0) await direct.click();
   else {
@@ -295,11 +304,10 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
 }) {
   const shortcuts = page.getByRole('navigation', { name: '我的待办入口', exact: true });
   await page.goto(new URL('/today', origin).href);
-  await page.getByRole('button', { name: '筛选与复制催单', exact: true }).click();
-  const scheduled = page.getByText(/^已约跟进\s*1$/);
+  const scheduled = shortcuts.getByRole('button', { name: /^已约跟进\s*1/ });
   const due = shortcuts.getByRole('button', { name: '到时跟进 1 批', exact: true });
   await scheduled.click();
-  await page.waitForURL((url) => url.searchParams.get('reasons') === 'follow_up_scheduled' && !url.searchParams.has('unit'));
+  await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled' && !url.searchParams.has('unit'));
   await row.getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
   assert.equal(await page.locator('.today-row').count(), 1);
   await page.screenshot({ path: join(out, 'procurement-follow-up-scheduled.png'), animations: 'disabled' });
@@ -343,24 +351,17 @@ export async function checkFirstBatch({ page, origin, buyer, warehouse }: {
   assert.equal(typeof id, 'string');
   const shortcut = page.getByRole('navigation', { name: '我的待办入口' }).getByRole('link', { name: /^待建批次 / });
   const order = page.getByRole('link', { name: '查看订单', exact: true }).and(page.locator('a[href="/lines/' + encodeURIComponent(id) + '"]'));
-  for (const filter of ['reasons=unshipped', 'work=factory_chase']) {
+  for (const filter of ['reasons=unshipped', 'work=factory_chase', 'group=priority&reasons=unshipped']) {
     await page.goto(new URL('/today?' + filter, origin).href);
     await shortcut.waitFor();
     assert.equal(await order.count(), 0);
     await shortcut.click();
-    await page.waitForURL((url) => url.search === '');
+    await page.waitForURL((url) => !url.searchParams.has('work') && !url.searchParams.has('reasons'));
     await page.waitForFunction(() => document.activeElement?.id === 'today-pending-batches');
     await order.waitFor();
   }
 
-  await page.goto(new URL('/today?group=priority&reasons=unshipped', origin).href);
-  await shortcut.click();
-  await page.waitForFunction(() => document.activeElement?.id === 'today-pending-batches');
-  assert.equal(new URL(page.url()).searchParams.get('reasons'), 'unshipped');
-  await page.getByRole('heading', { name: '待建批次', exact: true }).waitFor();
-  await order.waitFor();
-
-  await page.goto(new URL('/today', origin).href);
+  await page.goto(new URL('/today?view=board', origin).href);
   const internal = page.getByRole('region', { name: '内部待办', exact: true });
   const link = internal.getByRole('link', { name: '查看订单', exact: true }).and(order);
   await link.click();
@@ -431,7 +432,7 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
   }
 
   await page.reload();
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*条.*第\s*11\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /共\s*501\s*项.*第\s*11\s*页/ }).waitFor();
   await detail.waitFor();
   assert.equal(page.url(), listUrl.href);
   assert.equal(await dialog.isVisible(), false);
