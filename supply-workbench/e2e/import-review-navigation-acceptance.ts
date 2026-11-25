@@ -10,6 +10,7 @@ const HISTORY_PATH = '/imports?template=po-master-v1&status=committed';
 const EMPTY_SCHEDULE = '/progress?view=schedule&from=2030-01-01';
 const WORKBOOK = 'po-master-procurement.xlsx';
 const SETTINGS_LABEL = '系统设置';
+const ADMIN_NAV_ENTRIES = 7;
 
 export async function checkEmptyProductArchive(page: Page, origin: URL, canReadImports: boolean): Promise<void> {
   await page.goto(new URL('/products', origin).href);
@@ -27,7 +28,7 @@ export async function checkImportReviewNavigation({ admin, buyer, lead, manager,
 }) {
   await checkAdminSettings(admin, origin);
   const legacyBatch = await checkBuyerNavigation(buyer, origin);
-  await checkReviewNavigation(admin, origin, 6);
+  await checkReviewNavigation(admin, origin, ADMIN_NAV_ENTRIES);
   await checkReviewNavigation(reviewer, origin, 5);
   await checkReviewPhone(reviewer, origin);
   await checkLegacyBatch(admin, legacyBatch, origin);
@@ -41,7 +42,7 @@ export async function checkImportReviewNavigation({ admin, buyer, lead, manager,
     await checkWithoutSettingsAccess(page, origin, name);
   }
   return {
-    buyerEntries: 5, adminEntries: 6, legacyBatch, historyFocus: true, keyboardFilePicker: true,
+    buyerEntries: 5, adminEntries: ADMIN_NAV_ENTRIES, legacyBatch, historyFocus: true, keyboardFilePicker: true,
     reviewPhoneWidth: 320, deniedRoles: ['manager', 'lead'],
     settings: { soleAdminLanding: '/settings', keyboardLink: true, phoneWidth: 320, deniedRoles: settingsDeniedRoles },
   };
@@ -74,7 +75,9 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await page.getByRole('button', { name: '打开菜单', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: '导航', exact: true });
   await drawer.waitFor();
-  assert.equal(await sidebarEntries(drawer).count(), 6);
+  const entries = sidebarEntries(drawer);
+  assert.equal(await entries.count(), ADMIN_NAV_ENTRIES);
+  await entries.first().getByRole('link', { name: '首页', exact: true }).waitFor();
   assert.equal(await drawer.locator('a[href="/settings"]').count(), 0);
   await drawer.getByRole('link', { name: '行动板', exact: true }).click();
   await drawer.waitFor({ state: 'hidden' });
