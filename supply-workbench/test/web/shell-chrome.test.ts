@@ -15,8 +15,7 @@ import { readViewport, shellQuery, subscribeViewport, unknownViewport } from '..
 import { matchesShortcut, searchShortcutHint, type Shortcut } from '../../apps/web/src/shared/hooks/shortcuts.js';
 import { antdTheme } from '../../apps/web/src/theme/antd.js';
 import { contrastRatio } from '../../apps/web/src/theme/contrast.js';
-import { accountSlotStyle, drawerFrame, headerBarStyle, headerClusterStyle, headerGridColumns, menuWidth, searchButtonStyle, searchTextStyle, siderBarStyle } from '../../apps/web/src/app/shell-frame.js';
-import { freshnessChipBoxStyle, freshnessLinkStyle } from '../../apps/web/src/app/shell-session.js';
+import { drawerFrame, headerBarStyle, headerGridColumns, menuWidth, searchButtonStyle, searchTextStyle, siderBarStyle } from '../../apps/web/src/app/shell-frame.js';
 import { surfaceStyle } from '../../apps/web/src/shared/ui/page.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, radius, radiusCard, space } from '../../apps/web/src/theme/tokens.js';
 
@@ -179,9 +178,9 @@ describe('层、圆角和菜单对比', () => {
     expect(menuWidth({ isCollapsed: false })).toBe(navWidth);
   });
 
-  it('手机顶栏改成 44 菜单 + 可缩搜索 + 账号，宽屏才用居中三列', () => {
+  it('手机顶栏为菜单、可缩搜索和账号，宽屏搜索固定在账号左边', () => {
     expect(headerGridColumns({ isPhone: true })).toBe('auto minmax(0, 1fr) auto');
-    expect(headerGridColumns({ isPhone: false })).toBe('minmax(0, 1fr) minmax(0, 280px) minmax(0, 1fr)');
+    expect(headerGridColumns({ isPhone: false })).toBe('minmax(0, 1fr) minmax(0, 280px) auto');
     expect(headerBarStyle({ contentInset: 16, isPhone: true }).gridTemplateColumns).toBe('auto minmax(0, 1fr) auto');
     expect(searchTextStyle()).toMatchObject({ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   });
@@ -207,17 +206,6 @@ describe('层、圆角和菜单对比', () => {
     expect(listeners.length).toBe(0);
     for (const run of listeners) run();
     expect(calls).toBe(4);
-  });
-
-  it('顶栏左右两簇都填满自己的列，内容靠边，不压到中间搜索', () => {
-    expect(headerClusterStyle({ edge: 'start' })).toMatchObject({ justifySelf: 'stretch', justifyContent: 'flex-start', minWidth: 0, overflow: 'hidden' });
-    expect(headerClusterStyle({ edge: 'end' })).toMatchObject({ justifySelf: 'stretch', justifyContent: 'flex-end', minWidth: 0, overflow: 'hidden' });
-    expect(accountSlotStyle()).toEqual({ flexShrink: 0 });
-  });
-
-  it('新鲜度在右列内收缩并省略，账号不缩，完整时间仍在 Tooltip', () => {
-    expect(freshnessLinkStyle()).toMatchObject({ flex: '0 1 auto', minWidth: 0, overflow: 'hidden' });
-    expect(freshnessChipBoxStyle(false)).toMatchObject({ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   });
 
   it('卡片无阴影', () => {

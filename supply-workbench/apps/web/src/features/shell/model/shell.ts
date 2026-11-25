@@ -1,8 +1,5 @@
 import { can, roleLabel, type Role } from '@sw/domain';
-import { freshnessView, type FreshnessChip, type FreshnessFacts } from './freshness.js';
 import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../../../shared/page-manifest.js';
-
-export type { FreshnessChip, FreshnessFacts, SourceFact } from './freshness.js';
 
 type KnownQueue = {
   readonly kind: 'known';
@@ -47,7 +44,7 @@ export type AccountEntry = {
 export type ShellView = {
   readonly home: HomePath | undefined;
   readonly nav: readonly NavRow[];
-  readonly freshness: { readonly headline: string; readonly chips: readonly FreshnessChip[] };
+  readonly procurementDate: string | null;
   readonly account: { readonly entries: readonly AccountEntry[] };
 };
 
@@ -59,14 +56,13 @@ export function shellView(input: {
   readonly user: Person;
   readonly queue: QueueFacts;
   readonly today: TodayFacts;
-  readonly freshness: FreshnessFacts;
-  readonly now: string;
+  readonly procurementDate: string | null;
   readonly navRoutes: readonly NavRoute[];
 }): ShellView {
   return {
     home: homeOf({ roles: input.user.roles, queue: input.queue }),
     nav: navRows({ roles: input.user.roles, queue: input.queue, today: input.today, navRoutes: input.navRoutes }),
-    freshness: freshnessView({ facts: input.freshness, now: input.now }),
+    procurementDate: input.procurementDate,
     account: accountOf(input.user),
   };
 }

@@ -1,3 +1,4 @@
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Alert, Button, Empty, Flex, Form, Select, Skeleton, Typography } from 'antd';
@@ -46,6 +47,7 @@ export function ImportBatchHistory() {
             />
           </Form.Item>
           {template === '' && status === '' ? null : <Button onClick={() => update({ template: null, status: null, page: null })}>清除筛选</Button>}
+          <ProcurementCutoff />
         </Flex>
       </search>
       <HistoryResults key={`${template}/${status}`} query={query.toString()} historySearch={historySearch}

@@ -66,6 +66,7 @@ it.each([
 ] satisfies [string, string[]][])('%s 的桌面顶栏只显示一条完整路径', (path, labels) => {
   const html = render(path, ['admin']);
   expect(html.match(/aria-label="当前位置"/g)).toHaveLength(1);
+  expect(html.match(/<header\b[^>]*\bshell-header\b[^>]*>/g)).toHaveLength(1);
   const header = html.match(/<header\b[^>]*>(.*?)<\/header>/s)?.[1] ?? '';
   const nav = header.match(/<nav[^>]*aria-label="当前位置"[^>]*>(.*?)<\/nav>/s)?.[1] ?? '';
   const trail = [...nav.matchAll(/<li[^>]+class="ant-breadcrumb-item"[^>]*>(.*?)<\/li>/gs)].map((match) => match[1]?.replace(/<[^>]+>/g, ''));

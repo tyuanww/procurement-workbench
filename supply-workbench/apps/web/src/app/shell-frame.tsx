@@ -6,7 +6,7 @@ import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../fe
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
 import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
-import { AccountMenu, FreshnessLink } from './shell-session.js';
+import { AccountMenu } from './shell-session.js';
 
 export const searchTrackPx = 280;
 const searchLabel = '搜索单号、品名、供应商';
@@ -22,7 +22,7 @@ export function onBrandIconColor(): CSSProperties {
 
 export function headerGridColumns(input: { readonly isPhone: boolean }): string {
   if (input.isPhone) return 'auto minmax(0, 1fr) auto';
-  return `minmax(0, 1fr) minmax(0, ${searchTrackPx}px) minmax(0, 1fr)`;
+  return `minmax(0, 1fr) minmax(0, ${searchTrackPx}px) auto`;
 }
 
 export function headerBarStyle(input: { readonly contentInset: 16 | 24; readonly isPhone: boolean }): CSSProperties {
@@ -58,27 +58,6 @@ export function drawerFrame(input: { readonly width: typeof navWidth }): {
   readonly size: typeof navWidth;
 } {
   return { placement: 'left', size: input.width };
-}
-
-export function headerClusterStyle(input: { readonly edge: 'start' | 'end' }): CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    justifySelf: 'stretch',
-    justifyContent: edgeJustify(input.edge),
-    minWidth: 0,
-    overflow: 'hidden',
-    gap: space[2],
-  };
-}
-
-export function accountSlotStyle(): CSSProperties {
-  return { flexShrink: 0 };
-}
-
-function edgeJustify(edge: 'start' | 'end'): 'flex-start' | 'flex-end' {
-  if (edge === 'start') return 'flex-start';
-  return 'flex-end';
 }
 
 export function searchButtonStyle(): CSSProperties {
@@ -129,7 +108,6 @@ export function ShellSider(input: {
 }
 
 export function ShellTop(input: {
-  readonly freshness: ShellView['freshness'];
   readonly account: ShellView['account'];
   readonly onSearch: () => void;
   readonly contentInset: 16 | 24;
@@ -138,15 +116,10 @@ export function ShellTop(input: {
 }): ReactNode {
   const isPhone = input.menuButton !== null;
   return (
-    <Layout.Header style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
+    <Layout.Header className="shell-header" style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
       <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
       <SearchButton onSearch={input.onSearch} />
-      <div style={headerClusterStyle({ edge: 'end' })}>
-        {isPhone ? null : <FreshnessLink freshness={input.freshness} />}
-        <div style={accountSlotStyle()}>
-          <AccountMenu account={input.account} />
-        </div>
-      </div>
+      <AccountMenu account={input.account} />
     </Layout.Header>
   );
 }
@@ -216,13 +189,12 @@ function CollapseButton(input: {
   );
 }
 
-function HeaderStart(input: { readonly menuButton: MenuButton | null; readonly startContent: ReactNode }) {
-  if (input.menuButton !== null) return <div style={headerClusterStyle({ edge: 'start' })}><HeaderMenuButton button={input.menuButton} /></div>;
-  return (
-    <div style={headerClusterStyle({ edge: 'start' })}>
-      {input.startContent}
-    </div>
-  );
+function HeaderStart(input: {
+  readonly menuButton: MenuButton | null;
+  readonly startContent: ReactNode;
+}) {
+  if (input.menuButton !== null) return <HeaderMenuButton button={input.menuButton} />;
+  return <div style={{ minWidth: 0, overflow: 'hidden' }}>{input.startContent}</div>;
 }
 
 function DrawerCloseButton({ onClose }: { readonly onClose: () => void }) {

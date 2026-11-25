@@ -92,7 +92,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
   const { page: manager } = await open('manager', '/', '/home');
-  await manager.getByRole('heading', { name: '暂无需要你优先处理的事项', exact: true }).waitFor();
+  await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
   const directorMenu = manager.locator('aside');
   const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
   const today = await sidebarLink(directorMenu, '今日事项', '行动板');

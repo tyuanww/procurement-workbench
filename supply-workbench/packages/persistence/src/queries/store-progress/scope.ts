@@ -5,7 +5,7 @@ export type ScopedStore = Exclude<ProcurementStore, 'all'>;
 
 // Stable material links accumulate across imports. Each observation names
 // precisely the finished lines that its own worksheet row confirmed.
-export const STORE_EVIDENCE = sql`
+export const OBSERVED_EDGES = sql`
   observed_edges as (
     select edge.finished_id, o.material_line_id, o.import_batch_id, o.sheet_name, o.row_no,
       case btrim(o.sheet_name)
@@ -15,7 +15,11 @@ export const STORE_EVIDENCE = sql`
     from procurement_observations o
     join import_batches b on b.id = o.import_batch_id and b.status = 'committed' and b.template = 'po-master-v1'
     cross join lateral unnest(o.finished_line_ids) as edge(finished_id)
-  ),
+  )
+`;
+
+export const STORE_EVIDENCE = sql`
+  ${OBSERVED_EDGES},
   finished_stores as (
     select finished_id, min(store) as store
     from observed_edges

@@ -77,7 +77,6 @@ describe('壳标记', () => {
     vi.stubGlobal('navigator', { platform });
     onTestFinished(() => { vi.unstubAllGlobals(); });
     const html = inRouter(h(ShellTop, {
-      freshness: { headline: '数据', chips: [] },
       account: { entries: [] },
       onSearch: () => undefined,
       contentInset: 24,
@@ -139,7 +138,6 @@ describe('页标题', () => {
 
   it('手机顶栏只留菜单、搜索和账号，不塞新鲜度和产品名', () => {
     const html = inRouter(h(ShellTop, {
-      freshness: { headline: '数据', chips: [{ key: 'a', text: '采购订单总表 11-04 12:58', tooltip: '采购订单总表 2026-11-04 12:58', isStale: false }] },
       account: { entries: [] },
       onSearch: () => undefined,
       contentInset: 16,
@@ -179,8 +177,7 @@ function buyerView(): ShellView {
     user: { name: '用户', roles: ['buyer'] },
     queue: { kind: 'unknown' },
     today: { kind: 'pending' },
-    freshness: { kind: 'pending' },
-    now: '2026-10-18T00:00:00.000Z',
+    procurementDate: null,
     navRoutes: NAV_ROUTES,
   });
 }

@@ -58,7 +58,6 @@ function ShellColumns(input: {
       <FrameSlot chrome={input.chrome} nav={input.view.nav} onToggle={input.onToggle} onClose={input.onClose} />
       <Layout style={{ background: bg.page }}>
         <ShellTop
-          freshness={input.view.freshness}
           account={input.view.account}
           onSearch={input.onSearch}
           contentInset={input.viewport.contentInset}
@@ -67,7 +66,7 @@ function ShellColumns(input: {
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
           {isBreadcrumbInHeader ? null : <WorkspaceBreadcrumb rows={input.view.nav} />}
-          <Outlet context={input.view.nav} />
+          <Outlet context={input.view} />
         </Layout.Content>
       </Layout>
     </>

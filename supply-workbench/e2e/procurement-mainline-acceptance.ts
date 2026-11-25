@@ -305,57 +305,32 @@ export async function checkDirectorHome({ page, buyer, lead, origin, out, materi
 
   const home = new URL('/home', origin).href;
   await page.goto(home);
-  const coordinate = page.getByRole('button', { name: '查看协调信息', exact: true });
-  await coordinate.waitFor();
+  await page.getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u).waitFor();
+  assert.equal(await page.getByRole('banner').getByText(/采购订单总表|数据截止/u).count(), 0);
   await checkDirectorRegister({ page, materialPo });
-  await page.getByText('按批次查看周会交付风险', { exact: true }).click();
-  const risk = page.getByRole('group', { name: '交付风险筛选' }).getByRole('button', { name: /^逾期未到/ });
-  await risk.press('Enter');
-  let drawer = page.getByRole('dialog', { name: /^逾期未到/ });
-  await drawer.getByText(materialPo, { exact: true }).waitFor();
-  await page.keyboard.press('Escape');
-  await drawer.waitFor({ state: 'hidden' });
-  await risk.and(page.locator(':focus')).waitFor();
-  await coordinate.click();
-  drawer = page.getByRole('dialog', { name: /^协调这笔逾期交付/ });
-  await drawer.getByText(`逾期未到 · ${yesterday} 应到`, { exact: true }).waitFor();
-  await drawer.getByText('可找谁协调', { exact: true }).waitFor();
-  await page.screenshot({ path: join(out, 'director-home-coordination.png'), animations: 'disabled' });
-  await drawer.getByRole('button', { name: '记录协调决定', exact: true }).click();
-  const form = page.getByRole('dialog', { name: '记录周会决定', exact: true });
-  const decision = '合成总监决定，核对余货到厂时间';
-  const criteria = '采购回传更新后的预计到货日';
-  await form.getByLabel('决定', { exact: true }).fill(decision);
-  await select(form.getByRole('combobox', { name: '负责人', exact: true }), page, '采购甲');
-  await fillDate(form.getByLabel('截止日', { exact: true }), weekStart);
-  await form.getByLabel('完成标准或要核对的依据', { exact: true }).fill(criteria);
-  await form.getByRole('button', { name: /^保\s*存$/ }).click();
-  const heading = page.getByRole('heading', { name: decision, exact: true });
-  await heading.waitFor();
-  await page.getByText('已记录决定', { exact: true }).waitFor();
+  await checkDirectorProjects(page);
+  await checkDirectorViewport(page);
   await page.screenshot({ path: join(out, 'director-home.png'), animations: 'disabled' });
-  await page.reload();
-  await heading.waitFor();
-
+  const scope = page.getByRole('group', { name: '店铺范围' });
+  await scope.getByRole('button', { name: '合成新品牌' }).click();
+  await page.getByRole('region', { name: '新品开发进度' }).getByRole('button', { name: '合成新品牌试产项目' }).waitFor();
+  await page.getByRole('group', { name: '事项概览' }).getByRole('button', { name: /进行中事项.*0 *件/ }).waitFor();
+  await scope.getByRole('button', { name: otherStoreName }).click();
+  await page.getByText('当前店铺没有新品排期记录', { exact: true }).waitFor();
+  await scope.getByRole('button', { name: storeName }).click();
+  await page.getByRole('region', { name: '员工负责事项' }).getByRole('button', { name: /第 20 名/ }).waitFor();
   await lead.goto(home);
-  await lead.getByRole('heading', { name: decision, exact: true }).waitFor();
-  assert.equal(await lead.getByRole('button', { name: '登记决定完成', exact: true }).count(), 0);
-  await lead.getByRole('link', { name: '查看管理周会', exact: true }).waitFor();
+  await lead.getByRole('region', { name: '新品开发进度' }).waitFor();
+  assert.equal((await buyer.request.get(new URL('/api/v1/dashboard/director/schedule', origin).href)).status(), 403);
   await page.setViewportSize({ width: 320, height: 780 });
   await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
-  await heading.waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-  await page.getByRole('button', { name: '登记决定完成', exact: true }).click();
-  const complete = page.getByRole('dialog', { name: '登记决定完成', exact: true });
-  await complete.getByLabel('实际完成依据', { exact: true }).fill('已回读合成供应商到货回复');
-  await complete.getByRole('button', { name: /^保\s*存$/ }).click();
-  await page.getByText('已登记完成', { exact: true }).waitFor();
-  await coordinate.waitFor();
+  const projectFocus = await page.getByRole('region', { name: '新品开发进度' }).getByText(/^先跟这件/u).boundingBox();
+  assert.ok(projectFocus && projectFocus.y >= 0 && projectFocus.y + projectFocus.height <= 780);
   await page.screenshot({ path: join(out, 'director-home-phone.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await select(page.getByRole('combobox', { name: '店铺范围', exact: true }), page, otherStoreName);
-  await page.getByRole('heading', { name: '暂无需要你优先处理的事项', exact: true }).waitFor();
-  return { home: '/home', overdueDrill: true, savedOnReload: true, leadReadOnly: true, completion: true, phoneWidth: 320, emptyStore: otherStoreName };
+  return { home: '/home', projectRankDrill: true, newBrand: true, phoneWidth: 320, emptyStore: otherStoreName };
+
 }
 
 async function checkDirectorRegister({ page, materialPo }: { readonly page: Page; readonly materialPo: string }) {
@@ -368,7 +343,14 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   assert.ok(position && position.y < 500, '总监在首屏看到交期风险');
   await risk.click();
   const table = page.getByRole('region', { name: '事项跟踪明细' });
+  const originalCount = await table.getByRole('status').innerText();
   const search = table.getByRole('textbox', { name: '搜索事项' });
+  assert.equal(await search.count(), 0);
+  const scope = table.getByRole('combobox', { name: '事项范围' });
+  const before = await scope.boundingBox();
+  await table.getByRole('button', { name: '展开事项搜索' }).click();
+  await search.and(page.locator(':focus')).waitFor();
+  await page.waitForFunction((x) => (document.querySelector('[aria-label="事项范围"]')?.getBoundingClientRect().x ?? Infinity) < x - 16, before?.x ?? 0);
   await search.fill(materialPo);
   const first = table.getByRole('row').filter({ hasText: materialPo }).first();
   await first.getByText('已逾期', { exact: true }).waitFor();
@@ -382,15 +364,85 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   await product.and(page.locator(':focus')).waitFor();
   await search.fill('不存在的合成订单');
   await table.getByText('当前条件没有匹配事项', { exact: true }).waitFor();
-  const staff = page.getByRole('region', { name: '员工负责事项' });
-  const assigned = staff.getByRole('button', { name: /^采购甲 · 进行中事项/ });
-  await assigned.click();
-  assert.equal(await search.inputValue(), '');
-  await table.getByRole('row').nth(1).getByText('采购甲', { exact: true }).waitFor();
-  for (const owner of await table.locator('tbody tr[data-row-key] td:nth-child(3)').allTextContents()) assert.equal(owner, '采购甲');
+  await search.press('Escape');
+  await table.getByRole('button', { name: '展开事项搜索' }).and(page.locator(':focus')).waitFor();
+  assert.equal(await search.count(), 0);
+  await table.getByRole('status').and(page.getByText(originalCount, { exact: true })).waitFor();
   await table.getByRole('columnheader', { name: /下一到货日/ }).click();
   await table.locator('th[aria-sort="ascending"]').waitFor();
   await risk.click();
+}
+
+async function checkDirectorProjects(page: Page) {
+  const search = page.getByRole('button', { name: '搜索单号、品名、供应商' });
+  const account = page.locator('header button[aria-expanded]').last();
+  const left = await search.boundingBox();
+  const right = await account.boundingBox();
+  assert.ok(left && right && right.x >= left.x + left.width);
+  const ranking = page.getByRole('region', { name: '员工负责事项' });
+  const first = ranking.getByRole('button', { name: '第 1 名 · 项目经理 01 · 3 个项目' });
+  await first.click();
+  const list = page.getByRole('dialog', { name: '项目经理 01 · 负责项目' });
+  await list.getByText('共 3 个项目', { exact: true }).waitFor();
+  await list.getByRole('textbox', { name: '搜索负责项目' }).fill('保湿');
+  await list.getByText('共 1 个项目', { exact: true }).waitFor();
+  await list.getByRole('button', { name: '合成保湿面膜' }).click();
+  const detail = page.getByRole('dialog', { name: '合成保湿面膜' });
+  await detail.getByText('BOM表搭建情况').waitFor();
+  await detail.getByText('核对样品反馈').waitFor();
+  await page.keyboard.press('Escape');
+  await detail.waitFor({ state: 'hidden' });
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'hidden' });
+  await ranking.getByRole('button', { name: /第 20 名/u }).click();
+  await page.getByRole('dialog').getByText('共 1 个项目', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+}
+
+async function checkDirectorViewport(page: Page) {
+  await page.getByRole('group', { name: '事项概览' }).getByRole('button', { name: /^进行中事项/ }).click();
+  const shops = page.getByRole('group', { name: '店铺范围' });
+  const cutoff = shops.getByText(/^\*数据截止/u);
+  const lastBrand = shops.getByRole('button', { name: '未分店铺' });
+  const dev = page.getByRole('region', { name: '新品开发进度' });
+  const rank = page.getByRole('region', { name: '员工负责事项' });
+  const shortcuts = page.getByRole('navigation', { name: '可用功能' });
+  const details = page.getByRole('region', { name: '事项跟踪明细' });
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 1366, height: 768 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      window.scrollTo(0, 0);
+    });
+    const [brand, date, title, caption] = await Promise.all([
+      lastBrand.boundingBox(), cutoff.boundingBox(),
+      rank.getByText('员工负责事项', { exact: true }).boundingBox(),
+      rank.getByText('按项目对接人负责的新品数量排行', { exact: true }).boundingBox(),
+    ]);
+    assert.ok(date && brand && date.x >= brand.x + brand.width && date.y < brand.y + brand.height && brand.y < date.y + date.height,
+      `店铺筛选和截止日期应同行。宽度 ${viewport.width}，位置 ${JSON.stringify({ brand, date })}`);
+    assert.ok(title && caption && caption.x >= title.x + title.width && caption.y < title.y + title.height && title.y < caption.y + caption.height,
+      `排行口径应在标题右侧。宽度 ${viewport.width}，位置 ${JSON.stringify({ title, caption })}`);
+    const [navigation, projects, tracking, staff] = await Promise.all([
+      shortcuts.boundingBox(),
+      ...[dev, details, rank].map((panel) => panel.locator('.ant-card').first().boundingBox()),
+    ]);
+    assert.ok(navigation && projects && tracking && staff);
+    assert.ok(Math.abs(navigation.y - projects.y) < 1, '首页两列顶部对齐');
+    assert.ok(Math.abs(tracking.y + tracking.height - staff.y - staff.height) < 1, '首页两列底部对齐');
+    assert.ok(tracking.y + tracking.height <= viewport.height && staff.y + staff.height <= viewport.height, '首页卡片在桌面首屏完整可见');
+  }
+  await dev.getByRole('button', { name: '月份待确认 · 2 个产品' }).click();
+  const drawer = page.getByRole('dialog', { name: '月份待确认' });
+  await drawer.getByText('共 2 个项目').waitFor();
+  await drawer.getByRole('button', { name: 'BOM 表 · 已完成 2 个' }).click();
+  await drawer.getByRole('button', { name: '合成排期产品 24' }).click();
+  await page.getByRole('dialog', { name: '合成排期产品 24' }).getByText('待分配', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: '合成排期产品 24' }).waitFor({ state: 'hidden' });
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
 }
 
 async function seedDevelopment(page: Page, origin: URL, resource: 'projects' | 'nodes', data: object) {
