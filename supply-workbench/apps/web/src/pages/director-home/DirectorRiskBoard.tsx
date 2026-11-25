@@ -25,10 +25,10 @@ export function DirectorRiskBoard({ risks, onEdit }: { readonly risks: readonly 
       return { key, label, tone, value: rows.length, unit: '批', action: { select: () => selectRisk(label, rows) } };
     })} />
     <Row gutter={[space[3], space[3]]}>
-      <Col xs={24} xl={16} style={{ minWidth: 0 }}>
+      <Col span={24} style={{ minWidth: 0 }}>
         <RiskTable risks={risks} onSelect={selectRisk} />
       </Col>
-      <Col xs={24} xl={8}>
+      <Col span={24}>
         <Card size="small" title={<Typography.Title level={2} style={{ margin: 0 }}>逾期批次在等谁</Typography.Title>}>
           {overdue.length === 0 ? <Typography.Text type="secondary">当前没有逾期批次。</Typography.Text>
             : <WaitingList overdue={overdue} onSelect={selectRisk} />}

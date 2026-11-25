@@ -69,7 +69,7 @@ function ShellColumns(input: {
         />
         <Layout.Content style={{ margin: input.viewport.contentInset, isolation: 'isolate' }}>
           {isBreadcrumbInHeader ? null : <WorkspaceBreadcrumb rows={input.view.nav} />}
-          <Outlet />
+          <Outlet context={input.view.nav} />
         </Layout.Content>
       </Layout>
     </>

@@ -1,4 +1,4 @@
-import { Alert, Button, Flex, Select, Skeleton } from 'antd';
+import { Alert, Button, Collapse, Flex, Select, Skeleton } from 'antd';
 import { MANAGEMENT_MEETING_STORES, ManagementMeetingSchema, type ManagementDecision, type ManagementMeeting, type ManagementMeetingStore } from '@sw/contracts';
 import { businessDay, weekStart, type LocalDate } from '@sw/domain';
 import { useEffect, useState } from 'react';
@@ -9,6 +9,7 @@ import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { space } from '../../theme/tokens.js';
 import { deliveryRisks, openDecisions, type EditDecision, type HomeEdit } from './director-home.js';
+import { DirectorWorkBoard } from './DirectorWorkBoard.js';
 import { DirectorPriority } from './DirectorPriority.js';
 import { DirectorRiskBoard } from './DirectorRiskBoard.js';
 
@@ -63,11 +64,13 @@ export function DirectorHomePage() {
         <span>截至 {today}</span>
         <Select<Scope> aria-label="店铺范围" options={STORES} value={scope} onChange={setScope} style={{ minWidth: 148 }} />
       </Flex>
-      {load === undefined ? <Skeleton active paragraph={{ rows: 5 }} /> : load.kind === 'error'
-        ? <Alert type="error" showIcon title="首页数据暂未读出" description={load.message}
-          action={<Button onClick={retry}>重试</Button>} />
-        : <DirectorHomeContent key={scope} meetings={load.meetings} scope={scope} today={today}
-          receipt={receipt} onEdit={canWrite ? startEdit : undefined} />}
+      <DirectorWorkBoard key={scope} scope={scope} today={today}>
+        {load === undefined ? <Skeleton active paragraph={{ rows: 5 }} /> : load.kind === 'error'
+          ? <Alert type="error" showIcon title="周会数据暂未读出" description={load.message}
+            action={<Button onClick={retry}>重试</Button>} />
+          : <DirectorHomeContent meetings={load.meetings} scope={scope} today={today}
+            receipt={receipt} onEdit={canWrite ? startEdit : undefined} />}
+      </DirectorWorkBoard>
       {editing === undefined ? null : <MeetingDecisionEditor {...editing} onClose={() => setEditing(undefined)} onSaved={(decision) => {
         applySavedDecision(decision);
         setReceipt(decision);
@@ -89,6 +92,7 @@ function DirectorHomeContent({ meetings, scope, today, receipt, onEdit }: {
   return <>
     <DirectorPriority risks={risks} decisions={openDecisions(scoped)} today={today}
       receipt={receipt !== undefined && (scope === 'all' || receipt.store === scope) ? receipt : undefined} onEdit={onEdit} />
-    <DirectorRiskBoard risks={risks} onEdit={onEdit} />
+    <Collapse size="small" items={[{ key: 'batches', label: '按批次查看周会交付风险',
+      children: <DirectorRiskBoard risks={risks} onEdit={onEdit} /> }]} />
   </>;
 }

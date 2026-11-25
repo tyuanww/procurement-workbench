@@ -307,8 +307,8 @@ export async function checkDirectorHome({ page, buyer, lead, origin, out, materi
   await page.goto(home);
   const coordinate = page.getByRole('button', { name: '查看协调信息', exact: true });
   await coordinate.waitFor();
-  const position = await coordinate.boundingBox();
-  assert.ok(position && position.y < 500, '协调入口在首屏');
+  await checkDirectorRegister({ page, materialPo });
+  await page.getByText('按批次查看周会交付风险', { exact: true }).click();
   const risk = page.getByRole('group', { name: '交付风险筛选' }).getByRole('button', { name: /^逾期未到/ });
   await risk.press('Enter');
   let drawer = page.getByRole('dialog', { name: /^逾期未到/ });
@@ -356,6 +356,41 @@ export async function checkDirectorHome({ page, buyer, lead, origin, out, materi
   await select(page.getByRole('combobox', { name: '店铺范围', exact: true }), page, otherStoreName);
   await page.getByRole('heading', { name: '暂无需要你优先处理的事项', exact: true }).waitFor();
   return { home: '/home', overdueDrill: true, savedOnReload: true, leadReadOnly: true, completion: true, phoneWidth: 320, emptyStore: otherStoreName };
+}
+
+async function checkDirectorRegister({ page, materialPo }: { readonly page: Page; readonly materialPo: string }) {
+  const features = page.getByRole('navigation', { name: '可用功能' });
+  await features.getByRole('link', { name: '跟进中心', exact: true }).waitFor();
+  assert.equal(await features.getByRole('link', { name: /导入/ }).count(), 0);
+  const metrics = page.getByRole('group', { name: '事项概览' });
+  const risk = metrics.getByRole('button', { name: /^交期风险/ });
+  const position = await risk.boundingBox();
+  assert.ok(position && position.y < 500, '总监在首屏看到交期风险');
+  await risk.click();
+  const table = page.getByRole('region', { name: '事项跟踪明细' });
+  const search = table.getByRole('textbox', { name: '搜索事项' });
+  await search.fill(materialPo);
+  const first = table.getByRole('row').filter({ hasText: materialPo }).first();
+  await first.getByText('已逾期', { exact: true }).waitFor();
+  const product = first.getByRole('button').first();
+  await product.click();
+  const drawer = page.getByRole('dialog');
+  await drawer.getByText('采购负责人', { exact: true }).waitFor();
+  await drawer.getByRole('link', { name: '打开订单跟进记录' }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await product.and(page.locator(':focus')).waitFor();
+  await search.fill('不存在的合成订单');
+  await table.getByText('当前条件没有匹配事项', { exact: true }).waitFor();
+  const staff = page.getByRole('region', { name: '员工负责事项' });
+  const assigned = staff.getByRole('button', { name: /^采购甲 · 进行中事项/ });
+  await assigned.click();
+  assert.equal(await search.inputValue(), '');
+  await table.getByRole('row').nth(1).getByText('采购甲', { exact: true }).waitFor();
+  for (const owner of await table.locator('tbody tr[data-row-key] td:nth-child(3)').allTextContents()) assert.equal(owner, '采购甲');
+  await table.getByRole('columnheader', { name: /下一到货日/ }).click();
+  await table.locator('th[aria-sort="ascending"]').waitFor();
+  await risk.click();
 }
 
 async function seedDevelopment(page: Page, origin: URL, resource: 'projects' | 'nodes', data: object) {

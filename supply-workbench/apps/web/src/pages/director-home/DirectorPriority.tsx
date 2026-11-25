@@ -36,7 +36,7 @@ export function DirectorPriority({ risks, decisions, today, receipt, onEdit }: {
           }]} />}
         </> : overdue !== undefined ? <CoordinationAction row={overdue} onOpen={() => setCoordinating(overdue)} /> : <>
           <Typography.Title level={2} style={{ margin: 0 }}>暂无需要你优先处理的事项</Typography.Title>
-          <Typography.Text type="secondary">下方可查看本周采购交付风险。</Typography.Text>
+          <Typography.Text type="secondary">可展开周会交付风险查看采购批次。</Typography.Text>
         </>}
       </Flex>
     </Card>
@@ -71,7 +71,7 @@ function DecisionAction({ entry, today, onEdit }: {
           : decision.dueDate === today ? <Tag color="warning">今天到期</Tag> : null}
       </Flex>
       <Typography.Title level={2} style={{ margin: 0, overflowWrap: 'anywhere' }}>{decision.decision}</Typography.Title>
-      <Descriptions size="small" column={{ xs: 1, sm: 2, md: 3 }} items={[
+      <Descriptions size="small" column={1} items={[
         { key: 'store', label: '店铺', children: meetingStoreLabels[meeting.store] },
         { key: 'owner', label: '负责人', children: decision.owner.name },
         { key: 'due', label: '截止日', children: decision.dueDate },
