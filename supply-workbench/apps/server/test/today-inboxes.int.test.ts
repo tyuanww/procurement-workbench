@@ -16,6 +16,9 @@ it('合并同批核收与催货后再分页，所有催单复制沿用今日完�
     const result = await page('inbox=today');
     expect(result.paging).toMatchObject({ total: 6, inboxCounts: { today: 6, scheduled: 3, unassigned: 1 }, pendingCount: 1, chaseCounts: { all: 2, filtered: 2 } });
     expect(result.pendingBatch?.map(({ orderLineId }) => orderLineId)).toEqual(['inbox-line-12']);
+    expect((await page('inbox=today&calendar=today')).pendingBatch).toEqual(result.pendingBatch);
+    expect((await page('inbox=today&calendar=' + result.asOf)).pendingBatch).toEqual(result.pendingBatch);
+    expect((await page('inbox=today&calendar=2099-01-11')).pendingBatch).toBeUndefined();
     expect(result.items.map(({ id }) => id).sort()).toEqual(['batch:inbox-1', 'batch:inbox-13', 'batch:inbox-14', 'batch:inbox-2', 'batch:inbox-3', 'exception:inbox-own']);
     expect(result.items).toContainEqual(expect.objectContaining({ id: 'batch:inbox-14', reasons: ['note_missing'], waitingOn: { kind: 'internal', partyId: null } }));
     const pageResults = await Promise.all([1, 2, 3].map((number) => page(`inbox=today&reasons=shipped_not_received&pageSize=1&page=${number}`)));

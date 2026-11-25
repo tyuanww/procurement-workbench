@@ -41,9 +41,9 @@ function readInboxes(read: TodayRead) {
     ctx: { today: read.asOf, now: Date.parse(read.now), settings: read.settings } });
 }
 
-function showsPending(input: TodayPageQuery): boolean {
+function showsPending(input: TodayPageQuery, isCurrentDay: boolean): boolean {
   return input.inbox === undefined || (input.inbox === 'today' && input.work === undefined
-    && input.reasons === undefined && input.calendar === undefined && input.sort.kind === 'urgency');
+    && input.reasons === undefined && isCurrentDay && input.sort.kind === 'urgency');
 }
 
 function matchReasons(items: readonly Projected[], reasons: TodayQuery['reasons']): readonly Projected[] {
@@ -86,7 +86,7 @@ function pageOf({ read, input, timeZone }: { readonly read: TodayRead; readonly 
   const shown = matched.slice(start, start + size);
   const chase = chaseSummary({ items: input.inbox === 'scheduled' ? [] : matched, read });
   return {
-    ...responseOf({ read, matched, shown, memos: memos(shown), includePending: showsPending(input) }),
+    ...responseOf({ read, matched, shown, memos: memos(shown), includePending: showsPending(input, calendar === undefined || calendar.date === read.asOf) }),
     truncated: false,
     paging: {
       page, pageSize: size, total: matched.length,
