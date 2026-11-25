@@ -361,7 +361,7 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
 
 async function checkDirectorProjects(page: Page) {
   const search = page.getByRole('button', { name: '搜索单号、品名、供应商' });
-  const account = page.locator('header .ant-dropdown-trigger').first();
+  const account = page.locator('header button[aria-expanded]').last();
   const left = await account.boundingBox();
   const right = await search.boundingBox();
   assert.ok(left && right && right.x >= left.x + left.width);
@@ -376,8 +376,10 @@ async function checkDirectorProjects(page: Page) {
   const detail = page.getByRole('dialog', { name: '合成保湿面膜' });
   await detail.getByText('BOM表搭建情况').waitFor();
   await detail.getByText('核对样品反馈').waitFor();
-  await detail.getByRole('button', { name: /close|关闭/i }).first().click();
-  await list.getByRole('button', { name: /close|关闭/i }).first().click();
+  await page.keyboard.press('Escape');
+  await detail.waitFor({ state: 'hidden' });
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'hidden' });
   await ranking.getByRole('button', { name: /第 20 名/u }).click();
   await page.getByRole('dialog').getByText('共 1 个项目', { exact: true }).waitFor();
   await page.keyboard.press('Escape');
