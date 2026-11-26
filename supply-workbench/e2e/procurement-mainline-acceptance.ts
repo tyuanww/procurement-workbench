@@ -162,7 +162,7 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
   }
 
   await page.goto(new URL('/today?group=owner', origin).href);
-  await page.getByRole('button', { name: new RegExp('^' + successor + '\\s') }).press('Enter');
+  await page.getByRole('button', { name: successor, exact: true }).press('Enter');
   const drawer = page.getByRole('dialog', { name: new RegExp(successor) });
   const warning = drawer.getByText(`${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: false });
   await warning.waitFor();
