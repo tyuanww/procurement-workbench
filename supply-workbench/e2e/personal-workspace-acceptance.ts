@@ -144,7 +144,7 @@ async function checkReceiptRetry(buyer: Page, url: URL) {
   assert.equal(await quantity.inputValue(), '750');
   assert.equal(await date.inputValue(), receivedOn);
   assert.equal(await evidence.inputValue(), '合成验收·第二车签收');
-  assert.ok(await confirmation.isEnabled());
+  await confirmation.and(dialog.locator('button:enabled')).waitFor();
 
   const [success] = await Promise.all([buyer.waitForResponse(isReceiptResponse), confirmation.click()]);
   assert.equal(success.status(), 200);

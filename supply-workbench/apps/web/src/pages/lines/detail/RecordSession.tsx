@@ -87,7 +87,7 @@ function RecordSession(props: {
     <Drawer placement="right" size={drawerWidth} open onClose={onClose} title={draftTitle(draft)} footer={
       <Flex className="record-form-footer" justify="flex-end" gap="small">
         <Button onClick={onClose}>取消</Button>
-        <Button type="primary" htmlType="submit" form={formId} loading={isPending} disabled={isPending || serverError?.canRetry === false}>确认</Button>
+        <Button type="primary" htmlType="submit" aria-label="确认" aria-busy={isPending} form={formId} loading={isPending} disabled={isPending || serverError?.canRetry === false}>确认</Button>
       </Flex>
     }>
       <RecordForm id={formId} draft={draft} error={serverError?.message ?? ''} warehouses={warehouses}

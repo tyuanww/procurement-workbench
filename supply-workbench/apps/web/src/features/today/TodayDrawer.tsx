@@ -103,7 +103,7 @@ export function RecordFooter(props: {
   return (
     <Flex className="record-form-footer" justify="flex-end" gap="small">
       <Button onClick={props.onCancel}>取消</Button>
-      <Button type="primary" htmlType="submit" form={props.formId} loading={props.isSaving} disabled={props.isSaving}>确认</Button>
+      <Button type="primary" htmlType="submit" aria-label="确认" aria-busy={props.isSaving} form={props.formId} loading={props.isSaving} disabled={props.isSaving}>确认</Button>
     </Flex>
   );
 }
