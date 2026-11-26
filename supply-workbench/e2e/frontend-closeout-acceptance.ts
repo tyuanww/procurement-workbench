@@ -485,7 +485,8 @@ async function checkProductPackagingReturn(page: Page, origin: URL): Promise<voi
     await results.getByText(/24 件\/箱/).waitFor();
     await results.getByText(/12 件\/箱/).waitFor();
     await channel.press('Enter');
-    await page.getByRole('heading', { name: '演示净润洁面乳渠道装', exact: true }).waitFor();
+    await page.waitForURL((url) => url.pathname === `${cleanser}-channel`);
+    await page.getByRole('heading', { name: '演示净润洁面乳渠道装', exact: true, level: 1 }).waitFor();
     for (const text of ['渠道装', `${barcode}-1`, '100 mL', '12 件/箱']) {
       await page.getByText(text, { exact: true }).waitFor();
     }
