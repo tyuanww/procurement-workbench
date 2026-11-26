@@ -67,12 +67,13 @@ export function SortControls({ sort, units: availableUnits, onSort }: {
   );
 }
 
-export function ActionPagination({ page }: { readonly page: ActionPageControls }) {
+export function ActionPagination({ page, isLocked }: { readonly page: ActionPageControls; readonly isLocked: boolean }) {
   const { paging } = page;
   if (paging.total <= paging.pageSize) return null;
   return (
-    <nav aria-label="工作台待办分页">
-      <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total} onChange={page.onPage} size="small" showSizeChanger={false} />
+    <nav aria-label="工作台待办分页" aria-disabled={isLocked || undefined}>
+      <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total}
+        onChange={(nextPage) => { if (!isLocked) page.onPage(nextPage); }} size="small" showSizeChanger={false} />
     </nav>
   );
 }

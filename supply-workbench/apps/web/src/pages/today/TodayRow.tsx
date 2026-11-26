@@ -1,6 +1,6 @@
 import { BorderBeam, Button, Card, Dropdown, Flex, Tooltip, Typography, type ButtonProps } from 'antd';
 import { CopyOutlined, EllipsisOutlined } from '@ant-design/icons';
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { actionIcon, actionReasonText, TodayOrderLink, type BoardRow, type QuickAction, type RowFace, type TodayOrderRef } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { formatDateTime, formatQuantity, formatTableDate } from '../../shared/ui/format.js';
@@ -10,6 +10,7 @@ import { brand, space } from '../../theme/tokens.js';
 import { ReceiptAction, type ReceiptWork } from './TodayAgenda.js';
 
 export type CopyAction = { readonly label: string; readonly disabled: boolean; readonly run: () => void };
+export const TodayResultActionsLocked = createContext(false);
 
 type RowProps = {
   readonly row: BoardRow;
@@ -250,15 +251,27 @@ type RowMenuProps = Pick<RowProps, 'copy' | 'onQuick'> & {
   readonly identity: string;
 };
 
-function RowMenu({ actions, copy, identity, onQuick }: RowMenuProps) {
+function useRowMenuState() {
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const [isOpen, setOpen] = useState(false);
+  const isLocked = useContext(TodayResultActionsLocked);
+  if (isLocked && isOpen) setOpen(false);
+  useLayoutEffect(() => {
+    if (!isLocked) return;
+    const menu = document.getElementById(menuId);
+    if (menu?.contains(document.activeElement)) {
+      trigger.current?.closest<HTMLElement>('#today-chase')?.focus({ preventScroll: true });
+    }
+    menu?.setAttribute('inert', '');
+  }, [isLocked, menuId]);
+
   function changeOpen(open: boolean) {
     // Ant Design keeps the menu mounted during its exit animation.
+    const shouldOpen = open && !isLocked;
     const menu = document.getElementById(menuId);
-    if (menu !== null) menu.inert = !open;
-    setOpen(open);
+    if (menu !== null) menu.inert = !shouldOpen;
+    setOpen(shouldOpen);
   }
   function closeAndRestoreFocus() {
     changeOpen(false);
@@ -270,7 +283,14 @@ function RowMenu({ actions, copy, identity, onQuick }: RowMenuProps) {
     event.stopPropagation();
     closeAndRestoreFocus();
   }
+  return { trigger, menuId, isOpen, isLocked, changeOpen, closeOnEscape, closeAndRestoreFocus };
+}
+
+function RowMenu({ actions, copy, identity, onQuick }: RowMenuProps) {
+  const { trigger, menuId, isOpen, isLocked, changeOpen, closeOnEscape, closeAndRestoreFocus } = useRowMenuState();
   function run(action: () => void) {
+    const button = trigger.current;
+    if (isLocked || button === null || button.closest('[inert]') !== null) return;
     closeAndRestoreFocus();
     action();
   }
@@ -283,7 +303,7 @@ function RowMenu({ actions, copy, identity, onQuick }: RowMenuProps) {
     onClick: () => run(copy.run),
   }, ...items];
   if (entries.length === 0) return null;
-  return <Dropdown trigger={['click']} autoFocus open={isOpen} onOpenChange={changeOpen}
+  return <Dropdown trigger={['click']} autoFocus disabled={isLocked} open={isOpen} onOpenChange={changeOpen}
     menu={{ id: menuId, items: entries, onKeyDown: closeOnEscape }}>
     <Button ref={trigger} className="today-action-more" type="text" aria-haspopup="menu" aria-expanded={isOpen}
       aria-controls={isOpen ? menuId : undefined} onKeyDown={closeOnEscape}

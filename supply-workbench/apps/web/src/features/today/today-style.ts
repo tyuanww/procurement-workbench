@@ -129,8 +129,8 @@ const todayWorkspaceCss = `
     }
     .today-list-panel .today-priority-list { gap: 0; }
     .today-list-panel .today-work-card { border-radius: 0; background: transparent; }
-    .today-action-main > .today-touch:not(.today-toolbar), .today-list-panel .today-action-rows > nav,
-    .today-list-panel .today-action-results-body > [role="status"] { padding: ${small}px ${regular}px; }
+    .today-action-main > .today-touch:not(.today-toolbar),
+    .today-list-panel .today-action-results-body > :is(nav, [role="status"]) { padding: ${small}px ${regular}px; }
     .today-action-results-body > [role="status"] { display: block; }
     .today-list-panel .today-action-list > li:last-child .today-work-card { border-end-start-radius: ${radiusCard}px; border-end-end-radius: ${radiusCard}px; }
     .today-list-panel .ant-empty { padding: ${regular}px; }

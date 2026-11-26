@@ -10,7 +10,7 @@ import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodaySplit } from './TodaySplit.js';
 import { TodayGroup } from './TodayGroup.js';
-import { TodayRow, type CopyAction } from './TodayRow.js';
+import { TodayResultActionsLocked, TodayRow, type CopyAction } from './TodayRow.js';
 import type { CalendarTodayAdditions } from './WorkspaceViews.js';
 import { isPriorityBatchSelection, selectedCalendarDay } from './action-query.js';
 import { workspaceRowId } from './today-focus.js';
@@ -139,13 +139,16 @@ function ResultGroups({ page, displayed, showStatus }: {
   readonly showStatus?: boolean;
 }) {
   if (page === undefined) return displayed === undefined ? null : <ActionGroups {...displayed} />;
+  const isLocked = !page.isSettled;
   return <>
     {showStatus ? <ActionResult page={page} /> : null}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
-    <div className="today-action-rows" aria-busy={page.isLoading} inert={!page.isSettled}>
-      {displayed === undefined ? null : <ActionGroups {...displayed} />}
-      {displayed?.page === undefined ? null : <ActionPagination page={displayed.page} />}
+    <div className="today-action-rows" aria-busy={page.isLoading} inert={isLocked}>
+      <TodayResultActionsLocked.Provider value={isLocked}>
+        {displayed === undefined ? null : <ActionGroups {...displayed} />}
+      </TodayResultActionsLocked.Provider>
     </div>
+    {displayed?.page === undefined ? null : <ActionPagination page={displayed.page} isLocked={isLocked} />}
   </>;
 }
 
