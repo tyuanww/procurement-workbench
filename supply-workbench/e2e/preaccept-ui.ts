@@ -155,7 +155,9 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
   result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
   const { page: peer } = await open('buyerPeer', '/', '/today');
-  result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin });
+  result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
+    expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
+  });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {

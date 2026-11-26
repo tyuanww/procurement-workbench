@@ -8,7 +8,14 @@ const batchId = 'hz09-batch-1';
 const note = '个人工作台合成验收：明早核对发货安排';
 const followUpTime = '2099-01-12T10:00';
 
-export async function checkPersonalWorkspace(input: { readonly buyer: Page; readonly peer: Page; readonly origin: URL }) {
+type ReceiptFailure = (path: string) => void;
+
+export async function checkPersonalWorkspace(input: {
+  readonly buyer: Page;
+  readonly peer: Page;
+  readonly origin: URL;
+  readonly expectReceiptFailure?: ReceiptFailure | undefined;
+}) {
   const { buyer, peer, origin } = input;
   const buyerMain = buyer.getByRole('main');
   const peerMain = peer.getByRole('main');
@@ -68,12 +75,16 @@ export async function checkPersonalWorkspace(input: { readonly buyer: Page; read
   await peerMain.getByText('暂无已约跟进', { exact: true }).waitFor();
   assert.equal(await peerMain.getByText(/HZ09-0001/).count(), 0);
 
-  const receipt = await checkScheduledReceipt({ buyer, origin });
+  const receipt = await checkScheduledReceipt({ buyer, origin, expectReceiptFailure: input.expectReceiptFailure });
   assert.equal(await scheduled.innerText(), scheduledCount);
   return { ownerIsolation: true, batchId, nextFollowUpAt: record.nextFollowUpAt, fulfillmentUnchanged: true, legacyFocus: true, receipt };
 }
 
-async function checkScheduledReceipt({ buyer, origin }: { readonly buyer: Page; readonly origin: URL }) {
+async function checkScheduledReceipt({ buyer, origin, expectReceiptFailure }: {
+  readonly buyer: Page;
+  readonly origin: URL;
+  readonly expectReceiptFailure: ReceiptFailure | undefined;
+}) {
   const batchPath = '/api/v1/batches/' + batchId;
   const shipped = await buyer.request.post(new URL(batchPath + '/shipments', origin).href, {
     data: { qty: 4_000, shippedOn: '2025-01-01', fulfillment: { kind: 'verified', unit: '件', evidence: '合成验收·货物交运' } },
@@ -100,7 +111,9 @@ async function checkScheduledReceipt({ buyer, origin }: { readonly buyer: Page; 
   const batches = buyer.getByRole('region', { name: '批次', exact: true });
   await batches.getByText('未发 6,000 件 · 待收 3,000 件 · 实收 1,000 件', { exact: true }).waitFor();
   await batches.getByRole('button', { name: '登记收货', exact: true }).click();
-  await checkReceiptRetry(buyer, new URL(batchPath + '/receipts', origin));
+  const receiptUrl = new URL(batchPath + '/receipts', origin);
+  expectReceiptFailure?.(receiptUrl.pathname);
+  await checkReceiptRetry(buyer, receiptUrl);
   await batches.getByText('未发 6,000 件 · 待收 2,250 件 · 实收 1,750 件', { exact: true }).waitFor();
   await buyer.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await buyer.waitForURL(today.href);
