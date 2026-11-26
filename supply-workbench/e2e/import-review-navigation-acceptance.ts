@@ -10,6 +10,7 @@ const HISTORY_PATH = '/imports?template=po-master-v1&status=committed';
 const EMPTY_SCHEDULE = '/progress?view=schedule&from=2030-01-01';
 const WORKBOOK = 'po-master-procurement.xlsx';
 const SETTINGS_LABEL = '系统设置';
+const SEARCH_LABEL = '搜索单号、品名、供应商';
 const ADMIN_NAV_ENTRIES = 7;
 
 export async function checkEmptyProductArchive(page: Page, origin: URL, canReadImports: boolean): Promise<void> {
@@ -45,6 +46,7 @@ export async function checkImportReviewNavigation({ admin, buyer, lead, manager,
     buyerEntries: 5, adminEntries: ADMIN_NAV_ENTRIES, legacyBatch, historyFocus: true, keyboardFilePicker: true,
     reviewPhoneWidth: 320, deniedRoles: ['manager', 'lead'],
     settings: { soleAdminLanding: '/settings', keyboardLink: true, phoneWidth: 320, deniedRoles: settingsDeniedRoles },
+    header: { alignmentWidths: [1440, 320], phoneTargetPx: 44, phoneSearchLabel: '搜索', roleTag: true, keyboardLogout: true },
   };
 }
 
@@ -91,15 +93,45 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
 }
 
 async function checkAccountFocusExit(page: Page, origin: URL) {
-  const trigger = page.getByRole('banner').getByRole('button', { name: '管理员', exact: true });
-  const settings = page.getByRole('link', { name: SETTINGS_LABEL, exact: true });
+  const header = page.getByRole('banner');
+  const trigger = header.getByRole('button', { name: '管理员', exact: true });
+  const search = header.getByRole('button', { name: SEARCH_LABEL, exact: true });
+  const navigation = header.getByRole('button', { name: '打开菜单', exact: true });
+  const settings = header.getByRole('link', { name: SETTINGS_LABEL, exact: true });
+  const logout = header.getByRole('button', { name: '退出', exact: true });
   const reportDate = page.getByLabel('周一', { exact: true });
   for (const width of [1440, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(new URL('/reports', origin).href);
     await reportDate.waitFor();
+    const [searchBox, accountBox] = await Promise.all([search.boundingBox(), trigger.boundingBox()]);
+    assert.ok(searchBox && accountBox, '顶栏应显示搜索和账户入口');
+    assert.ok(Math.abs((searchBox.y + searchBox.height / 2) - (accountBox.y + accountBox.height / 2)) <= 1, '搜索和账户入口应沿垂直中心对齐');
+    assert.equal(searchBox.height, accountBox.height, '搜索和账户入口应等高');
+    if (width === 320) {
+      const navBox = await navigation.boundingBox();
+      assert.ok(navBox, '手机顶栏应显示菜单入口');
+      for (const box of [navBox, searchBox, accountBox]) {
+        assert.ok(box.width >= 44 && box.height >= 44, '手机顶栏的点击区应至少为 44 × 44');
+      }
+    } else {
+      const hint = search.getByText(/^(Ctrl\+K|⌘K)$/u);
+      const hintBox = await hint.boundingBox();
+      assert.ok(hintBox, '桌面应显示快捷键提示');
+      const hintInset = searchBox.x + searchBox.width - hintBox.x - hintBox.width;
+      assert.ok(hintInset >= 0 && hintInset <= 24, '桌面快捷键提示应贴近搜索按钮右侧');
+    }
     await trigger.press('Enter');
     await settings.waitFor();
+    await logout.waitFor();
+    await header.locator('.ant-tag').filter({ hasText: /^管理员$/u }).waitFor();
+    const [settingsHeight, logoutHeight] = await Promise.all([
+      settings.evaluate((link) => 'offsetHeight' in link && link.offsetHeight),
+      logout.evaluate((button) => 'offsetHeight' in button && button.offsetHeight),
+    ]);
+    assert.ok(settingsHeight && logoutHeight, '账户菜单应显示系统设置和退出');
+    assert.equal(settingsHeight, logoutHeight, '系统设置和退出应等高');
+    if (width === 320) assert.ok(logoutHeight >= 44, '手机账户菜单操作应至少 44 高');
     for (const _step of [1, 2, 3]) await page.keyboard.press('Tab');
     assert.equal(await reportDate.evaluate((input) => input === document.activeElement), true);
     assert.equal(await trigger.getAttribute('aria-expanded'), 'false', '焦点移到页面时账户菜单应关闭');
@@ -113,11 +145,61 @@ async function checkWithoutSettingsAccess(page: Page, origin: URL, name: string)
   await page.goto(new URL('/settings', origin).href);
   await page.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
   const trigger = page.getByRole('banner').getByRole('button', { name, exact: true });
-  await trigger.click();
-  await page.getByRole('menuitem', { name: /退出/ }).waitFor();
+  const logout = page.getByRole('button', { name: '退出', exact: true });
+  const focused = page.locator(':focus');
+  await trigger.press('Enter');
+  await logout.waitFor();
   assert.equal(await page.getByRole('link', { name: SETTINGS_LABEL, exact: true }).count(), 0);
+  await page.keyboard.press('Tab');
+  await logout.and(focused).waitFor();
+  await page.keyboard.press('Shift+Tab');
+  await trigger.and(focused).waitFor();
+  await page.keyboard.press('Tab');
+  await logout.and(focused).waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+  await trigger.and(focused).waitFor();
+}
+
+export async function checkAccountLogout(page: Page, origin: URL, expectFailure: (path: string) => void) {
+  const today = new URL('/today', origin);
+  const session = new URL('/api/v1/me', origin).href;
+  const logoutUrl = new URL('/api/v1/auth/logout', origin);
+  await page.setViewportSize({ width: 320, height: 780 });
+  await page.goto(today.href);
+  const header = page.getByRole('banner');
+  const trigger = header.getByRole('button', { name: '采购甲', exact: true });
+  const logout = header.getByRole('button', { name: '退出', exact: true });
+  const focused = page.locator(':focus');
+  await trigger.press('Enter');
+  await logout.waitFor();
+  await page.keyboard.press('Tab');
+  await logout.and(focused).waitFor();
+
+  expectFailure(logoutUrl.pathname);
+  await page.route(logoutUrl.href, (route) => route.fulfill({
+    status: 503,
+    json: { error: { code: 'INTERNAL', message: '验收模拟退出失败', details: {} } },
+  }), { times: 1 });
+  const failed = page.waitForResponse((response) => response.url() === logoutUrl.href && response.request().method() === 'POST');
+  await page.keyboard.press('Space');
+  assert.equal((await failed).status(), 503);
+  await page.getByText('退出没有完成', { exact: true }).waitFor();
+  await trigger.and(focused).waitFor();
+  assert.equal(page.url(), today.href);
+  assert.equal((await page.request.get(session)).status(), 200);
+
+  await page.keyboard.press('Enter');
+  await logout.waitFor();
+  await page.keyboard.press('Tab');
+  await logout.and(focused).waitFor();
+  const retry = page.waitForResponse((response) => response.url() === logoutUrl.href && response.request().method() === 'POST');
+  await page.keyboard.press('Enter');
+  assert.equal((await retry).status(), 204);
+  await page.waitForURL(new URL('/login', origin).href);
+  await page.getByRole('heading', { name: '供应链工作台登录', exact: true }).waitFor();
+  assert.equal((await page.request.get(session)).status(), 401);
+  return { failedStatus: 503, sessionAfterFailure: 200, retryStatus: 204, sessionAfterLogout: 401, landing: '/login' };
 }
 
 async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
@@ -219,6 +301,22 @@ async function checkReviewPhone(page: Page, origin: URL): Promise<void> {
   await drawer.getByRole('link', { name: IMPORT_LABEL, exact: true }).click();
   await page.waitForURL(new URL('/imports', origin).href);
   await drawer.waitFor({ state: 'hidden' });
+
+  const search = page.getByRole('banner').getByRole('button', { name: SEARCH_LABEL, exact: true });
+  const label = search.getByText('搜索', { exact: true });
+  await label.waitFor();
+  assert.equal(await search.getByText(/Ctrl\+K|⌘K/u).count(), 0);
+  const [labelBox, searchBox] = await Promise.all([label.boundingBox(), search.boundingBox()]);
+  assert.ok(labelBox && searchBox, '手机应显示搜索按钮及文案');
+  assert.ok(labelBox.x >= searchBox.x && labelBox.x + labelBox.width <= searchBox.x + searchBox.width
+    && labelBox.y >= searchBox.y && labelBox.y + labelBox.height <= searchBox.y + searchBox.height,
+  '320 px 下搜索文案应完整处于按钮内');
+  await search.click();
+  const dialog = page.getByRole('dialog', { name: '搜索', exact: true });
+  await dialog.waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await checkWithoutSettingsAccess(page, origin, '审核人甲');
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 

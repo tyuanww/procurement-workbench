@@ -1,0 +1,85 @@
+.shell-account {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.shell-account .shell-account-trigger {
+  max-inline-size: min(12rem, 42vw);
+  min-inline-size: 44px;
+  font-weight: 600;
+}
+
+.shell-account-label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-account-user-icon {
+  font-size: var(--ant-font-size-lg);
+}
+
+.shell-account-indicator {
+  flex: none;
+  color: var(--ant-color-text-secondary);
+  font-size: var(--ant-font-size-sm);
+}
+
+.shell-account-panel {
+  inline-size: min(13rem, calc(100vw - 2rem));
+  padding: var(--ant-padding-xs);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  background: var(--ant-color-bg-elevated);
+}
+
+.shell-account-identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ant-margin-xxs);
+  padding: var(--ant-padding-xxs) var(--ant-padding-xs) var(--ant-padding-xs);
+  overflow-wrap: anywhere;
+}
+
+.shell-account-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ant-margin-xxs);
+}
+
+.shell-account-roles .ant-tag {
+  margin-inline-end: 0;
+}
+
+.shell-account-actions .shell-account-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--ant-margin-xs);
+  inline-size: 100%;
+  block-size: auto;
+  padding-inline: var(--ant-padding-xs);
+  border: 1px solid transparent;
+  border-radius: var(--ant-border-radius);
+  color: var(--ant-color-text);
+  font-size: var(--ant-font-size);
+  text-decoration: none;
+}
+
+.shell-account-actions .shell-account-action:hover,
+.shell-account-actions .shell-account-action:focus-visible {
+  background: var(--ant-color-bg-text-hover);
+  color: var(--ant-color-text);
+}
+
+.shell-account-action:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: -2px;
+}
+
+.shell-account-divider {
+  margin: var(--ant-margin-xxs) var(--ant-margin-xs);
+  border: 0;
+  border-block-start: 1px solid var(--ant-color-border-secondary);
+}

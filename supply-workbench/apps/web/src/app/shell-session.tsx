@@ -1,6 +1,6 @@
-import { Badge, Button, Dropdown, Menu, Tag, Typography, type BadgeProps, type MenuProps } from 'antd';
-import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
-import { useId, useRef, useState, type Ref } from 'react';
+import { App, Badge, Button, Dropdown, Tag, Typography, theme, type BadgeProps } from 'antd';
+import { DownOutlined, LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
+import { Fragment, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type Ref } from 'react';
 import { Link } from 'react-router';
 import { SETTINGS_PATH } from '../shared/page-manifest.js';
 import {
@@ -9,7 +9,8 @@ import {
   type BadgeMark,
   type ShellView,
 } from '../features/shell/index.js';
-import { bg, brand, space } from '../theme/tokens.js';
+import { brand, rowCompact } from '../theme/tokens.js';
+import './shell-account.css';
 
 export function NavBadge({ mark, compact, countProps }: {
   readonly mark: BadgeMark;
@@ -31,28 +32,13 @@ export function NavBadge({ mark, compact, countProps }: {
   }
 }
 
-export function AccountMenu({ account }: { readonly account: ShellView['account'] }) {
-  const [isOpen, setOpen] = useState(false);
-  const [logoutError, setLogoutError] = useState('');
+export function AccountMenu({ account, hitPx }: { readonly account: ShellView['account']; readonly hitPx: number | undefined }) {
+  const { isOpen, setOpen, trigger, panel, close, handleBlur, handleKeyDown } = useAccountDisclosure();
+  const { message } = App.useApp();
   const panelId = useId();
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const name = account.entries.find((entry) => entry.kind === 'name');
-  const label = name === undefined ? '' : name.label;
-  const close = () => {
-    setOpen(false);
-    trigger.current?.focus();
-  };
+  const label = account.entries.find((entry) => entry.kind === 'name')?.label ?? '';
   return (
-    <div
-      onBlur={({ relatedTarget }) => {
-        if (isOpen && !trigger.current?.contains(relatedTarget) && !panel.current?.contains(relatedTarget)) setOpen(false);
-      }}
-      onKeyDown={(event) => {
-        // Let native Tab navigation reach links inside this custom dropdown panel.
-        if (isOpen && event.key === 'Tab') event.stopPropagation();
-      }}
-    >
+    <div className="shell-account" onBlur={handleBlur} onKeyDown={handleKeyDown}>
       <Dropdown
         trigger={['click']}
         open={isOpen}
@@ -60,57 +46,100 @@ export function AccountMenu({ account }: { readonly account: ShellView['account'
         placement="bottomRight"
         getPopupContainer={(node) => node.closest('header') ?? node.ownerDocument.body}
         popupRender={() => (
-          <AccountPanel id={panelId} panelRef={panel} entries={account.entries} onClose={close} onFail={() => setLogoutError('退出没有完成')} />
+          <AccountPanel id={panelId} panelRef={panel} label={label} entries={account.entries} hitPx={hitPx ?? rowCompact}
+            onClose={close} onFail={() => { void message.error('退出没有完成'); }} />
         )}
       >
-        <Button ref={trigger} type="text" aria-expanded={isOpen} aria-controls={isOpen ? panelId : undefined}>
-          <UserOutlined aria-hidden="true" />
-          {label}
+        <Button ref={trigger} type="text" className="shell-account-trigger" style={{ minHeight: hitPx }}
+          icon={<UserOutlined aria-hidden="true" className="shell-account-user-icon" />}
+          aria-expanded={isOpen} aria-controls={isOpen ? panelId : undefined}>
+          <span className="shell-account-label">{label}</span>
+          <DownOutlined aria-hidden="true" className="shell-account-indicator" />
         </Button>
       </Dropdown>
-      {logoutError === '' ? null : <Typography.Text type="danger">{logoutError}</Typography.Text>}
     </div>
   );
 }
 
-function AccountPanel(input: { readonly id: string; readonly panelRef: Ref<HTMLDivElement>; readonly entries: readonly AccountEntry[]; readonly onClose: () => void; readonly onFail: () => void }) {
+function useAccountDisclosure() {
+  const [isOpen, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  function close(): void {
+    setOpen(false);
+    trigger.current?.focus();
+  }
+
+  function handleBlur({ relatedTarget }: FocusEvent<HTMLDivElement>): void {
+    if (isOpen && !trigger.current?.contains(relatedTarget) && !panel.current?.contains(relatedTarget)) setOpen(false);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (!isOpen || (event.key !== 'Tab' && event.key !== 'Escape')) return;
+    // Allow native Tab navigation through the disclosure actions.
+    event.stopPropagation();
+    if (event.key === 'Escape') close();
+  }
+
+  return { isOpen, setOpen, trigger, panel, close, handleBlur, handleKeyDown };
+}
+
+function AccountPanel(input: {
+  readonly id: string;
+  readonly panelRef: Ref<HTMLDivElement>;
+  readonly label: string;
+  readonly entries: readonly AccountEntry[];
+  readonly hitPx: number;
+  readonly onClose: () => void;
+  readonly onFail: () => void;
+}) {
+  const { token } = theme.useToken();
+  const roles = input.entries.filter((entry) => entry.kind === 'role');
+  const actions = input.entries.filter((entry) => entry.kind === 'settings' || entry.kind === 'logout');
   return (
-    <div ref={input.panelRef} id={input.id} style={{ background: bg.surface, padding: space[2], display: 'flex', flexDirection: 'column', gap: space[1] }}>
-      {input.entries.map((entry) => (
-        <AccountRow key={entry.key} entry={entry} onClose={input.onClose} onFail={input.onFail} />
-      ))}
+    <div ref={input.panelRef} id={input.id} className="shell-account-panel" style={{ boxShadow: token.boxShadowSecondary }}>
+      <div className="shell-account-identity">
+        <Typography.Text strong>{input.label}</Typography.Text>
+        {roles.length === 0 ? null : (
+          <div className="shell-account-roles">{roles.map((entry) => <Tag key={entry.key}>{entry.label}</Tag>)}</div>
+        )}
+      </div>
+      <div className="shell-account-actions">
+        {actions.map((entry, index) => (
+          <Fragment key={entry.key}>
+            {entry.kind === 'logout' && index > 0 ? <hr className="shell-account-divider" /> : null}
+            <AccountAction entry={entry} hitPx={input.hitPx} onClose={input.onClose} onFail={input.onFail} />
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }
 
-function AccountRow(input: { readonly entry: AccountEntry; readonly onClose: () => void; readonly onFail: () => void }) {
-  if (input.entry.kind === 'name') return <Typography.Text>{input.entry.label}</Typography.Text>;
-  if (input.entry.kind === 'role') return <Tag>{input.entry.label}</Tag>;
-  if (input.entry.kind === 'settings') return (
-    <Link to={SETTINGS_PATH} onClick={input.onClose} style={{ display: 'flex', alignItems: 'center', gap: space[1], minHeight: 32, paddingInline: space[2] }}>
+function AccountAction({ entry, hitPx, onClose, onFail }: {
+  readonly entry: AccountEntry;
+  readonly hitPx: number;
+  readonly onClose: () => void;
+  readonly onFail: () => void;
+}) {
+  if (entry.kind === 'settings') return (
+    <Link to={SETTINGS_PATH} onClick={onClose} className="shell-account-action" style={{ minHeight: hitPx }}>
       <SettingOutlined aria-hidden="true" />
-      {input.entry.label}
+      {entry.label}
     </Link>
   );
-  if (input.entry.kind === 'logout') return <LogoutItem {...input} />;
-  return unreachable(input.entry.kind);
-}
-
-function LogoutItem(input: { readonly entry: AccountEntry; readonly onClose: () => void; readonly onFail: () => void }) {
-  return (
-    <Menu
-      selectable={false}
-      items={logoutItems(input.entry)}
+  if (entry.kind === 'logout') return (
+    <Button type="text" className="shell-account-action" style={{ minHeight: hitPx }}
+      icon={<LogoutOutlined aria-hidden="true" />}
       onClick={() => {
-        input.onClose();
-        void endSession().catch(() => input.onFail());
-      }}
-    />
+        onClose();
+        void endSession().catch(onFail);
+      }}>
+      {entry.label}
+    </Button>
   );
-}
-
-function logoutItems(entry: AccountEntry): NonNullable<MenuProps['items']> {
-  return [{ key: entry.key, icon: <LogoutOutlined />, label: entry.label }];
+  return null;
 }
 
 function unreachable(value: never): never {

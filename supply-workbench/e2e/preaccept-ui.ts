@@ -11,7 +11,7 @@ import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
-import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
+import { checkAccountLogout, checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
 import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
 import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
@@ -47,6 +47,7 @@ const users = {
 const warehouse = '0199f0a0-0000-7000-8000-000000000010';
 const queuePath = '/api/v1/master/review-queue/counts';
 const loginPath = '/api/v1/auth/dev/login';
+const logoutPath = '/api/v1/auth/logout';
 const searchLabel = '搜索单号、品名、供应商';
 const headless = process.env.ACCEPT_HEADLESS !== '0';
 const browser = await chromium.launch({ headless, channel });
@@ -158,6 +159,9 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
     expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
   });
+  result.checks.accountLogout = await checkAccountLogout(buyer, origin, (path) => {
+    expectedFailures.push({ role: 'buyer', path, status: 503 });
+  });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
@@ -223,9 +227,10 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
 }
 
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {
-  const initialSessionReads = new Set<number>();
+  const signedOutSessionReads = new Set<number>();
   const pending = [...expectedFailures];
   const unexpected = network.filter((response) => {
+    if (response.path === logoutPath && response.status === 204) signedOutSessionReads.delete(response.session);
     if (response.status < 400) return false;
     if (response.signedIn) {
       const match = pending.findIndex((expected) => expected.role === response.role && expected.path === response.path && expected.status === response.status);
@@ -233,8 +238,8 @@ function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord
       pending.splice(match, 1);
       return false;
     }
-    if (response.path !== '/api/v1/me' || response.status !== 401 || initialSessionReads.has(response.session)) return true;
-    initialSessionReads.add(response.session);
+    if (response.path !== '/api/v1/me' || response.status !== 401 || signedOutSessionReads.has(response.session)) return true;
+    signedOutSessionReads.add(response.session);
     return false;
   });
   assert.deepEqual(pending, [], '确认浏览器观测到了刻意触发的失败响应');
@@ -252,6 +257,7 @@ async function open(role: Role, path: string, landing = path) {
     const url = new URL(response.url);
     if (url.origin !== origin.origin) return;
     if (url.pathname === loginPath && response.status === 200) signedIn = true;
+    if (url.pathname === logoutPath && response.status === 204) signedIn = false;
     result.network.push({ role, session, path: url.pathname, status: response.status, signedIn });
   });
   devtools.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {

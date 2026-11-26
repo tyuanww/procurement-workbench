@@ -1,5 +1,5 @@
 import { Button, ConfigProvider, Drawer, Layout, Menu } from 'antd';
-import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SearchOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
@@ -118,8 +118,8 @@ export function ShellTop(input: {
   return (
     <Layout.Header className="shell-header" style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
       <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
-      <SearchButton onSearch={input.onSearch} />
-      <AccountMenu account={input.account} />
+      <SearchButton onSearch={input.onSearch} hitPx={input.menuButton?.hitPx} />
+      <AccountMenu account={input.account} hitPx={input.menuButton?.hitPx} />
     </Layout.Header>
   );
 }
@@ -221,12 +221,27 @@ function HeaderMenuButton({ button }: { readonly button: MenuButton }) {
   );
 }
 
-function SearchButton({ onSearch }: { readonly onSearch: () => void }) {
+function SearchButton({ onSearch, hitPx }: { readonly onSearch: () => void; readonly hitPx: number | undefined }) {
   const hint = searchShortcutHint();
+  const isPhone = hitPx !== undefined;
   return (
-    <Button aria-label={searchLabel} aria-keyshortcuts={hint.ariaKeys} onClick={onSearch} style={searchButtonStyle()}>
-      <span style={searchTextStyle()}>{searchLabel}</span>
-      <span aria-hidden="true" style={{ flexShrink: 0 }}>{hint.label}</span>
+    <Button
+      aria-label={searchLabel}
+      aria-keyshortcuts={hint.ariaKeys}
+      onClick={onSearch}
+      icon={isPhone ? <SearchOutlined aria-hidden="true" /> : undefined}
+      style={isPhone
+        ? {
+          ...searchButtonStyle(),
+          minHeight: hitPx,
+          justifyContent: 'center',
+          paddingInline: space[2],
+          lineHeight: 'var(--ant-line-height, 1.5)',
+        }
+        : searchButtonStyle()}
+    >
+      <span style={searchTextStyle()}>{isPhone ? '搜索' : searchLabel}</span>
+      {isPhone ? null : <span aria-hidden="true" style={{ flexShrink: 0 }}>{hint.label}</span>}
     </Button>
   );
 }
