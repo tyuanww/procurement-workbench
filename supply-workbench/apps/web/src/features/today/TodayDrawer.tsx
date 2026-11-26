@@ -130,7 +130,9 @@ function FaceBlock(props: FaceBlockProps) {
         {face.remaining === undefined ? null : <Typography.Text>{face.remaining}</Typography.Text>}
         {face.inTransit === undefined ? null : <Typography.Text>{face.inTransit}</Typography.Text>}
       </Flex>}
-      {face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>下次跟进 · {formatDateTime(face.nextFollowUpAt)}</div>}
+      {face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>
+        下次跟进 · {formatDateTime(face.nextFollowUpAt)}{face.nextFollowUpTarget === undefined ? '' : ` · ${face.nextFollowUpTarget}`}
+      </div>}
       <FollowUpFacts face={face} />
     </Flex>
   );
