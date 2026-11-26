@@ -136,7 +136,7 @@ function decorate(input: { readonly key: string; readonly name: string; readonly
 }
 
 function rowsOf(items: readonly BoardItem[]): BoardRow[] {
-  return items.map((item) => ({ id: item.id, face: faceOf(item), actions: actionsOf(item) }));
+  return items.map((item) => ({ id: item.id, face: faceOf(item), reasons: orderCodes(item.reasons), actions: actionsOf(item) }));
 }
 
 function countsOf(items: readonly BoardItem[]): ReasonCount[] {

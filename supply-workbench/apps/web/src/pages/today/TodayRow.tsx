@@ -1,9 +1,10 @@
-import { Button, Card, Dropdown, Flex, Typography, type ButtonProps } from 'antd';
-import { CopyOutlined, DownOutlined } from '@ant-design/icons';
+import { Button, Card, Dropdown, Flex, Tooltip, Typography, type ButtonProps } from 'antd';
+import { CopyOutlined, EllipsisOutlined } from '@ant-design/icons';
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { actionIcon, rowStyle, TodayOrderLink, type BoardRow, type QuickAction, type RowFace, type TodayOrderRef } from '../../features/today/index.js';
+import { actionIcon, actionReasonText, rowStyle, TodayOrderLink, type BoardRow, type QuickAction, type RowFace, type TodayOrderRef } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
-import { formatDateTime } from '../../shared/ui/format.js';
+import { formatDateTime, formatQuantity, formatTableDate } from '../../shared/ui/format.js';
+import { isStatusKey } from '../../shared/ui/status.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
 import { ReceiptAction, type ReceiptWork } from './TodayAgenda.js';
@@ -47,10 +48,9 @@ type CardPresentation = {
 export function TodayRow(props: RowProps): ReactNode {
   const canRecord = useCanWrite('records.write');
   const card = presentRow(props, canRecord ? props.row.actions : []);
-  const { face } = props.row;
   const style = rowStyle({ isFocused: props.isFocused, isFading: props.isFading });
   const content = <div className="today-row-layout">
-    <RowFacts card={card} face={face} receipt={props.receipt} headingLevel={props.headingLevel}
+    <RowFacts card={card} row={props.row} receipt={props.receipt} headingLevel={props.headingLevel}
       isScheduled={props.isScheduled} showReminder={props.showReminder === true} onOpen={props.onOpen} />
     <RowActions {...props} card={card} />
   </div>;
@@ -85,45 +85,83 @@ function choosePrimary({ actions, receipt, copy, isScheduled, assignmentOrder }:
   return copy === null ? { kind: 'detail' } : { kind: 'copy', action: copy };
 }
 
-const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
-
 function receiptQuantity(receipt: ReceiptWork | undefined): string | undefined {
   if (receipt === undefined) return undefined;
-  return `在途待收 ${quantityFormat.format(receipt.inTransitQty)} ${receipt.unit}`;
+  return `在途待收 ${formatQuantity(receipt.inTransitQty)} ${receipt.unit}`;
 }
 
-function RowFacts({ card, face, receipt, headingLevel, isScheduled, showReminder, onOpen }: Pick<RowProps, 'receipt' | 'headingLevel' | 'isScheduled' | 'showReminder' | 'onOpen'> & { readonly card: CardPresentation; readonly face: RowFace }) {
+function RowFacts({ card, row, receipt, headingLevel, isScheduled, showReminder, onOpen }: Pick<RowProps, 'row' | 'receipt' | 'headingLevel' | 'isScheduled' | 'showReminder' | 'onOpen'> & { readonly card: CardPresentation }) {
+  const { face } = row;
   const hasReminderContext = showReminder === true || isScheduled || (card.primary.kind === 'quick' && card.primary.action.kind === 'note');
   const waiting = isScheduled && face.nextFollowUpTarget !== undefined ? undefined : face.waiting;
-  return <div className="today-row-facts">
-    <RowHeading card={card} face={face} receipt={receipt} headingLevel={headingLevel} onOpen={onOpen} />
-    <DeliveryFacts face={face} receipt={receipt} waiting={waiting} showReminder={showReminder === true} />
-    <div className="today-row-line today-row-quantities">
-      {face.remaining === undefined ? null : <Typography.Text>{face.remaining}</Typography.Text>}
-      {card.inTransit === undefined ? null : <Typography.Text>{card.inTransit}</Typography.Text>}
+  const factory = face.waitingKind === 'supplier' ? waiting : undefined;
+  const reasonCodes = visibleReasons(row, receipt);
+  return <>
+    <div className="today-row-facts">
+      <RowHeading card={card} face={face} receipt={receipt} reason={reasonCodes[0]} headingLevel={headingLevel} onOpen={onOpen} />
+      <RowIdentity card={card} face={face} factory={factory} isReceipt={receipt !== undefined} />
+      <AdditionalReasons codes={receipt === undefined ? reasonCodes.slice(1) : reasonCodes} face={face} />
+      {hasReminderContext ? <NextFollowUp face={face} /> : null}
     </div>
-    {hasReminderContext ? <NextFollowUp face={face} /> : null}
+    <div className="today-row-details">
+      <DeliveryFacts face={face} receipt={receipt} waiting={factory === undefined ? waiting : undefined} showReminder={showReminder === true} />
+      <RowQuantities remaining={face.remaining} inTransit={card.inTransit} />
+    </div>
+  </>;
+}
+
+function RowQuantities({ remaining, inTransit }: { readonly remaining: string | undefined; readonly inTransit: string | undefined }) {
+  return <div className="today-row-line today-row-quantities">
+    {[remaining, inTransit].map((value) => value === undefined ? null : <Typography.Text key={value}>{value}</Typography.Text>)}
   </div>;
 }
 
-function RowHeading({ card, face, receipt, headingLevel, onOpen }: Pick<RowProps, 'receipt' | 'headingLevel' | 'onOpen'> & { readonly card: CardPresentation; readonly face: RowFace }) {
+function visibleReasons({ face, reasons = [] }: BoardRow, receipt: ReceiptWork | undefined) {
+  const distinct = reasons.filter((code) => code !== 'unassigned');
+  const shown = distinct.filter((code) => {
+    if (code === 'unshipped') return face.remaining === undefined;
+    if (code === 'shipped_not_received') return receipt === undefined && face.inTransit === undefined;
+    if (code === 'due_today') return receipt?.status !== 'due_today' || face.date !== receipt.confirmedDate;
+    return true;
+  });
+  return shown.length === 0 && receipt === undefined ? distinct.slice(0, 1) : shown;
+}
+
+function RowHeading({ card, face, receipt, reason, headingLevel, onOpen }: Pick<RowProps, 'receipt' | 'headingLevel' | 'onOpen'> & {
+  readonly card: CardPresentation; readonly face: RowFace; readonly reason: string | undefined;
+}) {
   return <div className="today-row-line today-batch-title">
+    <RowStatus face={face} receipt={receipt} reason={reason} />
     <Typography.Title level={headingLevel} className="today-row-title">{card.primary.kind === 'detail' ? card.title
       : <Button type="link" onClick={onOpen} aria-label={`查看详情 ${card.identity}`}>{card.title}</Button>}</Typography.Title>
-    <div className="today-row-line today-row-status">
-      <RowStatus face={face} receipt={receipt} />
-      {face.isUnassigned === true ? <Typography.Text className="today-batch-meta" type="secondary">未分配</Typography.Text> : null}
-    </div>
-    {card.batch === undefined ? null : <Typography.Text className="today-batch-meta today-row-batch" type="secondary">{card.batch}</Typography.Text>}
   </div>;
 }
 
-function RowStatus({ face, receipt }: { readonly face: RowFace; readonly receipt: ReceiptWork | undefined }) {
-  if (receipt === undefined) return face.overdueTone === 'danger'
-    ? <StatusTag status="overdue" label={face.overdue} />
-    : <Typography.Text className="today-batch-meta" type="secondary">{face.reason}</Typography.Text>;
-  const isLate = receipt.status === 'overdue';
-  return <StatusTag status={isLate ? 'overdue' : 'due_today'} label={isLate ? '到仓逾期' : '今日应到'} />;
+function RowStatus({ face, receipt, reason }: { readonly face: RowFace; readonly receipt: ReceiptWork | undefined; readonly reason: string | undefined }) {
+  if (receipt !== undefined) {
+    const isLate = receipt.status === 'overdue';
+    return <StatusTag status={isLate ? 'overdue' : 'due_today'} label={isLate ? '到仓逾期' : '今日应到'} />;
+  }
+  if (reason !== undefined && isStatusKey(reason)) return <StatusTag status={reason} label={reasonLabel(reason, face)} />;
+  return <Typography.Text className="today-row-meta" type="secondary">{reason === undefined ? face.reason : actionReasonText(reason)}</Typography.Text>;
+}
+
+function RowIdentity({ card, face, factory, isReceipt }: {
+  readonly card: CardPresentation; readonly face: RowFace; readonly factory: string | undefined; readonly isReceipt: boolean;
+}) {
+  const parts = [face.orderNo === '—' ? undefined : face.orderNo, card.batch,
+    factory === undefined ? undefined : isReceipt ? factory : `等待方 · ${factory}`,
+    face.isUnassigned === true ? '未分配' : undefined].filter(Boolean);
+  return parts.length === 0 ? null : <Typography.Text className="today-row-meta" type="secondary">{parts.join(' · ')}</Typography.Text>;
+}
+
+function AdditionalReasons({ codes, face }: { readonly codes: readonly string[]; readonly face: RowFace }) {
+  if (codes.length === 0) return null;
+  return <Typography.Text className="today-row-reason">{codes.map((code) => reasonLabel(code, face)).join('、')}</Typography.Text>;
+}
+
+function reasonLabel(code: string, face: RowFace) {
+  return code === 'overdue' && face.overdueTone === 'danger' ? `未发${face.overdue}` : actionReasonText(code);
 }
 
 function DeliveryFacts({ face, receipt, waiting, showReminder }: {
@@ -133,19 +171,29 @@ function DeliveryFacts({ face, receipt, waiting, showReminder }: {
   readonly showReminder: boolean;
 }) {
   if (receipt === undefined) return <div className="today-row-line today-row-delivery">
-    {face.date === '—' ? null : <Fact label="采购确认到仓日" value={face.date} />}
+    {face.date === '—' ? null : <DateFact label="采购确认到仓日" date={face.date} />}
     {waiting === undefined ? null : <Typography.Text type="secondary">等待方 · {waiting}</Typography.Text>}
   </div>;
   return <div className="today-row-line today-row-delivery">
-    <Fact label="采购确认到仓日" value={receipt.confirmedDate ?? '未确认'} />
+    <DateFact label="采购确认到仓日" date={receipt.confirmedDate} />
     <Fact label="收货方" value={receipt.warehouse ?? '未命名'} />
-    {face.date !== '—' && face.date !== receipt.confirmedDate ? <Fact label="待办日期" value={face.date} /> : null}
+    {face.date !== '—' && face.date !== receipt.confirmedDate ? <DateFact label="待办日期" date={face.date} /> : null}
     {showReminder && waiting !== undefined ? <Typography.Text type="secondary">今日等待方 · {waiting}</Typography.Text> : null}
   </div>;
 }
 
-function Fact({ label, value }: { readonly label: string; readonly value: string }) {
+function Fact({ label, value }: { readonly label: string; readonly value: ReactNode }) {
   return <Typography.Text><Typography.Text type="secondary">{label} </Typography.Text>{value}</Typography.Text>;
+}
+
+const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'long', timeZone: 'UTC' });
+
+function DateFact({ label, date }: { readonly label: string; readonly date: string | null }) {
+  if (date === null) return <Fact label={label} value="未确认" />;
+  const iso = new Date(date);
+  const title = Number.isNaN(iso.valueOf()) ? date : `${date} ${weekday.format(iso)}`;
+  return <Fact label={label} value={<Tooltip title={title}><time dateTime={date} aria-label={title}>
+    {formatTableDate({ iso: date, now: new Date() })}</time></Tooltip>} />;
 }
 
 function NextFollowUp({ face }: { readonly face: RowFace }) {
@@ -236,6 +284,6 @@ function RowMenu({ actions, copy, identity, onQuick }: RowMenuProps) {
     menu={{ id: menuId, items: entries, onKeyDown: closeOnEscape }}>
     <Button ref={trigger} className="today-action-more" type="text" aria-haspopup="menu" aria-expanded={isOpen}
       aria-controls={isOpen ? menuId : undefined} onKeyDown={closeOnEscape}
-      aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
+      aria-label={`更多操作 ${identity}`} title="更多操作" icon={<EllipsisOutlined aria-hidden />} />
   </Dropdown>;
 }

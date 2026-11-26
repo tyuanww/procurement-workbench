@@ -96,8 +96,6 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.match(sorted[0] ?? '', /HZ09-0501/);
   assert.match(sorted[1] ?? '', /HZ09-0001/);
   assert.equal(await order('HZ09-0002').count(), 0);
-  await page.setViewportSize({ width: 320, height: 800 });
-  await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
   const clearFilters = page.getByRole('button', { name: '清除筛选', exact: true });
   await clearFilters.evaluate((clear, label) => {
     const open = globalThis.document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
@@ -110,6 +108,20 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.waitForURL(({ searchParams }) => !['reasons', 'sort', 'unit', 'work'].some((key) => searchParams.has(key)));
   const clearedFilterUrl = page.url();
   const filters = page.getByRole('dialog', { name: filterName, exact: true });
+  await filters.getByText('批次按紧急度', { exact: true }).waitFor();
+  await filters.getByRole('button', { name: '取消', exact: true }).click();
+  await filters.waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
+  const tools = page.getByRole('button', { name: '待办操作', exact: true });
+  await tools.press('Enter');
+  await page.getByRole('menuitem', { name: chaseName, exact: true }).press('Enter');
+  await factoryDialog.waitFor();
+  await page.keyboard.press('Escape');
+  await factoryDialog.waitFor({ state: 'hidden' });
+  await tools.and(page.locator(':focus')).waitFor();
+  await tools.click();
+  await page.getByRole('menuitem', { name: filterName, exact: true }).click();
   await filters.getByText('批次按紧急度', { exact: true }).waitFor();
   await filters.getByRole('button', { name: /^要催货/ }).click();
   await filters.getByRole('button', { name: /^要催货/, pressed: true }).waitFor();
@@ -155,7 +167,8 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.waitForURL((url) => url.pathname === '/today' && url.search === sourceSearch);
   const scheduled = await recordFollowUp(page, order('HZ09-0501'), '2099-01-11T10:00', '明早十点再联系供应商');
   assert.equal(scheduled.nextFollowUpAt, '2099-01-11T02:00:00.000Z');
-  await page.getByRole('button', { name: /^已约跟进/ }).click();
+  await page.getByRole('button', { name: '切换工作范围', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^已约跟进/ }).click();
   await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled');
   await page.reload();
   await order('HZ09-0501').getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
@@ -415,12 +428,12 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
   readonly row: Locator;
   readonly out: string;
 }) {
-  const scopes = page.getByRole('navigation', { name: '工作范围', exact: true });
   await page.goto(new URL('/today', origin).href);
-  const scheduled = scopes.getByRole('button', { name: /^已约跟进\s*1/ });
+  const scheduled = page.getByRole('menuitem', { name: /^已约跟进\s*1/ });
   const filters = page.getByRole('button', { name: filterName, exact: true });
   const dialog = page.getByRole('dialog', { name: filterName, exact: true });
   const due = dialog.getByRole('button', { name: '到时跟进 1', exact: true });
+  await page.getByRole('button', { name: '切换工作范围', exact: true }).click();
   await scheduled.click();
   await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled' && !url.searchParams.has('unit'));
   await row.getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();

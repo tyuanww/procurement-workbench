@@ -53,7 +53,7 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
     expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
     expect(textOf('body')).not.toContain('截至今日');
     expect(document.querySelector('.today-business-date')).toBeNull();
-    expect(document.querySelector('.today-workspace-heading nav[aria-label="工作范围"]')).not.toBeNull();
+    expect(document.querySelector('nav[aria-label="工作范围"] button[aria-haspopup="menu"]')).not.toBeNull();
     expect(textOf('body')).not.toContain('用 j k 移动');
     pressTodayKey('?');
     expect(textOf('[role="dialog"]')).toContain('j k 或方向键移动，Enter 打开');

@@ -1,7 +1,7 @@
 import { Flex, Pagination, Select, Typography, type ModalProps } from 'antd';
 import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
 import type { CSSProperties } from 'react';
-import type { ChaseScope, WorkspaceInbox } from './action-query.js';
+import { isPriorityBatchSelection, type ChaseScope, type WorkspaceInbox } from './action-query.js';
 import type { ChasePreview } from './today-copy.js';
 
 export type ActionPageControls = {
@@ -109,6 +109,7 @@ function resultDay(page: ActionPageControls, asOf: string | undefined): string |
 
 function resultUnit(page: ActionPageControls): string {
   if (page.work !== undefined) return WORK_RESULT_UNITS[page.work];
+  if (page.inbox === 'today' && isPriorityBatchSelection(page.reasons)) return '批';
   return page.inbox === 'scheduled' ? '批已约跟进' : page.isFiltered ? '项' : '项批次与跟进待办';
 }
 

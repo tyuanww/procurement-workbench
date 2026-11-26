@@ -1,4 +1,5 @@
 import { useInRouterContext, useNavigate } from 'react-router';
+import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import type { TodayView } from '../../features/today/index.js';
 import { ViewSwitch } from '../../shared/ui/view-switch.js';
 
@@ -23,5 +24,6 @@ function TodaySectionSwitch({ view, search }: Parameters<typeof TodaySectionNavi
       if (current.size > 0) target.set('workspaceReturn', current.toString());
       void navigate('/today?' + target);
     }} />
+    <ProcurementCutoff />
   </div>;
 }

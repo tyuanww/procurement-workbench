@@ -1,11 +1,11 @@
-import { Button, Flex, Modal, Typography } from 'antd';
+import { Button, Dropdown, Flex, Modal, Typography } from 'antd';
 import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import type { TodayWorkFilter } from '@sw/contracts';
-import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from 'react';
 import type { GroupMode, ReasonChip, TodayBoard } from '../../features/today/index.js';
-import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { actionDialogStyles, actionDialogTarget, ActionResult, SortControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
-import type { WorkspaceFilterSelection } from './action-query.js';
+import { ViewSwitch } from '../../shared/ui/view-switch.js';
+import { isPriorityBatchSelection, PRIORITY_BATCH_REASONS, type WorkspaceFilterSelection } from './action-query.js';
 import { ChaseCopyDialog } from './ChaseCopyDialog.js';
 import { focusSection } from './today-focus.js';
 import { TodayGrouping } from './TodayGroup.js';
@@ -16,6 +16,7 @@ export type ActionToolbarProps = {
   readonly board: TodayBoard;
   readonly page: ActionPageControls | undefined;
   readonly viewControls?: ReactNode;
+  readonly scopeControls?: ReactNode;
   readonly utilityLinks?: ((onJump: CloseAndJump) => ReactNode) | undefined;
   readonly calendar?: ReactNode;
   readonly onApplyFilters?: (selection: WorkspaceFilterSelection) => void;
@@ -38,9 +39,11 @@ export function ActionToolbar(props: ActionToolbarProps) {
   const { board, page, viewControls } = props;
   const [dialog, setDialog] = useState<ToolbarDialog | null>(null);
   const filterButton = useRef<HTMLButtonElement>(null);
+  const toolsButton = useRef<HTMLButtonElement>(null);
   const clearPending = useRef(false);
   const { isFiltered, inbox, copyNotice } = page ?? {};
-  const selection = appliedFilterLabels(board.chips, page);
+  const preset = priorityPreset(props);
+  const selection = appliedFilterLabels(board.chips, page, preset);
   const chasePage = inbox === 'today' ? page : undefined;
   const draft = dialog?.kind === 'filter' ? dialog.draft : null;
   const isChaseOpen = dialog?.kind === 'chase';
@@ -57,7 +60,7 @@ export function ActionToolbar(props: ActionToolbarProps) {
   }
 
   return <>
-    <ToolbarActions viewControls={viewControls} filterButton={filterButton} isFilterOpen={draft !== null}
+    <ToolbarActions preset={preset} scopeControls={props.scopeControls} viewControls={viewControls} filterButton={filterButton} toolsButton={toolsButton} isFilterOpen={draft !== null}
       chasePage={chasePage} isChaseOpen={isChaseOpen} onFilter={openFilters}
       onChase={() => {
         chasePage?.onCancelCopy?.();
@@ -68,14 +71,27 @@ export function ActionToolbar(props: ActionToolbarProps) {
     <AppliedFilters page={page} selection={selection} onClear={() => {
       // Reopening can happen before the router renders the cleared search parameters.
       clearPending.current = true;
-      filterButton.current?.focus({ preventScroll: true });
+      const target = toolsButton.current?.offsetWidth ? toolsButton.current : filterButton.current;
+      target?.focus({ preventScroll: true });
     }} />
     {!isChaseOpen && copyNotice ? <Typography.Text role="status">{copyNotice}</Typography.Text> : null}
   </>;
 }
 
-function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls'> & {
+type PriorityPreset = { readonly isActive: boolean; readonly select: (active: boolean) => void };
+
+function priorityPreset({ board, page, onApplyFilters }: ActionToolbarProps): PriorityPreset | null {
+  if (page?.inbox !== 'today' || page.calendar !== undefined || board.group === 'kanban' || onApplyFilters === undefined) return null;
+  if (page.work !== undefined || page.sort.kind !== 'urgency') return null;
+  const isActive = isPriorityBatchSelection(page.reasons);
+  if (page.reasons.length > 0 && !isActive) return null;
+  return { isActive, select: (active) => onApplyFilters({ ...CLEARED_FILTERS, reasons: active ? PRIORITY_BATCH_REASONS : [] }) };
+}
+
+function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls' | 'scopeControls'> & {
+  readonly preset: PriorityPreset | null;
   readonly filterButton: Ref<HTMLButtonElement>;
+  readonly toolsButton: RefObject<HTMLButtonElement | null>;
   readonly chasePage: ActionPageControls | undefined;
   readonly isFilterOpen: boolean;
   readonly isChaseOpen: boolean;
@@ -83,30 +99,50 @@ function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls'> & {
   readonly onChase: () => void;
 }) {
   return <Flex className="today-touch today-toolbar" align="center" gap="small" wrap>
+    {props.scopeControls}
     <Flex className="today-toolbar-main" align="center" gap="small" wrap>
+      {props.preset === null ? null : <ViewSwitch className="today-priority-switch" aria-label="批次优先范围"
+        options={[{ value: 'all', label: '全部' }, { value: 'priority', label: '优先', tooltip: '逾期或今日应到的批次' }]}
+        value={props.preset.isActive ? 'priority' : 'all'} onChange={(value) => props.preset?.select(value === 'priority')} />}
       {props.viewControls}
+      <CompactActionMenu preset={props.preset} trigger={props.toolsButton} canChase={props.chasePage !== undefined} onFilter={props.onFilter} onChase={props.onChase} />
       <Flex className="today-toolbar-buttons" gap="small" wrap>
         <Button className="today-toolbar-filter" ref={props.filterButton} icon={<FilterOutlined aria-hidden />}
           aria-label="筛选待办" aria-haspopup="dialog" aria-expanded={props.isFilterOpen} onClick={(event) => {
             event.currentTarget.focus({ preventScroll: true });
             props.onFilter();
-          }}><ToolbarLabel full="筛选待办" short="筛选" /></Button>
+          }}>筛选待办</Button>
         {props.chasePage === undefined ? null : <Button className="today-toolbar-chase" icon={<CopyOutlined aria-hidden />}
           aria-label="按工厂复制催单" aria-haspopup="dialog" aria-expanded={props.isChaseOpen} onClick={(event) => {
             event.currentTarget.focus({ preventScroll: true });
             props.onChase();
-          }}><ToolbarLabel full="按工厂复制催单" short="复制催单" /></Button>}
+          }}>按工厂复制催单</Button>}
       </Flex>
     </Flex>
-    <ProcurementCutoff />
   </Flex>;
 }
 
-function ToolbarLabel({ full, short }: { readonly full: string; readonly short: string }) {
-  return <span aria-hidden="true">
-    <span className="today-toolbar-label-full">{full}</span>
-    <span className="today-toolbar-label-short">{short}</span>
-  </span>;
+function CompactActionMenu({ trigger, canChase, onFilter, onChase, preset }: {
+  readonly trigger: RefObject<HTMLButtonElement | null>; readonly canChase: boolean; readonly preset: PriorityPreset | null;
+  readonly onFilter: () => void; readonly onChase: () => void;
+}) {
+  const [isOpen, setOpen] = useState(false);
+  const items = [{ key: 'filter', icon: <FilterOutlined aria-hidden />, label: '筛选待办' }];
+  if (preset) items.unshift({ key: 'priority', icon: <FilterOutlined aria-hidden />, label: preset.isActive ? '查看全部待办' : '只看优先批次' });
+  if (canChase) items.push({ key: 'chase', icon: <CopyOutlined aria-hidden />, label: '按工厂复制催单' });
+  return <Dropdown autoFocus open={isOpen} onOpenChange={setOpen} trigger={['click']} destroyOnHidden
+    menu={{ className: 'today-workspace-menu', items, onKeyDown: (event) => {
+      // rc-menu already activates the item. A native Enter click would hit the newly focused modal control.
+      if (event.key === 'Enter') event.preventDefault();
+    }, onClick: ({ key }) => {
+      setOpen(false);
+      trigger.current?.focus({ preventScroll: true });
+      if (key === 'priority' && preset) preset.select(!preset.isActive);
+      if (key === 'filter') onFilter();
+      if (key === 'chase') onChase();
+    } }}>
+    <Button ref={trigger} className="today-toolbar-compact" aria-label="待办操作" aria-expanded={isOpen} aria-haspopup="menu">操作</Button>
+  </Dropdown>;
 }
 
 function WorkspaceFilterDialog({ draft, onClose, onChange, onApplyFilters, ...props }: ActionToolbarProps & {
@@ -157,7 +193,8 @@ function filterDraft(board: TodayBoard, page: ActionPageControls | undefined): W
   };
 }
 
-function appliedFilterLabels(chips: readonly ReasonChip[], page: ActionPageControls | undefined): readonly string[] {
+function appliedFilterLabels(chips: readonly ReasonChip[], page: ActionPageControls | undefined, preset: PriorityPreset | null): readonly string[] {
+  if (preset?.isActive) return ['逾期或今日应到的批次'];
   const selection = chips.filter((chip) => chip.isSelected).map((chip) => chip.label);
   if (page?.work !== undefined) selection.unshift(workFilterLabels[page.work]);
   if (page?.sort.kind === 'bulk') selection.push(`大批优先（${page.sort.unit}）`);

@@ -18,7 +18,7 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
   if (mixed.batch === null || mixed.line === null) throw new Error('缺少样例批次');
   const due = localDate('2026-11-20');
   const batch: TodoItemView = {
-    ...mixed, reasons: ['shipped_not_received', 'unshipped'], dueDate: due,
+    ...mixed, reasons: ['shipped_not_received', 'unshipped', 'demand_before_confirmed'], dueDate: due,
     waitingOn: { kind: 'supplier', partyId: 'sample-factory' },
     waitingOnParty: { id: 'sample-factory', displayName: '样例工厂', rawName: null },
     reminderTarget: { kind: 'supplier', name: '样例工厂' },
@@ -48,8 +48,9 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
     expect(receipt.textContent).not.toContain('复制本批催单');
     const facts = receipt.textContent ?? '';
     expect(receipt.closest('article')?.getAttribute('aria-label')).toBe('PO · 同名样品 · 第 1 批');
-    expect(facts).toMatch(/同名样品.*到仓逾期.*第 1 批.*采购确认到仓日 2026-11-20.*收货方 上海仓.*核对收货/);
-    expect(facts).not.toMatch(/单号 PO|样例工厂|下次跟进|回查最近一次催货记录/);
+    expect(facts).toMatch(/到仓逾期.*同名样品.*PO · 第 1 批 · 样例工厂.*需求早于确认.*采购确认到仓日 (?:2026-)?11-20.*收货方 上海仓.*核对收货/);
+    expect(receipt.querySelector('time[aria-label="2026-11-20 星期五"]')).not.toBeNull();
+    expect(facts).not.toMatch(/仍待发|已发待收|下次跟进|回查最近一次催货记录/);
     click(button('同名样品'));
     await waitFor(() => textOf('[role="dialog"]').includes('最近跟进 · 回查最近一次催货记录'));
     const detail = textOf('[role="dialog"]');
@@ -93,10 +94,10 @@ it('工作台不显示混合总数，日历日期计数保留本人排期和待�
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
       fulfill({ urlPart: 'page=2', status: 200, body: response(2) });
     });
-    expect(textOf('.today-workspace-heading h2')).toMatch(/^今天要办\s*本人范围$/u);
+    expect(document.querySelector('.today-workspace-heading h2')?.getAttribute('aria-label')).toBe('我的行动清单');
     expect(textOf('[aria-label="工作台日历"]')).not.toContain('51项');
     await act(() => { fulfill({ urlPart: '/api/v1/plan/daily', status: 200, body: daily }); });
-    expect(textOf('.today-workspace-heading h2')).toMatch(/^今天要办\s*本人范围$/u);
+    expect(document.querySelector('.today-workspace-heading h2')?.getAttribute('aria-label')).toBe('我的行动清单');
     expect(textOf('[aria-label="工作台日历"]')).toContain('53项');
     expect(textOf('#today-chase')).not.toContain('首批待建样品');
     expect(textOf('#today-chase')).not.toContain('本人里程碑');
@@ -106,7 +107,7 @@ it('工作台不显示混合总数，日历日期计数保留本人排期和待�
     click(jump);
     await waitFor(() => !new URLSearchParams(textOf('output')).has('page'));
     await act(() => { fulfill({ urlPart: 'page=1', status: 200, body: response(1) }); });
-    expect(textOf('.today-workspace-heading h2')).toMatch(/^今天要办\s*本人范围$/u);
+    expect(document.querySelector('.today-workspace-heading h2')?.getAttribute('aria-label')).toBe('我的行动清单');
     expect(document.querySelectorAll('#today-pending-batches')).toHaveLength(1);
     expect(document.activeElement?.id).toBe('today-pending-batches');
     expect(textOf('#today-chase')).toContain('本人里程碑');

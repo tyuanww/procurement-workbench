@@ -5,6 +5,7 @@ import { sidebarEntries, sidebarLink } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
+const todayWidths = [320, 390, 768, 1280, 1440, 1920] as const;
 
 export async function checkFrontendCloseout({ page, origin, out }: {
   readonly page: Page; readonly origin: URL; readonly out: string;
@@ -18,10 +19,14 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto(new URL('/today', origin).href);
   await checkActionBoard(page);
+  await checkBatchPriorityFilter(page);
+  await checkTodayLayouts(page, out, 'action-board');
   await page.screenshot({ path: join(out, 'closeout-action-board.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await checkArrivals(page);
   await checkDailySchedule(page);
+  await checkTodayLayouts(page, out, 'daily-schedule');
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: join(out, 'closeout-daily-schedule.png'), animations: 'disabled' });
 
   await page.goto(new URL('/products', origin).href);
@@ -78,15 +83,17 @@ async function checkActionBoard(page: Page): Promise<void> {
   await board.getByRole('article', { name: /^UI-DEMO-001/ }).waitFor();
   await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
   await page.getByRole('heading', { name: '个人工作台', level: 1, exact: true }).waitFor();
-  await page.getByRole('heading', { name: /^今天要办\s*本人范围$/u, level: 2 }).waitFor();
-  const scopes = page.getByRole('navigation', { name: '工作范围', exact: true });
-  await scopes.getByRole('button', { name: /^已约跟进/ }).waitFor();
-  await scopes.getByRole('button', { name: /^待分派/ }).waitFor();
+  await page.getByRole('heading', { name: '我的行动清单', level: 2, exact: true }).waitFor();
+  const switchScope = page.getByRole('button', { name: '切换工作范围', exact: true });
+  await switchScope.press('Enter');
+  await page.getByRole('menuitem', { name: /^已约跟进/u }).waitFor();
+  await page.getByRole('menuitem', { name: /^待分派/u }).waitFor();
+  await page.keyboard.press('Escape');
+  await switchScope.and(page.locator(':focus')).waitFor();
   const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
   assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['今日事项', '个人工作台']);
   assert.equal(await page.getByText(/^业务日\s+\d{4}-\d{2}-\d{2}$/u).count(), 0);
-  await board.getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u).waitFor();
-  await checkWideWorkspace(page);
+  await page.getByRole('main').getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u).waitFor();
   const pending = board.getByText('UI-DEMO-003', { exact: false }).first();
   await pending.waitFor();
   const task = board.getByRole('button', { name: /确认今日出货/ });
@@ -114,23 +121,59 @@ async function checkActionBoard(page: Page): Promise<void> {
   await chase.and(page.locator(':focus')).waitFor();
 }
 
-async function checkWideWorkspace(page: Page): Promise<void> {
-  const { heading, toolbar, results, shortcuts, row } = await page.locator('.today-workspace-screen').evaluate((workspace) => {
+async function measureTodayLayout(page: Page) {
+  return page.locator('.today-workspace-screen').evaluate((workspace) => {
     const edges = (selector: string) => {
       const bounds = workspace.querySelector(selector)?.getBoundingClientRect();
       return bounds === undefined ? undefined : { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width };
     };
     return {
-      heading: edges('.today-workspace-heading'), toolbar: edges('.today-toolbar'),
+      tabs: edges('[aria-label="今日事项视图"]'), cutoff: edges('.procurement-cutoff'),
       results: edges('.today-workspace-results'), shortcuts: edges('.today-action-shortcuts'),
-      row: edges('.today-workspace-results .today-work-card'),
+      row: edges('.today-workspace-results :is(.today-work-card, .today-task-row)'),
     };
   });
-  assert.ok(heading && toolbar && toolbar.width >= 1_200 && results && shortcuts && row);
-  assert.deepEqual([heading.left, heading.right], [toolbar.left, toolbar.right], '标题与操作区共用桌面正文宽度');
-  assert.deepEqual([results.top, results.bottom], [shortcuts.top, shortcuts.bottom], '待办与快捷处理在宽屏上下对齐');
-  assert.ok(results.right < shortcuts.left, '待办左列与快捷处理右列互不覆盖');
-  assert.ok(row.left >= results.left && row.right <= results.right, '待办行保持在主清单内');
+}
+
+async function checkBatchPriorityFilter(page: Page) {
+  const priority = page.getByRole('radiogroup', { name: '批次优先范围', exact: true });
+  const overdue = page.getByRole('article', { name: /^UI-DEMO-001/ });
+  const undated = page.getByRole('article', { name: /^UI-DEMO-002/ });
+  await priority.getByRole('radio', { name: '优先', exact: true }).press('Space');
+  await page.waitForURL((url) => url.searchParams.has('reasons'));
+  await undated.waitFor({ state: 'hidden' });
+  await overdue.waitFor();
+  await page.setViewportSize({ width: 320, height: 900 });
+  const tools = page.getByRole('button', { name: '待办操作', exact: true });
+  await tools.press('Enter');
+  await page.getByRole('menuitem', { name: '查看全部待办', exact: true }).press('Enter');
+  await undated.waitFor();
+  await tools.press('Enter');
+  await page.getByRole('menuitem', { name: '只看优先批次', exact: true }).press('Enter');
+  await undated.waitFor({ state: 'hidden' });
+  await overdue.waitFor();
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await priority.getByRole('radio', { name: '全部', exact: true }).press('Space');
+  await undated.waitFor();
+}
+
+async function checkTodayLayouts(page: Page, out: string, view: 'action-board' | 'daily-schedule') {
+  for (const width of todayWidths) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    const { tabs, cutoff, results, shortcuts, row } = await measureTodayLayout(page);
+    assert.ok(tabs && cutoff && results && shortcuts && row);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${width}px 页面横向溢出`);
+    if (width >= 1280) {
+      assert.ok(tabs.right < cutoff.left && cutoff.top < tabs.bottom && cutoff.bottom > tabs.top, '截止日期在页签行右侧');
+      assert.deepEqual([results.top, results.bottom], [shortcuts.top, shortcuts.bottom], '待办与辅助区上下对齐');
+      assert.ok(results.right < shortcuts.left);
+    } else {
+      assert.ok(results.bottom <= shortcuts.top, '窄屏先读待办，再读辅助区');
+    }
+    assert.ok(row.left >= results.left && row.right <= results.right);
+    await page.screenshot({ path: join(out, `${view}-${width}.png`), animations: 'disabled' });
+  }
 }
 
 async function checkCalendarBesideResults(page: Page): Promise<void> {

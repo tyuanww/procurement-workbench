@@ -1,5 +1,6 @@
-import { Button, Typography } from 'antd';
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { Button, Dropdown, Typography } from 'antd';
+import { DownOutlined } from '@ant-design/icons';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { TodayPaging, TodayResponse } from '@sw/contracts';
 import type { ActionPageControls } from './ActionControls.js';
@@ -25,57 +26,52 @@ type TodayLinksProps = {
 };
 
 export function TodayLinks(props: TodayLinksProps) {
-  const { page, myPlan, inbox, onInbox } = props;
+  const { page, myPlan, inbox, onInbox, onRetryPlan } = props;
   const isPlanUnavailable = myPlan?.kind === 'error';
   const counts = page?.paging.inboxCounts;
-  const heading = useRef<HTMLElement>(null);
-  const shouldFocusHeading = useRef(false);
-  const calendar = page?.calendar;
-  useEffect(() => {
-    if (!shouldFocusHeading.current) return;
-    shouldFocusHeading.current = false;
-    heading.current?.focus({ preventScroll: true });
-  }, [inbox, calendar]);
-  const selectScope = (scope: WorkspaceInbox) => {
-    shouldFocusHeading.current = true;
-    onInbox(scope);
-  };
+  const scopeOptions = inboxes.map((scope) => ({
+    key: scope.key, label: scopeLabel(scope, hasSharedReviews(page)) + scopeQuantity(scope, counts),
+  }));
+  const title = inbox === 'today' ? '我的行动清单' : (scopeOptions.find((scope) => scope.key === inbox)?.label ?? '工作范围');
+  const titleId = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, props.asOf);
   return <div className="today-workspace-intro">
-    <div className="today-workspace-heading">
-      <ActiveScope heading={heading} inbox={inbox} count={counts?.[inbox]} hasSharedReviews={hasSharedReviews(page)} />
-      <ScopeSwitch {...props} onInbox={selectScope} counts={counts} canRetry={isPlanUnavailable} />
-    </div>
-    {inbox === 'today' && isPlanUnavailable && counts !== undefined
-      ? <Typography.Text type="secondary">已加载 · 排期未读</Typography.Text> : null}
+    <nav className="today-workspace-heading today-touch" aria-label="工作范围">
+      <Typography.Title level={2} aria-label={title}>
+        <Dropdown trigger={['click']} autoFocus open={isMenuOpen} onOpenChange={setMenuOpen} destroyOnHidden
+          menu={{ className: 'today-workspace-menu', selectable: true, selectedKeys: [inbox], items: scopeOptions, onClick: ({ key }) => {
+            const scope = inboxes.find((item) => item.key === key);
+            if (scope === undefined) return;
+            setMenuOpen(false);
+            onInbox(scope.key);
+            trigger.current?.focus({ preventScroll: true });
+          } }}>
+          <Button ref={trigger} type="text" aria-label="切换工作范围" aria-haspopup="menu" aria-expanded={isMenuOpen} aria-describedby={titleId}>
+            <ScopeCaption id={titleId} title={title} inbox={inbox} />
+            <DownOutlined aria-hidden />
+          </Button>
+        </Dropdown>
+      </Typography.Title>
+      {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
+    </nav>
+    {isPlanUnavailable ? <div className="today-review-scope today-touch">
+      <Typography.Text type="secondary">排期未读</Typography.Text><Button onClick={onRetryPlan}>重试排期</Button>
+    </div> : null}
     <ReviewScopeNote page={page} />
   </div>;
 }
 
-function ActiveScope({ heading, inbox, count, hasSharedReviews: hasReviews }: {
-  readonly heading: Ref<HTMLElement>;
-  readonly inbox: WorkspaceInbox; readonly count: number | undefined; readonly hasSharedReviews: boolean;
-}) {
-  const active = inboxes.find(({ key }) => key === inbox);
-  if (active === undefined) return null;
-  return <Typography.Title level={2} ref={heading} tabIndex={-1}>
-    {scopeLabel(active, hasReviews)}{inbox === 'today' ? null : <> <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}</>}
-    {inbox === 'unassigned' ? null : <small className="today-mine-scope">本人范围</small>}
-  </Typography.Title>;
+function ScopeCaption({ id, title, inbox }: { readonly id: string; readonly title: string; readonly inbox: WorkspaceInbox }) {
+  return <span id={id}>{inbox === 'today' ? <>
+    <span className="today-scope-full">{title}</span><span className="today-scope-short">我的清单</span>
+  </> : title}</span>;
 }
 
-function ScopeSwitch({ inbox, onInbox, onRetryPlan, page, asOf, counts, canRetry }: Omit<TodayLinksProps, 'myPlan'> & {
-  readonly counts: TodayPaging['inboxCounts'];
-  readonly canRetry: boolean;
-}) {
-  const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, asOf);
-  return <nav className="today-workspace-scopes today-touch" aria-label="工作范围">
-    {inboxes.filter(({ key }) => key !== inbox).map((scope) => (
-      <Button key={scope.key} onClick={() => onInbox(scope.key)}>{scopeLabel(scope, hasSharedReviews(page))}
-        {scope.key === 'today' ? null : <> <strong>{counts?.[scope.key] ?? '—'}</strong>{counts?.[scope.key] === undefined ? null : scope.unit}</>}</Button>
-    ))}
-    {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
-    {canRetry ? <Button onClick={onRetryPlan}>重试排期</Button> : null}
-  </nav>;
+function scopeQuantity(scope: (typeof inboxes)[number], counts: TodayPaging['inboxCounts']) {
+  const count = counts?.[scope.key];
+  return scope.key === 'today' || count === undefined ? '' : ' ' + count + scope.unit;
 }
 
 function scopeLabel(scope: (typeof inboxes)[number], hasReviews: boolean): string {

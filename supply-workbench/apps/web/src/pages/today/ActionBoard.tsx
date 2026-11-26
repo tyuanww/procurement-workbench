@@ -9,6 +9,7 @@ import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodayGroup } from './TodayGroup.js';
 import { TodayRow, type CopyAction } from './TodayRow.js';
+import { isPriorityBatchSelection } from './action-query.js';
 import { workspaceRowId } from './today-focus.js';
 
 type BatchSequence = (rowId: string) => number | undefined;
@@ -35,15 +36,18 @@ export type ActionBoardProps = ActionToolbarProps & {
 
 export function ActionBoard(props: ActionBoardProps): ReactNode {
   const { page } = props;
+  const isList = props.calendar === undefined && !isKanban(props);
+  const toolbar = <ActionToolbar {...props} />;
   return (
     <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
       <Flex vertical gap="small">
-        <ActionToolbar {...props} />
+        {isList ? null : toolbar}
         <div className={props.calendar === undefined ? 'today-actions-layout' : 'today-workspace-calendar-layout'}>
           {props.calendar}
-          <Flex vertical gap="small" className={isKanban(props) ? undefined : 'today-workspace-results'}>
+          <div className={isList ? 'today-workspace-results today-list-panel' : isKanban(props) ? undefined : 'today-workspace-results'}>
+            {isList ? toolbar : null}
             {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
-          </Flex>
+          </div>
           {props.shortcuts}
         </div>
       </Flex>
@@ -82,40 +86,19 @@ function ActionGroups(props: ActionBoardProps): ReactNode {
 
 function PriorityActions(props: ActionBoardProps & { readonly rows: readonly BoardRow[] }) {
   const { rows, receiptOf, internalCards } = props;
-  const canPrioritize = isBusinessDay(props) && !isActionFiltered(props);
-  const overdue = canPrioritize ? rows.filter((row) => receiptOf?.(row.id)?.status === 'overdue') : [];
-  if (overdue.length === 0) return <>
-    <ActionRows {...props} isPriorityList headingLevel={2} extras={internalCards} />
+  const canPrioritize = isBusinessDay(props) && (!isActionFiltered(props) || isPriorityBatchSelection(props.page?.reasons ?? [])) && props.page?.sort.kind !== 'bulk';
+  const ordered = canPrioritize ? [
+    ...rows.filter((row) => receiptOf?.(row.id)?.status === 'overdue'),
+    ...rows.filter((row) => receiptOf?.(row.id)?.status !== 'overdue'),
+  ] : rows;
+  return <>
+    <ActionRows {...props} rows={ordered} isPriorityList headingLevel={3} extras={internalCards} />
     {props.internalPagination}
   </>;
-  return <PriorityGroups {...props} overdue={overdue} />;
 }
 
 function isBusinessDay({ page, asOf }: Pick<ActionBoardProps, 'page' | 'asOf'>): boolean {
   return page?.inbox === 'today' && (page.calendar === undefined || page.calendar === 'today' || page.calendar === asOf);
-}
-
-function PriorityGroups(props: ActionBoardProps & { readonly rows: readonly BoardRow[]; readonly overdue: readonly BoardRow[] }) {
-  const { page, rows, overdue, receiptOf, internalCards } = props;
-  const remaining = rows.filter((row) => receiptOf?.(row.id)?.status !== 'overdue');
-  const isPaged = page !== undefined && page.paging.total > page.paging.pageSize;
-  return <>
-    <section className="today-priority-block" aria-labelledby="today-priority-heading">
-      <PriorityHeading id="today-priority-heading" title="先核对逾期到仓" count={`${isPaged ? '本页 ' : ''}${overdue.length} 批`} />
-      <ActionRows {...props} rows={overdue} isPriorityList headingLevel={3} />
-    </section>
-    {remaining.length || internalCards?.length ? <section className="today-priority-block" aria-labelledby="today-other-heading">
-      <PriorityHeading id="today-other-heading" title="其余待办" />
-      <ActionRows {...props} rows={remaining} isPriorityList headingLevel={3} extras={internalCards} />
-    </section> : null}
-    {props.internalPagination}
-  </>;
-}
-
-function PriorityHeading({ id, title, count }: { readonly id: string; readonly title: string; readonly count?: string }) {
-  return <Typography.Title id={id} level={2} className="today-priority-heading">
-    {title}{count === undefined ? null : <Typography.Text type="secondary">{count}</Typography.Text>}
-  </Typography.Title>;
 }
 
 function ActionEmpty({ page, board, description }: ActionBoardProps & { readonly description: string }) {

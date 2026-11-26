@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { focusForRows, handleKey, rowsSettled, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { ScheduleView } from '../../apps/web/src/pages/today/ScheduleView.js';
-import type { PlanLoad } from '../../apps/web/src/features/today/index.js';
+import type { PlanLoad, PlanRow } from '../../apps/web/src/features/today/index.js';
 
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
 
@@ -98,7 +98,7 @@ function key(value: string): { key: string; target: null; defaultPrevented: bool
 }
 
 function readyPlan(rowIds: readonly string[]): PlanLoad {
-  const rows = rowIds.map((id) => ({ id, workItemId: id, title: id, meta: '', tags: [] }));
+  const rows = rowIds.map((id): PlanRow => ({ id, workItemId: id, title: id, meta: '', tags: [], status: 'planned', timing: 'today', isHighPriority: false }));
   return {
     kind: 'ready',
     board: { kind: 'groups', groups: [{ key: 'due-today', name: '今天到期', counts: [], note: null, isUnassigned: false, rows }], rows },

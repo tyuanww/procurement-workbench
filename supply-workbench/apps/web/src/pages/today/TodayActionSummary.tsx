@@ -1,4 +1,3 @@
-import { Button, Card, Flex } from 'antd';
 import { MetricStrip, type MetricItem } from '../../shared/ui/analytics.js';
 import { arrivalShortcutPath } from '../../features/today/index.js';
 import type { ActionPageControls } from './ActionControls.js';
@@ -21,24 +20,4 @@ export function TodayActionSummary({ page, search, onArrivals, onPending }: {
       ...(paging.pendingCount ? { action: { select: onPending } } : {}) },
   ];
   return <div className="today-action-summary"><MetricStrip items={items} ariaLabel="行动摘要" compact /></div>;
-}
-
-export function TodayActionShortcuts({ overdue, followUp, planCount, onOverdue, onFollowUp, onPlan }: {
-  readonly overdue: number;
-  readonly followUp: number;
-  readonly planCount: number | undefined;
-  readonly onOverdue: () => void;
-  readonly onFollowUp: () => void;
-  readonly onPlan: () => void;
-}) {
-  if (overdue === 0 && followUp === 0 && !planCount) return null;
-  return <aside className="today-action-shortcuts" aria-label="快捷定位">
-    <Card size="small" title="快捷定位">
-      <Flex vertical gap="small" className="today-touch">
-        {overdue === 0 ? null : <Button onClick={onOverdue}>未发逾期</Button>}
-        {followUp === 0 ? null : <Button onClick={onFollowUp}>到时跟进</Button>}
-        {!planCount ? null : <Button onClick={onPlan}>我的到期排期 {planCount} 项</Button>}
-      </Flex>
-    </Card>
-  </aside>;
 }

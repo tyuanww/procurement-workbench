@@ -4,7 +4,8 @@ import { Button, Card, Flex, Pagination, Typography } from 'antd';
 import { HintBatchResultSchema, type TodayResponse } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../shared/api/client.js';
-import { MissingValue } from '../../shared/ui/widgets.js';
+import { formatQuantity } from '../../shared/ui/format.js';
+import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
 import { workspaceRowId } from './today-focus.js';
 
@@ -68,7 +69,7 @@ export function pendingBatchCards(view: PendingBatchView, focus: string | null) 
     const id = pendingBatchRowId(row.orderLineId);
     return (
       <li key={id} className="today-jump-target" {...(index === 0 ? jumpTarget : {})}>
-        <article><Card className="today-row today-work-card" size="small" style={rowStyle({ isFocused: focus === id, isFading: false })}>
+        <article><Card className="today-row today-work-card today-batch-card" size="small" style={rowStyle({ isFocused: focus === id, isFading: false })}>
           <PendingBatchItem row={row} view={view} />
         </Card></article>
       </li>
@@ -121,23 +122,28 @@ function PendingBatchItem({ row, view }: {
       <TodayOrderLink id={workspaceRowId(pendingBatchRowId(row.orderLineId))} order={{ lineId: row.orderLineId }} isPending focusRef={orderLink} primary={!canCreate}>查看订单</TodayOrderLink>
     </Flex>
   );
-  const facts = <>
-      <div style={{ overflowWrap: 'anywhere' }}><Typography.Text strong>{row.nameRaw || '品名未填写'}</Typography.Text>{' · '}{row.poRaw || <MissingValue reason="not_provided" />}</div>
-      <Typography.Text type="secondary">
-        订单数量 {row.qtyOrdered === null ? <MissingValue reason="not_provided" /> : row.qtyOrdered.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}{row.unit === null ? '' : ` ${row.unit}`}
-        {nextStep(row)}
-      </Typography.Text>
-  </>;
   return <div className="today-row-layout">
-    <div className="today-row-facts">
-      <Typography.Text type="secondary">待建批次</Typography.Text>
-      {facts}
+    <PendingFacts row={row} />
+    <div className="today-row-details today-row-quantities">
+      <Typography.Text>订单数量 {row.qtyOrdered === null ? <MissingValue reason="not_provided" /> : formatQuantity(row.qtyOrdered)}{row.unit === null ? '' : ` ${row.unit}`}</Typography.Text>
     </div>
     {actions}
   </div>;
 }
 
+function PendingFacts({ row }: { readonly row: PendingBatch }) {
+  const step = nextStep(row);
+  return <div className="today-row-facts">
+    <div className="today-row-line today-batch-title">
+      <StatusTag status="no_batch" label="待建批次" />
+      <Typography.Title level={3} className="today-row-title">{row.nameRaw || '品名未填写'}</Typography.Title>
+    </div>
+    <Typography.Text className="today-row-meta" type="secondary">{row.poRaw || <MissingValue reason="not_provided" />}</Typography.Text>
+    {step === '' ? null : <Typography.Text className="today-row-reason">{step}</Typography.Text>}
+  </div>;
+}
+
 function nextStep(row: PendingBatch) {
-  if (row.missingFields.length > 0) return ` · 待补${row.missingFields.map((field) => missingLabels[field]).join('、')}`;
-  return row.action === 'detail' ? ' · 在订单详情确认收货方' : '';
+  if (row.missingFields.length > 0) return `待补${row.missingFields.map((field) => missingLabels[field]).join('、')}`;
+  return row.action === 'detail' ? '在订单详情确认收货方' : '';
 }

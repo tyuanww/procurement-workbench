@@ -6,6 +6,9 @@ export type PlanGroupMode = 'schedule' | 'owner' | 'supplier';
 export type PlanRow = {
   readonly id: string;
   readonly workItemId: string;
+  readonly status: WorkItem['status'];
+  readonly timing: 'today' | 'overdue' | null;
+  readonly isHighPriority: boolean;
   readonly title: string;
   readonly meta: string;
   readonly tags: readonly TaskTag[];
@@ -39,7 +42,7 @@ export type PlanInsight = {
 export type PlanLoad =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly board: PlanBoard }
+  | { readonly kind: 'ready'; readonly board: PlanBoard; readonly unfilteredRows?: readonly PlanRow[] }
   | { readonly kind: 'error'; readonly message: string };
 
 export type ViewGroup = DailyPlan['byOwner'][number];
@@ -82,6 +85,9 @@ export function planRows(items: readonly WorkItem[], today: string): readonly Pl
   return sortPlanItems(items).map((item) => ({
     id: taskParam(item.id),
     workItemId: item.id,
+    status: item.status,
+    timing: (item.overdueDays ?? 0) > 0 ? 'overdue' : item.plannedEnd === today ? 'today' : null,
+    isHighPriority: isUrgent(item),
     title: item.title,
     meta: taskMeta(item, today),
     tags: taskTags(item, today),

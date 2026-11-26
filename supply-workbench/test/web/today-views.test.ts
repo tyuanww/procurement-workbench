@@ -5,7 +5,7 @@ import { sessionRows } from '../../apps/web/src/pages/today/use-today-plan.js';
 import { ActionBoard } from '../../apps/web/src/pages/today/ActionBoard.js';
 import { ScheduleView } from '../../apps/web/src/pages/today/ScheduleView.js';
 import { TodayScreen, type TodayScreenProps } from '../../apps/web/src/pages/today/TodayBoard.js';
-import type { BoardRow, PlanLoad, TodayBoard, TodayInsight } from '../../apps/web/src/features/today/index.js';
+import type { BoardRow, PlanLoad, PlanRow, TodayBoard, TodayInsight } from '../../apps/web/src/features/today/index.js';
 
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
 const root = new URL('../../', import.meta.url);
@@ -15,9 +15,9 @@ describe('今日页两个视图', () => {
     const html = render(TodayScreen, todayProps());
     expect(html).toContain('个人工作台');
     expect(html).toContain('aria-label="工作范围"');
-    expect(html).toContain('今天要办');
-    expect(html).toContain('已约跟进');
-    expect(html).toContain('待分派');
+    expect(html).toContain('我的行动清单');
+    expect(html).toContain('切换工作范围');
+    expect(html).not.toContain('已约跟进');
     expect(html).not.toContain('title="等待方"');
     expect(html).not.toContain('title="原因"');
     expect(html).not.toContain('title="日期"');
@@ -72,7 +72,7 @@ describe('今日视图各自渲染', () => {
     const html = render(ActionBoard, todayProps({ board, batchSeqOf: () => 2 }));
     expect(html).toContain('aria-label="查看详情 PO-1 · 样品 · 第 2 批"');
     expect(html.indexOf('2026-11-24')).toBeLessThan(html.indexOf('aria-label="查看详情'));
-    expect(html).toMatch(group === 'priority' ? /<h2[^>]*>样品<\/h2>/ : /<h3[^>]*>样品<\/h3>/);
+    expect(html).toMatch(/<h3[^>]*>样品<\/h3>/);
     if (group === 'priority') {
       expect(html).toMatch(/class="(?=[^"]*\bant-card\b)(?=[^"]*\btoday-row\b)[^"]+"/);
       expect(html).not.toContain('待办组计数');
@@ -260,7 +260,7 @@ function face(): BoardRow['face'] {
 }
 
 function readyPlan(rowIds: readonly string[]): PlanLoad {
-  const rows = rowIds.map((id) => ({ id, workItemId: id, title: '里程碑', meta: 'PO · 样品 · 11-09 至 11-10', tags: [] }));
+  const rows = rowIds.map((id): PlanRow => ({ id, workItemId: id, status: 'planned', timing: 'today', isHighPriority: false, title: '里程碑', meta: 'PO · 样品 · 11-09 至 11-10', tags: [] }));
   return {
     kind: 'ready',
     board: {

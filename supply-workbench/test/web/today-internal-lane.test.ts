@@ -12,6 +12,7 @@ const myPlan: NonNullable<TodayScreenProps['myPlan']> = {
   kind: 'ready',
   rows: [{
     id: 'task:plan-1', workItemId: 'plan-1', title: '逾期排期样例', meta: 'PO-2 · 样品 · 11-22',
+    status: 'planned', timing: 'overdue', isHighPriority: false,
     tags: [{ key: 'due', label: '逾期 2 天', tone: 'danger', fill: 'solid' }],
   }],
 };

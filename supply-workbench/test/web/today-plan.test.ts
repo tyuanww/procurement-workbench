@@ -202,6 +202,9 @@ describe('今日排期看板', () => {
     expect(board.groups[1]?.counts).toEqual([{ label: '任务', count: 1 }]);
     expect(board.groups[1]?.note).toBe('平均逾期 2 天');
     expect(board.rows.map((row) => row.id)).toEqual(['task:due', 'task:unassigned', 'task:overdue']);
+    expect(board.rows.map(({ timing, status, isHighPriority }) => [timing, status, isHighPriority])).toEqual([
+      ['today', 'planned', true], ['today', 'planned', false], ['overdue', 'blocked', false],
+    ]);
     expect(board.groups[0]?.rows[0]?.meta).toContain('P02024700026');
   });
 

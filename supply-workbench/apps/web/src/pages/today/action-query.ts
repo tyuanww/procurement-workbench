@@ -4,6 +4,13 @@ import { readReasons, taskIdOf, withGroup, type GroupMode } from '../../features
 
 export const ACTION_PAGE_SIZE = 50;
 
+// The personal inbox adds shipped_not_received only for due or overdue receipts.
+export const PRIORITY_BATCH_REASONS = ['overdue', 'due_today', 'shipped_not_received'] as const satisfies readonly TodoReason[];
+
+export function isPriorityBatchSelection(reasons: readonly string[]): boolean {
+  return reasons.length === PRIORITY_BATCH_REASONS.length && PRIORITY_BATCH_REASONS.every((reason) => reasons.includes(reason));
+}
+
 export type WorkspaceView = 'list' | 'board' | 'calendar';
 export type WorkspaceInbox = TodayInbox;
 

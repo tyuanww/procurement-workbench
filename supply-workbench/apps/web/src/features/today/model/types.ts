@@ -43,6 +43,7 @@ export type RowFace = {
 export type BoardRow = {
   readonly id: string;
   readonly face: RowFace;
+  readonly reasons?: readonly string[];
   readonly actions: readonly QuickAction[];
 };
 

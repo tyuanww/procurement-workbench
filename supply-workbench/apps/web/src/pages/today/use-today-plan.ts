@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   planBoard, planRows, todayViewOf,
   type DailyPlan, type GroupMode, type PlanLoad, type PlanRow, type TodayBoard,
 } from '../../features/today/index.js';
 import { loadDailyPlan, todayPlanDate } from '../../features/plan/index.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
+import { matchesScheduleFilter, readScheduleFilter, selectPlanItems, type ScheduleFilter } from './schedule-filter.js';
 
 type PlanViewLoad =
   | { readonly kind: 'idle' }
@@ -25,7 +27,8 @@ export function useTodayPlan({ group, ownerId, isMine, shouldLoad }: {
 }) {
   const state = useDailyPlan(shouldLoad);
   const mine = myPlanOf(state.state, ownerId);
-  const load = planLoadOf({ state: state.state, group, ownerId: isMine ? ownerId ?? '' : null });
+  const [params] = useSearchParams();
+  const load = planLoadOf({ state: state.state, group, ownerId: isMine ? ownerId ?? '' : null, filter: readScheduleFilter(params) });
   return { load, reload: state.reload, mine };
 }
 
@@ -54,24 +57,21 @@ function myPlanOf(state: PlanViewLoad, ownerId: string | null): MyPlan {
   return { kind: 'ready', rows: planRows(state.view.items.filter((item) => item.ownerUserId === ownerId), state.view.date) };
 }
 
-function planLoadOf({ state, group, ownerId }: {
+function planLoadOf({ state, group, ownerId, filter }: {
   readonly state: PlanViewLoad;
   readonly group: GroupMode;
   readonly ownerId: string | null;
+  readonly filter: ScheduleFilter | undefined;
 }): PlanLoad {
   if (todayViewOf(group) !== 'schedule') return { kind: 'idle' };
   if (state.kind !== 'ready') return state;
-  const view = ownerId === null ? state.view : personalPlan(state.view, ownerId);
-  return { kind: 'ready', board: planBoard({ view, group: planGroupOf(group) }) };
-}
-
-function personalPlan(view: DailyPlan, ownerId: string): DailyPlan {
-  const forOwner = (groups: DailyPlan['byOwner']) => groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => item.ownerUserId === ownerId) }))
-    .filter((group) => group.items.length > 0);
-  const items = view.items.filter((item) => item.ownerUserId === ownerId);
-  return { ...view, items, total: items.length, overdueCount: items.filter((item) => item.overdueDays !== null).length,
-    byOwner: forOwner(view.byOwner), bySupplier: forOwner(view.bySupplier), byFactory: forOwner(view.byFactory) };
+  const view = ownerId === null ? state.view : selectPlanItems(state.view, (item) => item.ownerUserId === ownerId);
+  const mode = planGroupOf(group);
+  const board = planBoard({ view, group: mode });
+  if (filter === undefined || board.kind === 'empty') return { kind: 'ready', board };
+  const matching = new Set(board.rows.filter((row) => matchesScheduleFilter(row, filter)).map((row) => row.workItemId));
+  const filtered = selectPlanItems(view, (item) => matching.has(item.id));
+  return { kind: 'ready', board: planBoard({ view: filtered, group: mode }), unfilteredRows: board.rows };
 }
 
 function planGroupOf(group: GroupMode): 'schedule' | 'owner' | 'supplier' {

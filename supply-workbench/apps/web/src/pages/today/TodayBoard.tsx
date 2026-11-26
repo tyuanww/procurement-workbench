@@ -16,7 +16,8 @@ import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
 import { PLAN_TASK_TARGET, arrivalWork, planTaskCards } from './TodayAgenda.js';
 import { TodayAgendaShortcuts, TodayLinks, useAgendaJump } from './TodayLinks.js';
-import { TodayActionShortcuts, TodayActionSummary } from './TodayActionSummary.js';
+import { TodayActionSummary } from './TodayActionSummary.js';
+import { ActionAssistant } from './ActionAssistant.js';
 import { TodaySectionNavigation } from './TodaySectionNavigation.js';
 import { focusSection } from './today-focus.js';
 import type { MyPlan } from './use-today-plan.js';
@@ -157,39 +158,39 @@ function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<s
     onChanged: props.onPendingBatchChanged,
   });
   const display = actionDisplay(props);
-  const overview = actionOverview({ props, inbox, jump });
+  const overview = actionOverview({ props, inbox, jump, receipts });
   return <>
-    <TodayLinks page={page} asOf={props.asOf}
-      myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />
     {overview.metrics}
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
     <ActionBoard {...props} {...navigation} page={page} receiptOf={(id) => receipts.get(id)}
       internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
       internalPagination={<PendingBatchPagination view={pending} />} {...display}
+      scopeControls={<TodayLinks page={page} asOf={props.asOf}
+      myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />}
       shortcuts={overview.shortcuts}
       utilityLinks={actionDestinations({ inbox, pendingCount: pending.total, page, myPlan: props.myPlan, jump, hasPlanShortcut: overview.shortcuts !== undefined, hasPendingSummary: overview.metrics !== undefined })} />
   </>;
 }
 
-function actionOverview({ props, inbox, jump }: { readonly props: TodayScreenProps; readonly inbox: WorkspaceInbox; readonly jump: (id: string) => void }) {
+function actionOverview({ props, inbox, jump, receipts }: { readonly props: TodayScreenProps; readonly inbox: WorkspaceInbox; readonly jump: (id: string) => void; readonly receipts: ReadonlyMap<string, ReceiptWork> }) {
   const { actionPage: page, onOpenArrivals, search = '' } = props;
   if (inbox !== 'today' || page === undefined || page.calendar !== undefined || onOpenArrivals === undefined) return {};
   return {
     metrics: <TodayActionSummary page={page} search={search} onArrivals={onOpenArrivals} onPending={() => jump(PENDING_BATCH_TARGET)} />,
-    shortcuts: props.workspace?.view === 'list' ? actionShortcuts({ props, page, jump }) : undefined,
+    shortcuts: props.workspace?.view === 'list' ? actionShortcuts({ props, page, jump, receipts }) : undefined,
   };
 }
 
-function actionShortcuts({ props, page, jump }: { readonly props: TodayScreenProps; readonly page: ActionPageControls; readonly jump: (id: string) => void }) {
+function actionShortcuts({ props, page, jump, receipts }: { readonly props: TodayScreenProps; readonly page: ActionPageControls; readonly jump: (id: string) => void; readonly receipts: ReadonlyMap<string, ReceiptWork> }) {
   const { myPlan } = props;
-  return <TodayActionShortcuts overdue={page.paging.reasonCounts.overdue} followUp={page.paging.followUpCounts?.due ?? 0}
+  return <ActionAssistant board={props.board} page={page} receipts={receipts}
     planCount={myPlan?.kind === 'ready' ? myPlan.rows.length : undefined}
     onOverdue={() => filterActionReason(props, 'overdue')} onFollowUp={() => filterActionReason(props, 'follow_up_due')}
     onPlan={() => jump(PLAN_TASK_TARGET)} />;
 }
 
 function filterActionReason(props: TodayScreenProps, reason: 'overdue' | 'follow_up_due') {
-  props.onApplyFilters?.({ reasons: [reason], work: undefined, sort: { kind: 'urgency' }, group: undefined });
+  props.onApplyFilters?.({ reasons: [reason], work: props.actionPage?.work, sort: props.actionPage?.sort ?? { kind: 'urgency' }, group: undefined });
   focusSection('today-chase');
 }
 
