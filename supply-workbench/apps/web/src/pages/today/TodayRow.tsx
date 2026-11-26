@@ -53,7 +53,7 @@ export function TodayRow(props: RowProps): ReactNode {
     <RowFacts card={card} row={props.row} receipt={props.receipt} headingLevel={props.headingLevel}
       isScheduled={props.isScheduled} showReminder={props.showReminder === true} onOpen={props.onOpen} />
     <RowActions {...props} card={card} />
-    {props.isFocused ? <BorderBeam className="today-row-beam" color={brand[600]} duration={4.8} outset={0}>
+    {props.isFocused ? <BorderBeam className="today-row-beam" color={brand[600]} duration={4.8} lineWidth={2} outset={0}>
       <div className="today-row-beam-host" aria-hidden="true" />
     </BorderBeam> : null}
   </div>;

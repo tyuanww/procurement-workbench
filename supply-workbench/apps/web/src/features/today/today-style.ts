@@ -124,7 +124,7 @@ const todayWorkspaceCss = `
     .today-batch-card > .ant-card-body { border-radius: inherit; }
     .today-row-beam-host { display: none; }
     @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-      .today-action-list > li:focus-within .today-row-beam-host { display: block; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+      .today-action-list > li:focus-within .today-row-beam-host { display: block; position: absolute; inset: 2px; border-radius: inherit; pointer-events: none; }
     }
     .today-list-panel .today-priority-list { gap: 0; }
     .today-list-panel .today-work-card { border-radius: 0; background: transparent; }

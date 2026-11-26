@@ -146,6 +146,11 @@ async function checkActionListMotion(page: Page) {
     return [style.animationDuration, style.animationIterationCount];
   });
   assert.deepEqual(animation, ['4.8s', 'infinite']);
+  const bottomInset = await beam.evaluate((element) => {
+    const row = element.closest('.today-batch-card');
+    return (row?.getBoundingClientRect().bottom ?? 0) - element.getBoundingClientRect().bottom;
+  });
+  assert.ok(bottomInset >= 1, '流光底边应与相邻分隔线留出间隔');
   assert.equal(await page.locator('.today-list-panel .ant-border-beam').count(), 1);
   assert.equal(await page.getByRole('button', { name: /清单流光/ }).count(), 0);
 
