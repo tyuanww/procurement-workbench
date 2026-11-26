@@ -279,12 +279,17 @@ async function checkTodayLayouts(page: Page, out: string, view: 'action-board' |
 }
 
 async function checkCalendarBesideResults(page: Page): Promise<void> {
-  const calendar = await page.getByRole('region', { name: '工作台日历' }).boundingBox();
-  const results = await page.locator('.today-workspace-results').boundingBox();
-  assert.ok(calendar !== null && results !== null);
-  assert.ok(calendar.x + calendar.width < results.x, '宽屏月历与所选日期的待办并排');
-  assert.equal(calendar.y, results.y);
-  assert.equal(calendar.y + calendar.height, results.y + results.height);
+  // Both panels can still be moving together in the incoming view transition.
+  const alignment = await page.getByRole('region', { name: '工作台日历' }).evaluate((calendar) => {
+    const results = calendar.closest('.today-workspace-calendar-layout')?.querySelector('.today-calendar-results');
+    if (results == null) return null;
+    const left = calendar.getBoundingClientRect();
+    const right = results.getBoundingClientRect();
+    return { isBeside: left.right < right.left, top: [left.top, right.top], bottom: [left.bottom, right.bottom] };
+  });
+  assert.ok(alignment?.isBeside, '宽屏月历与所选日期的待办并排');
+  assert.equal(alignment.top[0], alignment.top[1]);
+  assert.equal(alignment.bottom[0], alignment.bottom[1]);
   const resultTitle = page.locator('.today-calendar-results').getByRole('heading', { level: 2 });
   const originalDate = await resultTitle.innerText();
   const originalUrl = page.url();
