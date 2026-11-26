@@ -59,10 +59,8 @@ export function WorkspaceCalendar({ calendar, date, inbox, onDay, todayAdditions
       <Flex gap="small" align="center" wrap>
         <DatePicker aria-label="选择工作日期" value={day} allowClear={false}
           onChange={(selected) => { if (selected !== null) onDay(selected.format('YYYY-MM-DD')); }} />
-        {inbox === 'today' && calendar?.scheduledDays !== undefined
-          ? <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>待办按项计，未来日期的已约跟进按批计</Typography.Text> : null}
-        {todayAdditions?.isPartial === true
-          ? <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>今日项数暂不含排期</Typography.Text> : null}
+        <CalendarNotes hasSchedulePreview={inbox === 'today' && calendar?.scheduledDays !== undefined}
+          hasPartialCount={todayAdditions?.isPartial === true} />
       </Flex>
       <ConfigProvider theme={calendarTheme}>
         <Calendar value={day} fullscreen={false} onSelect={(selected) => onDay(selected.format('YYYY-MM-DD'))}
@@ -78,6 +76,13 @@ export function WorkspaceCalendar({ calendar, date, inbox, onDay, todayAdditions
       </ConfigProvider>
     </Flex>
   </Card>;
+}
+
+function CalendarNotes({ hasSchedulePreview, hasPartialCount }: { readonly hasSchedulePreview: boolean; readonly hasPartialCount: boolean }) {
+  return <>
+    {hasSchedulePreview ? <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>待办按项计，未来日期的已约跟进按批计</Typography.Text> : null}
+    {hasPartialCount ? <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>今日项数暂不含排期</Typography.Text> : null}
+  </>;
 }
 
 const calendarMonths = Array.from({ length: 12 }, (_, month) => ({ value: month, label: `${month + 1}月` }));
