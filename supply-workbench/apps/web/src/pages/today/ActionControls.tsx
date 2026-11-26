@@ -56,7 +56,7 @@ export function ChasePreviewDialog({ page }: { readonly page: ActionPageControls
   const preview = page.copyPreview;
   return <Modal open={preview != null} title="预览跨厂催货汇总" okText="复制内部汇总" cancelText="返回"
     onOk={() => page.onConfirmCopy?.()} onCancel={() => page.onCancelCopy?.()} confirmLoading={page.isCopying}
-    cancelButtonProps={{ autoFocus: true }} mask={{ closable: false }} focusable={{ trap: true, focusTriggerAfterClose: true }}>
+    cancelButtonProps={{ autoFocus: true }} destroyOnHidden mask={{ closable: false }} focusable={{ trap: true, focusTriggerAfterClose: true }}>
     {preview == null ? null : <>
       <Typography.Paragraph>{preview.scope === 'all' ? '今日可催' : '当前筛选'} · {preview.factories.length} 家工厂 · {preview.count} 批</Typography.Paragraph>
       <ul>{preview.factories.map((factory) => <li key={factory.id}>{factory.name} · {factory.count} 批</li>)}</ul>

@@ -23,7 +23,9 @@ export function todayMotionCss(): string {
     .today-priority-list { display: flex; flex-direction: column; gap: ${small}px; }
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
-    .today-lane-links { display: flex; flex-wrap: wrap; gap: ${tiny}px; }
+    .today-lane-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${tiny}px; }
+    .today-lane-links > .ant-btn { display: grid; place-content: center; gap: 0; min-block-size: 44px; padding-inline: ${tiny}px; line-height: 1.25; }
+    .today-lane-links > .ant-btn span:last-child { font-size: ${fontSize.meta}px; color: ${text.secondary}; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
     ${todayCardCss()}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }

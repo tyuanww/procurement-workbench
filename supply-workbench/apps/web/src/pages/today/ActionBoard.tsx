@@ -104,7 +104,7 @@ function ActionKanban(props: ActionBoardProps) {
       {lanes.map(({ id, name, count }) => <Button key={id} size="small" href={`#${id}`} onClick={(event) => {
         event.preventDefault();
         focusSection(id);
-      }}>{name} {count} 项</Button>)}
+      }}><span>{name}</span><span>{count} 项</span></Button>)}
     </nav>
     <div className="today-kanban">
       {lanes.map(({ key, name, rows, extras, count, id }) => <section key={key} id={id} tabIndex={-1}
