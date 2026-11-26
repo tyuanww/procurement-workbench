@@ -99,12 +99,18 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
   const clearFilters = page.getByRole('button', { name: '清除筛选', exact: true });
-  await clearFilters.click();
+  await clearFilters.evaluate((clear, label) => {
+    const open = globalThis.document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    if (!(clear instanceof HTMLButtonElement) || open === null) throw new Error('缺少清除筛选或打开筛选的按钮');
+    // Reopen before React Router renders the URL change.
+    clear.click();
+    open.click();
+  }, filterName);
   await clearFilters.waitFor({ state: 'hidden' });
   await page.waitForURL(({ searchParams }) => !['reasons', 'sort', 'unit', 'work'].some((key) => searchParams.has(key)));
   const clearedFilterUrl = page.url();
-  await page.getByRole('button', { name: filterName, exact: true }).click();
   const filters = page.getByRole('dialog', { name: filterName, exact: true });
+  await filters.getByText('批次按紧急度', { exact: true }).waitFor();
   await filters.getByRole('button', { name: /^要催货/ }).click();
   await filters.getByRole('button', { name: /^要催货/, pressed: true }).waitFor();
   assert.equal(page.url(), clearedFilterUrl);

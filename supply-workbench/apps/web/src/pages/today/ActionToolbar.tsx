@@ -1,7 +1,7 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import type { TodayWorkFilter } from '@sw/contracts';
-import { useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { GroupMode, ReasonChip, TodayBoard } from '../../features/today/index.js';
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { actionDialogStyles, actionDialogTarget, ActionResult, SortControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
@@ -32,27 +32,45 @@ const LIST_GROUPS: readonly { readonly id: GroupMode; readonly label: string }[]
   { id: 'date', label: '日期' },
 ];
 
+const CLEARED_FILTERS: WorkspaceFilterSelection = { reasons: [], work: undefined, sort: { kind: 'urgency' }, group: undefined };
+
 export function ActionToolbar(props: ActionToolbarProps) {
   const { board, page, viewControls } = props;
   const [dialog, setDialog] = useState<ToolbarDialog | null>(null);
   const filterButton = useRef<HTMLButtonElement>(null);
+  const clearPending = useRef(false);
+  const { isFiltered, inbox, copyNotice } = page ?? {};
   const selection = appliedFilterLabels(board.chips, page);
-  const chasePage = page?.inbox === 'today' ? page : undefined;
+  const chasePage = inbox === 'today' ? page : undefined;
   const draft = dialog?.kind === 'filter' ? dialog.draft : null;
   const isChaseOpen = dialog?.kind === 'chase';
   const close = () => setDialog(null);
 
+  useEffect(() => {
+    if (!isFiltered) clearPending.current = false;
+  }, [isFiltered]);
+
+  function openFilters() {
+    const draft = clearPending.current ? CLEARED_FILTERS : filterDraft(board, page);
+    clearPending.current = false;
+    setDialog({ kind: 'filter', draft });
+  }
+
   return <>
     <ToolbarActions viewControls={viewControls} filterButton={filterButton} isFilterOpen={draft !== null}
-      chasePage={chasePage} isChaseOpen={isChaseOpen} onFilter={() => setDialog({ kind: 'filter', draft: filterDraft(board, page) })}
+      chasePage={chasePage} isChaseOpen={isChaseOpen} onFilter={openFilters}
       onChase={() => {
         chasePage?.onCancelCopy?.();
         setDialog({ kind: 'chase' });
       }} />
     <WorkspaceFilterDialog {...props} draft={draft} onClose={close} onChange={(next) => setDialog({ kind: 'filter', draft: next })} />
     {chasePage === undefined ? null : <ChaseCopyDialog page={chasePage} open={isChaseOpen} onClose={close} />}
-    <AppliedFilters page={page} selection={selection} onClear={() => filterButton.current?.focus({ preventScroll: true })} />
-    {!isChaseOpen && page?.copyNotice ? <Typography.Text role="status">{page.copyNotice}</Typography.Text> : null}
+    <AppliedFilters page={page} selection={selection} onClear={() => {
+      // Reopening can happen before the router renders the cleared search parameters.
+      clearPending.current = true;
+      filterButton.current?.focus({ preventScroll: true });
+    }} />
+    {!isChaseOpen && copyNotice ? <Typography.Text role="status">{copyNotice}</Typography.Text> : null}
   </>;
 }
 
