@@ -113,11 +113,13 @@ async function checkWithoutSettingsAccess(page: Page, origin: URL, name: string)
   await page.goto(new URL('/settings', origin).href);
   await page.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
   const trigger = page.getByRole('banner').getByRole('button', { name, exact: true });
+  const logout = page.getByRole('button', { name: '退出', exact: true });
   await trigger.click();
-  await page.getByRole('menuitem', { name: /退出/ }).waitFor();
+  await logout.waitFor();
   assert.equal(await page.getByRole('link', { name: SETTINGS_LABEL, exact: true }).count(), 0);
-  await page.keyboard.press('Escape');
+  await logout.press('Escape');
   assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+  assert.equal(await trigger.evaluate((button) => button === document.activeElement), true);
 }
 
 async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {

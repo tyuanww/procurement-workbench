@@ -118,8 +118,8 @@ export function ShellTop(input: {
   return (
     <Layout.Header className="shell-header" style={headerBarStyle({ contentInset: input.contentInset, isPhone })}>
       <HeaderStart menuButton={input.menuButton} startContent={input.startContent} />
-      <SearchButton onSearch={input.onSearch} />
-      <AccountMenu account={input.account} />
+      <SearchButton onSearch={input.onSearch} hitPx={input.menuButton?.hitPx} />
+      <AccountMenu account={input.account} hitPx={input.menuButton?.hitPx} />
     </Layout.Header>
   );
 }
@@ -221,10 +221,10 @@ function HeaderMenuButton({ button }: { readonly button: MenuButton }) {
   );
 }
 
-function SearchButton({ onSearch }: { readonly onSearch: () => void }) {
+function SearchButton({ onSearch, hitPx }: { readonly onSearch: () => void; readonly hitPx: number | undefined }) {
   const hint = searchShortcutHint();
   return (
-    <Button aria-label={searchLabel} aria-keyshortcuts={hint.ariaKeys} onClick={onSearch} style={searchButtonStyle()}>
+    <Button aria-label={searchLabel} aria-keyshortcuts={hint.ariaKeys} onClick={onSearch} style={{ ...searchButtonStyle(), minHeight: hitPx }}>
       <span style={searchTextStyle()}>{searchLabel}</span>
       <span aria-hidden="true" style={{ flexShrink: 0 }}>{hint.label}</span>
     </Button>
