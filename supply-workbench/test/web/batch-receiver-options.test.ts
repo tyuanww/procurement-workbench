@@ -40,6 +40,7 @@ it('新增批次可按名称选择下一页工厂，并保留预置仓且主体�
     if (!(selected instanceof HTMLElement)) throw new Error('没有第二页工厂选项');
     click(selected);
     click(button('确认'));
+    await waitFor(() => savedBody !== null);
     expect(savedBody).toMatchObject({ receiverPartyId: factory.id, plannedQty: 10 });
   } finally {
     await act(() => view.unmount());
