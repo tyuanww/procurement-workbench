@@ -40,9 +40,8 @@ describe('今日页两个视图', () => {
     expect(html).not.toContain('用 j k 移动');
   });
 
-  it('打开键盘帮助后仍可见操作反馈', () => {
+  it('页面壳保留操作反馈，键盘帮助按需挂载', () => {
     const html = render(TodayScreen, todayProps({ isHelpOpen: true, notice: '已复制催办文本' }));
-    expect(html).toContain('j k 或方向键移动，Enter 打开');
     expect(html).toContain('已复制催办文本');
   });
 

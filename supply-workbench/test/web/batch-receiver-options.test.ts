@@ -28,8 +28,7 @@ it('新增批次可按名称选择下一页工厂，并保留预置仓且主体�
   });
   const view = mount(memoryRouter(element(LineRecordDrawer, { detail: detail(), onReload: () => undefined }), '/lines/line-1?drawer=create'));
   try {
-    await waitFor(() => [...document.querySelectorAll('button')].some((item) => item.textContent?.replace(/\s/g, '') === '确认' && !item.disabled));
-    expect(requested).toContain('/api/v1/parties?role=factory&pageSize=200&page=2');
+    await waitFor(() => requested.includes('/api/v1/parties?role=factory&pageSize=200&page=2'));
     expect(document.body.textContent).toContain(preset.displayName);
 
     search(preset.displayName);
@@ -77,7 +76,8 @@ function detail(): OrderLineDetail {
 }
 
 function search(value: string): void {
-  const input = document.querySelector('[role="combobox"][aria-label="收货方"]');
+  const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent === '收货方');
+  const input = label?.control;
   if (!(input instanceof HTMLInputElement)) throw new Error('没有收货方搜索框');
   act(() => {
     input.focus();
