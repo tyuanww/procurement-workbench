@@ -1,7 +1,15 @@
 import { brand, fontSize, radius, rowComfort, space, statusColor, text } from '../../theme/tokens.js';
 
 export const workspaceCalendarCss = `
-  .today-calendar { max-inline-size: 49rem; }
+  .today-workspace-calendar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: ${space[3]}px;
+  }
+  @container today-action (min-inline-size: 62rem) {
+    .today-workspace-calendar-layout { grid-template-columns: minmax(26rem, 2fr) minmax(0, 3fr); }
+  }
   .today-calendar-desktop:empty { display: none; }
   .today-calendar-tools { margin-block-end: ${space[0]}px; }
   .today-calendar .today-calendar-input { inline-size: 9rem; max-inline-size: 100%; }
@@ -13,6 +21,12 @@ export const workspaceCalendarCss = `
     border-radius: ${radius}px;
     color: inherit;
     font-variant-numeric: tabular-nums;
+  }
+  .today-calendar-day[data-calendar-date] {
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 0;
+    block-size: auto;
   }
   .today-calendar .today-calendar-day[aria-pressed="false"]:hover { background: ${statusColor.neutral.bg}; }
   .today-calendar .today-calendar-day[aria-pressed="true"] { background: ${brand[100]}; color: ${brand[800]}; font-weight: 600; }

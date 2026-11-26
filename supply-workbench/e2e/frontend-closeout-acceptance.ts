@@ -15,10 +15,11 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   const collapsedIcons = await checkCollapsedIcons(page, out);
   await checkSaveFollowUpView(page);
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto(new URL('/today', origin).href);
   await checkActionBoard(page);
   await page.screenshot({ path: join(out, 'closeout-action-board.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await checkArrivals(page);
   await checkDailySchedule(page);
   await page.screenshot({ path: join(out, 'closeout-daily-schedule.png'), animations: 'disabled' });
@@ -76,6 +77,7 @@ async function checkActionBoard(page: Page): Promise<void> {
   const board = page.getByRole('region', { name: '工作台待办' });
   await board.getByRole('article', { name: /^UI-DEMO-001/ }).waitFor();
   await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
+  await checkWideWorkspace(page);
   const pending = board.getByText('UI-DEMO-003', { exact: false }).first();
   await pending.waitFor();
   const task = board.getByRole('button', { name: /确认今日出货/ });
@@ -88,12 +90,34 @@ async function checkActionBoard(page: Page): Promise<void> {
   const views = board.getByRole('radiogroup', { name: '工作台视图', exact: true });
   await views.getByRole('radio', { name: '日历', exact: true }).press('Space');
   await board.getByRole('textbox', { name: '选择工作日期', exact: true }).waitFor();
+  await checkCalendarBesideResults(page);
   await pending.waitFor();
   await task.waitFor();
   await views.getByRole('radio', { name: '列表', exact: true }).press('Space');
   assert.equal(await board.getByRole('article', { name: /^UI-DEMO-005/ }).count(), 0);
   await board.getByRole('button', { name: '按工厂催单', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: /复制全部可催/ }).isEnabled(), true);
+}
+
+async function checkWideWorkspace(page: Page): Promise<void> {
+  const { heading, toolbar, row } = await page.locator('.today-workspace-screen').evaluate((workspace) => {
+    const edges = (selector: string) => {
+      const bounds = workspace.querySelector(selector)?.getBoundingClientRect();
+      return bounds === undefined ? undefined : { left: bounds.left, right: bounds.right, width: bounds.width };
+    };
+    return { heading: edges('.today-workspace-heading'), toolbar: edges('.today-toolbar'), row: edges('.today-workspace-results .today-work-card') };
+  });
+  assert.ok(toolbar !== undefined && toolbar.width >= 1_200);
+  assert.deepEqual(heading, toolbar, '标题与操作区共用桌面正文宽度');
+  assert.deepEqual(row, toolbar, '待办行填满桌面正文宽度');
+}
+
+async function checkCalendarBesideResults(page: Page): Promise<void> {
+  const calendar = await page.getByRole('region', { name: '工作台日历' }).boundingBox();
+  const results = await page.locator('.today-workspace-results').boundingBox();
+  assert.ok(calendar !== null && results !== null);
+  assert.ok(calendar.x + calendar.width < results.x, '宽屏月历与所选日期的待办并排');
+  assert.equal(calendar.y, results.y);
 }
 
 async function checkArrivals(page: Page): Promise<void> {

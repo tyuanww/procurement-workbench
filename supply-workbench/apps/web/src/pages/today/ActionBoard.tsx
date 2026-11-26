@@ -38,8 +38,12 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
     <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
       <Flex vertical gap="small">
         <ActionToolbar {...props} />
-        {props.calendar}
-        {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+        <div className={props.calendar === undefined ? undefined : 'today-workspace-calendar-layout'}>
+          {props.calendar}
+          <Flex vertical gap="small" className={isKanban(props) ? undefined : 'today-workspace-results'}>
+            {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+          </Flex>
+        </div>
       </Flex>
     </section>
   );

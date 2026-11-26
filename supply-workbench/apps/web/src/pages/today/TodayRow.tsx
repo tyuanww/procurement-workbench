@@ -109,9 +109,11 @@ function RowFacts({ card, face, receipt, headingLevel, isScheduled, showReminder
 function RowHeading({ card, face, receipt, headingLevel }: Pick<RowProps, 'receipt' | 'headingLevel'> & { readonly card: CardPresentation; readonly face: RowFace }) {
   return <div className="today-row-line today-batch-title">
     <Typography.Title level={headingLevel} className="today-row-title">{card.title}</Typography.Title>
-    <RowStatus face={face} receipt={receipt} />
-    {face.isUnassigned === true ? <Typography.Text className="today-batch-meta" type="secondary">未分配</Typography.Text> : null}
-    {card.batch === undefined ? null : <Typography.Text className="today-batch-meta" type="secondary">{card.batch}</Typography.Text>}
+    <div className="today-row-line today-row-status">
+      <RowStatus face={face} receipt={receipt} />
+      {face.isUnassigned === true ? <Typography.Text className="today-batch-meta" type="secondary">未分配</Typography.Text> : null}
+    </div>
+    {card.batch === undefined ? null : <Typography.Text className="today-batch-meta today-row-batch" type="secondary">{card.batch}</Typography.Text>}
   </div>;
 }
 
@@ -129,11 +131,11 @@ function DeliveryFacts({ face, receipt, waiting, showReminder }: {
   readonly waiting: string | undefined;
   readonly showReminder: boolean;
 }) {
-  if (receipt === undefined) return <div className="today-row-line">
+  if (receipt === undefined) return <div className="today-row-line today-row-delivery">
     {face.date === '—' ? null : <Fact label="采购确认到仓日" value={face.date} />}
     {waiting === undefined ? null : <Typography.Text type="secondary">等待方 · {waiting}</Typography.Text>}
   </div>;
-  return <div className="today-row-line today-row-receipt-facts">
+  return <div className="today-row-line today-row-delivery">
     <Fact label="采购确认到仓日" value={receipt.confirmedDate ?? '未确认'} />
     <Fact label="收货方" value={receipt.warehouse ?? '未命名'} />
     {face.date !== '—' && face.date !== receipt.confirmedDate ? <Fact label="待办日期" value={face.date} /> : null}
@@ -147,7 +149,7 @@ function Fact({ label, value }: { readonly label: string; readonly value: string
 
 function NextFollowUp({ face }: { readonly face: RowFace }) {
   if (face.nextFollowUpAt === undefined) return null;
-  return <div className="today-row-line">
+  return <div className="today-row-line today-row-reminder">
     <Typography.Text>下次跟进 · {formatDateTime(face.nextFollowUpAt)}</Typography.Text>
     {face.nextFollowUpTarget === undefined ? null : <Typography.Text type="secondary">{face.nextFollowUpTarget}</Typography.Text>}
   </div>;

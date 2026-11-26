@@ -33,7 +33,7 @@ export function todayMotionCss(): string {
     .today-kanban-lane .today-lane-heading { display: none; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
     ${todayRowCss()}
-    ${todayWorkspaceCss()}
+    ${todayWorkspaceCss}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     #today-chase { container: today-action / inline-size; }
@@ -54,9 +54,13 @@ export function todayMotionCss(): string {
   `;
 }
 
-function todayWorkspaceCss(): string {
-  return `
-    .today-workspace-screen { container: today-workspace / inline-size; }
+const todayWorkspaceCss = `
+    .today-workspace-screen {
+      container: today-workspace / inline-size;
+      inline-size: 100%;
+      max-inline-size: 90rem;
+      margin-inline: auto;
+    }
     .today-workspace-intro { display: grid; gap: ${small}px; }
     .today-workspace-heading, .today-workspace-scopes { display: flex; align-items: baseline; flex-wrap: wrap; gap: ${tiny}px ${small}px; }
     .today-workspace-heading { justify-content: space-between; }
@@ -76,6 +80,14 @@ function todayWorkspaceCss(): string {
     .today-priority-block + .today-priority-block { margin-block-start: ${small}px; }
     .today-priority-block .today-priority-heading { display: flex; align-items: baseline; gap: ${small}px; margin: 0; font-size: ${fontSize.section}px; }
     .today-priority-heading > .ant-typography { font-size: ${fontSize.meta}px; font-weight: 500; }
+    @container today-card (min-width: 50rem) {
+      .today-workspace-results .today-work-card .today-plan-summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+        align-items: center;
+        gap: ${regular}px;
+      }
+    }
     @container today-workspace (max-width: 28rem) {
       .today-workspace-heading { align-items: start; flex-direction: column; }
       .today-workspace-scopes > .ant-btn { min-block-size: 44px; block-size: auto; }
@@ -89,7 +101,6 @@ function todayWorkspaceCss(): string {
       .today-copy-panel .ant-radio-wrapper { min-block-size: 44px; align-items: center; }
     }
   `;
-}
 
 export function reasonStyle(): CSSProperties {
   return { color: text.secondary, fontSize: fontSize.table };
