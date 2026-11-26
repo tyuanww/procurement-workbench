@@ -150,7 +150,7 @@ function NoteFields({ draft, onChange }: Fields<Extract<OpenForm, { kind: 'note'
         onChange={(followKind) => onChange({ ...draft, followKind: followKindOf(followKind) })}
       />}</RecordField>
       <RecordField label="内容" required error={errors.text}>
-        {(control) => <Input {...control} value={draft.text} onChange={(event) => onChange({ ...draft, text: event.target.value })} />}
+        {(control) => <Input.TextArea {...control} rows={2} value={draft.text} onChange={(event) => onChange({ ...draft, text: event.target.value })} />}
       </RecordField>
       {draft.nextFollowUpLocal === undefined ? null : <RecordField label="下次跟进时间（选填）" error={errors.time}
         hint={`工作台时区 ${businessTimeZone()}。清空时间可取消本批次提醒。`}>

@@ -1,5 +1,5 @@
 import { Button, Card, Flex, Tag, Typography } from 'antd';
-import { FilterOutlined } from '@ant-design/icons';
+import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import type { GroupMode, ReasonChip, TodayBoard } from '../../features/today/index.js';
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
@@ -24,33 +24,45 @@ const LIST_GROUPS: readonly { readonly id: GroupMode; readonly label: string }[]
 ];
 
 export function ActionToolbar(props: ActionToolbarProps) {
-  const { board, page, utilityLinks, viewControls } = props;
-  const [isOpen, setOpen] = useState(false);
+  const { board, page, viewControls } = props;
+  const [panel, setPanel] = useState<'filter' | 'chase' | null>(null);
   const filterId = useId();
+  const chaseId = useId();
   const filterButton = useRef<HTMLButtonElement>(null);
-  const selection = board.chips.filter((chip) => chip.isSelected).map((chip) => chip.label);
-  if (page?.work !== undefined) selection.unshift(workFilterLabels[page.work]);
-  if (page?.sort.kind === 'bulk') selection.push(`大批优先（${page.sort.unit}）`);
-  const label = page?.inbox === 'today' ? '筛选与复制催单' : '筛选';
+  const selection = appliedFilterLabels(board.chips, page);
+  const chasePage = page?.inbox === 'today' ? page : undefined;
+  const isFilterOpen = panel === 'filter';
+  const isChaseOpen = panel === 'chase';
   return (
     <>
-      <Flex className="today-touch" align="center" gap="small" wrap>
-        <Flex align="center" gap="small" wrap>
+      <Flex className="today-touch today-toolbar" align="center" gap="small" wrap>
+        <Flex className="today-toolbar-main" align="center" gap="small" wrap>
           {viewControls}
-          <Button ref={filterButton} icon={<FilterOutlined aria-hidden />} aria-label={label} aria-expanded={isOpen}
-            aria-controls={filterId} onClick={() => setOpen(!isOpen)}>
-            <span>筛选{page?.inbox === 'today' ? <span className="today-filter-copy-label">与复制催单</span> : null}</span>
-          </Button>
+          <Flex className="today-toolbar-buttons" gap="small">
+            <Button className="today-toolbar-filter" ref={filterButton} icon={<FilterOutlined aria-hidden />} aria-expanded={isFilterOpen}
+              aria-controls={filterId} onClick={() => setPanel(isFilterOpen ? null : 'filter')}>筛选</Button>
+            {chasePage === undefined ? null : <Button className="today-toolbar-chase" icon={<CopyOutlined aria-hidden />}
+              aria-expanded={isChaseOpen} aria-controls={chaseId} onClick={() => setPanel(isChaseOpen ? null : 'chase')}>按工厂催单</Button>}
+          </Flex>
         </Flex>
-        <ActionControls page={page} utilityLinks={utilityLinks} />
         <ProcurementCutoff />
       </Flex>
-      <div id={filterId} hidden={!isOpen}>
-        {isOpen ? <ActionOptions {...props} /> : null}
+      <div id={filterId} hidden={!isFilterOpen}>
+        {isFilterOpen ? <ActionOptions {...props} /> : null}
       </div>
+      {chasePage === undefined ? null : <div id={chaseId} hidden={!isChaseOpen}>
+        {isChaseOpen ? <Card size="small" className="today-copy-panel" role="region" aria-label="工厂催单"><ChaseControls page={chasePage} /></Card> : null}
+      </div>}
       <AppliedFilters page={page} selection={selection} onClear={() => filterButton.current?.focus({ preventScroll: true })} />
     </>
   );
+}
+
+function appliedFilterLabels(chips: readonly ReasonChip[], page: ActionPageControls | undefined): readonly string[] {
+  const selection = chips.filter((chip) => chip.isSelected).map((chip) => chip.label);
+  if (page?.work !== undefined) selection.unshift(workFilterLabels[page.work]);
+  if (page?.sort.kind === 'bulk') selection.push(`大批优先（${page.sort.unit}）`);
+  return selection;
 }
 
 function AppliedFilters({ page, selection, onClear }: {
@@ -72,7 +84,7 @@ function ActionOptions({ board, page, onGroup, onToggleReason, calendar, utility
   const canGroupList = calendar === undefined && board.group !== 'kanban' && page?.sort.kind !== 'bulk';
   return <Card size="small">
     <Flex vertical gap="small">
-      <ActionControls page={page} utilityLinks={utilityLinks} isNarrow />
+      <ActionControls page={page} utilityLinks={utilityLinks} />
       {canGroupList ? <Flex className="today-touch" align="center" gap="small" wrap>
         <Typography.Text>清单分组</Typography.Text>
         <TodayGrouping label="清单分组" modes={LIST_GROUPS} group={board.group} onGroup={onGroup} />
@@ -80,21 +92,18 @@ function ActionOptions({ board, page, onGroup, onToggleReason, calendar, utility
       <search className="today-touch" aria-label="工作台筛选">
         <ReasonChips chips={board.chips} onToggle={onToggleReason} />
       </search>
-      {page?.inbox === 'today' ? <ChaseOptions page={page} /> : null}
+      {page?.inbox === 'today' ? <WorkOptions page={page} /> : null}
     </Flex>
   </Card>;
 }
 
-function ChaseOptions({ page }: { readonly page: ActionPageControls }) {
+function WorkOptions({ page }: { readonly page: ActionPageControls }) {
   const isAllUnshipped = page.work === 'all_unshipped';
-  return <>
-    <Flex className="today-touch" align="center" gap="small" wrap>
-      {isAllUnshipped ? null : <BatchLinks page={page} />}
-      <Button size="small" aria-pressed={isAllUnshipped}
-        onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>{workFilterLabels.all_unshipped}</Button>
-    </Flex>
-    <ChaseControls page={page} />
-  </>;
+  return <Flex className="today-touch" align="center" gap="small" wrap>
+    {isAllUnshipped ? null : <BatchLinks page={page} />}
+    <Button size="small" aria-pressed={isAllUnshipped}
+      onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>{workFilterLabels.all_unshipped}</Button>
+  </Flex>;
 }
 
 function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly onToggle: (code: string) => void }): ReactNode {

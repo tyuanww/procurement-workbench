@@ -52,7 +52,7 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
     expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
     expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
     expect(textOf('body')).not.toContain('截至今日');
-    expect(textOf('nav[aria-label="我的待办入口"]')).toContain('业务日 2026-11-21');
+    expect(textOf('.today-business-date')).toBe('业务日 2026-11-21');
     expect(textOf('body')).not.toContain('用 j k 移动');
     pressTodayKey('?');
     expect(textOf('[role="dialog"]')).toContain('j k 或方向键移动，Enter 打开');
@@ -126,7 +126,7 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
       fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) });
     });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
-    const filter = button('筛选与复制催单');
+    const filter = button('筛选');
     click(filter);
     click(button('要催货2批'));
     await act(() => { fulfill({ urlPart: 'work=factory_chase', status: 200, body: result(factories) }); });

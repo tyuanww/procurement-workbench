@@ -28,11 +28,14 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
     expect(first.paging).toMatchObject({ total: 501, page: 1, pageSize: 50, units: ['件', '箱'], reasonCounts: { unshipped: 501 }, chaseCounts: { all: 501, filtered: 501 } });
     expect(first.paging.chaseItemIds).toEqual(first.items.map((item) => item.id));
     expect(first.items[0]?.id).toBe('batch:hz09-batch-1');
-    expect(first.paging.factories.map((factory) => factory.id).sort()).toEqual(['hz09-factory-a', 'hz09-factory-b']);
+    expect(first.paging.factories).toMatchObject([
+      { id: 'hz09-factory-a', count: 500 }, { id: 'hz09-factory-b', count: 1 },
+    ]);
     expect(first.pendingBatch?.map((row) => row.orderLineId)).toContain('hz09-line-503');
     for (let page = 2; page <= 11; page += 1) {
       const result = await readPage(page);
       expect(result.paging).toMatchObject({ total: 501, page });
+      expect(result.paging.factories).toEqual(first.paging.factories);
       expect(result.items).toHaveLength(page === 11 ? 1 : 50);
       expect(result.truncated).toBe(false);
       all.push(...result.items);
@@ -70,6 +73,7 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
     const bulk = await readPage(10, `${bulkQuery}&focusId=batch%3Ahz09-batch-501`);
     expect(bulk.paging.page).toBe(1);
     expect(bulk.paging).toMatchObject({ total: 499, units: ['件', '箱'], chaseCounts: { all: 501, filtered: 499 } });
+    expect(bulk.paging.factories).toMatchObject([{ id: 'hz09-factory-a', count: 498 }, { id: 'hz09-factory-b', count: 1 }]);
     expect(bulk.items.slice(0, 2).map((item) => [item.id, item.batch?.fulfillment?.unshippedQty])).toEqual([
       ['batch:hz09-batch-501', 30000], ['batch:hz09-batch-1', 10000],
     ]);
@@ -100,6 +104,7 @@ it('行动板按原因分出完整的 50 行各页，催单使用同一筛选及
     expect(factoryWork.paging).toMatchObject({ total: 500, page: 10, chaseCounts: { all: 500, filtered: 500 }, internalNoteCount: 1 });
     expect(factoryWork.items.map((item) => item.id)).toEqual(factoryWork.paging.chaseItemIds);
     expect(internalWork.paging).toMatchObject({ total: 1, chaseCounts: { all: 500, filtered: 0 }, internalNoteCount: 1 });
+    expect(internalWork.paging.factories).toEqual([]);
     expect(internalWork.items).toMatchObject([{ id: 'batch:hz09-batch-501', waitingOn: { kind: 'internal' }, reasons: ['note_missing'] }]);
     expect(internalWork.arrivalMemos).toContainEqual(expect.objectContaining({ batchId: 'hz09-batch-501', inTransitQty: 40000 }));
     expect(unfiltered.paging.total).toBe(502);

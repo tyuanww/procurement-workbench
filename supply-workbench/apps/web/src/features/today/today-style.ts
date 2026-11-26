@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { bg, border, brand, controlBorder, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import type { RowFace } from './model/types.js';
+import { todayBatchCardCss } from './today-row-style.js';
 
 const [tiny, small, , regular] = space;
 
@@ -23,27 +24,23 @@ export function todayMotionCss(): string {
     .today-priority-list { display: flex; flex-direction: column; gap: ${small}px; }
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
+    .today-kanban-lane[data-active="false"] { display: none; }
     .today-lane-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${tiny}px; }
-    .today-lane-links > .ant-btn { display: grid; place-content: center; gap: 0; min-block-size: 44px; padding-inline: ${tiny}px; line-height: 1.25; }
-    .today-lane-links > .ant-btn span:last-child { font-size: ${fontSize.meta}px; color: ${text.secondary}; }
+    .today-lane-links > .ant-btn { min-block-size: 44px; block-size: auto; padding-inline: ${tiny}px; gap: ${tiny}px; font-size: ${fontSize.meta}px; }
+    .today-lane-links > .ant-btn[aria-pressed="true"] { background: ${brand[100]}; color: ${brand[800]}; border-color: ${brand[600]}; }
+    .today-lane-heading { position: absolute; inline-size: 1px; block-size: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
     ${todayCardCss()}
+    ${todayBatchCardCss()}
+    ${todayWorkspaceCss()}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     #today-chase { container: today-action / inline-size; }
-    @container today-action (max-width: 22rem) {
-      .today-filter-copy-label { display: none; }
-    }
-    .today-controls-wide { display: contents; }
-    .today-controls-narrow { display: none; }
-    @media (max-width: 520px) {
-      .today-controls-wide { display: none; }
-      .today-controls-narrow { display: block; }
-      .today-workspace-views .ant-segmented-item-icon { display: none; }
-    }
     @container today-action (min-width: 60rem) {
       .today-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .today-kanban-lane[data-active="false"] { display: flex; }
       .today-lane-links { display: none; }
+      .today-lane-heading { position: static; inline-size: auto; block-size: auto; clip-path: none; overflow: visible; white-space: normal; }
     }
     @media (any-pointer: coarse) {
       .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a {
@@ -53,6 +50,41 @@ export function todayMotionCss(): string {
       .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a { display: inline-flex; align-items: center; justify-content: center; }
     }
     @media (prefers-reduced-motion: reduce) { .today-row { transition: none; } }
+  `;
+}
+
+function todayWorkspaceCss(): string {
+  return `
+    .today-workspace-screen { container: today-workspace / inline-size; }
+    .today-workspace-intro { display: grid; gap: ${small}px; }
+    .today-workspace-heading, .today-workspace-scopes { display: flex; align-items: baseline; flex-wrap: wrap; gap: ${tiny}px ${small}px; }
+    .today-workspace-heading { justify-content: space-between; }
+    .today-workspace-heading .ant-typography { margin: 0; }
+    .today-workspace-heading h2 { font-size: ${fontSize.page}px; line-height: 1.4; }
+    .today-workspace-heading h2 strong { font-size: ${fontSize.metric}px; line-height: 1; }
+    .today-workspace-heading h2 small, .today-workspace-heading .today-business-date, .today-toolbar .procurement-cutoff { font-size: ${fontSize.meta}px; }
+    .today-workspace-heading h2 small { color: ${text.secondary}; font-weight: 500; }
+    .today-workspace-heading h2 strong, .today-workspace-scopes strong, .today-business-date { font-variant-numeric: tabular-nums; }
+    .today-workspace-scopes > .ant-btn { gap: ${tiny}px; border-color: ${border}; padding-inline: 10px; }
+    .today-toolbar { padding-block-end: ${small}px; border-block-end: 1px solid ${border}; }
+    .today-toolbar-main { min-inline-size: 0; }
+    .today-toolbar .today-workspace-views { box-shadow: inset 0 0 0 1px ${border}; }
+    .today-priority-block { display: grid; gap: ${small}px; }
+    .today-priority-block + .today-priority-block { margin-block-start: ${small}px; }
+    .today-priority-block .today-priority-heading { display: flex; align-items: baseline; gap: ${small}px; margin: 0; font-size: ${fontSize.section}px; }
+    .today-priority-heading > .ant-typography { font-size: ${fontSize.meta}px; font-weight: 500; }
+    @container today-workspace (max-width: 28rem) {
+      .today-workspace-heading { align-items: start; flex-direction: column; }
+      .today-workspace-scopes > .ant-btn { min-block-size: 44px; block-size: auto; }
+    }
+    @container today-action (max-width: 26rem) {
+      .today-toolbar-main, .today-toolbar-buttons { gap: ${tiny}px; }
+      .today-toolbar-buttons > .ant-btn { min-block-size: 44px; min-inline-size: 44px; padding-inline: ${tiny}px; }
+      .today-toolbar-buttons > .ant-btn .anticon, .today-workspace-views .ant-segmented-item-icon { display: none; }
+      .today-toolbar .today-workspace-views .ant-segmented-item, .today-toolbar .today-workspace-views .ant-segmented-item-label { min-inline-size: 44px; }
+      .today-toolbar .today-workspace-views .ant-segmented-item-label { display: grid; place-items: center; min-block-size: 44px; padding-inline: 2px; }
+      .today-copy-panel .ant-radio-wrapper { min-block-size: 44px; align-items: center; }
+    }
   `;
 }
 

@@ -122,7 +122,7 @@ export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayRespon
     urgent: z.int().nonnegative(),
     reasonCounts: todayResponse.shape.counts,
     units: z.array(z.string()),
-    factories: z.array(todayFactory),
+    factories: z.array(todayFactory.extend({ count: optional(z.int().positive()) })),
     followUpCounts: optional(strictObject({ due: z.int().nonnegative(), scheduled: z.int().nonnegative() })),
     chaseCounts: optional(strictObject({ all: z.int().nonnegative(), filtered: z.int().nonnegative() })),
     internalNoteCount: optional(z.int().nonnegative()),

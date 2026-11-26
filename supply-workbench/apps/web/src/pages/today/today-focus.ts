@@ -19,13 +19,13 @@ export function workspaceRowOf(target: EventTarget | null): string | null {
 export function workspaceKeyboardRows(): readonly { readonly id: string }[] {
   return [...document.querySelectorAll(ROW_SELECTOR)].flatMap((row) => {
     const id = rowIdOf(row);
-    return id === null || row.closest('[inert]') !== null ? [] : [{ id }];
+    return id === null || row.closest('[inert]') !== null || isHiddenLane(row) ? [] : [{ id }];
   });
 }
 
 export function focusWorkspaceRow(id: string): HTMLElement | null {
   const row = document.getElementById(workspaceRowId(id));
-  if (row === null) return null;
+  if (row === null || isHiddenLane(row)) return null;
   row.focus({ preventScroll: true });
   (row.closest('.today-jump-target') ?? row).scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   return row;
@@ -102,8 +102,13 @@ async function locateFollowUp({ id, inbox }: { readonly id: string; readonly inb
 
 export function focusSection(id: string): boolean {
   const target = document.getElementById(id);
-  if (target === null) return false;
+  if (target === null || isHiddenLane(target)) return false;
   target.focus({ preventScroll: true });
   target.scrollIntoView({ block: 'start' });
   return true;
+}
+
+function isHiddenLane(element: Element): boolean {
+  const lane = element.closest('.today-kanban-lane[data-active="false"]');
+  return lane !== null && getComputedStyle(lane).display === 'none';
 }

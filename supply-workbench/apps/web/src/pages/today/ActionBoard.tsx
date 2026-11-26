@@ -8,15 +8,20 @@ import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodayGroup } from './TodayGroup.js';
 import { TodayRow, type CopyAction } from './TodayRow.js';
-import { focusSection, workspaceRowId } from './today-focus.js';
+import { workspaceRowId } from './today-focus.js';
 
 type BatchSequence = (rowId: string) => number | undefined;
+export type ActionLane = typeof ACTION_LANES[number]['key'];
+
 export type ActionBoardProps = ActionToolbarProps & {
   readonly batchSeqOf?: BatchSequence | undefined;
   readonly receiptOf?: ((rowId: string) => ReceiptWork | undefined) | undefined;
   readonly arrivalFocusId?: string | null | undefined;
   readonly internalCards?: readonly ReactNode[] | undefined;
   readonly internalPagination?: ReactNode;
+  readonly boardFocusId?: string | null;
+  readonly selectedLane?: ActionLane | undefined;
+  readonly onSelectLane?: (lane: ActionLane) => void;
   readonly focus: string | null;
   readonly fading: string | null;
   readonly onOpen: (id: string) => void;
@@ -69,12 +74,37 @@ function ActionGroups(props: ActionBoardProps): ReactNode {
 }
 
 function PriorityActions(props: ActionBoardProps & { readonly rows: readonly BoardRow[] }) {
-  return <>
-    {props.board.group === 'priority' && props.rows.length > 0 && Boolean(props.internalCards?.length) ?
-      <Typography.Text type="secondary">批次按紧急度排列，之后是到期排期和待建批次。</Typography.Text> : null}
-    <ActionRows {...props} isPriorityList headingLevel={2} extras={props.internalCards} />
+  const { page, rows, receiptOf, internalCards } = props;
+  const canPrioritize = page?.inbox === 'today' && page.calendar === undefined && !isActionFiltered(props);
+  const overdue = canPrioritize ? rows.filter((row) => receiptOf?.(row.id)?.status === 'overdue') : [];
+  if (overdue.length === 0) return <>
+    <ActionRows {...props} isPriorityList headingLevel={2} extras={internalCards} />
     {props.internalPagination}
   </>;
+  return <PriorityGroups {...props} overdue={overdue} />;
+}
+
+function PriorityGroups(props: ActionBoardProps & { readonly rows: readonly BoardRow[]; readonly overdue: readonly BoardRow[] }) {
+  const { page, rows, overdue, receiptOf, internalCards } = props;
+  const remaining = rows.filter((row) => receiptOf?.(row.id)?.status !== 'overdue');
+  const isPaged = page !== undefined && page.paging.total > page.paging.pageSize;
+  return <>
+    <section className="today-priority-block" aria-labelledby="today-priority-heading">
+      <PriorityHeading id="today-priority-heading" title="先核对逾期到仓" count={`${isPaged ? '本页 ' : ''}${overdue.length} 批`} />
+      <ActionRows {...props} rows={overdue} isPriorityList headingLevel={3} />
+    </section>
+    {remaining.length || internalCards?.length ? <section className="today-priority-block" aria-labelledby="today-other-heading">
+      <PriorityHeading id="today-other-heading" title="其余待办" />
+      <ActionRows {...props} rows={remaining} isPriorityList headingLevel={3} extras={internalCards} />
+    </section> : null}
+    {props.internalPagination}
+  </>;
+}
+
+function PriorityHeading({ id, title, count }: { readonly id: string; readonly title: string; readonly count?: string }) {
+  return <Typography.Title id={id} level={2} className="today-priority-heading">
+    {title}{count === undefined ? null : <Typography.Text type="secondary">{count}</Typography.Text>}
+  </Typography.Title>;
 }
 
 function ActionEmpty({ page, board, description }: ActionBoardProps & { readonly description: string }) {
@@ -94,22 +124,22 @@ export function isActionFiltered({ board, page }: Pick<ActionBoardProps, 'board'
 
 function ActionKanban(props: ActionBoardProps) {
   const groups = props.board.body.kind === 'groups' ? props.board.body.groups : [];
-  const lanes = ACTION_LANES.map(({ key, name }) => {
+  const lanes = [ACTION_LANES[1], ACTION_LANES[0], ACTION_LANES[2]].map(({ key, name }) => {
     const rows = groups.find((group) => group.key === key)?.rows ?? [];
     const extras = key === 'internal' ? props.internalCards : undefined;
     return { key, name, rows, extras, count: rows.length + (extras?.length ?? 0), id: `today-lane-${key}` };
   });
+  const focusedLane = laneOfFocus(lanes, props.boardFocusId);
+  const active = props.selectedLane ?? focusedLane ?? lanes.find(({ count }) => count > 0)?.key ?? 'receipt';
   return <>
     <nav aria-label="看板分组" className="today-lane-links today-touch">
-      {lanes.map(({ id, name, count }) => <Button key={id} size="small" href={`#${id}`} onClick={(event) => {
-        event.preventDefault();
-        focusSection(id);
-      }}><span>{name}</span><span>{count} 项</span></Button>)}
+      {lanes.map(({ key, id, name, count }) => <Button key={key} size="small" aria-controls={id} aria-pressed={key === active}
+        onClick={() => props.onSelectLane?.(key)}>{name}<span>{count} 项</span></Button>)}
     </nav>
     <div className="today-kanban">
       {lanes.map(({ key, name, rows, extras, count, id }) => <section key={key} id={id} tabIndex={-1}
-        className="today-kanban-lane today-jump-target" aria-label={name}>
-        <Flex align="center" gap="small" wrap>
+        className="today-kanban-lane today-jump-target" data-active={key === active} aria-label={name}>
+        <Flex align="center" gap="small" wrap className="today-lane-heading">
           <Typography.Title level={2} style={{ margin: 0, fontSize: fontSize.section }}>{name}</Typography.Title>
           <Typography.Text type="secondary">{count} 项</Typography.Text>
         </Flex>
@@ -119,6 +149,12 @@ function ActionKanban(props: ActionBoardProps) {
       </section>)}
     </div>
   </>;
+}
+
+function laneOfFocus(lanes: readonly { readonly key: ActionLane; readonly rows: readonly BoardRow[] }[], id: string | null | undefined) {
+  if (id == null) return undefined;
+  if (id.startsWith('task:') || id.startsWith('pending:')) return 'internal';
+  return lanes.find(({ rows }) => rows.some((row) => row.id === id))?.key;
 }
 
 function groupCopy({ group, page, onCopy }: { readonly group: BoardGroup; readonly page: ActionBoardProps['page']; readonly onCopy: ActionBoardProps['onCopy'] }): CopyAction | null {
@@ -139,7 +175,7 @@ function batchCopy(page: ActionBoardProps['page'], id: string): CopyAction | nul
   return { label: '复制本批催单', disabled: page.isCopying, run: () => page.onCopyChase({ kind: 'batch', id }) };
 }
 
-type ActionRowsProps = Pick<ActionBoardProps, 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'receiptOf' | 'arrivalFocusId' | 'onOpen' | 'onQuick'> & {
+type ActionRowsProps = Pick<ActionBoardProps, 'board' | 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'receiptOf' | 'arrivalFocusId' | 'onOpen' | 'onQuick'> & {
   readonly group: BoardGroup;
 };
 
@@ -160,13 +196,14 @@ function ActionRows(props: Omit<ActionRowsProps, 'group'> & {
   readonly extras?: readonly ReactNode[] | undefined;
 }): ReactNode {
   const List = props.isPriorityList ? 'ol' : 'ul';
+  const shouldShowReminder = props.board.chips.some((chip) => chip.code === 'follow_up_due' && chip.isSelected);
   return (
     <List role="list" className={props.isPriorityList ? 'today-action-list today-priority-list' : 'today-action-list'}>
       {props.rows.map((row) => (
         <li key={row.id} id={workspaceRowId(row.id)} className="today-jump-target" tabIndex={-1}>
           <TodayRow row={row} isCard={props.isPriorityList} headingLevel={props.headingLevel} isFocused={props.focus === row.id} isFading={props.fading === row.id}
             batchSeq={props.batchSeqOf?.(row.id)} receipt={props.receiptOf?.(row.id)} arrivalFocusId={props.arrivalFocusId}
-            copy={batchCopy(props.page, row.id)} isScheduled={props.page?.inbox === 'scheduled'}
+            copy={batchCopy(props.page, row.id)} isScheduled={props.page?.inbox === 'scheduled'} showReminder={shouldShowReminder}
             onOpen={() => props.onOpen(row.id)} onQuick={(kind) => props.onQuick({ id: row.id, kind })} />
         </li>
       ))}

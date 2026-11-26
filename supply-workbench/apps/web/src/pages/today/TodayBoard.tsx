@@ -1,6 +1,6 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Button, Card, Empty, Flex, Modal, Result, Skeleton, Typography } from 'antd';
-import type { ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
@@ -10,14 +10,15 @@ import {
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { ActionPageControls } from './ActionControls.js';
-import { ActionBoard, isActionFiltered } from './ActionBoard.js';
-import { PendingBatchPagination, pendingBatchCards, usePendingBatches } from './PendingBatches.js';
+import { ActionBoard, isActionFiltered, type ActionLane } from './ActionBoard.js';
+import { PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendingBatches } from './PendingBatches.js';
 import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
 import { arrivalWork, planTaskCards } from './TodayAgenda.js';
-import { arrivalShortcutPath, TodayLinks, type ArrivalTiming } from './TodayLinks.js';
+import { arrivalShortcutPath, TodayAgendaShortcuts, TodayLinks, useAgendaJump, type ArrivalTiming } from './TodayLinks.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceDestinations, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
+import type { WorkspaceInbox } from './action-query.js';
 
 const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
 const ACTION_HELP = `${NAVIGATION_HELP}，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭`;
@@ -110,7 +111,7 @@ function TodayReady(props: TodayScreenProps): ReactNode {
   if (props.arrivalsView !== undefined) return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
   const isSchedule = view === 'schedule';
   return (
-    <section style={screenStyle()}>
+    <section className={isSchedule ? undefined : 'today-workspace-screen'} style={screenStyle()}>
       <style>{todayMotionCss()}</style>
       <PageHeader title={isSchedule ? '今日排期' : '个人工作台'} />
       {isSchedule ? <SchedulePane {...props} /> : <ActionPane {...props} />}
@@ -148,6 +149,7 @@ function ActionPane(props: TodayScreenProps): ReactNode {
   const { board, actionPage: page, workspace } = props;
   const summary = actionSummary(props);
   const inbox = workspace?.inbox ?? 'today';
+  const { navigation, jump } = useBoardNavigation(props, inbox);
   const pending = usePendingBatches({
     rows: summary.pendingRows,
     focusId: summary.pendingFocusId,
@@ -155,15 +157,54 @@ function ActionPane(props: TodayScreenProps): ReactNode {
     onChanged: props.onPendingBatchChanged,
   });
   const receipts = arrivalWork(summary.arrivals, board.body.kind === 'groups' ? board.body.rows : []);
+  const display = actionDisplay(props);
   return <>
-    <TodayLinks pending={pending.total} page={page} asOf={props.asOf}
+    <TodayLinks page={page} asOf={props.asOf}
       myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
-    <ActionBoard {...props} page={page} receiptOf={(id) => receipts.get(id)}
+    <ActionBoard {...props} {...navigation} page={page} receiptOf={(id) => receipts.get(id)}
       internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
-      internalPagination={<PendingBatchPagination view={pending} />} {...actionDisplay(props)} />
+      internalPagination={<PendingBatchPagination view={pending} />} {...display}
+      utilityLinks={<ActionDestinations inbox={inbox} pendingCount={pending.total} page={page} myPlan={props.myPlan}
+        jump={jump}>{display.utilityLinks}</ActionDestinations>} />
     {workspace === undefined ? null : <Typography.Text type="secondary"><Link to="/today/personal?preview=1">打开合成预览</Link></Typography.Text>}
   </>;
+}
+
+function ActionDestinations({ inbox, pendingCount, page, myPlan, jump, children }: {
+  readonly inbox: WorkspaceInbox;
+  readonly pendingCount: number;
+  readonly page: ActionPageControls | undefined;
+  readonly myPlan: MyPlan | undefined;
+  readonly jump: (id: string) => void;
+  readonly children: ReactNode;
+}) {
+  const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
+  return <>
+    {children}
+    {inbox === 'today' ? <TodayAgendaShortcuts pendingCount={page?.paging.pendingCount ?? pendingCount} planCount={planCount} jump={jump} /> : null}
+  </>;
+}
+
+function useBoardNavigation(props: TodayScreenProps, inbox: WorkspaceInbox) {
+  const { workspace, actionPage } = props;
+  const [laneSelection, setLaneSelection] = useState<{ readonly inbox: WorkspaceInbox; readonly lane: ActionLane }>();
+  const selectLane = useCallback((lane: ActionLane) => setLaneSelection({ inbox, lane }), [inbox]);
+  const showAgenda = useCallback(() => {
+    if (workspace?.view === 'board') selectLane('internal');
+  }, [selectLane, workspace?.view]);
+  const { jump, jumpId } = useAgendaJump({ page: actionPage, onShow: showAgenda, onReset: () => workspace?.onInbox('today') });
+  const selectedLane = laneSelection?.inbox === inbox ? laneSelection.lane : undefined;
+  return { jump, navigation: {
+    boardFocusId: boardFocusId(props), selectedLane: jumpId === null ? selectedLane : 'internal' as const, onSelectLane: selectLane,
+  } };
+}
+
+function boardFocusId({ pendingFocusId, arrivalFocusId, search }: TodayScreenProps): string | null {
+  if (pendingFocusId != null) return pendingBatchRowId(pendingFocusId);
+  if (arrivalFocusId != null) return 'batch:' + arrivalFocusId;
+  const params = new URLSearchParams(search);
+  return params.get('drawer') ?? params.get('focusId');
 }
 
 function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, arrivalMemos, onRetryPlan, board, actionPage }: TodayScreenProps) {

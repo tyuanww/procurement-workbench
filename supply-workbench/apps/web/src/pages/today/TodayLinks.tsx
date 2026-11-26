@@ -1,8 +1,7 @@
-import { Button, Flex, Typography } from 'antd';
+import { Button, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import type { TodayPaging, TodayResponse } from '@sw/contracts';
 import { todayArrivalsPath } from '../../features/today/index.js';
-import { MetricStrip } from '../../shared/ui/analytics.js';
 import type { ActionPageControls } from './ActionControls.js';
 import { focusSection } from './today-focus.js';
 import { PENDING_BATCH_TARGET } from './PendingBatches.js';
@@ -29,7 +28,6 @@ const inboxes: readonly { readonly key: WorkspaceInbox; readonly label: string; 
 ];
 
 type TodayLinksProps = {
-  readonly pending: number;
   readonly asOf: TodayResponse['asOf'] | undefined;
   readonly page: ActionPageControls | undefined;
   readonly myPlan: MyPlan | undefined;
@@ -39,21 +37,43 @@ type TodayLinksProps = {
 };
 
 export function TodayLinks(props: TodayLinksProps) {
-  const { page, pending, myPlan, inbox, onInbox } = props;
-  const isOtherDay = isOtherWorkDay(page?.calendar, props.asOf);
-  const pendingCount = page?.paging.pendingCount ?? pending;
+  const { page, myPlan, inbox, asOf } = props;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
-  const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable: myPlan?.kind === 'error' });
-  const isTodayPartial = myPlan?.kind === 'error' && counts.today !== undefined;
-  return <nav className="today-touch" aria-label="我的待办入口">
-    <Flex vertical gap="small">
-      <MetricStrip compact ariaLabel="工作范围" items={inboxes.map(({ key, label, unit }) => ({
-        key, label, value: counts[key] ?? '—', ...(counts[key] === undefined ? {} : { unit }),
-        ...(key === 'today' && isTodayPartial ? { hint: '已加载 · 排期未读' } : {}),
-        action: { isActive: key === inbox, select: () => { if (key !== inbox || (key === 'today' && isOtherDay)) onInbox(key); } },
-      }))} />
-      <TodayShortcuts {...props} pendingCount={pendingCount} planCount={planCount} />
-    </Flex>
+  const isPlanUnavailable = myPlan?.kind === 'error';
+  const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable });
+  return <div className="today-workspace-intro">
+    <div className="today-workspace-heading">
+      <ActiveScope inbox={inbox} count={counts[inbox]} />
+      {asOf === undefined ? null : <Typography.Text type="secondary" className="today-business-date">
+        业务日 <time dateTime={asOf}>{asOf}</time>
+      </Typography.Text>}
+    </div>
+    <ScopeSwitch {...props} counts={counts} canRetry={isPlanUnavailable} />
+    {inbox === 'today' && isPlanUnavailable && counts.today !== undefined
+      ? <Typography.Text type="secondary">已加载 · 排期未读</Typography.Text> : null}
+    <ReviewScopeNote page={page} />
+  </div>;
+}
+
+function ActiveScope({ inbox, count }: { readonly inbox: WorkspaceInbox; readonly count: number | undefined }) {
+  const active = inboxes.find(({ key }) => key === inbox);
+  if (active === undefined) return null;
+  return <Typography.Title level={2}>
+    {active.label} <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}
+  </Typography.Title>;
+}
+
+function ScopeSwitch({ inbox, onInbox, onRetryPlan, page, asOf, counts, canRetry }: Omit<TodayLinksProps, 'myPlan'> & {
+  readonly counts: ReturnType<typeof workspaceCounts>;
+  readonly canRetry: boolean;
+}) {
+  const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, asOf);
+  return <nav className="today-workspace-scopes today-touch" aria-label="工作范围">
+    {inboxes.filter(({ key }) => key !== inbox).map(({ key, label, unit }) => (
+      <Button key={key} onClick={() => onInbox(key)}>{label} <strong>{counts[key] ?? '—'}</strong>{counts[key] === undefined ? null : unit}</Button>
+    ))}
+    {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
+    {canRetry ? <Button onClick={onRetryPlan}>重试排期</Button> : null}
   </nav>;
 }
 
@@ -74,27 +94,12 @@ function workspaceCounts({ paging, planCount, isPlanUnavailable }: {
   return { today, scheduled: counts?.scheduled, unassigned: counts?.unassigned };
 }
 
-function TodayShortcuts({ page, asOf, myPlan, onRetryPlan, inbox, onInbox, pendingCount, planCount }: TodayLinksProps & {
-  readonly pendingCount: number;
-  readonly planCount: number | undefined;
-}) {
-  const jump = useAgendaJump({ page, onReset: () => onInbox('today') });
-  return <Flex gap="small" align="center" wrap>
-    {inbox === 'today' ? <TodayOnlyShortcuts pendingCount={pendingCount} planCount={planCount} jump={jump} /> : null}
-    <ReviewScopeNote page={page} />
-    {myPlan?.kind === 'error' ? <Button size="small" onClick={onRetryPlan}>重试排期</Button> : null}
-    {asOf === undefined ? null : <Typography.Text type="secondary" style={{ marginInlineStart: 'auto' }}>
-      业务日 <time dateTime={asOf}>{asOf}</time>
-    </Typography.Text>}
-  </Flex>;
-}
-
 function ReviewScopeNote({ page }: { readonly page: ActionPageControls | undefined }) {
   if (page?.inbox !== 'unassigned' || page.paging.reasonCounts.review_pending === 0) return null;
   return <Typography.Text type="secondary">含共享主数据待审核</Typography.Text>;
 }
 
-function TodayOnlyShortcuts({ pendingCount, planCount, jump }: {
+export function TodayAgendaShortcuts({ pendingCount, planCount, jump }: {
   readonly pendingCount: number;
   readonly planCount: number | undefined;
   readonly jump: (id: string) => void;
@@ -105,17 +110,25 @@ function TodayOnlyShortcuts({ pendingCount, planCount, jump }: {
   </>;
 }
 
-function useAgendaJump({ page, onReset }: { readonly page: ActionPageControls | undefined; readonly onReset: () => void }) {
+export function useAgendaJump({ page, onReset, onShow }: {
+  readonly page: ActionPageControls | undefined;
+  readonly onReset: () => void;
+  readonly onShow: () => void;
+}) {
   const [jumpId, setJumpId] = useState<string | null>(null);
   const canJump = page?.isSettled !== false;
   useEffect(() => {
-    if (jumpId !== null && canJump && focusSection(jumpId)) setJumpId(null);
-  }, [jumpId, canJump]);
-  return (id: string) => {
+    if (jumpId === null || !canJump || !focusSection(jumpId)) return;
+    onShow();
+    setJumpId(null);
+  }, [jumpId, canJump, onShow]);
+  const jump = (id: string) => {
+    onShow();
     if (canJump && focusSection(id)) return;
     setJumpId(id);
-    onReset();
+    if (!canJump || document.getElementById(id) === null) onReset();
   };
+  return { jump, jumpId };
 }
 
 function JumpLink({ id, children, jump }: { readonly id: string; readonly children: React.ReactNode; readonly jump: (id: string) => void }) {

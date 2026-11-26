@@ -29,9 +29,9 @@ export async function checkPersonalWorkspace(input: {
   const opening = buyerMain.getByRole('button', { name: /^查看详情 HZ09-0001/ });
   await opening.waitFor();
   await peer.goto(new URL(workspace, origin).href);
-  await peerMain.getByText(/HZ09-0502/).first().waitFor();
-  assert.equal(await peerMain.getByText(/HZ09-0001/).count(), 0);
-  assert.equal(await buyerMain.getByText(/HZ09-0502/).count(), 0);
+  await peerMain.getByRole('article', { name: /^HZ09-0502/ }).waitFor();
+  assert.equal(await peerMain.getByRole('article', { name: /^HZ09-0001/ }).count(), 0);
+  assert.equal(await buyerMain.getByRole('article', { name: /^HZ09-0502/ }).count(), 0);
 
   const before = await fulfillment({ page: buyer, origin });
   assert.equal(before.unshippedQty, 10_000);
@@ -52,7 +52,7 @@ export async function checkPersonalWorkspace(input: {
   assert.equal(record.nextFollowUpAt, '2099-01-12T02:00:00.000Z');
   await drawer.waitFor({ state: 'hidden' });
   await buyer.waitForURL((url) => url.pathname === workspace && url.searchParams.get('inbox') === 'scheduled');
-  const scheduled = buyerMain.getByRole('button', { name: /^已约跟进/, pressed: true });
+  const scheduled = buyerMain.getByRole('heading', { name: /^已约跟进/ });
   await scheduled.waitFor();
   await buyerMain.getByText(/2099-01-12 10:00/).first().waitFor();
   await buyer.reload();
@@ -67,10 +67,10 @@ export async function checkPersonalWorkspace(input: {
   await buyer.goto(legacy.href);
   await buyer.waitForURL((url) => url.pathname === workspace && url.searchParams.get('inbox') === 'scheduled'
     && url.searchParams.get('focusId') === 'batch:' + batchId);
-  const card = buyerMain.locator('.today-row').filter({ hasText: 'HZ09-0001' });
+  const card = buyerMain.getByRole('article', { name: /^HZ09-0001/ });
   await card.waitFor();
   assert.equal(await card.count(), 1);
-  await buyerMain.getByRole('listitem').filter({ hasText: 'HZ09-0001' }).and(buyer.locator(':focus')).waitFor();
+  await buyerMain.getByRole('listitem').filter({ has: buyer.getByRole('article', { name: /^HZ09-0001/ }) }).and(buyer.locator(':focus')).waitFor();
   await peer.goto(legacy.href);
   await peerMain.getByText('暂无已约跟进', { exact: true }).waitFor();
   assert.equal(await peerMain.getByText(/HZ09-0001/).count(), 0);
@@ -99,7 +99,7 @@ async function checkScheduledReceipt({ buyer, origin, expectReceiptFailure }: {
   const today = new URL(workspace, origin);
   today.searchParams.set('reasons', 'shipped_not_received');
   await buyer.goto(today.href);
-  const card = buyer.getByRole('main').locator('.today-row').filter({ hasText: 'HZ09-0001' });
+  const card = buyer.getByRole('main').getByRole('article', { name: /^HZ09-0001/ });
   const receipt = card.getByRole('link', { name: /^核对收货 HZ09-0001/ });
   await receipt.waitFor();
   assert.equal(await card.count(), 1);

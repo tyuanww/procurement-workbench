@@ -1,7 +1,7 @@
-import { Button, Flex, Modal, Pagination, Select, Typography } from 'antd';
+import { Button, Flex, Modal, Pagination, Radio, Select, Typography } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import type { ChaseScope, WorkspaceInbox } from './action-query.js';
 import type { FollowUpFilter } from './action-query.js';
 import { focusSection } from './today-focus.js';
@@ -32,23 +32,20 @@ export type ActionPageControls = {
   readonly onRetry: () => void;
 };
 
-export function ActionControls({ page, utilityLinks, isNarrow = false }: {
+export function ActionControls({ page, utilityLinks }: {
   readonly page: ActionPageControls | undefined;
   readonly utilityLinks: ReactNode;
-  readonly isNarrow?: boolean;
 }) {
-  return <div className={isNarrow ? 'today-controls-narrow' : 'today-controls-wide'}>
-    <Flex className="today-touch" gap="small" align="center" wrap>
-      {utilityLinks}
-      {page === undefined || page.inbox === 'scheduled' ? null : <SortControls page={page} />}
-    </Flex>
-  </div>;
+  return <Flex className="today-touch" gap="small" align="center" wrap>
+    {utilityLinks}
+    {page === undefined || page.inbox === 'scheduled' ? null : <SortControls page={page} />}
+  </Flex>;
 }
 
 export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
-  return <Flex className="today-touch" align="center" gap="small" wrap>
+  return <Flex className="today-touch" vertical gap="middle">
     <FactoryCopy page={page} />
-    <ChaseCopyButtons page={page} />
+    <Flex align="center" gap="small" wrap><ChaseCopyButtons page={page} /></Flex>
   </Flex>;
 }
 
@@ -120,20 +117,28 @@ function SortControls({ page }: { readonly page: ActionPageControls }) {
 }
 
 function FactoryCopy({ page }: { readonly page: ActionPageControls }) {
+  const radioName = useId();
   const { factories } = page.paging;
-  const selected = factories.find((factory) => factory.id === page.factoryId) ?? (factories.length === 1 ? factories[0] : undefined);
+  const selectedId = factories.find((factory) => factory.id === page.factoryId)?.id ?? null;
+  const isFiltered = page.isFiltered || page.calendar !== undefined;
   const isDisabled = !page.isSettled || page.isCopying;
-  return (
-    <>
-      <Select<string> aria-label="催单工厂" placeholder="选择催单工厂" value={selected?.id ?? null} size="small" virtual={factories.length > 50}
-        disabled={factories.length === 0 || isDisabled} options={factories.map(({ id, name }) => ({ value: id, label: name }))}
-        onChange={page.onFactory}
-      />
-      <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={isDisabled || selected === undefined} onClick={() => { if (selected !== undefined) page.onCopyChase({ kind: 'factory', id: selected.id }); }}>
-        {page.isFiltered ? '复制该工厂筛选催单' : '复制该工厂催单'}
-      </Button>
-    </>
-  );
+  if (factories.length === 0) return <Typography.Text type="secondary">当前范围没有可催货的工厂</Typography.Text>;
+  const options = factories.map(({ id, name, count }) => ({
+    value: id,
+    label: count === undefined ? name : `${name} · ${count} 批`,
+  }));
+  return <Flex vertical align="start" gap="small">
+    {factories.length > 6
+      ? <Select<string> aria-label="催单工厂" placeholder="选择催单工厂" value={selectedId}
+        showSearch={{ optionFilterProp: 'label' }} virtual={factories.length > 50} disabled={isDisabled}
+        options={options} onChange={page.onFactory} />
+      : <Radio.Group className="today-factory-choices" aria-label="催单工厂" name={radioName} value={selectedId} disabled={isDisabled}>
+        {options.map(({ value, label }) => <Radio key={value} value={value} onChange={() => page.onFactory(value)}>{label}</Radio>)}
+      </Radio.Group>}
+    <Button icon={<CopyOutlined aria-hidden />} disabled={isDisabled || selectedId === null} onClick={() => {
+      if (selectedId !== null) page.onCopyChase({ kind: 'factory', id: selectedId });
+    }}>{isFiltered ? '复制该工厂筛选催单' : '复制该工厂催单'}</Button>
+  </Flex>;
 }
 
 export function ActionPagination({ page }: { readonly page: ActionPageControls }) {

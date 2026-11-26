@@ -74,8 +74,8 @@ async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
 
 async function checkActionBoard(page: Page): Promise<void> {
   const board = page.getByRole('region', { name: '工作台待办' });
-  await board.getByText('UI-DEMO-001', { exact: false }).first().waitFor();
-  await board.getByText('UI-DEMO-002', { exact: false }).first().waitFor();
+  await board.getByRole('article', { name: /^UI-DEMO-001/ }).waitFor();
+  await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
   const pending = board.getByText('UI-DEMO-003', { exact: false }).first();
   await pending.waitFor();
   const task = board.getByRole('button', { name: /确认今日出货/ });
@@ -91,8 +91,8 @@ async function checkActionBoard(page: Page): Promise<void> {
   await pending.waitFor();
   await task.waitFor();
   await views.getByRole('radio', { name: '列表', exact: true }).press('Space');
-  assert.equal(await board.getByText('UI-DEMO-005', { exact: false }).count(), 0);
-  await board.getByRole('button', { name: /筛选与复制催单/ }).click();
+  assert.equal(await board.getByRole('article', { name: /^UI-DEMO-005/ }).count(), 0);
+  await board.getByRole('button', { name: '按工厂催单', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: /复制全部可催/ }).isEnabled(), true);
 }
 

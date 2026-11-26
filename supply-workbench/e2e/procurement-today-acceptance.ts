@@ -28,8 +28,8 @@ export async function checkChaseToday({ page, origin, out }: {
 }) {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: origin.origin });
   await page.goto(new URL('/today?view=board&reasons=unshipped', origin).href);
-  const sampleRows = page.locator('.today-row').filter({ hasText: /HZ09-\d{4}/ });
-  const order = (po: string) => sampleRows.filter({ hasText: po });
+  const sampleRows = page.locator('.today-row').filter({ has: page.getByRole('button', { name: /^查看详情 HZ09-\d{4}/ }) });
+  const order = (po: string) => sampleRows.filter({ has: page.getByRole('button', { name: `查看详情 ${po}`, exact: false }) });
   await order('HZ09-0001').waitFor();
   for (const lane of ['跟进发货', '核对收货', '内部待办']) {
     await page.getByRole('region', { name: lane, exact: true }).waitFor();
@@ -44,7 +44,7 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.equal(await sampleRows.count(), 1);
   await page.screenshot({ path: join(out, 'procurement-last-page.png'), animations: 'disabled' });
 
-  await page.getByRole('button', { name: /筛选与复制催单/ }).click();
+  await page.getByRole('button', { name: '按工厂催单', exact: true }).click();
   const copiedBeforePreview = await clipboardText(page);
   const filteredCopy = page.getByRole('button', { name: /复制当前范围催单/ });
   await filteredCopy.click();
@@ -56,11 +56,20 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.equal(await clipboardText(page), copiedBeforePreview);
   await copyChaseSummary(page, filteredCopy);
   await page.getByRole('status').filter({ hasText: '已复制 501 条催单' }).waitFor();
+  await preview.waitFor({ state: 'hidden' });
   const allText = await clipboardText(page);
   assert.ok(allText.startsWith('【内部催货汇总 · 2 家工厂】'));
   assert.deepEqual(purchaseOrders(allText), sampleOrders(501));
   assert.ok(allText.includes('合成催货甲厂') && allText.includes('合成催货乙厂'));
-  await page.getByRole('button', { name: /复制合成催货甲厂催单/ }).click();
+  const factoryPanel = page.getByRole('region', { name: '工厂催单' });
+  const factoryCopy = factoryPanel.getByRole('button', { name: '复制该工厂筛选催单', exact: true });
+  assert.equal(await factoryCopy.isEnabled(), false);
+  await factoryPanel.getByRole('radio', { name: '合成催货乙厂 · 1 批', exact: true }).waitFor();
+  const factoryOption = { name: '合成催货甲厂 · 500 批', exact: true };
+  await factoryPanel.getByRole('radio', factoryOption).click();
+  await page.waitForURL((url) => url.searchParams.get('chaseFactory') === 'hz09-factory-a' && url.searchParams.get('page') === '11');
+  await factoryPanel.getByRole('radio', { ...factoryOption, checked: true }).waitFor();
+  await factoryCopy.click();
   await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
   const factoryText = await clipboardText(page);
   assert.deepEqual(purchaseOrders(factoryText), sampleOrders(501).filter((po) => po !== 'HZ09-0250'));
@@ -77,14 +86,14 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.goto(bulk);
   await order('HZ09-0501').waitFor();
   await order('HZ09-0001').waitFor();
-  const sorted = await sampleRows.allTextContents();
+  const sorted = await sampleRows.getByRole('button', { name: /^查看详情 HZ09-/ }).evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
   assert.match(sorted[0] ?? '', /HZ09-0501/);
   assert.match(sorted[1] ?? '', /HZ09-0001/);
   assert.equal(await order('HZ09-0002').count(), 0);
   await page.setViewportSize({ width: 320, height: 800 });
   await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
   await page.getByRole('button', { name: '清除筛选', exact: true }).click();
-  await page.getByRole('button', { name: /筛选与复制催单/ }).click();
+  await page.getByRole('button', { name: '筛选', exact: true }).click();
   await page.getByRole('main').getByRole('button', { name: /要催货/ }).click();
   await page.getByRole('status').filter({ hasText: /共\s*501\s*批待催货/ }).waitFor();
   assert.ok(await page.getByRole('region', { name: '工作台待办' }).evaluate((list) => list === document.activeElement));
@@ -102,12 +111,16 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.reload();
   await order('HZ09-0501').getByText(/未发\s+5,000\s+件/).waitFor();
   await order('HZ09-0501').getByText(/在途待收\s+25,000\s+件/).waitFor();
-  assert.match((await sampleRows.first().innerText()), /HZ09-0001/);
+  assert.match((await sampleRows.first().getByRole('button', { name: /^查看详情/ }).getAttribute('aria-label')) ?? '', /HZ09-0001/);
   await checkBatchProgressChart(page, order('HZ09-0501'), out);
   await checkInlineReceiptLink(page, order('HZ09-0501'));
+  await order('HZ09-0501').getByRole('button', { name: /^更多操作 HZ09-0501/ }).click();
+  await page.getByRole('menuitem', { name: '复制本批催单', exact: true }).click();
+  await copied.waitFor();
+  assert.deepEqual(purchaseOrders(await clipboardText(page)), ['HZ09-0501']);
   const memos = arrivalMemos(page);
   const sourceSearch = new URL(page.url()).search;
-  await page.getByRole('button', { name: /筛选与复制催单/ }).click();
+  await page.getByRole('button', { name: '筛选', exact: true }).click();
   await page.getByRole('main').getByRole('link', { name: '在途待收', exact: true }).click();
   await page.getByText(/待收 25,000 件/).waitFor();
   await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
@@ -129,7 +142,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await order('HZ09-0001').waitFor();
   assert.equal(await order('HZ09-0501').count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('button', { name: /筛选与复制催单/ }).click();
+  await page.getByRole('button', { name: '按工厂催单', exact: true }).click();
   await copyChaseSummary(page, page.getByRole('button', { name: /复制当前范围催单/ }));
   await page.getByRole('status').filter({ hasText: '已复制 499 条催单' }).waitFor();
   const after = purchaseOrders(await clipboardText(page));
@@ -152,6 +165,8 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   const list = view.getByRole('radio', { name: '列表', exact: true });
   const kanban = view.getByRole('radio', { name: '看板', exact: true });
   const groups = page.getByRole('radiogroup', { name: '清单分组' });
+  const filters = page.getByRole('button', { name: '筛选', exact: true });
+  await filters.click();
   assert.equal(await view.getByRole('radio').count(), 3);
   assert.equal(await list.isChecked(), true);
   assert.equal(await groups.getByRole('radio', { name: '等待方', exact: true }).isChecked(), true);
@@ -170,11 +185,10 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
 
   await kanban.press('Space');
   await page.waitForURL((url) => url.searchParams.get('view') === 'board' && url.searchParams.get('reasons') === 'unshipped' && url.searchParams.get('page') === '11');
-  await page.getByRole('region', { name: '跟进发货', exact: true }).getByText('HZ09-0501', { exact: false }).first().waitFor();
+  await page.getByRole('region', { name: '跟进发货', exact: true }).getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
   await groups.waitFor({ state: 'hidden' });
   await list.press('Space');
   await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('page') === '11');
-  const filters = page.getByRole('button', { name: '筛选与复制催单', exact: true });
   if (await filters.getAttribute('aria-expanded') !== 'true') await filters.click();
   await groups.getByRole('radio', { name: '日期', exact: true, checked: true }).waitFor({ state: 'attached' });
 }
@@ -321,10 +335,10 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
   readonly row: Locator;
   readonly out: string;
 }) {
-  const shortcuts = page.getByRole('navigation', { name: '我的待办入口', exact: true });
+  const scopes = page.getByRole('navigation', { name: '工作范围', exact: true });
   await page.goto(new URL('/today', origin).href);
-  const scheduled = shortcuts.getByRole('button', { name: /^已约跟进\s*1/ });
-  const filters = page.getByRole('button', { name: '筛选与复制催单', exact: true });
+  const scheduled = scopes.getByRole('button', { name: /^已约跟进\s*1/ });
+  const filters = page.getByRole('button', { name: '筛选', exact: true });
   const due = page.getByRole('button', { name: '到时跟进 1 批', exact: true });
   await scheduled.click();
   await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled' && !url.searchParams.has('unit'));
@@ -372,10 +386,11 @@ export async function checkFirstBatch({ page, origin, buyer, warehouse }: {
   assert.ok(line.ok());
   const { line: { id } } = await line.json();
   assert.equal(typeof id, 'string');
-  const shortcut = page.getByRole('navigation', { name: '我的待办入口' }).getByRole('link', { name: /^待建批次 / });
+  const shortcut = page.getByRole('link', { name: /^待建批次 / });
   const order = page.getByRole('link', { name: '查看订单', exact: true }).and(page.locator('a[href="/lines/' + encodeURIComponent(id) + '"]'));
   for (const filter of ['reasons=unshipped', 'work=factory_chase', 'group=priority&reasons=unshipped']) {
     await page.goto(new URL('/today?' + filter, origin).href);
+    await page.getByRole('button', { name: '筛选', exact: true }).click();
     await shortcut.waitFor();
     assert.equal(await order.count(), 0);
     await shortcut.click();

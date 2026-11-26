@@ -124,7 +124,7 @@ export type TodayPaging = {
   readonly urgent: number;
   readonly reasonCounts: TodayResponse['counts'];
   readonly units: readonly string[];
-  readonly factories: readonly TodayFactory[];
+  readonly factories: readonly (TodayFactory & { readonly count?: number })[];
   readonly followUpCounts?: { readonly due: number; readonly scheduled: number };
   readonly chaseCounts?: { readonly all: number; readonly filtered: number };
   readonly internalNoteCount?: number;

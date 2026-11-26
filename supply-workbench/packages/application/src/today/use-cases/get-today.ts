@@ -225,14 +225,16 @@ function toChaseRow({ item, eligible, line, batch }: {
   };
 }
 
-function chaseSummary({ items, read }: ChaseInput): { readonly factories: readonly TodayFactory[]; readonly ids: ReadonlySet<string> } {
-  const factories = new Map<string, TodayFactory>();
+function chaseSummary({ items, read }: ChaseInput): { readonly factories: TodayPaging['factories']; readonly ids: ReadonlySet<string> } {
+  const factories = new Map<string, TodayFactory & { readonly count: number }>();
   const ids = new Set<string>();
   for (const item of items) {
     const eligible = chaseEligibility(item, read);
     if (eligible === null) continue;
     ids.add(item.id);
-    factories.set(eligible.factory.id, eligible.factory);
+    const { factory } = eligible;
+    const total = factories.get(factory.id)?.count;
+    factories.set(factory.id, { ...factory, count: total === undefined ? 1 : total + 1 });
   }
   return { ids, factories: [...factories.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN') || left.id.localeCompare(right.id)) };
 }
