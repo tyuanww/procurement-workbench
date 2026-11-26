@@ -20,6 +20,7 @@ import { TodayActionSummary } from './TodayActionSummary.js';
 import { ActionAssistant } from './ActionAssistant.js';
 import { TodaySectionNavigation } from './TodaySectionNavigation.js';
 import { focusSection } from './today-focus.js';
+import type { ArrivalsView } from './today-session.js';
 import type { CalendarBusinessDayPreview } from './use-calendar-business-day.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
@@ -37,7 +38,7 @@ export type TodayScreenProps = {
   readonly canRecord?: boolean;
   readonly isInternalWorkVisible?: boolean;
   readonly search?: string;
-  readonly arrivalsView?: { readonly focusBatch: string | null; readonly timing?: ArrivalTiming } | undefined;
+  readonly arrivalsView?: ArrivalsView | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
   readonly arrivalFocusId?: string | null;
   readonly pendingFocusId?: string | null;
@@ -140,7 +141,7 @@ function arrivalsTitle(timing: ArrivalTiming | undefined): string {
   return timing === undefined ? '在途待收' : ARRIVAL_TIMING_TITLES[timing];
 }
 
-function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: NonNullable<TodayScreenProps['arrivalsView']>; readonly search: string }): ReactNode {
+function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: ArrivalsView; readonly search: string }): ReactNode {
   const returnSearch = new URLSearchParams(search).get('actionReturn') ?? '';
   const rows = view.timing === undefined ? memos : memos.filter((memo) => memo.status === view.timing);
   const title = arrivalsTitle(view.timing);
