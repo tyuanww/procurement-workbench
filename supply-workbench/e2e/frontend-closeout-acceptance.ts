@@ -85,10 +85,13 @@ async function checkActionBoard(page: Page): Promise<void> {
   await page.getByRole('heading', { name: '个人工作台', level: 1, exact: true }).waitFor();
   await page.getByRole('heading', { name: '我的行动清单', level: 2, exact: true }).waitFor();
   const switchScope = page.getByRole('button', { name: '切换工作范围', exact: true });
+  await checkQuickMenuDismissal(page, '切换工作范围');
   await switchScope.press('Enter');
+  await page.getByRole('menuitem').and(page.locator(':focus')).waitFor();
   await page.getByRole('menuitem', { name: /^已约跟进/u }).waitFor();
   await page.getByRole('menuitem', { name: /^待分派/u }).waitFor();
   await page.keyboard.press('Escape');
+  await page.getByRole('menuitem', { name: /^已约跟进/u }).waitFor({ state: 'hidden' });
   await switchScope.and(page.locator(':focus')).waitFor();
   const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
   assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['今日事项', '个人工作台']);
@@ -145,6 +148,7 @@ async function checkBatchPriorityFilter(page: Page) {
   await overdue.waitFor();
   await page.setViewportSize({ width: 320, height: 900 });
   const tools = page.getByRole('button', { name: '待办操作', exact: true });
+  await checkQuickMenuDismissal(page, '待办操作');
   await tools.press('Enter');
   await page.getByRole('menuitem', { name: '查看全部待办', exact: true }).press('Enter');
   await undated.waitFor();
@@ -155,6 +159,15 @@ async function checkBatchPriorityFilter(page: Page) {
   await page.setViewportSize({ width: 1920, height: 900 });
   await priority.getByRole('radio', { name: '全部', exact: true }).press('Space');
   await undated.waitFor();
+}
+
+async function checkQuickMenuDismissal(page: Page, label: string) {
+  const trigger = page.getByRole('button', { name: label, exact: true });
+  await trigger.press('Enter');
+  await page.keyboard.press('Escape');
+  await page.locator('.today-workspace-menu').waitFor({ state: 'hidden' });
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+  assert.ok(await trigger.evaluate((button) => button === document.activeElement), `${label}关闭后焦点回到原按钮`);
 }
 
 async function checkTodayLayouts(page: Page, out: string, view: 'action-board' | 'daily-schedule') {

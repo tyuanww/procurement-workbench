@@ -1,4 +1,4 @@
-import { Button, Dropdown, Flex, Modal, Typography } from 'antd';
+import { Button, Flex, Modal, Typography } from 'antd';
 import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import type { TodayWorkFilter } from '@sw/contracts';
 import { useEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from 'react';
@@ -9,6 +9,7 @@ import { isPriorityBatchSelection, PRIORITY_BATCH_REASONS, type WorkspaceFilterS
 import { ChaseCopyDialog } from './ChaseCopyDialog.js';
 import { focusSection } from './today-focus.js';
 import { TodayGrouping } from './TodayGroup.js';
+import { WorkspaceMenu } from './WorkspaceMenu.js';
 
 type CloseAndJump = (jump: () => void) => void;
 
@@ -126,23 +127,15 @@ function CompactActionMenu({ trigger, canChase, onFilter, onChase, preset }: {
   readonly trigger: RefObject<HTMLButtonElement | null>; readonly canChase: boolean; readonly preset: PriorityPreset | null;
   readonly onFilter: () => void; readonly onChase: () => void;
 }) {
-  const [isOpen, setOpen] = useState(false);
   const items = [{ key: 'filter', icon: <FilterOutlined aria-hidden />, label: '筛选待办' }];
   if (preset) items.unshift({ key: 'priority', icon: <FilterOutlined aria-hidden />, label: preset.isActive ? '查看全部待办' : '只看优先批次' });
   if (canChase) items.push({ key: 'chase', icon: <CopyOutlined aria-hidden />, label: '按工厂复制催单' });
-  return <Dropdown autoFocus open={isOpen} onOpenChange={setOpen} trigger={['click']} destroyOnHidden
-    menu={{ className: 'today-workspace-menu', items, onKeyDown: (event) => {
-      // rc-menu already activates the item. A native Enter click would hit the newly focused modal control.
-      if (event.key === 'Enter') event.preventDefault();
-    }, onClick: ({ key }) => {
-      setOpen(false);
-      trigger.current?.focus({ preventScroll: true });
+  return <WorkspaceMenu trigger={trigger} button={{ className: 'today-toolbar-compact', 'aria-label': '待办操作' }}
+    menu={{ items, onClick: ({ key }) => {
       if (key === 'priority' && preset) preset.select(!preset.isActive);
       if (key === 'filter') onFilter();
       if (key === 'chase') onChase();
-    } }}>
-    <Button ref={trigger} className="today-toolbar-compact" aria-label="待办操作" aria-expanded={isOpen} aria-haspopup="menu">操作</Button>
-  </Dropdown>;
+    } }}>操作</WorkspaceMenu>;
 }
 
 function WorkspaceFilterDialog({ draft, onClose, onChange, onApplyFilters, ...props }: ActionToolbarProps & {

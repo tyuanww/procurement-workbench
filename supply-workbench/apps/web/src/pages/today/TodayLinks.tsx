@@ -1,4 +1,4 @@
-import { Button, Dropdown, Typography } from 'antd';
+import { Button, Typography } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -9,6 +9,7 @@ import { PENDING_BATCH_TARGET } from './PendingBatches.js';
 import type { WorkspaceInbox } from './action-query.js';
 import { PLAN_TASK_TARGET } from './TodayAgenda.js';
 import type { MyPlan } from './use-today-plan.js';
+import { WorkspaceMenu } from './WorkspaceMenu.js';
 
 const inboxes: readonly { readonly key: WorkspaceInbox; readonly label: string; readonly unit: string }[] = [
   { key: 'today', label: '今天要办', unit: ' 项' },
@@ -35,24 +36,18 @@ export function TodayLinks(props: TodayLinksProps) {
   const title = inbox === 'today' ? '我的行动清单' : (scopeOptions.find((scope) => scope.key === inbox)?.label ?? '工作范围');
   const titleId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const [isMenuOpen, setMenuOpen] = useState(false);
   const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, props.asOf);
   return <div className="today-workspace-intro">
     <nav className="today-workspace-heading today-touch" aria-label="工作范围">
       <Typography.Title level={2} aria-label={title}>
-        <Dropdown trigger={['click']} autoFocus open={isMenuOpen} onOpenChange={setMenuOpen} destroyOnHidden
-          menu={{ className: 'today-workspace-menu', selectable: true, selectedKeys: [inbox], items: scopeOptions, onClick: ({ key }) => {
+        <WorkspaceMenu trigger={trigger} button={{ type: 'text', 'aria-label': '切换工作范围', 'aria-describedby': titleId }}
+          menu={{ selectable: true, selectedKeys: [inbox], items: scopeOptions, onClick: ({ key }) => {
             const scope = inboxes.find((item) => item.key === key);
-            if (scope === undefined) return;
-            setMenuOpen(false);
-            onInbox(scope.key);
-            trigger.current?.focus({ preventScroll: true });
+            if (scope !== undefined) onInbox(scope.key);
           } }}>
-          <Button ref={trigger} type="text" aria-label="切换工作范围" aria-haspopup="menu" aria-expanded={isMenuOpen} aria-describedby={titleId}>
-            <ScopeCaption id={titleId} title={title} inbox={inbox} />
-            <DownOutlined aria-hidden />
-          </Button>
-        </Dropdown>
+          <ScopeCaption id={titleId} title={title} inbox={inbox} />
+          <DownOutlined aria-hidden />
+        </WorkspaceMenu>
       </Typography.Title>
       {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
     </nav>
