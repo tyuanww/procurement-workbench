@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarLink } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
@@ -164,28 +164,7 @@ async function checkActionListMotion(page: Page) {
     const panel = document.querySelector('.today-list-panel');
     return panel !== null && panel.getBoundingClientRect().width < initialWidth - 20;
   }, initial);
-  const beforeDrag = await width();
-  const handle = await divider.boundingBox();
-  assert.ok(handle);
-  const x = handle.x + handle.width / 2;
-  const y = Math.max(0, handle.y) + 32;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  const assistant = page.locator('.today-action-shortcuts');
-  const assistantWidth = () => assistant.evaluate((element) => element.getBoundingClientRect().width);
-  const beforeAssistant = await assistantWidth();
-  let draggedAssistant: number;
-  try {
-    await page.mouse.move(x - 100, y, { steps: 5 });
-    assert.ok(await width() < beforeDrag - 45, '松开鼠标前应看到清单变窄');
-    draggedAssistant = await assistantWidth();
-    assert.ok(draggedAssistant > beforeAssistant + 45, '松开鼠标前应看到事项助手变宽');
-  } finally {
-    await page.mouse.up();
-  }
-  assert.ok(Math.abs(await assistantWidth() - draggedAssistant) <= 1, '松手后保留两栏留白和助手宽度');
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await divider.dblclick({ position: { x: handle.width / 2, y: 64 } });
+  await checkActionPanelDrag(page, divider);
 
   await selectedRow.locator('.today-row-layout').click({ position: { x: 8, y: 8 } });
   await beam.waitFor();
@@ -196,6 +175,39 @@ async function checkActionListMotion(page: Page) {
   } finally {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
   }
+}
+
+async function checkActionPanelDrag(page: Page, divider: Locator) {
+  // The keyboard transition can still be moving the handle when the first width change is visible.
+  await divider.hover();
+  const handle = await divider.boundingBox();
+  const viewport = page.viewportSize();
+  assert.ok(handle && viewport);
+  const x = handle.x + handle.width / 2;
+  const y = (Math.max(0, handle.y) + Math.min(viewport.height, handle.y + handle.height)) / 2;
+  const beforeDrag = await page.locator('.today-list-panel').evaluate((element) => element.getBoundingClientRect().width);
+  const assistant = page.locator('.today-action-shortcuts');
+  const assistantWidth = () => assistant.evaluate((element) => element.getBoundingClientRect().width);
+  const beforeAssistant = await assistantWidth();
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  let draggedAssistant: number;
+  try {
+    await divider.and(page.locator('.today-split-handle-dragging')).waitFor({ timeout: 2_000 });
+    await page.mouse.move(x - 100, y, { steps: 5 });
+    await page.waitForFunction(({ listWidth, assistantWidth: startAssistantWidth }) => {
+      const list = document.querySelector('.today-list-panel');
+      const helper = document.querySelector('.today-action-shortcuts');
+      return list !== null && helper !== null &&
+        list.getBoundingClientRect().width < listWidth - 45 && helper.getBoundingClientRect().width > startAssistantWidth + 45;
+    }, { listWidth: beforeDrag, assistantWidth: beforeAssistant }, { timeout: 2_000 });
+    draggedAssistant = await assistantWidth();
+  } finally {
+    await page.mouse.up();
+  }
+  assert.ok(Math.abs(await assistantWidth() - draggedAssistant) <= 1, '松手后保留两栏留白和助手宽度');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await divider.dblclick({ position: { x: handle.width / 2, y: 64 } });
 }
 
 async function measureTodayLayout(page: Page) {
