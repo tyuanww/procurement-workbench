@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button, Drawer, Flex } from 'antd';
 import type { OrderLineDetail } from '@sw/contracts';
-import { ApiError, apiErrorMessage } from '../../../shared/api/client.js';
+import { ApiError } from '../../../shared/api/client.js';
 import {
   businessToday,
   canAddBatch,
@@ -12,7 +12,6 @@ import {
   postShipment,
   openBatchActions,
   receiptDraft,
-  recordError,
   RecordForm,
   shipDraft,
   showsRecordEdits,
@@ -56,6 +55,8 @@ export function openRecord(input: {
   input.setParams(new URLSearchParams(writeUrlState(input.search, { drawer: input.drawer, batchId, reportId: input.reportId ?? null })));
 }
 
+type SaveError = { readonly message: string; readonly canRetry: boolean };
+
 function RecordSession(props: {
   readonly detail: OrderLineDetail;
   readonly drawer: 'ship' | 'receipt' | 'create';
@@ -67,8 +68,8 @@ function RecordSession(props: {
   const [warehouses, setWarehouses] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
   const [draft, setDraft] = useState<RecordDraft | null>(() => draftFromQuery({ ...props, warehouses: [] }));
   const [isFirstBatch] = useState(() => props.drawer === 'create' && props.detail.batches.length === 0);
-  const [serverError, setServerError] = useState('');
-  const [isPending, setPending] = useState(false);
+  const { serverError, setServerError, isPending, onSubmit, onClose } = useRecordSave(props);
+  const formId = useId();
   useEffect(() => { if (props.drawer === 'create') void readWarehouses(setWarehouses, setServerError); }, [props.drawer]);
   useEffect(() => {
     if (draft?.kind !== 'create' || draft.receiverPartyId !== '') return;
@@ -82,17 +83,45 @@ function RecordSession(props: {
     setDraft({ ...draft, receiverPartyId: next.receiverPartyId });
   }, [draft, props.detail.line.id, props.detail.line.qtyOrdered, props.detail.line.receiver, warehouses]);
   if (draft === null) return null;
-  const clientError = recordError(draft, businessToday());
-  const error = serverError !== '' ? serverError : clientError;
   return (
-    <Drawer placement="right" size={drawerWidth} open onClose={props.onClose} title={draftTitle(draft)} footer={
-      <Flex justify="flex-end">
-        <Button type="primary" loading={isPending} disabled={isPending || error !== ''} onClick={() => { void submit({ draft, firstBatchOnly: isFirstBatch, setServerError, setPending, onClose: props.onClose, onReload: props.onReload }); }}>确认</Button>
+    <Drawer placement="right" size={drawerWidth} open onClose={onClose} title={draftTitle(draft)} footer={
+      <Flex className="record-form-footer" justify="flex-end" gap="small">
+        <Button onClick={onClose}>取消</Button>
+        <Button type="primary" htmlType="submit" form={formId} loading={isPending} disabled={isPending || serverError?.canRetry === false}>确认</Button>
       </Flex>
     }>
-      <RecordForm draft={draft} error={error} warehouses={warehouses} onChange={(next) => { setServerError(''); setDraft(next); }} />
+      <RecordForm id={formId} draft={draft} error={serverError?.message ?? ''} warehouses={warehouses}
+        onSubmit={() => onSubmit(draft, isFirstBatch)} onChange={(next) => { setServerError(null); setDraft(next); }} />
     </Drawer>
   );
+}
+
+function useRecordSave(props: { readonly onClose: () => void; readonly onReload: () => void }) {
+  const [serverError, setServerError] = useState<SaveError | null>(null);
+  const [isPending, setPending] = useState(false);
+  const isSaving = useRef(false);
+  const isCurrent = useRef(true);
+  useEffect(() => {
+    isCurrent.current = true;
+    return () => { isCurrent.current = false; };
+  }, []);
+  const onClose = () => {
+    isCurrent.current = false;
+    props.onClose();
+  };
+  const onSubmit = (draft: RecordDraft, firstBatchOnly: boolean) => {
+    if (isSaving.current || serverError?.canRetry === false) return;
+    isSaving.current = true;
+    setServerError(null);
+    setPending(true);
+    void submit({ draft, firstBatchOnly, setServerError, onClose: () => {
+      if (isCurrent.current) onClose();
+    }, onReload: props.onReload }).finally(() => {
+      isSaving.current = false;
+      if (isCurrent.current) setPending(false);
+    });
+  };
+  return { serverError, setServerError, isPending, onClose, onSubmit };
 }
 
 function draftFromQuery(input: {
@@ -149,41 +178,45 @@ function shipmentDraft(batch: OrderLineDetail['batches'][number], reportId: stri
 
 async function readWarehouses(
   setWarehouses: (rows: readonly { readonly id: string; readonly name: string }[]) => void,
-  setServerError: (message: string) => void,
+  setServerError: (error: SaveError) => void,
 ) {
   try {
     setWarehouses(await loadBatchReceivers());
   } catch {
     setWarehouses([]);
-    setServerError('收货方没有读出来。');
+    setServerError({ message: '收货方没有读出来。请关闭表单并重新打开。', canRetry: false });
   }
 }
 
 async function submit(input: {
   readonly draft: RecordDraft;
   readonly firstBatchOnly: boolean;
-  readonly setServerError: (message: string) => void;
-  readonly setPending: (isPending: boolean) => void;
+  readonly setServerError: (error: SaveError) => void;
   readonly onClose: () => void;
   readonly onReload: () => void;
 }) {
-  input.setPending(true);
   try {
     await postDraft(input.draft, input.firstBatchOnly);
     input.onClose();
     input.onReload();
   } catch (error) {
     if (isFirstBatchConflict(error)) {
-      input.setServerError('首批次已存在。请关闭表单并核对现有批次。');
+      input.setServerError({ message: '首批次已存在。请关闭表单并核对现有批次。', canRetry: false });
       input.onReload();
       return;
     }
-    const message = apiErrorMessage(error);
-    if (message === undefined) throw error;
-    input.setServerError(message);
-  } finally {
-    input.setPending(false);
+    input.setServerError(saveErrorOf(error));
   }
+}
+
+function saveErrorOf(error: unknown): SaveError {
+  if (error instanceof ApiError && error.code !== 'INTERNAL') {
+    return { message: `${error.message}。请核对并修改后再确认。`, canRetry: false };
+  }
+  const message = error instanceof ApiError
+    ? `${error.message}。已保留填写内容，可以重新确认。`
+    : '暂未收到保存结果。请先核对现有记录，再重新确认。';
+  return { message, canRetry: true };
 }
 
 function isFirstBatchConflict(error: unknown): boolean {

@@ -1,3 +1,4 @@
+import { isLocalDate } from '@sw/domain';
 import { businessTimeZone } from '../../../shared/business-time-zone.js';
 
 const DAY_MS = 86_400_000;
@@ -16,10 +17,14 @@ export function receiptDefaults(input: { readonly plannedQty: number; readonly r
 }
 
 export function receiptErrors(input: { readonly qty: number; readonly receivedOn: string; readonly today: string }): string[] {
-  const errors: string[] = [];
-  if (!(input.qty > 0)) errors.push('数量必须大于 0');
-  if (input.receivedOn > input.today) errors.push('收货日不能晚于今天');
-  return errors;
+  return Object.values(receiptFieldErrors(input)).filter((error) => error !== undefined);
+}
+
+export function receiptFieldErrors(input: { readonly qty: number; readonly receivedOn: string; readonly today: string }) {
+  return {
+    qty: quantityError(input.qty),
+    date: businessDateError(input.receivedOn, '收货日') ?? (input.receivedOn > input.today ? '收货日不能晚于今天' : undefined),
+  };
 }
 
 export function dateChangeErrors(input: { readonly isFirst: boolean; readonly reason: string }): string[] {
@@ -32,10 +37,23 @@ export function shipmentDefaults(input: { readonly plannedQty: number; readonly 
 }
 
 export function shipmentErrors(input: { readonly qty: number; readonly shippedOn: string; readonly today: string }): string[] {
-  const errors: string[] = [];
-  if (!(input.qty > 0)) errors.push('数量必须大于 0');
-  if (Date.parse(input.shippedOn) > Date.parse(input.today) + DAY_MS) errors.push('发货日不能晚于明天');
-  return errors;
+  return Object.values(shipmentFieldErrors(input)).filter((error) => error !== undefined);
+}
+
+export function shipmentFieldErrors(input: { readonly qty: number; readonly shippedOn: string; readonly today: string }) {
+  return {
+    qty: quantityError(input.qty),
+    date: businessDateError(input.shippedOn, '发货日') ?? (Date.parse(input.shippedOn) > Date.parse(input.today) + DAY_MS ? '发货日不能晚于明天' : undefined),
+  };
+}
+
+export function businessDateError(value: string, label: string): string | undefined {
+  if (value === '') return `请填写${label}`;
+  return isLocalDate(value) ? undefined : `请输入有效的${label}（YYYY-MM-DD）`;
+}
+
+function quantityError(value: number): string | undefined {
+  return value > 0 ? undefined : '数量必须大于 0';
 }
 
 export function followUpErrors(input: { readonly text: string }): string[] {

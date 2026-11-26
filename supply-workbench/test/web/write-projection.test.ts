@@ -87,7 +87,7 @@ function showConfirm(role: Role): string {
   return roleMarkup({
     role,
     type: RecordFooter,
-    props: { draft: { kind: 'ship', qty: 1, shippedOn: '2026-11-10' }, hadDate: false, isSaving: false, onSubmit: () => undefined },
+    props: { formId: 'today-ship', isSaving: false, onCancel: () => undefined },
   });
 }
 

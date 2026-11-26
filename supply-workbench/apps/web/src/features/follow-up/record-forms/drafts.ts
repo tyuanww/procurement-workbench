@@ -1,5 +1,5 @@
 import type { ReceiptCategory, ReceiptEvidenceInput, ShipmentEvidenceInput } from '@sw/domain';
-import { receiptDefaults, receiptErrors, shipmentDefaults, shipmentErrors } from './defaults.js';
+import { receiptDefaults, receiptFieldErrors, shipmentDefaults, shipmentFieldErrors } from './defaults.js';
 
 export type ShipDraft = {
   readonly kind: 'ship';
@@ -77,11 +77,20 @@ export function createDraft(input: {
   };
 }
 
-export function recordError(draft: RecordDraft, today: string): string {
-  if (draft.kind === 'create') return createErrors(draft).join('；');
-  const errors = draft.kind === 'ship' ? shipmentErrors({ qty: draft.qty, shippedOn: draft.shippedOn, today }) : receiptErrors({ qty: draft.qty, receivedOn: draft.receivedOn, today });
-  if (draft.fulfillment !== undefined && draft.fulfillment.evidence.trim() === '') return [...errors, '填写可回查的依据'].join('；');
-  return errors.join('；');
+type RecordFieldErrors = {
+  readonly qty?: string | undefined;
+  readonly date?: string | undefined;
+  readonly evidence?: string | undefined;
+  readonly receiver?: string | undefined;
+};
+
+export function recordFieldErrors(draft: Omit<ShipDraft, 'batchId'> | Omit<ReceiptDraft, 'batchId' | 'category'> | CreateDraft, today: string): RecordFieldErrors {
+  if (draft.kind === 'create') return {
+    qty: draft.plannedQty === null || !(draft.plannedQty > 0) ? '数量必须大于 0' : undefined,
+    receiver: draft.receiverPartyId === '' ? '先选择收货方' : undefined,
+  };
+  const errors = draft.kind === 'ship' ? shipmentFieldErrors({ qty: draft.qty, shippedOn: draft.shippedOn, today }) : receiptFieldErrors({ qty: draft.qty, receivedOn: draft.receivedOn, today });
+  return { ...errors, evidence: draft.fulfillment?.evidence.trim() === '' ? '填写可回查的依据' : undefined };
 }
 
 export function draftTitle(draft: RecordDraft | null): string {
@@ -104,11 +113,4 @@ function knownWarehouse(input: {
   if (id === null) return '';
   if (input.warehouses.some((row) => row.id === id)) return id;
   return '';
-}
-
-function createErrors(draft: CreateDraft): readonly string[] {
-  const errors: string[] = [];
-  if (draft.plannedQty === null || !(draft.plannedQty > 0)) errors.push('数量必须大于 0');
-  if (draft.receiverPartyId === '') errors.push('先选择收货方');
-  return errors;
 }

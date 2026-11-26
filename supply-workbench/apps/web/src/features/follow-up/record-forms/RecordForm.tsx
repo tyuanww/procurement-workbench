@@ -1,45 +1,48 @@
-import { Alert, Form, Input, InputNumber, Select } from 'antd';
+import { Input, InputNumber, Select } from 'antd';
 import type { ReceiptDisposition, ReceiptEvidenceInput, ShipmentEvidenceInput } from '@sw/domain';
 import { businessToday } from './defaults.js';
-import { recordError, type ReceiptDraft, type RecordDraft, type ShipDraft } from './drafts.js';
+import { recordFieldErrors, type RecordDraft } from './drafts.js';
+import { RecordField, RecordFormLayout } from './RecordFields.js';
 
-export function RecordForm(props: {
+type Errors = ReturnType<typeof recordFieldErrors>;
+type RecordFormProps = {
+  readonly id: string;
   readonly draft: RecordDraft;
   readonly error: string;
   readonly warehouses: readonly { readonly id: string; readonly name: string }[];
   readonly onChange: (draft: RecordDraft) => void;
-}) {
-  const message = props.error !== '' ? props.error : recordError(props.draft, businessToday());
+  readonly onSubmit: () => void;
+};
+
+export function RecordForm(props: RecordFormProps) {
+  const errors = recordFieldErrors(props.draft, businessToday());
   return (
-    <Form layout="vertical">
-      {message === '' ? null : <Alert type="error" title={message} />}
-      <RecordFields draft={props.draft} warehouses={props.warehouses} onChange={props.onChange} />
-    </Form>
+    <RecordFormLayout id={props.id} invalid={Object.values(errors).some(Boolean)} error={props.error} onSubmit={props.onSubmit}>
+      <RecordFields draft={props.draft} warehouses={props.warehouses} errors={errors} onChange={props.onChange} />
+    </RecordFormLayout>
   );
 }
 
-function RecordFields(props: {
-  readonly draft: RecordDraft;
-  readonly warehouses: readonly { readonly id: string; readonly name: string }[];
-  readonly onChange: (draft: RecordDraft) => void;
-}) {
-  const draft = props.draft;
-  if (draft.kind === 'ship') return <ShipmentFields draft={draft} onChange={props.onChange} />;
-  if (draft.kind === 'receipt') return <ReceiptFields draft={draft} onChange={props.onChange} />;
-  return <CreateFields draft={draft} warehouses={props.warehouses} onChange={props.onChange} />;
+type Change<T extends RecordDraft> = { readonly draft: T; readonly errors: Errors; readonly onChange: (draft: RecordDraft) => void };
+
+function RecordFields({ draft, warehouses, errors, onChange }: Change<RecordDraft> & Pick<RecordFormProps, 'warehouses'>) {
+  if (draft.kind === 'ship') return <ShipmentFields draft={draft} errors={errors} onChange={onChange} />;
+  if (draft.kind === 'receipt') return <ReceiptFields draft={draft} errors={errors} onChange={onChange} />;
+  return <CreateFields draft={draft} warehouses={warehouses} errors={errors} onChange={onChange} />;
 }
 
-function ShipmentFields({ draft, onChange }: { readonly draft: ShipDraft; readonly onChange: (draft: ShipDraft) => void }) {
+function ShipmentFields({ draft, errors, onChange }: Change<Extract<RecordDraft, { kind: 'ship' }>>) {
   const facts = draft.fulfillment;
   const isReported = facts?.kind === 'reported';
   const canSwitch = facts !== undefined && (facts.kind !== 'verified' || facts.reportId === undefined);
   return (
     <>
-      {canSwitch ? <Form.Item label="发货记录类型"><Select<ShipmentEvidenceInput['kind']> aria-label="发货记录类型" value={facts.kind}
+      {canSwitch ? <RecordField label="发货记录类型">{(control) => <Select<ShipmentEvidenceInput['kind']> {...control} value={facts.kind}
         options={[{ value: 'verified', label: '核实实发' }, { value: 'reported', label: '工厂报发待核' }]}
-        onChange={(kind) => onChange({ ...draft, fulfillment: { kind, unit: facts.unit, evidence: '' } })} /></Form.Item> : null}
-      <QtyDate label={isReported ? '报发日期' : '发货日'} qty={draft.qty} date={draft.shippedOn} onQty={(qty) => onChange({ ...draft, qty })} onDate={(shippedOn) => onChange({ ...draft, shippedOn })} />
-      {facts === undefined ? null : <EvidenceFields facts={facts} label={isReported ? '工厂报发来源' : '交运依据'} onChange={(patch) => onChange({ ...draft, fulfillment: { ...facts, ...patch } })} />}
+        onChange={(kind) => onChange({ ...draft, fulfillment: { kind, unit: facts.unit, evidence: '' } })} />}</RecordField> : null}
+      <QtyDate label={isReported ? '报发日期' : '发货日'} errors={errors} qty={draft.qty} date={draft.shippedOn} onQty={(qty) => onChange({ ...draft, qty })} onDate={(shippedOn) => onChange({ ...draft, shippedOn })} />
+      {facts === undefined ? null : <EvidenceFields facts={facts} error={errors.evidence} label={isReported ? '工厂报发来源' : '交运依据'}
+        onChange={(patch) => onChange({ ...draft, fulfillment: { ...facts, ...patch } })} />}
     </>
   );
 }
@@ -50,35 +53,36 @@ const dispositions = [
   { value: 'return', label: '退回待核' },
 ] satisfies ReadonlyArray<{ value: ReceiptDisposition; label: string }>;
 
-function ReceiptFields({ draft, onChange }: { readonly draft: ReceiptDraft; readonly onChange: (draft: ReceiptDraft) => void }) {
+function ReceiptFields({ draft, errors, onChange }: Change<Extract<RecordDraft, { kind: 'receipt' }>>) {
   const facts = draft.fulfillment;
   return (
     <>
-      <QtyDate label="收货日" qty={draft.qty} date={draft.receivedOn} onQty={(qty) => onChange({ ...draft, qty })} onDate={(receivedOn) => onChange({ ...draft, receivedOn })} />
+      <QtyDate label="收货日" errors={errors} qty={draft.qty} date={draft.receivedOn} onQty={(qty) => onChange({ ...draft, qty })} onDate={(receivedOn) => onChange({ ...draft, receivedOn })} />
       {facts === undefined ? null : <>
-        <Form.Item label="收货处置"><Select<ReceiptDisposition> aria-label="收货处置" value={facts.disposition} options={dispositions}
-          onChange={(disposition) => onChange({ ...draft, fulfillment: { ...facts, disposition } })} /></Form.Item>
-        <EvidenceFields facts={facts} label="收货及归批依据" onChange={(patch) => onChange({ ...draft, fulfillment: { ...facts, ...patch } })} />
+        <RecordField label="收货处置">{(control) => <Select<ReceiptDisposition> {...control} value={facts.disposition} options={dispositions}
+          onChange={(disposition) => onChange({ ...draft, fulfillment: { ...facts, disposition } })} />}</RecordField>
+        <EvidenceFields facts={facts} error={errors.evidence} label="收货及归批依据" onChange={(patch) => onChange({ ...draft, fulfillment: { ...facts, ...patch } })} />
       </>}
     </>
   );
 }
 
-type EvidenceFields = Pick<ReceiptEvidenceInput, 'unit' | 'evidence'>;
+type Evidence = Pick<ReceiptEvidenceInput, 'unit' | 'evidence'>;
 
-function EvidenceFields({ facts, label, onChange }: { readonly facts: EvidenceFields; readonly label: string; readonly onChange: (patch: Partial<EvidenceFields>) => void }) {
+function EvidenceFields({ facts, label, error, onChange }: { readonly facts: Evidence; readonly label: string; readonly error: string | undefined; readonly onChange: (patch: Partial<Evidence>) => void }) {
   return <>
-    <Form.Item label="数量单位" extra="单位缺失或与批次计划不同的记录需要核对">
-      <Input aria-label="数量单位" value={facts.unit ?? ''} maxLength={64} onChange={(event) => onChange({ unit: event.target.value })} />
-    </Form.Item>
-    <Form.Item label={label}>
-      <Input aria-label={label} value={facts.evidence} maxLength={1000} onChange={(event) => onChange({ evidence: event.target.value })} />
-    </Form.Item>
+    <RecordField label="数量单位" hint="单位缺失或与批次计划不同的记录需要核对">
+      {(control) => <Input {...control} value={facts.unit ?? ''} maxLength={64} onChange={(event) => onChange({ unit: event.target.value })} />}
+    </RecordField>
+    <RecordField label={label} required error={error}>
+      {(control) => <Input {...control} value={facts.evidence} maxLength={1000} onChange={(event) => onChange({ evidence: event.target.value })} />}
+    </RecordField>
   </>;
 }
 
 function QtyDate(props: {
   readonly label: string;
+  readonly errors: Errors;
   readonly qty: number;
   readonly date: string;
   readonly onQty: (qty: number) => void;
@@ -86,47 +90,36 @@ function QtyDate(props: {
 }) {
   return (
     <>
-      <Form.Item label="数量" style={{ marginBottom: 16 }}>
-        <InputNumber aria-label="数量" value={props.qty} onChange={(value) => props.onQty(numberOf(value))} />
-      </Form.Item>
-      <Form.Item label={props.label} style={{ marginBottom: 16 }}>
-        <Input aria-label={props.label} value={props.date} onChange={(event) => props.onDate(event.target.value)} />
-      </Form.Item>
+      <RecordField label="数量" required error={props.errors.qty}>
+        {(control) => <InputNumber {...control} value={props.qty} onChange={(value) => props.onQty(optionalNumber(value) ?? 0)} />}
+      </RecordField>
+      <RecordField label={props.label} required error={props.errors.date}>
+        {(control) => <Input {...control} placeholder="YYYY-MM-DD" value={props.date} onChange={(event) => props.onDate(event.target.value)} />}
+      </RecordField>
     </>
   );
 }
 
-function CreateFields(props: {
-  readonly draft: Extract<RecordDraft, { readonly kind: 'create' }>;
-  readonly warehouses: readonly { readonly id: string; readonly name: string }[];
-  readonly onChange: (draft: RecordDraft) => void;
-}) {
+function CreateFields({ draft, warehouses, errors, onChange }: Change<Extract<RecordDraft, { kind: 'create' }>> & Pick<RecordFormProps, 'warehouses'>) {
   return (
     <>
-      <Form.Item label="计划数量" style={{ marginBottom: 16 }}>
-        <InputNumber aria-label="计划数量" value={props.draft.plannedQty} onChange={(value) => props.onChange({ ...props.draft, plannedQty: optionalNumber(value) })} />
-      </Form.Item>
-      <Form.Item label="收货方" style={{ marginBottom: 16 }}>
-        <Select
-          aria-label="收货方"
+      <RecordField label="计划数量" required error={errors.qty}>
+        {(control) => <InputNumber {...control} value={draft.plannedQty} onChange={(value) => onChange({ ...draft, plannedQty: optionalNumber(value) })} />}
+      </RecordField>
+      <RecordField label="收货方" required error={errors.receiver}>
+        {(control) => <Select
+          {...control}
           placeholder="选择收货方"
           showSearch={{ optionFilterProp: 'label' }}
-          style={{ width: 160 }}
-          value={props.draft.receiverPartyId === '' ? null : props.draft.receiverPartyId}
-          options={props.warehouses.map((row) => ({ value: row.id, label: row.name }))}
-          onChange={(receiverPartyId) => props.onChange({ ...props.draft, receiverPartyId })}
-        />
-      </Form.Item>
+          value={draft.receiverPartyId === '' ? null : draft.receiverPartyId}
+          options={warehouses.map((row) => ({ value: row.id, label: row.name }))}
+          onChange={(receiverPartyId) => onChange({ ...draft, receiverPartyId })}
+        />}
+      </RecordField>
     </>
   );
-}
-
-function numberOf(value: number | string | null): number {
-  if (typeof value === 'number') return value;
-  return 0;
 }
 
 function optionalNumber(value: number | string | null): number | null {
-  if (typeof value === 'number') return value;
-  return null;
+  return typeof value === 'number' ? value : null;
 }

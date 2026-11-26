@@ -34,8 +34,8 @@ describe('今日抽屉状态写进 URL', () => {
     const draft = draftFor(session);
     expect(draft?.kind).toBe('date');
     if (draft === null) throw new Error('expected draft');
-    const html = render(ActionForm, { draft, hadDate: true, lane: 'finished', onChange: () => undefined, onSubmit: () => undefined });
-    expect(html).toContain('aria-label="确认日"');
+    const html = render(ActionForm, { id: "today-date", draft, hadDate: true, lane: 'finished', onChange: () => undefined, onSubmit: () => undefined });
+    expect(html).toMatch(/<label[^>]+for=[^>]+><span[^>]+>确认日<\/span><\/label>/);
     expect(html).toContain('value="2026-11-10"');
   });
 

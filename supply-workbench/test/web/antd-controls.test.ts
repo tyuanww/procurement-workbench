@@ -35,19 +35,20 @@ describe('页面只用 antd 控件', () => {
   it('今日非记录表单也把确认按钮放在抽屉 footer 里', async () => {
     const drawer = await readFile(path.join(WEB_ROOT, 'src/features/today/TodayDrawer.tsx'), 'utf8');
     const forms = await readFile(path.join(WEB_ROOT, 'src/features/today/TodayForms.tsx'), 'utf8');
-    expect(drawer).toContain('footer={props.draft === null || !canRecord ? null : <RecordFooter');
+    expect(drawer).toContain('footer={draft === null ? null : <RecordFooter');
     expect(forms).not.toContain('>确认</Button>');
     expect(forms).not.toContain('htmlType="submit"');
   });
 });
 
 describe('表单失败时已填内容还在', () => {
-  it('改确认日时缺原因报错，但已填的日期仍渲染在输入框里', () => {
+  it('改确认日首次打开显示必填字段和原值，校验失败后再提示', () => {
     const draft = { kind: 'date' as const, date: '2026-11-10', reason: '' };
     expect(formErrors({ draft, hadDate: true, today: '2026-11-03' })).toEqual(['改已有确认日必须写原因']);
-    const html = render(ActionForm, { draft, hadDate: true, lane: 'finished', onChange: () => undefined, onSubmit: () => undefined });
+    const html = render(ActionForm, { id: "today-date", draft, hadDate: true, lane: 'finished', onChange: () => undefined, onSubmit: () => undefined });
     expect(html).toContain('value="2026-11-10"');
-    expect(html).toContain('改已有确认日必须写原因');
+    expect(html).not.toContain('改已有确认日必须写原因');
+    expect(html).toContain('aria-required="true"');
     expect(html).toContain('ant-input');
     expect(html).toContain('value="2026-11-10"');
   });

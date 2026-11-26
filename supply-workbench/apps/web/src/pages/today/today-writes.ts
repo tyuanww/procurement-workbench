@@ -1,7 +1,7 @@
 import { BatchViewSchema, ExceptionViewSchema, ReceiptViewSchema } from '@sw/contracts';
 import { businessToday, postReceipt, postShipment } from '../../features/follow-up/index.js';
 import { confirmedDateBody, formErrors, localFollowUpTime, saveTodayNote, type BoardItem, type NoteRef, type OpenForm, type Target, type Undo } from '../../features/today/index.js';
-import { apiDelete, apiSend } from '../../shared/api/client.js';
+import { ApiError, apiDelete, apiSend } from '../../shared/api/client.js';
 import { applyNextToday, type TodayLoad } from './today-load.js';
 
 type TodayWriteState = Pick<TodayLoad, 'items' | 'targets' | 'noteRefs'> & {
@@ -60,7 +60,10 @@ async function writeDraft(input: SubmitInput & { readonly ready: SaveInput }): P
     }
     await applyNextToday({ refresh: state.refresh, setNotice: state.setNotice, close });
   } catch (error) {
-    state.setSaveError(error instanceof Error ? error.message : '保存失败');
+    const message = error instanceof ApiError
+      ? `${error.message}。${error.code === 'INTERNAL' ? '已保留填写内容，可以重新确认。' : '请核对填写内容后再确认。'}`
+      : '暂未收到保存结果。请先核对现有记录，再重新确认。';
+    state.setSaveError(message);
   }
 }
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Page, Response } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarLink } from './sidebar.ts';
 
 const workspace = '/today';
@@ -100,11 +100,7 @@ async function checkScheduledReceipt({ buyer, origin }: { readonly buyer: Page; 
   const batches = buyer.getByRole('region', { name: '批次', exact: true });
   await batches.getByText('未发 6,000 件 · 待收 3,000 件 · 实收 1,000 件', { exact: true }).waitFor();
   await batches.getByRole('button', { name: '登记收货', exact: true }).click();
-  const dialog = buyer.getByRole('dialog', { name: '登记收货', exact: true });
-  await dialog.getByRole('spinbutton', { name: '数量', exact: true }).fill('750');
-  await dialog.getByLabel('收货及归批依据', { exact: true }).fill('合成验收·第二车签收');
-  await dialog.getByRole('button', { name: /^确\s*认$/ }).click();
-  await dialog.waitFor({ state: 'hidden' });
+  await checkReceiptRetry(buyer, new URL(batchPath + '/receipts', origin));
   await batches.getByText('未发 6,000 件 · 待收 2,250 件 · 实收 1,750 件', { exact: true }).waitFor();
   await buyer.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await buyer.waitForURL(today.href);
@@ -112,7 +108,35 @@ async function checkScheduledReceipt({ buyer, origin }: { readonly buyer: Page; 
   await buyer.getByRole('button', { name: /^已约跟进/ }).click();
   await card.getByText('下次跟进 · 2099-01-12 10:00', { exact: true }).waitFor();
   assert.equal(await card.getByRole('button', { name: '复制本批催单' }).count(), 0);
-  return { unshipped: 6_000, inTransit: 2_250, received: 1_750, reminderRetainedAfterReceipt: true };
+  return { unshipped: 6_000, inTransit: 2_250, received: 1_750, reminderRetainedAfterReceipt: true, receiptRetryPreserved: true };
+}
+
+async function checkReceiptRetry(buyer: Page, url: URL) {
+  const dialog = buyer.getByRole('dialog', { name: '登记收货', exact: true });
+  const quantity = dialog.getByRole('spinbutton', { name: '数量', exact: true });
+  const date = dialog.getByLabel('收货日', { exact: true });
+  const evidence = dialog.getByLabel('收货及归批依据', { exact: true });
+  const confirmation = dialog.getByRole('button', { name: /^确\s*认$/ });
+  const receivedOn = await date.inputValue();
+  await quantity.fill('750');
+  await evidence.fill('合成验收·第二车签收');
+
+  await buyer.route(url.href, (route) => route.fulfill({ status: 503, json: { error: { code: 'INTERNAL' } } }), { times: 1 });
+  const isReceiptResponse = (response: Response) =>
+    response.url() === url.href && response.request().method() === 'POST';
+
+  const [failure] = await Promise.all([buyer.waitForResponse(isReceiptResponse), confirmation.click()]);
+  assert.equal(failure.status(), 503);
+  await dialog.getByRole('alert').filter({ hasText: '可以重新确认' }).waitFor();
+  assert.equal(await quantity.inputValue(), '750');
+  assert.equal(await date.inputValue(), receivedOn);
+  assert.equal(await evidence.inputValue(), '合成验收·第二车签收');
+  assert.ok(await confirmation.isEnabled());
+
+  const [success] = await Promise.all([buyer.waitForResponse(isReceiptResponse), confirmation.click()]);
+  assert.equal(success.status(), 200);
+  assert.deepEqual(success.request().postDataJSON(), failure.request().postDataJSON());
+  await dialog.waitFor({ state: 'hidden' });
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

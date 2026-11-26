@@ -1,7 +1,6 @@
-import { useId } from 'react';
-import { Alert, Form, Input, Select } from 'antd';
+import { Input, Select } from 'antd';
 import { EXCEPTION_TYPE_LABELS, EXCEPTION_TYPES, FOLLOW_UP_KIND_LABELS, FOLLOW_UP_KINDS, type BatchFulfillment, type ExceptionType, type FollowUpKind, type ReceiptEvidenceInput, type ShipmentEvidenceInput } from '@sw/domain';
-import { businessToday, dateChangeErrors, exceptionErrors, followUpErrors, receiptDefaults, receiptErrors, shipmentDefaults, shipmentErrors, RecordForm, type RecordDraft } from '../../features/follow-up/index.js';
+import { businessDateError, businessToday, dateChangeErrors, exceptionErrors, followUpErrors, receiptDefaults, shipmentDefaults, recordFieldErrors, RecordField, RecordForm, RecordFormLayout, type RecordDraft } from '../../features/follow-up/index.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { followUpInstant, localFollowUpTime } from './follow-up-time.js';
 import type { BoardItem } from './model/types.js';
@@ -36,37 +35,31 @@ export type Undo =
   | { readonly kind: 'ship' | 'note' | 'exception'; readonly id: string; readonly label: string }
   | { readonly kind: 'date'; readonly batchId: string; readonly previous: string | null; readonly label: string };
 
+type SimpleDraft = Exclude<OpenForm, { kind: 'ship' | 'receipt' }>;
+
 export function ActionForm(props: {
+  readonly id: string;
   readonly draft: OpenForm;
   readonly hadDate: boolean;
   readonly lane: 'finished' | 'material';
   readonly onChange: (draft: OpenForm) => void;
   readonly onSubmit: () => void;
 }) {
-  const errors = formErrors({ draft: props.draft, hadDate: props.hadDate, today: businessToday() });
-  const record = recordOf({ draft: props.draft, lane: props.lane });
-  if (record !== null) {
-    return (
-      <>
-        <RecordForm draft={record} error={errors.join('；')} warehouses={[]} onChange={(next) => props.onChange(openOf(next))} />
-      </>
-    );
+  const { draft } = props;
+  if (draft.kind === 'ship' || draft.kind === 'receipt') {
+    const record: RecordDraft = draft.kind === 'ship' ? { ...draft, batchId: '' } : {
+      ...draft, batchId: '', category: props.lane === 'finished' ? 'finished' : 'packaging',
+    };
+    return <RecordForm id={props.id} draft={record} error="" warehouses={[]} onChange={(next) => props.onChange(openOf(next))} onSubmit={props.onSubmit} />;
   }
-  return (
-    <Form layout="vertical">
-      {errors.length === 0 ? null : <Alert style={{ marginBottom: 16 }} type="error" showIcon title={errors.join('；')} />}
-      {props.draft.kind === 'receipt' ? <Alert type="info" showIcon title="工作台登记，不等于 SRM 收货" /> : null}
-      <FormFields draft={props.draft} onChange={props.onChange} />
-    </Form>
-  );
-}
 
-function FormFields(props: { readonly draft: OpenForm; readonly onChange: (draft: OpenForm) => void }) {
-  const draft = props.draft;
-  if (draft.kind === 'date') return <DateFields draft={draft} onChange={props.onChange} />;
-  if (draft.kind === 'ship' || draft.kind === 'receipt') return null;
-  if (draft.kind === 'note') return <NoteFields draft={draft} onChange={props.onChange} />;
-  return <ExceptionFields draft={draft} onChange={props.onChange} />;
+  return (
+    <RecordFormLayout id={props.id} invalid={Object.values(simpleFieldErrors(draft, props.hadDate)).some(Boolean)} onSubmit={props.onSubmit}>
+      {draft.kind === 'date' ? <DateFields draft={draft} hadDate={props.hadDate} onChange={props.onChange} /> : null}
+      {draft.kind === 'note' ? <NoteFields draft={draft} onChange={props.onChange} /> : null}
+      {draft.kind === 'exception' ? <ExceptionFields draft={draft} onChange={props.onChange} /> : null}
+    </RecordFormLayout>
+  );
 }
 
 export function openDraft(input: { readonly id: string; readonly kind: OpenForm['kind']; readonly targets: Readonly<Record<string, Target>>; readonly setFocus: (id: string) => void; readonly setDraft: (draft: OpenForm | null) => void }): void {
@@ -108,31 +101,20 @@ export function confirmedDateBody(input: { readonly hadDate: boolean; readonly d
 }
 
 export function formErrors({ draft, hadDate, today }: { readonly draft: OpenForm; readonly hadDate: boolean; readonly today: string }): string[] {
-  if (draft.kind === 'receipt') return evidenceErrors(draft.fulfillment, receiptErrors({ qty: draft.qty, receivedOn: draft.receivedOn, today }));
-  if (draft.kind === 'ship') return evidenceErrors(draft.fulfillment, shipmentErrors({ qty: draft.qty, shippedOn: draft.shippedOn, today }));
-  if (draft.kind === 'date') return draft.date === '' ? ['请填写确认日'] : dateChangeErrors({ isFirst: !hadDate, reason: draft.reason });
+  const errors = draft.kind === 'receipt' || draft.kind === 'ship' ? recordFieldErrors(draft, today) : simpleFieldErrors(draft, hadDate);
+  return Object.values(errors).filter((error) => error !== undefined);
+}
+
+function simpleFieldErrors(draft: SimpleDraft, hadDate: boolean) {
+  if (draft.kind === 'date') return { date: businessDateError(draft.date, '确认日'), reason: dateChangeErrors({ isFirst: !hadDate, reason: draft.reason })[0] };
   if (draft.kind === 'note') {
-    const errors = followUpErrors({ text: draft.text });
     const local = draft.nextFollowUpLocal;
-    return local === undefined || local === '' || followUpInstant(local) !== null ? errors : [...errors, '请选择有效的业务日期和时间'];
-  }
-  return exceptionErrors({ note: draft.note });
-}
-
-function evidenceErrors(facts: ShipmentEvidenceInput | ReceiptEvidenceInput | undefined, errors: string[]): string[] {
-  return facts?.evidence.trim() === '' ? [...errors, '填写可回查的依据'] : errors;
-}
-
-function recordOf(input: { readonly draft: OpenForm; readonly lane: 'finished' | 'material' }): RecordDraft | null {
-  if (input.draft.kind === 'ship') return { ...input.draft, batchId: '' };
-  if (input.draft.kind === 'receipt') {
     return {
-      ...input.draft,
-      batchId: '',
-      category: input.lane === 'finished' ? 'finished' : 'packaging',
+      text: followUpErrors({ text: draft.text })[0],
+      time: local === undefined || local === '' || followUpInstant(local) !== null ? undefined : '请选择有效的业务日期和时间',
     };
   }
-  return null;
+  return { note: exceptionErrors({ note: draft.note })[0] };
 }
 
 function openOf(draft: RecordDraft): OpenForm {
@@ -141,58 +123,56 @@ function openOf(draft: RecordDraft): OpenForm {
   throw new Error('今日不在这里新增批次');
 }
 
-function DateFields(props: { readonly draft: Extract<OpenForm, { readonly kind: 'date' }>; readonly onChange: (draft: OpenForm) => void }) {
+type Fields<T extends SimpleDraft> = { readonly draft: T; readonly onChange: (draft: OpenForm) => void };
+
+function DateFields({ draft, hadDate, onChange }: Fields<Extract<OpenForm, { kind: 'date' }>> & { readonly hadDate: boolean }) {
+  const errors = simpleFieldErrors(draft, hadDate);
   return (
     <>
-      <Form.Item label="确认日">
-        <Input aria-label="确认日" value={props.draft.date} onChange={(event) => props.onChange({ ...props.draft, date: event.target.value })} />
-      </Form.Item>
-      <Form.Item label="原因">
-        <Input aria-label="原因" value={props.draft.reason} onChange={(event) => props.onChange({ ...props.draft, reason: event.target.value })} />
-      </Form.Item>
+      <RecordField label="确认日" required error={errors.date}>
+        {(control) => <Input {...control} placeholder="YYYY-MM-DD" value={draft.date} onChange={(event) => onChange({ ...draft, date: event.target.value })} />}
+      </RecordField>
+      <RecordField label="原因" required={hadDate} error={errors.reason}>
+        {(control) => <Input {...control} value={draft.reason} onChange={(event) => onChange({ ...draft, reason: event.target.value })} />}
+      </RecordField>
     </>
   );
 }
 
-function NoteFields(props: { readonly draft: Extract<OpenForm, { readonly kind: 'note' }>; readonly onChange: (draft: OpenForm) => void }) {
-  const reminderId = useId();
-  const hintId = useId();
+function NoteFields({ draft, onChange }: Fields<Extract<OpenForm, { kind: 'note' }>>) {
+  const errors = simpleFieldErrors(draft, false);
   return (
     <>
-      <Form.Item label="类型">
-        <Select
-          aria-label="类型"
-          value={props.draft.followKind}
-          options={FOLLOW_UP_KINDS.map((kind) => ({ value: kind, label: FOLLOW_UP_KIND_LABELS[kind] }))}
-          onChange={(followKind) => props.onChange({ ...props.draft, followKind: followKindOf(followKind) })}
-        />
-      </Form.Item>
-      <Form.Item label="内容">
-        <Input aria-label="内容" value={props.draft.text} onChange={(event) => props.onChange({ ...props.draft, text: event.target.value })} />
-      </Form.Item>
-      {props.draft.nextFollowUpLocal === undefined ? null : <Form.Item label="下次跟进时间（选填）" htmlFor={reminderId}
-        extra={<span id={hintId}>工作台时区 {businessTimeZone()}。清空时间可取消本批次提醒。</span>}>
-        <Input id={reminderId} name="nextFollowUpAt" aria-describedby={hintId} type="datetime-local" value={props.draft.nextFollowUpLocal}
-          onChange={(event) => props.onChange({ ...props.draft, nextFollowUpLocal: event.target.value })} />
-      </Form.Item>}
+      <RecordField label="类型">{(control) => <Select
+        {...control}
+        value={draft.followKind}
+        options={FOLLOW_UP_KINDS.map((kind) => ({ value: kind, label: FOLLOW_UP_KIND_LABELS[kind] }))}
+        onChange={(followKind) => onChange({ ...draft, followKind: followKindOf(followKind) })}
+      />}</RecordField>
+      <RecordField label="内容" required error={errors.text}>
+        {(control) => <Input {...control} value={draft.text} onChange={(event) => onChange({ ...draft, text: event.target.value })} />}
+      </RecordField>
+      {draft.nextFollowUpLocal === undefined ? null : <RecordField label="下次跟进时间（选填）" error={errors.time}
+        hint={`工作台时区 ${businessTimeZone()}。清空时间可取消本批次提醒。`}>
+        {(control) => <Input {...control} name="nextFollowUpAt" type="datetime-local" value={draft.nextFollowUpLocal}
+          onChange={(event) => onChange({ ...draft, nextFollowUpLocal: event.target.value })} />}
+      </RecordField>}
     </>
   );
 }
 
-function ExceptionFields(props: { readonly draft: Extract<OpenForm, { readonly kind: 'exception' }>; readonly onChange: (draft: OpenForm) => void }) {
+function ExceptionFields({ draft, onChange }: Fields<Extract<OpenForm, { kind: 'exception' }>>) {
   return (
     <>
-      <Form.Item label="类型">
-        <Select
-          aria-label="类型"
-          value={props.draft.type}
-          options={EXCEPTION_TYPES.map((type) => ({ value: type, label: EXCEPTION_TYPE_LABELS[type] }))}
-          onChange={(type) => props.onChange({ ...props.draft, type: exceptionTypeOf(type) })}
-        />
-      </Form.Item>
-      <Form.Item label="说明">
-        <Input aria-label="说明" value={props.draft.note} onChange={(event) => props.onChange({ ...props.draft, note: event.target.value })} />
-      </Form.Item>
+      <RecordField label="类型">{(control) => <Select
+        {...control}
+        value={draft.type}
+        options={EXCEPTION_TYPES.map((type) => ({ value: type, label: EXCEPTION_TYPE_LABELS[type] }))}
+        onChange={(type) => onChange({ ...draft, type: exceptionTypeOf(type) })}
+      />}</RecordField>
+      <RecordField label="说明" required error={simpleFieldErrors(draft, false).note}>
+        {(control) => <Input {...control} value={draft.note} onChange={(event) => onChange({ ...draft, note: event.target.value })} />}
+      </RecordField>
     </>
   );
 }
