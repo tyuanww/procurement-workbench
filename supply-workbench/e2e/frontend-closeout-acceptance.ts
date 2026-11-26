@@ -170,7 +170,7 @@ async function checkActionListMotion(page: Page) {
   const assistant = page.locator('.today-action-shortcuts');
   const assistantWidth = () => assistant.evaluate((element) => element.getBoundingClientRect().width);
   const beforeAssistant = await assistantWidth();
-  let draggedAssistant = beforeAssistant;
+  let draggedAssistant: number;
   try {
     await page.mouse.move(x - 100, y, { steps: 5 });
     assert.ok(await width() < beforeDrag - 45, '松开鼠标前应看到清单变窄');

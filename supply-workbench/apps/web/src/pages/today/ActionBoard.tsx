@@ -44,7 +44,7 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
   const isList = calendar === undefined && !isKanban(props);
   const animation = useActionListBeam(isList && (page?.inbox ?? 'today') === 'today');
   const main = <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}
-    data-beam-paused={animation.paused}>
+    data-beam-paused={animation.isPaused}>
     <ActionToolbar {...props} motionControl={animation.control} />
     {animation.beam}
     {calendar === undefined ? <div className="today-action-results-body">
@@ -59,14 +59,14 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
 }
 
 function useActionListBeam(enabled: boolean) {
-  const [paused, setPaused] = useState(false);
+  const [isPaused, setPaused] = useState(false);
   if (!enabled) return {};
-  const action = paused ? '播放清单流光' : '暂停清单流光';
+  const action = isPaused ? '播放清单流光' : '暂停清单流光';
   return {
-    paused,
+    isPaused,
     control: <Button className="today-list-beam-control" type="text"
-      icon={paused ? <CaretRightOutlined aria-hidden /> : <PauseOutlined aria-hidden />}
-      aria-label={action} title={action} onClick={() => setPaused((isPaused) => !isPaused)} />,
+      icon={isPaused ? <CaretRightOutlined aria-hidden /> : <PauseOutlined aria-hidden />}
+      aria-label={action} title={action} onClick={() => setPaused((isCurrentlyPaused) => !isCurrentlyPaused)} />,
     beam: <BorderBeam className="today-list-beam" color={brand[600]} duration={4.8} outset={0}>
       <div className="today-list-beam-host" aria-hidden="true" />
     </BorderBeam>,
