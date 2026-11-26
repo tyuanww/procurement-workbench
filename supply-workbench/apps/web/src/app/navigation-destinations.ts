@@ -1,15 +1,10 @@
 import type { NavDestination, NavPath } from '../shared/page-manifest.js';
-import { todayArrivalsPath } from '../features/today/index.js';
 
 export const destinations: Partial<Record<NavPath, readonly NavDestination[]>> = {
   '/progress': [
     { to: '/progress/current', label: '当前进度', aliases: ['/progress'] },
     { to: '/progress/schedule', label: '总排期', aliases: ['/progress?view=schedule'] },
     { to: '/progress/development', label: '新品开发进度', aliases: ['/progress?view=development'] },
-  ],
-  '/today': [
-    { to: '/today', label: '个人工作台', aliases: ['/today/personal'] },
-    { to: todayArrivalsPath, label: '在途待收' },
   ],
   '/dashboard': [
     { to: '/dashboard', label: '卡点' },

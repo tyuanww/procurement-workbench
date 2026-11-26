@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 
 const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
@@ -163,10 +163,16 @@ export async function checkChaseToday({ page, origin, out }: {
   const memos = arrivalMemos(page);
   const sourceSearch = new URL(page.url()).search;
   await page.getByRole('button', { name: '打开菜单', exact: true }).click();
-  await page.getByRole('dialog', { name: '导航' }).getByRole('link', { name: '在途待收', exact: true }).click();
+  const navigation = page.getByRole('dialog', { name: '导航' });
+  assert.equal(await navigation.getByRole('link', { name: '今日事项', exact: true }).getAttribute('href'), '/today');
+  assert.equal(await navigation.getByRole('link', { name: /^(个人工作台|在途待收|今日排期)$/u }).count(), 0);
+  await page.keyboard.press('Escape');
+  await navigation.waitFor({ state: 'hidden' });
+  const tabs = page.getByRole('tablist', { name: '今日事项视图' });
+  await page.getByRole('group', { name: '行动摘要' }).getByRole('button', { name: /^在途待收/u }).press('Enter');
+  await tabs.getByRole('tab', { name: '在途待收', selected: true }).and(page.locator(':focus')).waitFor();
   await page.getByText(/待收 25,000 件/).waitFor();
-  await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
-  await page.waitForURL((url) => url.pathname === '/today' && url.search === sourceSearch);
+  await checkTodayTabHistory({ page, sourceSearch, memo: memos.getByRole('link', { name: /查看批次 HZ09-0501/u }) });
   const scheduled = await recordFollowUp(page, order('HZ09-0501'), '2099-01-11T10:00', '明早十点再联系供应商');
   assert.equal(scheduled.nextFollowUpAt, '2099-01-11T02:00:00.000Z');
   await page.getByRole('button', { name: /切换工作范围$/u }).click();
@@ -313,6 +319,38 @@ function arrivalMemos(page: Page): Locator {
   return page.locator('section').filter({ has: page.getByRole('heading', { name: '待收批次', exact: true }) }).last();
 }
 
+async function checkTodayTabHistory({ page, sourceSearch, memo }: { readonly page: Page; readonly sourceSearch: string; readonly memo: Locator }) {
+  const tabs = page.getByRole('tablist', { name: '今日事项视图' });
+  const action = tabs.getByRole('tab', { name: /行动板$/u });
+  const schedule = tabs.getByRole('tab', { name: /今日排期$/u });
+  const selectedArrival = tabs.getByRole('tab', { name: /在途待收$/u, selected: true });
+  const actionAt = (url: URL) => url.pathname === '/today' && url.search === sourceSearch;
+  const arrivalUrl = page.url();
+  await schedule.click();
+  await schedule.and(page.locator('[aria-selected="true"]')).waitFor();
+  const scheduleUrl = page.url();
+  await page.goBack();
+  await page.waitForURL(arrivalUrl);
+  await selectedArrival.waitFor();
+  await memo.focus();
+  await page.goBack();
+  await page.waitForURL(actionAt);
+  const selectedAction = action.and(page.locator('[aria-selected="true"]'));
+  await selectedAction.waitFor();
+  if (!new URLSearchParams(sourceSearch).has('focusId')) await selectedAction.and(page.locator(':focus')).waitFor();
+  await page.getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
+  await page.goForward();
+  await page.waitForURL(arrivalUrl);
+  await selectedArrival.waitFor();
+  await memo.waitFor();
+  await page.goForward();
+  await page.waitForURL(scheduleUrl);
+  await schedule.and(page.locator('[aria-selected="true"]')).waitFor();
+  await page.getByRole('heading', { name: '今日排期', level: 1, exact: true }).waitFor();
+  await action.click();
+  await page.waitForURL(actionAt);
+}
+
 async function checkBatchProgressChart(page: Page, row: Locator, out: string): Promise<void> {
   const trigger = row.getByRole('button', { name: /^查看详情 HZ09-0501/ });
   await trigger.press('Enter');
@@ -375,6 +413,7 @@ export async function checkKeyboardReceipt({ page, origin, out }: {
   await page.getByText(/实收登记.*12,000 件.*合成收货单 A/).waitFor();
   await page.screenshot({ path: join(out, 'procurement-partial-receipt.png'), animations: 'disabled' });
   await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
+  await page.getByRole('tab', { name: '在途待收', selected: true }).waitFor();
   await batchLink.and(page.locator(':focus')).waitFor();
 
   await page.goto(today.href);

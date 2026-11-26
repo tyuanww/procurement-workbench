@@ -97,7 +97,7 @@ async function procurementAcceptance(): Promise<void> {
   await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
   const directorMenu = manager.locator('aside');
   const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
-  const today = await sidebarLink(directorMenu, '今日事项', '个人工作台');
+  const today = directorMenu.getByRole('link', { name: '今日事项', exact: true });
   const todayBox = await today.boundingBox();
   assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);

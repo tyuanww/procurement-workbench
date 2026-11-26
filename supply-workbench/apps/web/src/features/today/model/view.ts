@@ -4,6 +4,7 @@ import type { GroupMode } from './types.js';
 export const todayArrivalsPath = '/today?view=arrivals';
 
 export type ArrivalTiming = 'overdue' | 'due_today';
+export type ArrivalsView = { readonly focusBatch: string | null; readonly timing?: ArrivalTiming };
 
 export function arrivalShortcutPath({ timing, returnSearch }: { readonly timing?: ArrivalTiming; readonly returnSearch: string }) {
   const path = new URLSearchParams();

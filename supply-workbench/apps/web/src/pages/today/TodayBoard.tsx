@@ -1,11 +1,10 @@
-import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { Button, Card, Empty, Flex, Modal, Result, Typography } from 'antd';
+import { Button, Card, Empty, Modal, Result, Typography } from 'antd';
 import { useCallback, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
 import {
-  ArrivalMemos, TodayDrawer, arrivalShortcutPath, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf,
+  ArrivalMemos, TodayDrawer, arrivalShortcutPath, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf, type ArrivalsView,
   type ActionDetail, type ArrivalTiming, type BoardRow, type GroupMode, type OpenForm, type PlanLoad, type QuickAction, type ReceiptWork, type TodayBoard,
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
@@ -29,6 +28,7 @@ import type { WorkspaceFilterSelection, WorkspaceInbox } from './action-query.js
 const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
 const ACTION_HELP = `${NAVIGATION_HELP}，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭`;
 const SCHEDULE_HELP = `${NAVIGATION_HELP}，? 帮助，Esc 关闭`;
+const ARRIVAL_TIMING_TITLES = { overdue: '到仓逾期', due_today: '今日应到' } satisfies Record<ArrivalTiming, string>;
 
 export type TodayScreenProps = {
   readonly asOf?: TodayResponse['asOf'] | undefined;
@@ -37,7 +37,7 @@ export type TodayScreenProps = {
   readonly canRecord?: boolean;
   readonly isInternalWorkVisible?: boolean;
   readonly search?: string;
-  readonly arrivalsView?: { readonly focusBatch: string | null; readonly timing?: ArrivalTiming } | undefined;
+  readonly arrivalsView?: ArrivalsView | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
   readonly arrivalFocusId?: string | null;
   readonly pendingFocusId?: string | null;
@@ -81,18 +81,21 @@ export type TodayScreenProps = {
 };
 
 export function TodayScreen(props: TodayScreenProps): ReactNode {
-  const view = todayViewOf(props.board.group);
-  if (props.arrivalsView === undefined) return <section className="today-workspace-screen" style={screenStyle()}>
+  const view = props.arrivalsView === undefined ? todayViewOf(props.board.group) : 'arrivals';
+  const title = { action: '个人工作台', arrivals: arrivalsTitle(props.arrivalsView?.timing), schedule: '今日排期' }[view];
+  return <section className="today-workspace-screen" style={screenStyle()}>
     <style>{todayMotionCss()}</style>
-    <PageHeader title={view === 'schedule' ? '今日排期' : '个人工作台'} />
+    <PageHeader title={title} />
     <TodaySectionNavigation view={view} search={props.search ?? ''}>
-      <WorkspaceBody {...props} />
+      <TodayContent {...props} />
     </TodaySectionNavigation>
   </section>;
-  if (!props.isReady || props.loadError !== '') return <section style={screenStyle()}>
-    <PageHeader title="在途待收" />
-    {props.isReady ? <TodayError {...props} /> : <TodayLoadingCard label="正在读取在途待收" />}
-  </section>;
+}
+
+function TodayContent(props: TodayScreenProps): ReactNode {
+  if (props.arrivalsView === undefined) return <WorkspaceBody {...props} />;
+  if (!props.isReady) return <TodayLoadingCard label="正在读取在途待收" />;
+  if (props.loadError !== '') return <TodayError {...props} />;
   return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
 }
 
@@ -133,22 +136,21 @@ function ShortcutHelp({ isOpen, isNavigationOnly, onClose }: { readonly isOpen: 
   </Modal>;
 }
 
-function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: NonNullable<TodayScreenProps['arrivalsView']>; readonly search: string }): ReactNode {
+function arrivalsTitle(timing: ArrivalTiming | undefined): string {
+  return timing === undefined ? '在途待收' : ARRIVAL_TIMING_TITLES[timing];
+}
+
+function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: ArrivalsView; readonly search: string }): ReactNode {
   const returnSearch = new URLSearchParams(search).get('actionReturn') ?? '';
-  const returnPath = returnSearch === '' ? '/today' : '/today?' + new URLSearchParams(returnSearch);
   const rows = view.timing === undefined ? memos : memos.filter((memo) => memo.status === view.timing);
-  const title = view.timing === 'overdue' ? '到仓逾期' : view.timing === 'due_today' ? '今日应到' : '在途待收';
-  return <section style={screenStyle()}>
-    <style>{todayMotionCss()}</style>
-    <PageHeader title={title} />
-    <Flex align="center" gap="small" wrap><Link to={returnPath}>返回个人工作台</Link>
-      {view.timing === undefined ? null : <Link to={arrivalShortcutPath({ returnSearch })}>查看全部在途</Link>}<ProcurementCutoff />
-    </Flex>
+  const title = arrivalsTitle(view.timing);
+  return <>
+    {view.timing === undefined ? null : <Link style={{ alignSelf: 'flex-start' }} to={arrivalShortcutPath({ returnSearch })}>查看全部在途</Link>}
     <Card size="small">
       {rows.length === 0 ? <Empty description={`当前没有${title}批次。`} />
         : <ArrivalMemos memos={rows} today={{ focusBatch: view.focusBatch, title: view.timing === undefined ? '待收批次' : title }} />}
     </Card>
-  </section>;
+  </>;
 }
 
 function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<string, ReceiptWork> }): ReactNode {

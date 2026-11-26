@@ -50,6 +50,7 @@ it.each([
 
 it.each([
   ['/home', ['首页']],
+  ['/today?view=arrivals', ['今日事项', '在途待收']],
   ['/today?group=owner', ['今日事项', '今日排期']],
   ['/progress/current?store=dafuyan', ['管理店铺', '当前进度']],
   ['/progress?view=schedule', ['管理店铺', '总排期']],

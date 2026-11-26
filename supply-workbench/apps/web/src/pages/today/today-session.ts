@@ -1,12 +1,11 @@
-import { isPlanGroupMode, readGroup, type GroupMode, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
-import type { TodayScreenProps } from './TodayBoard.js';
+import { isPlanGroupMode, readGroup, type ArrivalsView, type GroupMode, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
 import { startTransition, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { actionPageParams, type WorkspaceView } from './action-query.js';
 import { openQuick } from './today-open.js';
 
-export function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly workspaceView: WorkspaceView; readonly arrivalsView: TodayScreenProps['arrivalsView'] } {
+export function screenView(params: URLSearchParams): { readonly group: GroupMode; readonly workspaceView: WorkspaceView; readonly arrivalsView: ArrivalsView | undefined } {
   if (params.get('view') === 'arrivals') {
     const timing = params.get('timing');
     return { group: 'waiting', workspaceView: 'list', arrivalsView: { focusBatch: params.get('focusBatch'), ...(timing === 'overdue' || timing === 'due_today' ? { timing } : {}) } };
