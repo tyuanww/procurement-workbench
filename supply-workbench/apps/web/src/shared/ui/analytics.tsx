@@ -54,7 +54,7 @@ export function MetricStrip(input: { readonly items: readonly MetricItem[]; read
 function MetricCard(input: { readonly item: MetricItem; readonly isCompact: boolean }): ReactNode {
   if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} isCompact={input.isCompact} />;
   return (
-    <Card size="small" styles={{ body: { padding: space[2] } }} style={{ width: '100%', borderTop: metricBorder(input.item) }}>
+    <Card size="small" styles={{ body: { padding: `var(--metric-padding, ${space[2]}px)` } }} style={{ width: '100%', borderTop: metricBorder(input.item) }}>
       <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
       <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
       {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
@@ -65,7 +65,7 @@ function MetricCard(input: { readonly item: MetricItem; readonly isCompact: bool
 function MetricButton({ item, action, isCompact }: { readonly item: MetricItem; readonly action: NonNullable<MetricItem['action']>; readonly isCompact: boolean }): ReactNode {
   return (
     <Button block aria-pressed={action.isActive} onClick={action.select} style={{
-      display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: isCompact ? space[1] : space[2],
+      display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: `var(--metric-padding, ${isCompact ? space[1] : space[2]}px)`,
       borderTop: metricBorder(item),
       background: action.isActive ? brand[100] : bg.surface,
       borderInlineColor: action.isActive ? brand[600] : border, borderBottomColor: action.isActive ? brand[600] : border,

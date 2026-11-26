@@ -36,8 +36,8 @@ export function makeGetToday(deps: GetTodayDeps): GetToday {
 
 type Projected = TodayRead['projected'][number];
 
-function readInboxes(read: TodayRead) {
-  return projectInboxes({ projected: read.projected, sources: read.sources, actorId: read.actor.id, memos: readArrivals(read),
+function readInboxes(read: TodayRead, memos = readArrivals(read)) {
+  return projectInboxes({ projected: read.projected, sources: read.sources, actorId: read.actor.id, memos,
     ctx: { today: read.asOf, now: Date.parse(read.now), settings: read.settings } });
 }
 
@@ -79,7 +79,7 @@ function responseOf({ read, matched, shown, memos = readArrivals(read), includeP
 }
 
 function pageOf({ read, input, timeZone }: { readonly read: TodayRead; readonly input: TodayPageQuery; readonly timeZone: string }): TodayPageResponse {
-  const { items, chaseScope, followUpCounts, extras, memos, scheduledForCalendar } = pageScope({ read, input, timeZone });
+  const { items, chaseScope, followUpCounts, extras, memos, scheduledForCalendar, internalNotes } = pageScope({ read, input, timeZone });
   const { candidates, matched, reasonCounts, calendar } = matchPage({ items, input, read, timeZone });
   const scheduledDays = calendar !== undefined && scheduledForCalendar !== undefined
     ? calendarOf({ candidates: scheduledForCalendar, date: calendar.date, asOf: read.asOf, timeZone }).view.days
@@ -104,7 +104,7 @@ function pageOf({ read, input, timeZone }: { readonly read: TodayRead; readonly 
         all: chaseScope.filter((item) => chaseEligibility(item, read) !== null).length,
         filtered: chase.ids.size,
       },
-      internalNoteCount: items.filter(isInternalNote).length,
+      internalNoteCount: internalNotes.filter(isInternalNote).length,
       chaseItemIds: shown.filter((item) => chase.ids.has(item.id)).map((item) => item.id),
       ...(calendar === undefined ? {} : { calendar: { ...calendar, ...(scheduledDays === undefined ? {} : { scheduledDays }) } }),
       ...extras,
@@ -116,19 +116,20 @@ function pageScope({ read, input, timeZone }: { readonly read: TodayRead; readon
   const { inbox } = input;
   if (inbox === undefined) {
     const counts = countsOf(read.projected);
-    return { items: read.projected, chaseScope: read.projected, extras: {}, memos: () => readArrivals(read), scheduledForCalendar: undefined,
+    return { items: read.projected, chaseScope: read.projected, extras: {}, memos: () => readArrivals(read), scheduledForCalendar: undefined, internalNotes: read.projected,
       followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled } };
   }
-  const inboxes = readInboxes(read);
+  const arrivals = readArrivals(read);
+  const inboxes = readInboxes(read, arrivals);
   const { today, scheduled, unassigned } = inboxes.rows;
-  const extras: Pick<TodayPaging, 'inboxCounts' | 'unassignedReviewCount' | 'pendingCount' | 'focusInbox' | 'focusDay' | 'focusWork'> = {
-    inboxCounts: { today: today.length, scheduled: scheduled.length, unassigned: unassigned.length },
+  const extras: Pick<TodayPaging, 'inboxCounts' | 'unassignedReviewCount' | 'pendingCount' | 'arrivalCount' | 'focusInbox' | 'focusDay' | 'focusWork'> = {
+    inboxCounts: { today: today.length, scheduled: scheduled.length, unassigned: unassigned.length }, arrivalCount: arrivals.length,
     unassignedReviewCount: unassigned.filter((item) => item.subject === 'review').length,
     ...(read.pending === undefined ? {} : { pendingCount: read.pending.length }),
     ...inboxFocus({ current: inbox, inboxes, focusId: input.focusId, asOf: read.asOf, timeZone }),
   };
   return {
-    items: inboxCandidates(inboxes, { ...input, inbox }), chaseScope: inbox === 'today' ? today : [], extras,
+    items: inboxCandidates(inboxes, { ...input, inbox }), chaseScope: inbox === 'today' ? today : [], internalNotes: inboxes.rows[inbox], extras,
     scheduledForCalendar: inbox === 'today' && input.calendarFollowUps === true ? scheduled : undefined,
     followUpCounts: { due: today.filter((item) => item.reasons.includes('follow_up_due')).length, scheduled: scheduled.length },
     memos: (shown: readonly Projected[]) => inbox === 'scheduled' ? [] : shown.flatMap((item) => {

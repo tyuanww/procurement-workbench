@@ -1,12 +1,12 @@
 import type { CSSProperties } from 'react';
-import { bg, border, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
+import { bg, border, brand, fontSize, radiusCard, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import type { RowFace } from './model/types.js';
 import { todayRowCss } from './today-row-style.js';
 
-const [tiny, small, , regular] = space;
+const [tiny, small, medium, regular] = space;
 
 export function screenStyle(): CSSProperties {
-  return { display: 'flex', flexDirection: 'column', gap: regular, background: bg.page };
+  return { display: 'flex', flexDirection: 'column', gap: `var(--today-workspace-gap, ${regular}px)`, background: bg.page };
 }
 
 export function rowStyle(input: { readonly isFocused: boolean; readonly isFading: boolean }): CSSProperties {
@@ -62,6 +62,20 @@ const todayWorkspaceCss = `
       margin-inline: auto;
     }
     .today-workspace-intro { display: grid; gap: ${small}px; }
+    .today-section-switch .ant-segmented { box-shadow: inset 0 0 0 1px ${border}; }
+    .today-action-summary .ant-btn > span > strong { line-height: 1.12; }
+    .today-actions-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: stretch; }
+    .today-actions-layout > *, .today-action-shortcuts { min-inline-size: 0; }
+    .today-action-shortcuts { display: grid; }
+    .today-action-shortcuts .ant-btn { text-align: start; justify-content: flex-start; block-size: auto; white-space: normal; }
+    .today-actions-layout .today-priority-list:not(:empty) { gap: 0; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
+    .today-actions-layout .today-priority-list > li + li { border-block-start: 1px solid ${border}; }
+    .today-actions-layout .today-priority-list .today-work-card { border: 0; }
+    .today-row-title > .ant-btn { color: inherit; padding: 0; block-size: auto; text-align: start; white-space: normal; font: inherit; }
+    .today-row-title > .ant-btn:is(:hover, :focus-visible) { text-decoration: underline; }
+    @container today-action (min-width: 62rem) {
+      .today-actions-layout:has(> .today-action-shortcuts) { grid-template-columns: minmax(0, 1fr) minmax(12rem, 17%); }
+    }
     .today-workspace-heading, .today-workspace-scopes { display: flex; align-items: safe center; flex-wrap: wrap; }
     .today-workspace-heading { gap: ${small}px ${regular}px; }
     .today-workspace-heading > .ant-typography { margin: 0; }
@@ -92,6 +106,10 @@ const todayWorkspaceCss = `
     }
     @container today-workspace (max-width: 28rem) {
       .today-workspace-scopes > .ant-btn { min-block-size: 44px; min-inline-size: 44px; block-size: auto; }
+      .today-action-summary { --metric-padding: ${tiny}px 2px; }
+    }
+    @media (max-width: 22rem) {
+      .today-workspace-screen { --today-workspace-gap: ${medium}px; }
     }
     @container today-action (max-width: 26rem) {
       .today-toolbar-main, .today-toolbar-buttons { gap: ${tiny}px; }

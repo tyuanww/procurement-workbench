@@ -11,11 +11,14 @@ import {
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { ActionPageControls } from './ActionControls.js';
 import { ActionBoard, isActionFiltered, type ActionBoardProps, type ActionLane } from './ActionBoard.js';
-import { PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendingBatches } from './PendingBatches.js';
+import { PENDING_BATCH_TARGET, PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendingBatches } from './PendingBatches.js';
 import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
-import { arrivalWork, planTaskCards } from './TodayAgenda.js';
+import { PLAN_TASK_TARGET, arrivalWork, planTaskCards } from './TodayAgenda.js';
 import { TodayAgendaShortcuts, TodayLinks, useAgendaJump } from './TodayLinks.js';
+import { TodayActionShortcuts, TodayActionSummary } from './TodayActionSummary.js';
+import { TodaySectionNavigation } from './TodaySectionNavigation.js';
+import { focusSection } from './today-focus.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
 import type { WorkspaceFilterSelection, WorkspaceInbox } from './action-query.js';
@@ -61,6 +64,7 @@ export type TodayScreenProps = {
   readonly isReady: boolean;
   readonly loadError: string;
   readonly onApplyFilters?: (selection: WorkspaceFilterSelection) => void;
+  readonly onOpenArrivals?: (path: string) => void;
   readonly onGroup: (group: GroupMode) => void;
   readonly onOpen: (id: string) => void;
   readonly onQuick: (input: { readonly id: string; readonly kind: QuickAction['kind'] }) => void;
@@ -73,27 +77,22 @@ export type TodayScreenProps = {
 };
 
 export function TodayScreen(props: TodayScreenProps): ReactNode {
-  const title = props.arrivalsView === undefined ? '个人工作台' : '在途待收';
-  if (props.arrivalsView === undefined && todayViewOf(props.board.group) === 'schedule') return <TodayReady {...props} />;
-  if (!props.isReady) return <TodayLoading title={title} />;
-  if (props.loadError !== '') return <TodayError {...props} title={title} />;
-  return <TodayReady {...props} />;
+  const view = todayViewOf(props.board.group);
+  if (props.arrivalsView === undefined) return <section className="today-workspace-screen" style={screenStyle()}>
+    <style>{todayMotionCss()}</style>
+    <PageHeader title={view === 'schedule' ? '今日排期' : '个人工作台'} />
+    <TodaySectionNavigation view={view} search={props.search ?? ''} />
+    <WorkspaceBody {...props} />
+  </section>;
+  if (!props.isReady || props.loadError !== '') return <section style={screenStyle()}>
+    <PageHeader title="在途待收" />
+    {props.isReady ? <TodayError {...props} /> : <Skeleton active paragraph={{ rows: 8 }} />}
+  </section>;
+  return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
 }
 
-function TodayLoading({ title }: { readonly title: string }): ReactNode {
-  return (
-    <section style={screenStyle()}>
-      <PageHeader title={title} />
-      <Skeleton active paragraph={{ rows: 8 }} />
-    </section>
-  );
-}
-
-function TodayError(props: TodayScreenProps & { readonly title: string }): ReactNode {
-  return (
-    <section style={screenStyle()}>
-      <PageHeader title={props.title} />
-      <Result
+function TodayError(props: TodayScreenProps): ReactNode {
+  return <Result
         status="error"
         title={props.arrivalsView === undefined ? '个人工作台没有读出来' : '在途待收没有读出来'}
         subTitle={props.loadError}
@@ -101,25 +100,21 @@ function TodayError(props: TodayScreenProps & { readonly title: string }): React
           <Button key="retry" type="primary" onClick={props.onRetry}>重试</Button>,
           <Button key="back" onClick={props.onBack}>返回</Button>,
         ]}
-      />
-    </section>
-  );
+      />;
 }
 
-function TodayReady(props: TodayScreenProps): ReactNode {
-  const view = todayViewOf(props.board.group);
-  if (props.arrivalsView !== undefined) return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
-  const isSchedule = view === 'schedule';
+function WorkspaceBody(props: TodayScreenProps): ReactNode {
+  const isSchedule = todayViewOf(props.board.group) === 'schedule';
+  if (!isSchedule && !props.isReady) return <Skeleton active paragraph={{ rows: 8 }} />;
+  if (!isSchedule && props.loadError !== '') return <TodayError {...props} />;
   const receipts = workspaceReceipts(props);
   return (
-    <section className={isSchedule ? undefined : 'today-workspace-screen'} style={screenStyle()}>
-      <style>{todayMotionCss()}</style>
-      <PageHeader title={isSchedule ? '今日排期' : '个人工作台'} />
+    <>
       {isSchedule ? <SchedulePane {...props} /> : <ActionPane {...props} receipts={receipts} />}
       <PageDrawers {...props} receipt={props.drawerId === null ? undefined : receipts.get(props.drawerId)} />
       <ShortcutHelp isOpen={props.isHelpOpen} isNavigationOnly={isSchedule || props.canRecord === false} onClose={props.onCloseHelp ?? noop} />
       <div role="status" style={helpStyle()}>{props.notice}</div>
-    </section>
+    </>
   );
 }
 
@@ -162,27 +157,54 @@ function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<s
     onChanged: props.onPendingBatchChanged,
   });
   const display = actionDisplay(props);
+  const overview = actionOverview({ props, inbox, jump });
   return <>
     <TodayLinks page={page} asOf={props.asOf}
       myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />
+    {overview.metrics}
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
     <ActionBoard {...props} {...navigation} page={page} receiptOf={(id) => receipts.get(id)}
       internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
       internalPagination={<PendingBatchPagination view={pending} />} {...display}
-      utilityLinks={actionDestinations({ inbox, pendingCount: pending.total, page, myPlan: props.myPlan, jump })} />
+      shortcuts={overview.shortcuts}
+      utilityLinks={actionDestinations({ inbox, pendingCount: pending.total, page, myPlan: props.myPlan, jump, hasPlanShortcut: overview.shortcuts !== undefined, hasPendingSummary: overview.metrics !== undefined })} />
   </>;
 }
 
-function actionDestinations({ inbox, pendingCount, page, myPlan, jump }: {
+function actionOverview({ props, inbox, jump }: { readonly props: TodayScreenProps; readonly inbox: WorkspaceInbox; readonly jump: (id: string) => void }) {
+  const { actionPage: page, onOpenArrivals, search = '' } = props;
+  if (inbox !== 'today' || page === undefined || page.calendar !== undefined || onOpenArrivals === undefined) return {};
+  return {
+    metrics: <TodayActionSummary page={page} search={search} onArrivals={onOpenArrivals} onPending={() => jump(PENDING_BATCH_TARGET)} />,
+    shortcuts: props.workspace?.view === 'list' ? actionShortcuts({ props, page, jump }) : undefined,
+  };
+}
+
+function actionShortcuts({ props, page, jump }: { readonly props: TodayScreenProps; readonly page: ActionPageControls; readonly jump: (id: string) => void }) {
+  const { myPlan } = props;
+  return <TodayActionShortcuts overdue={page.paging.reasonCounts.overdue} followUp={page.paging.followUpCounts?.due ?? 0}
+    planCount={myPlan?.kind === 'ready' ? myPlan.rows.length : undefined}
+    onOverdue={() => filterActionReason(props, 'overdue')} onFollowUp={() => filterActionReason(props, 'follow_up_due')}
+    onPlan={() => jump(PLAN_TASK_TARGET)} />;
+}
+
+function filterActionReason(props: TodayScreenProps, reason: 'overdue' | 'follow_up_due') {
+  props.onApplyFilters?.({ reasons: [reason], work: undefined, sort: { kind: 'urgency' }, group: undefined });
+  focusSection('today-chase');
+}
+
+function actionDestinations({ inbox, pendingCount, page, myPlan, jump, hasPlanShortcut, hasPendingSummary }: {
   readonly inbox: WorkspaceInbox;
   readonly pendingCount: number;
   readonly page: ActionPageControls | undefined;
   readonly myPlan: MyPlan | undefined;
   readonly jump: (id: string) => void;
+  readonly hasPlanShortcut: boolean;
+  readonly hasPendingSummary: boolean;
 }): ActionBoardProps['utilityLinks'] {
   if (inbox !== 'today') return undefined;
-  const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
-  const pendingRows = page?.paging.pendingCount ?? pendingCount;
+  const planCount = !hasPlanShortcut && myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
+  const pendingRows = hasPendingSummary ? 0 : page?.paging.pendingCount ?? pendingCount;
   if (!planCount && pendingRows === 0) return undefined;
   return (afterClose) => <TodayAgendaShortcuts pendingCount={pendingRows} planCount={planCount}
     jump={(id) => afterClose(() => jump(id))} />;
@@ -245,7 +267,6 @@ function SchedulePane(props: TodayScreenProps): ReactNode {
   return (
     <ScheduleView
       isMine={props.isMyPlan === true}
-      returnSearch={new URLSearchParams(props.search).get('workspaceReturn') ?? ''}
       group={props.board.group}
       load={props.plan ?? { kind: 'idle' }}
       focus={props.focus}

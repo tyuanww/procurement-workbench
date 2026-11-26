@@ -51,7 +51,7 @@ export function TodayRow(props: RowProps): ReactNode {
   const style = rowStyle({ isFocused: props.isFocused, isFading: props.isFading });
   const content = <div className="today-row-layout">
     <RowFacts card={card} face={face} receipt={props.receipt} headingLevel={props.headingLevel}
-      isScheduled={props.isScheduled} showReminder={props.showReminder === true} />
+      isScheduled={props.isScheduled} showReminder={props.showReminder === true} onOpen={props.onOpen} />
     <RowActions {...props} card={card} />
   </div>;
   return props.isCard
@@ -92,11 +92,11 @@ function receiptQuantity(receipt: ReceiptWork | undefined): string | undefined {
   return `在途待收 ${quantityFormat.format(receipt.inTransitQty)} ${receipt.unit}`;
 }
 
-function RowFacts({ card, face, receipt, headingLevel, isScheduled, showReminder }: Pick<RowProps, 'receipt' | 'headingLevel' | 'isScheduled' | 'showReminder'> & { readonly card: CardPresentation; readonly face: RowFace }) {
+function RowFacts({ card, face, receipt, headingLevel, isScheduled, showReminder, onOpen }: Pick<RowProps, 'receipt' | 'headingLevel' | 'isScheduled' | 'showReminder' | 'onOpen'> & { readonly card: CardPresentation; readonly face: RowFace }) {
   const hasReminderContext = showReminder === true || isScheduled || (card.primary.kind === 'quick' && card.primary.action.kind === 'note');
   const waiting = isScheduled && face.nextFollowUpTarget !== undefined ? undefined : face.waiting;
   return <div className="today-row-facts">
-    <RowHeading card={card} face={face} receipt={receipt} headingLevel={headingLevel} />
+    <RowHeading card={card} face={face} receipt={receipt} headingLevel={headingLevel} onOpen={onOpen} />
     <DeliveryFacts face={face} receipt={receipt} waiting={waiting} showReminder={showReminder === true} />
     <div className="today-row-line today-row-quantities">
       {face.remaining === undefined ? null : <Typography.Text>{face.remaining}</Typography.Text>}
@@ -106,9 +106,10 @@ function RowFacts({ card, face, receipt, headingLevel, isScheduled, showReminder
   </div>;
 }
 
-function RowHeading({ card, face, receipt, headingLevel }: Pick<RowProps, 'receipt' | 'headingLevel'> & { readonly card: CardPresentation; readonly face: RowFace }) {
+function RowHeading({ card, face, receipt, headingLevel, onOpen }: Pick<RowProps, 'receipt' | 'headingLevel' | 'onOpen'> & { readonly card: CardPresentation; readonly face: RowFace }) {
   return <div className="today-row-line today-batch-title">
-    <Typography.Title level={headingLevel} className="today-row-title">{card.title}</Typography.Title>
+    <Typography.Title level={headingLevel} className="today-row-title">{card.primary.kind === 'detail' ? card.title
+      : <Button type="link" onClick={onOpen} aria-label={`查看详情 ${card.identity}`}>{card.title}</Button>}</Typography.Title>
     <div className="today-row-line today-row-status">
       <RowStatus face={face} receipt={receipt} />
       {face.isUnassigned === true ? <Typography.Text className="today-batch-meta" type="secondary">未分配</Typography.Text> : null}
@@ -166,8 +167,7 @@ function RowActions({ card, row, copy, isFactoryChase, onOpen, ...work }: Pick<R
     <RowWorkAction {...work} primary={primary} rowId={row.id} />
     {copyAction === null ? null : <Button {...(primary.kind === 'copy' ? mainButton : secondaryButton)} icon={<CopyOutlined aria-hidden />}
       disabled={copyAction.disabled} onClick={copyAction.run}>{copyAction.label}</Button>}
-    <Button {...(primary.kind === 'detail' ? mainButton : secondaryButton)}
-      onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
+    {primary.kind === 'detail' ? <Button {...mainButton} onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button> : null}
     <RowMenu actions={card.overflow} copy={copyAction === null ? copy : null} identity={identity} onQuick={work.onQuick} />
   </Flex>;
 }

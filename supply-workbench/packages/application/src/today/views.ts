@@ -128,6 +128,7 @@ export type TodayPaging = {
   readonly followUpCounts?: { readonly due: number; readonly scheduled: number };
   readonly chaseCounts?: { readonly all: number; readonly filtered: number };
   readonly internalNoteCount?: number;
+  readonly arrivalCount?: number;
   readonly chaseItemIds?: readonly string[];
   /** 三个工作范围各自分页和筛选前的办件数。同一批次可有今天核收和已约跟进。 */
   readonly inboxCounts?: Readonly<Record<TodayInbox, number>>;

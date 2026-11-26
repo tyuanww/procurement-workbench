@@ -39,6 +39,9 @@ it('合并同批核收与催货后再分页，所有催单复制沿用今日完�
     expect((await page('inbox=today&work=all_unshipped')).items.map(({ id }) => id)).toContain('batch:inbox-5');
     expect((await page('inbox=today&focusId=batch:inbox-5')).paging).toMatchObject({ focusInbox: 'today', focusDay: '2099-01-10', focusWork: 'all_unshipped' });
     const arrivals = TodayResponseSchema.parse(await get('/api/v1/today?scope=mine')).arrivalMemos;
+    expect(result.paging.arrivalCount).toBe(arrivals.length);
+    expect(pageResults.map(({ paging }) => paging.arrivalCount)).toEqual([arrivals.length, arrivals.length, arrivals.length]);
+    expect((await page('inbox=today&work=all_unshipped')).paging.internalNoteCount).toBe(result.paging.internalNoteCount);
     expect(arrivals).toContainEqual(expect.objectContaining({ batchId: 'inbox-8', status: 'in_transit', confirmedDate: null }));
     expect(arrivals).toContainEqual(expect.objectContaining({ batchId: 'inbox-9', status: 'in_transit' }));
   } finally {

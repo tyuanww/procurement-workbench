@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { TodaySort } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
 import {
@@ -25,6 +25,7 @@ export function TodayPage() {
 }
 
 function useTodayScreen(): TodayScreenProps {
+  const navigate = useNavigate();
   const route = useWorkspaceRoute();
   const { query, group, arrivalsView, isPlanMode, isMyPlan } = route;
   const today = useTodayData(query);
@@ -40,6 +41,7 @@ function useTodayScreen(): TodayScreenProps {
     ...(arrivalsView === undefined ? {} : { isReady: today.isLoadedForQuery || today.loadError !== '', loadError: today.loadError }),
     search: route.search, actionPage, arrivalsView, workspace: workspaceControls({ route, asOf: state.asOf }), myPlan: plan.mine,
     canRecord, pendingFocusId: route.pendingFocusId, arrivalFocusId: route.arrivalFocusId, isMyPlan, isInternalWorkVisible,
+    onOpenArrivals: (path) => { void navigate(path); },
     onApplyFilters: (selection) => {
       const params = workspaceFilterParams(route.search, selection);
       if (params.toString() !== route.search) route.setParams(params);

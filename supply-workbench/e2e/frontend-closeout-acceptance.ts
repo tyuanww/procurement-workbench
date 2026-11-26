@@ -78,7 +78,7 @@ async function checkActionBoard(page: Page): Promise<void> {
   await board.getByRole('article', { name: /^UI-DEMO-001/ }).waitFor();
   await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
   await page.getByRole('heading', { name: '个人工作台', level: 1, exact: true }).waitFor();
-  await page.getByRole('heading', { name: /^今天要办\s*\d+\s*项\s*本人范围/u, level: 2 }).waitFor();
+  await page.getByRole('heading', { name: /^今天要办\s*本人范围$/u, level: 2 }).waitFor();
   const scopes = page.getByRole('navigation', { name: '工作范围', exact: true });
   await scopes.getByRole('button', { name: /^已约跟进/ }).waitFor();
   await scopes.getByRole('button', { name: /^待分派/ }).waitFor();
@@ -115,16 +115,22 @@ async function checkActionBoard(page: Page): Promise<void> {
 }
 
 async function checkWideWorkspace(page: Page): Promise<void> {
-  const { heading, toolbar, row } = await page.locator('.today-workspace-screen').evaluate((workspace) => {
+  const { heading, toolbar, results, shortcuts, row } = await page.locator('.today-workspace-screen').evaluate((workspace) => {
     const edges = (selector: string) => {
       const bounds = workspace.querySelector(selector)?.getBoundingClientRect();
-      return bounds === undefined ? undefined : { left: bounds.left, right: bounds.right, width: bounds.width };
+      return bounds === undefined ? undefined : { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width };
     };
-    return { heading: edges('.today-workspace-heading'), toolbar: edges('.today-toolbar'), row: edges('.today-workspace-results .today-work-card') };
+    return {
+      heading: edges('.today-workspace-heading'), toolbar: edges('.today-toolbar'),
+      results: edges('.today-workspace-results'), shortcuts: edges('.today-action-shortcuts'),
+      row: edges('.today-workspace-results .today-work-card'),
+    };
   });
-  assert.ok(toolbar !== undefined && toolbar.width >= 1_200);
-  assert.deepEqual(heading, toolbar, '标题与操作区共用桌面正文宽度');
-  assert.deepEqual(row, toolbar, '待办行填满桌面正文宽度');
+  assert.ok(heading && toolbar && toolbar.width >= 1_200 && results && shortcuts && row);
+  assert.deepEqual([heading.left, heading.right], [toolbar.left, toolbar.right], '标题与操作区共用桌面正文宽度');
+  assert.deepEqual([results.top, results.bottom], [shortcuts.top, shortcuts.bottom], '待办与快捷处理在宽屏上下对齐');
+  assert.ok(results.right < shortcuts.left, '待办左列与快捷处理右列互不覆盖');
+  assert.ok(row.left >= results.left && row.right <= results.right, '待办行保持在主清单内');
 }
 
 async function checkCalendarBesideResults(page: Page): Promise<void> {
@@ -142,16 +148,29 @@ async function checkArrivals(page: Page): Promise<void> {
 }
 
 async function checkDailySchedule(page: Page): Promise<void> {
-  await (await sidebarLink(page.locator('aside'), '今日事项', '今日排期')).click();
+  await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
+  const scheduleTab = page.getByRole('main').getByRole('radiogroup', { name: '今日事项视图', exact: true })
+    .getByRole('radio', { name: '今日排期', exact: true });
+  await scheduleTab.press('Space');
+  await page.waitForURL((url) => url.pathname === '/today' && url.searchParams.get('group') === 'schedule');
   const task = page.getByRole('button', { name: /确认今日出货/ });
   await task.waitFor();
   await page.getByRole('button', { name: /核实逾期包材/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: /明日复核|已完成确认/ }).count(), 0);
+  const grouping = page.getByRole('radiogroup', { name: '今日排期分组', exact: true });
+  await grouping.getByRole('radio', { name: '供应商', exact: true }).press('Space');
+  await page.waitForURL((url) => url.searchParams.get('group') === 'supplier');
+  await task.getByText('今日到期', { exact: true }).waitFor();
   await task.press('Enter');
   const detail = page.getByRole('dialog', { name: /确认今日出货/ });
   await detail.getByText(/核实逾期包材.*仍阻塞/).waitFor();
   await page.keyboard.press('Escape');
   await detail.waitFor({ state: 'hidden' });
+  await task.and(page.locator(':focus')).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('group'), 'supplier');
+  await grouping.getByRole('radio', { name: '排期', exact: true }).press('Space');
+  await page.waitForURL((url) => url.searchParams.get('group') === 'schedule');
+  await page.getByRole('heading', { name: '今天到期', exact: true }).waitFor();
 }
 
 async function checkProductArchive(page: Page, out: string): Promise<void> {

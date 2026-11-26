@@ -26,9 +26,8 @@ type TodayLinksProps = {
 
 export function TodayLinks(props: TodayLinksProps) {
   const { page, myPlan, inbox, onInbox } = props;
-  const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
   const isPlanUnavailable = myPlan?.kind === 'error';
-  const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable });
+  const counts = page?.paging.inboxCounts;
   const heading = useRef<HTMLElement>(null);
   const shouldFocusHeading = useRef(false);
   const calendar = page?.calendar;
@@ -43,10 +42,10 @@ export function TodayLinks(props: TodayLinksProps) {
   };
   return <div className="today-workspace-intro">
     <div className="today-workspace-heading">
-      <ActiveScope heading={heading} inbox={inbox} count={counts[inbox]} hasSharedReviews={hasSharedReviews(page)} />
+      <ActiveScope heading={heading} inbox={inbox} count={counts?.[inbox]} hasSharedReviews={hasSharedReviews(page)} />
       <ScopeSwitch {...props} onInbox={selectScope} counts={counts} canRetry={isPlanUnavailable} />
     </div>
-    {inbox === 'today' && isPlanUnavailable && counts.today !== undefined
+    {inbox === 'today' && isPlanUnavailable && counts !== undefined
       ? <Typography.Text type="secondary">已加载 · 排期未读</Typography.Text> : null}
     <ReviewScopeNote page={page} />
   </div>;
@@ -59,19 +58,20 @@ function ActiveScope({ heading, inbox, count, hasSharedReviews: hasReviews }: {
   const active = inboxes.find(({ key }) => key === inbox);
   if (active === undefined) return null;
   return <Typography.Title level={2} ref={heading} tabIndex={-1}>
-    {scopeLabel(active, hasReviews)} <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}
+    {scopeLabel(active, hasReviews)}{inbox === 'today' ? null : <> <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}</>}
     {inbox === 'unassigned' ? null : <small className="today-mine-scope">本人范围</small>}
   </Typography.Title>;
 }
 
 function ScopeSwitch({ inbox, onInbox, onRetryPlan, page, asOf, counts, canRetry }: Omit<TodayLinksProps, 'myPlan'> & {
-  readonly counts: ReturnType<typeof workspaceCounts>;
+  readonly counts: TodayPaging['inboxCounts'];
   readonly canRetry: boolean;
 }) {
   const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, asOf);
   return <nav className="today-workspace-scopes today-touch" aria-label="工作范围">
     {inboxes.filter(({ key }) => key !== inbox).map((scope) => (
-      <Button key={scope.key} onClick={() => onInbox(scope.key)}>{scopeLabel(scope, hasSharedReviews(page))} <strong>{counts[scope.key] ?? '—'}</strong>{counts[scope.key] === undefined ? null : scope.unit}</Button>
+      <Button key={scope.key} onClick={() => onInbox(scope.key)}>{scopeLabel(scope, hasSharedReviews(page))}
+        {scope.key === 'today' ? null : <> <strong>{counts?.[scope.key] ?? '—'}</strong>{counts?.[scope.key] === undefined ? null : scope.unit}</>}</Button>
     ))}
     {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
     {canRetry ? <Button onClick={onRetryPlan}>重试排期</Button> : null}
@@ -88,19 +88,6 @@ function hasSharedReviews(page: ActionPageControls | undefined): boolean {
 
 function isOtherWorkDay(date: string | undefined, businessDate: string | undefined): boolean {
   return date !== undefined && date !== 'today' && date !== businessDate;
-}
-
-function workspaceCounts({ paging, planCount, isPlanUnavailable }: {
-  readonly paging: TodayPaging | undefined;
-  readonly planCount: number | undefined;
-  readonly isPlanUnavailable: boolean;
-}) {
-  const counts = paging?.inboxCounts;
-  const pendingCount = paging?.pendingCount;
-  const loadedPlanCount = isPlanUnavailable ? 0 : planCount;
-  const today = counts === undefined || pendingCount === undefined || loadedPlanCount === undefined
-    ? undefined : counts.today + pendingCount + loadedPlanCount;
-  return { today, scheduled: counts?.scheduled, unassigned: counts?.unassigned };
 }
 
 function ReviewScopeNote({ page }: { readonly page: ActionPageControls | undefined }) {

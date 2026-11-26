@@ -140,7 +140,9 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     await waitFor(() => document.activeElement?.id === 'today-chase');
 
     click(filter);
-    click(button('内部等回单1批'));
+    const internalOption = [...document.querySelectorAll('[role="dialog"] button')].find((option) => /内部等回单\s*1\s*批/u.test(option.textContent ?? ''));
+    if (!(internalOption instanceof HTMLButtonElement)) throw new Error('没有内部等回单筛选');
+    click(internalOption);
     click(button('应用筛选'));
     await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');

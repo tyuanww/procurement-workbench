@@ -16,6 +16,7 @@ import { SettingsPage } from '../pages/settings/SettingsPage.js';
 import { TodayPage } from '../pages/today/TodayPage.js';
 import { PersonalWorkspacePage } from '../pages/personal-workspace/PersonalWorkspacePage.js';
 import { destinations } from './navigation-destinations.js';
+import { isPlanGroupMode, readGroup } from '../features/today/index.js';
 
 type NavPageEntry = {
   readonly path: NavPath;
@@ -42,7 +43,7 @@ export type PageManifestEntry = (NavPageEntry | OtherPageEntry) & {
 
 export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/home', nav: { label: '首页' }, gate: 'oversight', element: <DirectorHomePage /> },
-  { path: '/today', nav: { label: '今日事项' }, gate: 'always', element: <TodayPage /> },
+  { path: '/today', nav: { label: '今日事项' }, gate: 'always', breadcrumb: todayBreadcrumb, element: <TodayPage /> },
   { path: '/today/personal', nav: null, gate: 'always', menuParent: '/today', element: <PersonalWorkspacePage /> },
   { path: '/progress', nav: { label: '管理店铺' }, gate: 'always', element: <ProgressPage /> },
   { path: '/progress/current', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="current" /> },
@@ -62,6 +63,11 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <MasterPage /> },
   { path: SETTINGS_PATH, nav: null, breadcrumb: (params) => ['系统设置', settingsSectionLabels[settingsSection(params).activeKey]], gate: 'admin', element: <SettingsPage /> },
 ];
+
+function todayBreadcrumb(params: URLSearchParams): readonly string[] {
+  const view = params.get('view');
+  return view !== 'arrivals' && (view === 'schedule' || isPlanGroupMode(readGroup(params.toString()))) ? ['今日排期'] : [];
+}
 
 export const NAV_ROUTES: readonly NavRoute[] = PAGE_MANIFEST.flatMap((entry) =>
   entry.nav === null ? [] : [{

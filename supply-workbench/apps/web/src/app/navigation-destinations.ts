@@ -10,7 +10,6 @@ export const destinations: Partial<Record<NavPath, readonly NavDestination[]>> =
   '/today': [
     { to: '/today', label: '个人工作台', aliases: ['/today/personal'] },
     { to: todayArrivalsPath, label: '在途待收' },
-    { to: '/today?group=schedule', label: '今日排期', aliases: ['/today?group=owner', '/today?group=supplier'] },
   ],
   '/dashboard': [
     { to: '/dashboard', label: '卡点' },

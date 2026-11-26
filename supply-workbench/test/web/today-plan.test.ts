@@ -151,7 +151,7 @@ describe('排期任务状态与标签', () => {
     expect(labels).toContain('供应商 样例供应商35');
     expect(labels).toContain('工厂 宜侬');
     expect(labels).toContain('计划中');
-    expect(labels).toContain('今日应到');
+    expect(labels).toContain('今日到期');
     const overdue = taskTags(OVERDUE, TODAY).map((tag) => tag.label);
     expect(overdue).toContain('阻塞');
     expect(overdue).toContain('逾期 2 天');

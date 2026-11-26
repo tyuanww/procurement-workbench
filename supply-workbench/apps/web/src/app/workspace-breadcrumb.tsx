@@ -12,8 +12,9 @@ export function WorkspaceBreadcrumb({ rows, inline = false }: { readonly rows: r
   const page = PAGE_MANIFEST.find(({ path }) => matchPath(path, location.pathname) !== null);
   if (page === undefined || routeAccess({ roles, gate: page.gate ?? 'always' }) !== 'open') return null;
   const active = navigationSelection(rows, location);
-  const trail = [active?.row.label, active?.destination?.label].filter((label) => label !== undefined);
-  trail.push(...pageLabels(page, location.search));
+  const labels = pageLabels(page, location.search);
+  const destination = page.nav !== null && labels.length > 0 ? undefined : active?.destination?.label;
+  const trail = [active?.row.label, destination, ...labels].filter((label) => label !== undefined);
   if (trail.length === 0) return null;
   const items = trail.map((label, index) => ({
     title: index === trail.length - 1 ? <span aria-current="page">{label}</span> : label,

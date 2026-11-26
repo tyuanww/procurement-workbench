@@ -22,6 +22,7 @@ export type ActionBoardProps = ActionToolbarProps & {
   readonly detailOf?: (id: string) => ActionDetail | undefined;
   readonly internalCards?: readonly ReactNode[] | undefined;
   readonly internalPagination?: ReactNode;
+  readonly shortcuts?: ReactNode;
   readonly boardFocusId?: string | null;
   readonly selectedLane?: ActionLane | undefined;
   readonly onSelectLane?: (lane: ActionLane) => void;
@@ -38,11 +39,12 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
     <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
       <Flex vertical gap="small">
         <ActionToolbar {...props} />
-        <div className={props.calendar === undefined ? undefined : 'today-workspace-calendar-layout'}>
+        <div className={props.calendar === undefined ? 'today-actions-layout' : 'today-workspace-calendar-layout'}>
           {props.calendar}
           <Flex vertical gap="small" className={isKanban(props) ? undefined : 'today-workspace-results'}>
             {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
           </Flex>
+          {props.shortcuts}
         </div>
       </Flex>
     </section>
