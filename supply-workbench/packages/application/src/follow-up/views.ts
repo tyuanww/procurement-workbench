@@ -243,7 +243,15 @@ export type UpdateBatchInput = {
 export type BatchReasonInput = { readonly batchId: DeliveryBatchId; readonly reason: string };
 export type BatchIdInput = { readonly batchId: DeliveryBatchId };
 export type RecordShipmentInput = { readonly batchId: DeliveryBatchId; readonly qty: number; readonly shippedOn: LocalDate; readonly note?: string; readonly fulfillment?: ShipmentEvidenceInput };
-export type RecordReceiptInput = { readonly batchId: DeliveryBatchId; readonly qty: number; readonly receivedOn: LocalDate; readonly category: ReceiptCategory; readonly note?: string; readonly fulfillment?: ReceiptEvidenceInput };
+export type RecordReceiptInput = {
+  readonly batchId: DeliveryBatchId;
+  readonly qty: number;
+  readonly receivedOn: LocalDate;
+  readonly category: ReceiptCategory;
+  readonly note?: string;
+  readonly fulfillment?: ReceiptEvidenceInput;
+  readonly attemptReceiptId?: EntityId;
+};
 export type RecordDeliveryNoteInput = {
   readonly batchId: DeliveryBatchId;
   readonly status: Exclude<NoteStatus, 'missing'>;

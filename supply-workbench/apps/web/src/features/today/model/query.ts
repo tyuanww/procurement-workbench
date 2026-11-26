@@ -12,7 +12,7 @@ export function withReason(input: { readonly search: string; readonly code: stri
 
 export function withGroup(input: { readonly search: string; readonly group: GroupMode }): string {
   const params = new URLSearchParams(input.search);
-  if (input.group === 'waiting') params.delete('group');
+  if (input.group === 'kanban') params.delete('group');
   else params.set('group', input.group);
   return params.toString();
 }
@@ -27,6 +27,6 @@ export function readGroup(search: string): GroupMode {
 }
 
 export function resolveGroup(value: string | null): GroupMode {
-  if (value === 'reason' || value === 'date' || value === 'schedule' || value === 'owner' || value === 'supplier') return value;
-  return 'waiting';
+  if (value === 'priority' || value === 'waiting' || value === 'reason' || value === 'date' || value === 'schedule' || value === 'owner' || value === 'supplier') return value;
+  return 'kanban';
 }

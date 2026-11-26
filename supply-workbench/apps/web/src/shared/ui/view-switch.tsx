@@ -6,7 +6,10 @@ export function ViewSwitch<Value extends string | number>(props: SegmentedProps<
   return <Segmented<Value> {...props} />;
 }
 
-export function ContentTabs({ 'aria-label': label, ...props }: Pick<TabsProps, 'items' | 'activeKey' | 'onChange' | 'destroyOnHidden'> & NamedControl) {
+type ContentTabsProps = Pick<TabsProps, 'items' | 'activeKey' | 'onChange' | 'destroyOnHidden' | 'id' | 'className' |
+  'classNames' | 'styles' | 'animated' | 'tabBarGutter' | 'renderTabBar'> & NamedControl;
+
+export function ContentTabs({ 'aria-label': label, ...props }: ContentTabsProps) {
   return (
     <Tabs {...props} ref={(tabs) => {
       tabs?.nativeElement?.querySelector('[role="tablist"]')?.setAttribute('aria-label', label);

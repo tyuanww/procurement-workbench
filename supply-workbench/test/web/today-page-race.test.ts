@@ -1,16 +1,13 @@
 // @vitest-environment happy-dom
-import { createRequire } from 'node:module';
-import path from 'node:path';
 import { expect, it } from 'vitest';
 import type { TodoItemView } from '../../packages/contracts/src/index.js';
-import { TodayPage } from '../../apps/web/src/pages/today/TodayPage.js';
+import { BatchProgress } from '../../apps/web/src/features/today/batch-progress.js';
 import { actionQuery } from '../../apps/web/src/pages/today/action-query.js';
 import { handleKey, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { useTodayData } from '../../apps/web/src/pages/today/today-load.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
-import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, useHostSearch, useHostState, waitFor } from './party-preview-dom.js';
-
-const requireWeb = createRequire(path.join(process.cwd(), 'apps/web/package.json'));
+import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, useHostState, waitFor } from './party-preview-dom.js';
+import { antdApp, batchTodo, LocationAndToday, pageBody } from './today-workspace-fixture.js';
 
 it('请求顺序颠倒时，较早的行动板页无法覆盖已经显示的新筛选结果', async () => {
   emptyReads();
@@ -51,25 +48,30 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
       fulfill({ urlPart: '/api/v1/today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batchTodo(2)] } });
     });
+    expect(textOf('[aria-label="工作台视图"] .ant-segmented-item-selected')).toBe('列表');
     expect(button('查看详情 PO · 同名样品 · 第 1 批')).toBeDefined();
     expect(button('查看详情 PO · 同名样品 · 第 2 批')).toBeDefined();
     expect(textOf('body')).not.toContain('截至今日');
-    expect(textOf('body')).not.toContain('2026-11-21');
+    expect(document.querySelector('.today-business-date')).toBeNull();
+    expect(document.querySelector('nav[aria-label="工作范围"] button[aria-haspopup="menu"]')).not.toBeNull();
     expect(textOf('body')).not.toContain('用 j k 移动');
     pressTodayKey('?');
-    expect(textOf('body')).toContain('j k 或方向键移动，Enter 打开');
-    pressTodayKey('?');
-    expect(textOf('body')).not.toContain('j k 或方向键移动');
+    expect(textOf('[role="dialog"]')).toContain('j k 或方向键移动，Enter 打开');
+    pressTodayKey('Escape');
     pressTodayKey('j');
     expect(keyboardRow()).toContain('第 1 批');
+    expect(document.activeElement?.textContent).toContain('第 1 批');
     pressTodayKey('ArrowDown');
     expect(keyboardRow()).toContain('第 2 批');
+    expect(document.activeElement?.textContent).toContain('第 2 批');
     pressTodayKey('k');
     expect(keyboardRow()).toContain('第 1 批');
     pressTodayKey('ArrowDown');
     pressTodayKey('Enter');
-    await waitFor(() => textOf('[role="dialog"]').includes('第 2 批'));
-    expect(textOf('[role="dialog"]')).not.toContain('第 1 批');
+    const batchDrawer = '.ant-drawer [role="dialog"]';
+    await waitFor(() => textOf(batchDrawer).includes('第 2 批'));
+    expect(textOf(batchDrawer)).not.toContain('第 1 批');
+    expect(textOf(batchDrawer)).toContain('批次交付数量待核实');
     expect(new URLSearchParams(textOf('output')).get('drawer')).toBe('batch:batch-2');
     pressTodayKey('Escape');
     await waitFor(() => !new URLSearchParams(textOf('output')).has('drawer'));
@@ -86,8 +88,23 @@ function pressTodayKey(key: string): void {
   act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key })); });
 }
 
+it('未发与在途数量待核时，详情仍列出已核实的实收数量', () => {
+  installMatchMedia();
+  const root = mount(element(BatchProgress, { facts: { unit: '件', unshippedQty: null, inTransitQty: null, receivedQty: 4000 } }));
+  try {
+    const numbers = textOf('[aria-label="批次交付数量"]');
+    expect(numbers).toContain('未发待核实');
+    expect(numbers).toContain('在途待收待核实');
+    expect(numbers).toContain('实收4,000 件');
+    expect(document.querySelector('canvas')).toBeNull();
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+  }
+});
+
 function keyboardRow(): string | null {
-  const row = [...document.querySelectorAll<HTMLElement>('.today-row')].find((item) => item.style.outlineStyle === 'solid');
+  const row = document.querySelector('.today-work-card[data-current="true"]');
   return row?.querySelector('button[aria-label^="查看详情"]')?.getAttribute('aria-label') ?? null;
 }
 
@@ -110,20 +127,36 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
       fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) });
     });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
-    click(button('要催货2批'));
+    const filter = button('筛选');
+    click(filter);
+    const all = filterChoice('radio', '全部');
+    await waitFor(() => document.activeElement === all);
+    expect(all.checked).toBe(true);
+    click(filterChoice('radio', '要催货 2 批'));
+    expect(all.checked).toBe(false);
+    expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
+    expect(document.querySelectorAll('.today-row')).toHaveLength(3);
+    click(button('应用筛选'));
     await act(() => { fulfill({ urlPart: 'work=factory_chase', status: 200, body: result(factories) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(2);
-    expect(textOf('#today-chase')).toContain('共 2 批待催货');
-    expect(document.activeElement?.id).toBe('today-chase');
+    expect(textOf('#today-chase')).toContain('匹配 2 批待催货');
+    expect(textOf('#today-chase')).not.toContain('当前筛选 · 要催货');
+    expect(button('筛选（1）')).toBe(filter);
+    await waitFor(() => document.activeElement?.id === 'today-chase');
 
-    click(button('内部等回单1批'));
+    click(filter);
+    click(filterChoice('radio', '内部等回单 1 批'));
+    click(button('应用筛选'));
     await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
-    expect(textOf('#today-chase')).toContain('共 1 批等回单');
-    click(button('查看全部待办'));
+    expect(textOf('#today-chase')).toContain('匹配 1 批等回单');
+    expect(textOf('#today-chase')).not.toContain('当前筛选 · 内部等回单');
+    await waitFor(() => document.activeElement?.id === 'today-chase');
+    click(button('清除筛选'));
     await act(() => { fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
     expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
+    expect(document.activeElement?.getAttribute('aria-expanded')).toBe('false');
   } finally {
     act(() => { root.unmount(); });
     resetDom();
@@ -131,16 +164,50 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
   }
 });
 
-function batchTodo(seq: number): TodoItemView {
-  const id = `batch-${seq}`;
-  return {
-    id: `batch:${id}`, subject: 'batch', reasons: ['missing_date'], severity: 1, ownerUserId: 'buyer-1',
-    waitingOn: { kind: 'supplier', partyId: null }, dueDate: null, overdueDays: null, refs: { orderLineId: 'line', batchId: id },
-    line: { id: 'line', lane: 'finished', poRaw: 'PO', poFormat: 'OTHER', nameRaw: '同名样品', itemCodeRaw: null, barcodeRaw: null, buyerName: null },
-    batch: { id, seq, plannedQty: 10, status: 'awaiting_date', noteStatus: 'missing', dateBuyerConfirmed: null, firstConfirmedDate: null,
-      dateFactoryRequired: null, dateSupplierPromised: null, shippedQty: null, receivedQty: null, lastShippedOn: null },
-    waitingOnParty: null, exception: null,
-  };
+it('到时跟进只有一个筛选入口且保留其他已选原因', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?reasons=overdue'));
+  const fixture = pageBody(1);
+  const page = { ...fixture, items: [batchTodo(1)], paging: { ...fixture.paging,
+    reasonCounts: { ...fixture.paging.reasonCounts, overdue: 1, follow_up_due: 1 }, followUpCounts: { due: 1, scheduled: 0 } } };
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: 'reasons=overdue', status: 200, body: page });
+    });
+    click(button('筛选（1）'));
+    const due = filterChoice('checkbox', '到时跟进 1');
+    expect(document.querySelector('.today-toolbar-filter')?.getAttribute('aria-expanded')).toBe('true');
+    expect(textOf('#today-chase')).not.toContain('到时跟进 1 批');
+    click(due);
+    expect(new URLSearchParams(textOf('output')).get('reasons')).toBe('overdue');
+    click(button('取消'));
+    expect(new URLSearchParams(textOf('output')).get('reasons')).toBe('overdue');
+    click(button('筛选（1）'));
+    const reopened = filterChoice('checkbox', '到时跟进 1');
+    expect(reopened.checked).toBe(false);
+    click(reopened);
+    click(button('应用筛选'));
+    const reasons = new URLSearchParams(textOf('output')).get('reasons');
+    expect(reasons?.split(',').sort()).toEqual(['follow_up_due', 'overdue']);
+    expect(button('筛选（2）')).toBeDefined();
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
+function filterChoice(type: 'radio' | 'checkbox', label: string): HTMLInputElement {
+  const choices = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')]
+    .filter((option) => option.textContent === label)
+    .flatMap((option) => [...option.querySelectorAll<HTMLInputElement>(`input[type="${type}"]`)]);
+  expect(choices).toHaveLength(1);
+  const [choice] = choices;
+  if (choice === undefined) throw new Error(`没有筛选条件 ${label}`);
+  return choice;
 }
 
 async function openOldLink({ target, isPresent }: { readonly target: string; readonly isPresent: boolean }) {
@@ -172,20 +239,6 @@ async function openOldLink({ target, isPresent }: { readonly target: string; rea
   }
 }
 
-function antdApp(children: unknown) {
-  const antd: unknown = requireWeb('antd');
-  if (typeof antd !== 'object' || antd === null || !('App' in antd)) throw new Error('没有 Ant Design App');
-  return element(antd.App, { children });
-}
-
-function LocationAndToday() {
-  const [search] = useHostSearch();
-  return element('div', { children: [
-    element('output', { key: 'url', children: search.toString() }),
-    element(TodayPage, { key: 'today' }),
-  ] });
-}
-
 function locatedPage({ target, isPresent }: { readonly target: string; readonly isPresent: boolean }) {
   const base = pageBody(isPresent ? 51 : 0);
   if (!isPresent) return base;
@@ -204,6 +257,7 @@ function locatedPage({ target, isPresent }: { readonly target: string; readonly 
 it('排期行获得焦点时仍能用 j 移动，行内按钮保留自己的键盘事件', () => {
   const row = document.createElement('div');
   row.className = 'today-task-row';
+  row.id = 'today-row-task:a';
   row.setAttribute('role', 'button');
   row.tabIndex = 0;
   const child = document.createElement('button');
@@ -222,6 +276,34 @@ it('排期行获得焦点时仍能用 j 移动，行内按钮保留自己的键�
   expect(focused).toEqual(['task:b']);
 });
 
+it('在表单中按 Esc 回到详情，组合框展开时先交给组合框处理', () => {
+  const field = document.createElement('input');
+  const actionsTaken: string[] = [];
+  const actions: KeyActions = {
+    closeDraft: () => { actionsTaken.push('draft'); },
+    closeDrawer: () => { actionsTaken.push('drawer'); },
+    openDrawer: () => { actionsTaken.push('open'); },
+    open: () => { actionsTaken.push('write'); },
+    setFocus: () => { actionsTaken.push('move'); },
+    toggleHelp: () => { actionsTaken.push('help'); },
+  };
+  const handle = (key: string) => handleKey({
+    event: { key, target: field, defaultPrevented: false, preventDefault: () => undefined },
+    rows: [{ id: 'batch:a' }], focus: 'batch:a', hasDraft: true, hasDrawer: true, actions,
+  });
+  handle('j');
+  handle('n');
+  handle('Enter');
+  expect(actionsTaken).toEqual([]);
+  field.setAttribute('role', 'combobox');
+  field.setAttribute('aria-expanded', 'true');
+  handle('Escape');
+  expect(actionsTaken).toEqual([]);
+  field.setAttribute('aria-expanded', 'false');
+  handle('Escape');
+  expect(actionsTaken).toEqual(['draft']);
+});
+
 function BoardRead() {
   const [search, setSearch] = useHostState('page=2&reasons=unshipped');
   const board = useTodayData(actionQuery(search));
@@ -229,15 +311,4 @@ function BoardRead() {
     element('button', { key: 'filter', onClick: () => setSearch('reasons=missing_date'), children: '换筛选' }),
     element('output', { key: 'total', children: board.data?.paging.total }),
   ] });
-}
-
-function pageBody(total: number) {
-  const counts = {
-    overdue: 0, demand_before_confirmed: 0, due_today: 0, missing_date: 0, shipped_not_received: 0, note_missing: 0, upcoming: 0,
-    unshipped: 0, fulfillment_review: 0, follow_up_due: 0, follow_up_scheduled: 0, exception_open: 0, review_pending: 0, import_pending: 0, unassigned: 0,
-  };
-  return {
-    asOf: '2026-11-21', counts, items: [], arrivalMemos: [], truncated: false,
-    paging: { page: 1, pageSize: 50, total, reasonCounts: counts, urgent: 0, units: [], factories: [] },
-  };
 }

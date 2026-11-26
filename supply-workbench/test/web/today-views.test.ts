@@ -5,22 +5,25 @@ import { sessionRows } from '../../apps/web/src/pages/today/use-today-plan.js';
 import { ActionBoard } from '../../apps/web/src/pages/today/ActionBoard.js';
 import { ScheduleView } from '../../apps/web/src/pages/today/ScheduleView.js';
 import { TodayScreen, type TodayScreenProps } from '../../apps/web/src/pages/today/TodayBoard.js';
-import type { BoardRow, PlanLoad, TodayBoard, TodayInsight } from '../../apps/web/src/features/today/index.js';
+import type { BoardRow, PlanLoad, PlanRow, TodayBoard, TodayInsight } from '../../apps/web/src/features/today/index.js';
 
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
 const root = new URL('../../', import.meta.url);
 
 describe('今日页两个视图', () => {
-  it('行动板只保留等待方、原因、日期，不把排期分组叠进来', () => {
+  it('个人工作台有统一的范围入口，筛选默认收起', () => {
     const html = render(TodayScreen, todayProps());
-    expect(html).toContain('等待方');
-    expect(html).toContain('原因');
-    expect(html).toContain('日期');
-    expect(html).toContain('筛选与指标');
+    expect(html).toContain('个人工作台');
+    expect(html).toContain('aria-label="工作范围"');
+    expect(html).toContain('我的行动清单');
+    expect(html).toContain('切换工作范围');
+    expect(html).not.toContain('已约跟进');
+    expect(html).not.toContain('title="等待方"');
+    expect(html).not.toContain('title="原因"');
+    expect(html).not.toContain('title="日期"');
     expect(html).not.toContain('缺确认日期');
     expect(html).not.toContain('供应商');
     expect(html).not.toContain('今天到期');
-    expect(html).not.toContain('用 j k 移动');
     expect(html).not.toContain('j k 或方向键移动');
   });
 
@@ -37,9 +40,8 @@ describe('今日页两个视图', () => {
     expect(html).not.toContain('用 j k 移动');
   });
 
-  it('打开键盘帮助后仍可见操作反馈', () => {
+  it('页面壳保留操作反馈，键盘帮助按需挂载', () => {
     const html = render(TodayScreen, todayProps({ isHelpOpen: true, notice: '已复制催办文本' }));
-    expect(html).toContain('j k 或方向键移动，Enter 打开');
     expect(html).toContain('已复制催办文本');
   });
 
@@ -59,14 +61,34 @@ describe('今日页两个视图', () => {
 });
 
 describe('今日视图各自渲染', () => {
-  it('行动板的指标和原因筛选初始收起，分组仍可见', () => {
-    const html = render(ActionBoard, todayProps());
+  it.each(['priority', 'waiting'] as const)('工作台 %s 保留批次事实和详情入口', (group) => {
+    const row: BoardRow = {
+      id: 'todo-1',
+      face: { ...face(), orderNo: 'PO-1', productName: '样品', date: '2026-11-24', waiting: '样例工厂' },
+      actions: [],
+    };
+    const content = { key: group, name: '待办组标题', counts: [{ label: '待办组计数', count: 1 }], nudgeText: '样例催单', rows: [row] };
+    const board: TodayBoard = { group, chips: [], body: { kind: 'groups', groups: [content], rows: [row] } };
+    const html = render(ActionBoard, todayProps({ board, batchSeqOf: () => 2 }));
+    expect(html).toContain('aria-label="查看详情 PO-1 · 样品 · 第 2 批"');
+    expect(html.indexOf('2026-11-24')).toBeLessThan(html.indexOf('aria-label="查看详情'));
+    expect(html).toMatch(/<h3[^>]*>样品<\/h3>/);
+    if (group === 'priority') {
+      expect(html).toMatch(/class="(?=[^"]*\bant-card\b)(?=[^"]*\btoday-row\b)[^"]+"/);
+      expect(html).not.toContain('待办组计数');
+    } else {
+      expect(html).toMatch(/<h2[^>]*>待办组标题<\/h2>/);
+      expect(html).toContain('复制催办文本');
+    }
+  });
+
+  it('清单把分组和原因筛选放在初始收起的同一折叠区', () => {
+    const html = render(ActionBoard, todayProps({ board: boardWith([], 'waiting') }));
     expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('当前筛选 · 缺确认日期');
+    expect(html).not.toContain('aria-label="清单分组"');
     expect(html).not.toContain('aria-label="今日关键指标"');
-    expect(html).not.toContain('缺确认日期');
-    expect(html).toContain('等待方');
     expect(html).not.toContain('今天到期');
-    expect(html).not.toContain('今日排期指标');
     expect(html).not.toContain('供应商');
   });
 
@@ -128,7 +150,7 @@ describe('今日视图模型', () => {
     const action = await readPage('ActionBoard.tsx');
     const schedule = await readPage('ScheduleView.tsx');
     const shell = await readPage('TodayBoard.tsx');
-    expect(action).toContain('todayPageKpi');
+    expect(action).not.toContain('todayPageKpi');
     expect(action).not.toContain('planInsight');
     expect(action).not.toContain('PlanLoad');
     expect(action).not.toContain('ScheduleView');
@@ -150,7 +172,6 @@ function drawerProps(input: { readonly group: TodayBoard['group']; readonly draw
   const noop = () => undefined;
   return {
     board: boardWith(['todo-1'], input.group),
-    insight: { total: 4, urgent: 1, overdue: 2, missingDate: 3 },
     plan: readyPlan(['task:work-1']),
     focus: null,
     fading: null,
@@ -164,7 +185,6 @@ function drawerProps(input: { readonly group: TodayBoard['group']; readonly draw
     isHelpOpen: false,
     isReady: true,
     loadError: '',
-    onToggleReason: noop,
     onGroup: noop,
     onOpen: noop,
     onQuick: noop,
@@ -240,7 +260,7 @@ function face(): BoardRow['face'] {
 }
 
 function readyPlan(rowIds: readonly string[]): PlanLoad {
-  const rows = rowIds.map((id) => ({ id, workItemId: id, title: '里程碑', meta: 'PO · 样品 · 11-09 至 11-10', tags: [] }));
+  const rows = rowIds.map((id): PlanRow => ({ id, workItemId: id, status: 'planned', timing: 'today', isHighPriority: false, title: '里程碑', meta: 'PO · 样品 · 11-09 至 11-10', tags: [] }));
   return {
     kind: 'ready',
     board: {
@@ -254,7 +274,6 @@ function readyPlan(rowIds: readonly string[]): PlanLoad {
 function scheduleProps(): Record<string, unknown> {
   return todayProps({
     board: boardWith(['todo-1'], 'schedule'),
-    insight: { total: 4, urgent: 1, overdue: 2, missingDate: 3 },
     plan: readyPlan(['task:work-1']),
   });
 }
@@ -262,8 +281,7 @@ function scheduleProps(): Record<string, unknown> {
 function todayProps(override: Record<string, unknown> = {}): Record<string, unknown> {
   const noop = () => undefined;
   return {
-    board: { group: 'waiting', chips: [{ code: 'missing_date', label: '缺确认日期', count: 3, isSelected: false }], body: { kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进中心看看。' } },
-    insight: { total: 4, urgent: 1, overdue: 2, missingDate: 3 },
+    board: { group: 'kanban', chips: [{ code: 'missing_date', label: '缺确认日期', count: 3, isSelected: false }], body: { kind: 'empty', text: '今天没有需要处理的事。' } },
     focus: null,
     fading: null,
     drawerId: null,
@@ -276,7 +294,6 @@ function todayProps(override: Record<string, unknown> = {}): Record<string, unkn
     isHelpOpen: false,
     isReady: true,
     loadError: '',
-    onToggleReason: noop,
     onGroup: noop,
     onOpen: noop,
     onQuick: noop,

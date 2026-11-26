@@ -174,10 +174,14 @@ export {
 export type { ProductCard, ProductList, ProductMaterials, ProductOverview, ProductPurchases, ProductStock } from '@sw/application';
 
 export {
+  PersonalTodayQuerySchema,
+  PersonalTodayResponseSchema,
+  PersonalTodayScopeSchema,
   SearchHitSchema,
   SearchResultSchema,
   TodayChaseQuerySchema,
   TodayChaseResponseSchema,
+  TodayInboxSchema,
   TodayPageQuerySchema,
   TodayPageResponseSchema,
   TodayQuerySchema,
@@ -186,7 +190,7 @@ export {
   TodoItemSchema,
   TodoItemViewSchema,
 } from './today-views.js';
-export type { SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodayWorkFilter, TodoItem, TodoItemView } from './today-views.js';
+export type { PersonalTodayQuery, PersonalTodayResponse, PersonalTodayScope, SearchHit, SearchResult, TodayChaseQuery, TodayChaseRow, TodayFactory, TodayInbox, TodayPageQuery, TodayPageResponse, TodayPaging, TodayQuery, TodayResponse, TodaySort, TodayWorkFilter, TodoItem, TodoItemView } from './today-views.js';
 
 export {
   AuditEntryViewSchema,

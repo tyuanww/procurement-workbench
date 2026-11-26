@@ -83,21 +83,21 @@ function idOf(prefix: string, name: string | null | undefined): string | null {
 }
 
 describe('今日分组参数', () => {
-  it('新增排期、负责人和供应商分组，默认仍是等待方', () => {
-    expect(readGroup('')).toBe('waiting');
+  it('排期、负责人和供应商分组保留独立参数，默认进入行动看板', () => {
+    expect(readGroup('')).toBe('kanban');
     expect(readGroup('group=reason')).toBe('reason');
     expect(readGroup('group=date')).toBe('date');
     expect(readGroup('group=schedule')).toBe('schedule');
     expect(readGroup('group=owner')).toBe('owner');
     expect(readGroup('group=supplier')).toBe('supplier');
-    expect(readGroup('group=bogus')).toBe('waiting');
+    expect(readGroup('group=bogus')).toBe('kanban');
     expect(isPlanGroupMode('schedule')).toBe(true);
     expect(isPlanGroupMode('waiting')).toBe(false);
   });
 
-  it('切换分组写 URL，等待方删参数，其它分组保留原筛选', () => {
+  it('切换分组保留原筛选，默认行动看板移除 group', () => {
     expect(withGroup({ search: '?reasons=overdue', group: 'schedule' })).toBe('reasons=overdue&group=schedule');
-    expect(withGroup({ search: 'reasons=overdue&group=schedule', group: 'waiting' })).toBe('reasons=overdue');
+    expect(withGroup({ search: 'reasons=overdue&group=schedule', group: 'kanban' })).toBe('reasons=overdue');
     expect(withGroup({ search: '', group: 'owner' })).toBe('group=owner');
   });
 });
@@ -151,7 +151,7 @@ describe('排期任务状态与标签', () => {
     expect(labels).toContain('供应商 样例供应商35');
     expect(labels).toContain('工厂 宜侬');
     expect(labels).toContain('计划中');
-    expect(labels).toContain('今日应到');
+    expect(labels).toContain('今日到期');
     const overdue = taskTags(OVERDUE, TODAY).map((tag) => tag.label);
     expect(overdue).toContain('阻塞');
     expect(overdue).toContain('逾期 2 天');
@@ -202,6 +202,9 @@ describe('今日排期看板', () => {
     expect(board.groups[1]?.counts).toEqual([{ label: '任务', count: 1 }]);
     expect(board.groups[1]?.note).toBe('平均逾期 2 天');
     expect(board.rows.map((row) => row.id)).toEqual(['task:due', 'task:unassigned', 'task:overdue']);
+    expect(board.rows.map(({ timing, status, isHighPriority }) => [timing, status, isHighPriority])).toEqual([
+      ['today', 'planned', true], ['today', 'planned', false], ['overdue', 'blocked', false],
+    ]);
     expect(board.groups[0]?.rows[0]?.meta).toContain('P02024700026');
   });
 

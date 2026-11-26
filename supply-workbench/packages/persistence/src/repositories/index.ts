@@ -43,6 +43,6 @@ export function placeholderStores(): UnitOfWorkStores {
     productContacts: { listByProduct: p03, replaceRole: p03 },
     bomLines: { replace: p03 },
     weeklyReports: { get: p03, find: p03, findCurrent: p03, list: p03, save: p03 },
-    audit: { record: p01 },
+    audit: { record: p01, hasEntry: p01 },
   };
 }

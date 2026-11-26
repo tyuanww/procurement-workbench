@@ -8,7 +8,7 @@ import {
   ownerText,
   plannedRangeText,
   supplierText,
-  taskParam,
+  TodayOrderLink, taskParam,
   workItemSourceLabel,
   type WorkItemDetail,
   type WorkItemStatus,
@@ -39,6 +39,7 @@ export type TaskDrawerProps = {
 };
 
 export function TaskDrawer(props: TaskDrawerProps): ReactNode {
+  const canRecord = useCanWrite('records.write');
   const data = useTaskDetail({ workItemId: props.workItemId, isOpen: props.isOpen });
   const ready = data.load.kind === 'ready' ? data.load.detail.item : null;
   const scheduleParams = props.showScheduleLink === true && ready !== null && ready.id === props.workItemId
@@ -56,7 +57,7 @@ export function TaskDrawer(props: TaskDrawerProps): ReactNode {
       size={drawerWide}
       open={props.isOpen}
       onClose={props.onClose}
-      title={drawerTitle(data.load)}
+      title={drawerTitle(data.load, canRecord ? '更新任务' : '任务详情')}
       extra={scheduleParams === null ? null : <Link to={`/progress?${scheduleParams}`}>在总排期查看此任务</Link>}
       footer={footerOf({ status: ready === null ? null : ready.status, change, onClose: props.onClose })}
     >
@@ -146,7 +147,7 @@ function lineNode(item: WorkItemDetail['item']): ReactNode {
   return (
     <Flex justify="space-between" gap={space[2]} wrap>
       <span>{item.orderLine.poRaw ?? '—'} · {item.orderLine.nameRaw ?? '—'}</span>
-      <Link to={`/lines/${item.orderLine.id}`}>打开订单行</Link>
+      <TodayOrderLink order={{ lineId: item.orderLine.id, ...(item.batch === null ? {} : { batchId: item.batch.id }) }}>打开订单行</TodayOrderLink>
     </Flex>
   );
 }
@@ -163,12 +164,12 @@ function footerOf(input: { readonly status: WorkItemStatus | null; readonly chan
   );
 }
 
-function drawerTitle(load: DetailLoad): ReactNode {
-  if (load.kind !== 'ready') return '更新任务';
+function drawerTitle(load: DetailLoad, title: string): ReactNode {
+  if (load.kind !== 'ready') return title;
   const item = load.detail.item;
   return (
     <span>
-      更新任务
+      {title}
       <span style={{ marginLeft: space[1], color: statusColor.neutral.text, fontSize: fontSize.meta }}>
         {item.title} · {item.orderLine?.poRaw ?? '—'}
       </span>

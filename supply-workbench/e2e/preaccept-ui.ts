@@ -12,6 +12,7 @@ import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
+import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
 import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
@@ -38,6 +39,7 @@ assert.ok(['chrome', 'msedge'].includes(channel));
 const users = {
   admin: '0199f0a0-0000-7000-8000-000000000001',
   buyer: '0199f0a0-0000-7000-8000-000000000002',
+  buyerPeer: '0199f0a0-0000-7000-8000-000000000003',
   reviewer: '0199f0a0-0000-7000-8000-000000000004',
   manager: '0199f0a0-0000-7000-8000-000000000005',
   lead: '0199f0a0-0000-7000-8000-000000000006',
@@ -87,7 +89,7 @@ async function procurementAcceptance(): Promise<void> {
   seedChaseSample();
   const { page: buyer, entry, devtools: buyerDevtools } = await open('buyer', '/', '/today');
   await checkShell(buyer, entry);
-  await buyer.getByRole('heading', { name: '行动板', exact: true }).waitFor();
+  await buyer.getByRole('heading', { name: '个人工作台', exact: true }).waitFor();
   result.checks.todayDrawer = await checkTodayDrawer(buyer, origin);
   result.checks.procurementChase = await checkChaseToday({ page: buyer, origin, out });
   result.checks.receipt = await checkKeyboardReceipt({ page: buyer, origin, out });
@@ -95,7 +97,7 @@ async function procurementAcceptance(): Promise<void> {
   await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
   const directorMenu = manager.locator('aside');
   const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
-  const today = await sidebarLink(directorMenu, '今日事项', '行动板');
+  const today = await sidebarLink(directorMenu, '今日事项', '个人工作台');
   const todayBox = await today.boundingBox();
   assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);
@@ -152,6 +154,10 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.redReview = await checkRedReview({ page: admin, origin });
   result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
   result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
+  const { page: peer } = await open('buyerPeer', '/', '/today');
+  result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
+    expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
+  });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
@@ -324,7 +330,7 @@ async function checkManagementNavigation({ manager, lead, buyer, reviewer, repor
 
 async function checkShell(page: Page, entry: { readonly asset: string; readonly sha256: string }) {
   const header = page.getByRole('banner');
-  await header.getByRole('navigation', { name: '当前位置' }).getByText('行动板', { exact: true }).and(page.locator('[aria-current="page"]')).waitFor();
+  await header.getByRole('navigation', { name: '当前位置' }).getByText('个人工作台', { exact: true }).and(page.locator('[aria-current="page"]')).waitFor();
   assert.equal(await header.getByText('开发登录', { exact: true }).count(), 0);
   const search = page.getByRole('button', { name: searchLabel });
   const mac = process.platform === 'darwin';

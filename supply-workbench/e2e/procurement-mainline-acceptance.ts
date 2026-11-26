@@ -96,8 +96,10 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await page.screenshot({ path: join(out, 'procurement-schedule.png'), animations: 'disabled' });
   await checkScheduleWindow(page, origin, out);
   await page.goto(new URL('/today', origin).href);
-  await (await sidebarLink(page.locator('aside'), '今日事项', '今日排期')).click();
-  await page.getByRole('button', { name: /^下单\s/ }).press('Enter');
+  const scheduleTab = page.getByRole('main').getByRole('tab', { name: '今日排期', exact: true });
+  await scheduleTab.press('Enter');
+  await page.waitForURL((url) => url.pathname === '/today' && url.searchParams.get('group') === 'schedule');
+  await page.getByRole('button', { name: '下单', exact: true }).filter({ hasText: finishedPo }).press('Enter');
   const task = page.getByRole('dialog');
   await task.getByText(finishedPo + ' · ' + finishedName, { exact: true }).waitFor();
   await task.getByRole('button', { name: /^关\s*闭$/ }).last().click();
@@ -159,7 +161,7 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
   }
 
   await page.goto(new URL('/today?group=owner', origin).href);
-  await page.getByRole('button', { name: new RegExp('^' + successor + '\\s') }).press('Enter');
+  await page.getByRole('button', { name: successor, exact: true }).press('Enter');
   const drawer = page.getByRole('dialog', { name: new RegExp(successor) });
   const warning = drawer.getByText(`${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: false });
   await warning.waitFor();
@@ -597,7 +599,8 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
 
   const batchNote = '合成批次等待承运回复';
   await page.goto(new URL(`/today?drawer=batch%3A${batchId}&draft=note`, origin).href);
-  const followUp = page.getByRole('dialog', { name: '合成待催 250', exact: true });
+  const followUp = page.getByRole('dialog', { name: '记跟进', exact: true });
+  await followUp.getByText(/合成待催 250/).first().waitFor();
   await select(followUp.getByRole('combobox', { name: '类型', exact: true }), page, '备注');
   await followUp.getByLabel('内容', { exact: true }).fill(batchNote);
   assert.deepEqual(await recordOrderFollowUp(page, followUp.getByRole('button', { name: /^确\s*认$/ })), {

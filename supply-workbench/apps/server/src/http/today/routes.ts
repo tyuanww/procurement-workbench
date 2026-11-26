@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { GetToday } from '@sw/application';
-import { TodayChaseQuerySchema, TodayChaseResponseSchema, TodayPageQuerySchema, TodayPageResponseSchema, TodayQuerySchema, TodayResponseSchema } from '@sw/contracts';
+import { PersonalTodayQuerySchema, PersonalTodayResponseSchema, TodayChaseQuerySchema, TodayChaseResponseSchema, TodayPageQuerySchema, TodayPageResponseSchema, TodayQuerySchema, TodayResponseSchema } from '@sw/contracts';
 import { requireActor } from '../app.js';
 import { parse } from '../parse.js';
 import { wire } from '../wire.js';
@@ -16,16 +16,23 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
       return wire(TodayResponseSchema, await api.getToday(parse(TodayQuerySchema, common), actor));
     }
     const input = parse(TodayPageQuerySchema, {
-      ...common, page: { number: raw.page, size: raw.pageSize }, sort: sortQuery(raw),
+      ...common, ...inboxQuery(raw), page: { number: raw.page, size: raw.pageSize }, sort: sortQuery(raw),
+      ...(raw.calendarFollowUps === undefined ? {} : { calendarFollowUps: raw.calendarFollowUps === 'true' ? true : raw.calendarFollowUps }),
       ...(raw.work === undefined ? {} : { work: raw.work }),
       ...(raw.focusId === undefined ? {} : { focusId: raw.focusId }),
     });
     return wire(TodayPageResponseSchema, await api.getToday.page(input, actor));
   });
+  app.get('/api/v1/today/personal', async (req) => {
+    const actor = requireActor(req);
+    const input = parse(PersonalTodayQuerySchema, rawQuery(req));
+    return wire(PersonalTodayResponseSchema, await api.getToday.personal(input, actor));
+  });
   app.get('/api/v1/today/chase', async (req) => {
     const raw = rawQuery(req);
     const reasons = list(raw.reasons);
     const input = parse(TodayChaseQuerySchema, {
+      ...inboxQuery(raw),
       ...(reasons === undefined ? {} : { reasons }),
       sort: sortQuery(raw),
       ...(raw.work === undefined ? {} : { work: raw.work }),
@@ -37,7 +44,12 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
 }
 
 function isPaged(raw: Record<string, unknown>): boolean {
-  return raw.page !== undefined || raw.pageSize !== undefined || raw.sort !== undefined || raw.unit !== undefined || raw.focusId !== undefined || raw.work !== undefined;
+  return ['page', 'pageSize', 'sort', 'unit', 'focusId', 'work', 'inbox', 'calendar', 'calendarFollowUps'].some((key) => raw[key] !== undefined);
+}
+
+function inboxQuery(raw: Record<string, unknown>) {
+  const { inbox, calendar } = raw;
+  return { ...(inbox === undefined ? {} : { inbox }), ...(calendar === undefined ? {} : { calendar }) };
 }
 
 function rawQuery(req: FastifyRequest): Record<string, unknown> {
@@ -53,7 +65,7 @@ function commonQuery(raw: Record<string, unknown>) {
   const pending = raw.includePending;
   const includePending = pending === 'true' ? true : pending === 'false' ? false : pending;
   return {
-    scope: raw.scope,
+    scope: raw.scope === undefined && raw.inbox !== undefined ? 'mine' : raw.scope,
     ...(reasons === undefined ? {} : { reasons }),
     ...(includePending === undefined ? {} : { includePending }),
   };

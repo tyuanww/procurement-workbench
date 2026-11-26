@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { App, Button } from 'antd';
 import { useCanWrite } from '../../shared/actor.js';
-import type { Undo } from './TodayForms.js';
+import type { Undo } from '../../features/today/index.js';
 
 const UNDO_KEY = 'today-undo';
 const UNDO_SECONDS = 10;

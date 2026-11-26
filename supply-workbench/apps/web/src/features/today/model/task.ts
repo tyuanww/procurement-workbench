@@ -124,7 +124,7 @@ export function factoryText(item: WorkItem): string {
 }
 
 export function taskMeta(item: WorkItem, today: string): string {
-  return `${item.orderLine?.poRaw ?? '—'} · ${item.orderLine?.nameRaw ?? '—'} · ${plannedRangeText(item, today)}`;
+  return [item.orderLine?.poRaw, item.orderLine?.nameRaw, plannedRangeText(item, today)].filter(Boolean).join(' · ');
 }
 
 export function taskWhenText(item: WorkItem, today: string): string {
@@ -140,7 +140,7 @@ export function overdueText(item: Pick<WorkItem, 'overdueDays'>): string | null 
 export function dueTag(item: WorkItem, today: string): TaskTag | null {
   const overdue = overdueText(item);
   if (overdue !== null) return { key: 'due', label: overdue, tone: 'danger', fill: 'solid' };
-  if (item.plannedEnd === today) return { key: 'due', label: '今日应到', tone: 'warning', fill: 'solid' };
+  if (item.plannedEnd === today) return { key: 'due', label: '今日到期', tone: 'warning', fill: 'solid' };
   return null;
 }
 
@@ -154,8 +154,8 @@ export function taskTags(item: WorkItem, today: string): readonly TaskTag[] {
       tone: item.ownerUserId === null ? 'warning' : 'neutral',
       fill: item.ownerUserId === null ? 'outline' : 'solid',
     },
-    { key: 'supplier', label: `供应商 ${supplierText(item)}`, tone: 'neutral', fill: 'solid' },
-    { key: 'factory', label: `工厂 ${factoryText(item)}`, tone: 'neutral', fill: 'solid' },
+    ...(item.supplierName === null ? [] : [{ key: 'supplier', label: `供应商 ${item.supplierName}`, tone: 'neutral', fill: 'solid' } satisfies TaskTag]),
+    ...(item.factoryName === null ? [] : [{ key: 'factory', label: `工厂 ${item.factoryName}`, tone: 'neutral', fill: 'solid' } satisfies TaskTag]),
     { key: 'status', label: workItemStatusLabel(item.status), tone: workItemStatusTone(item.status), fill: 'solid' },
     ...(due === null ? [] : [due]),
   ];

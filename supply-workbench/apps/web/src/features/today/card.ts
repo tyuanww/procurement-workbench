@@ -1,5 +1,5 @@
 import type { TodoItemView } from '@sw/contracts';
-import type { BoardItem } from '../../features/today/index.js';
+import type { BoardItem } from './model/types.js';
 
 export function toBoardItem(item: TodoItemView): BoardItem {
   return {
@@ -13,11 +13,26 @@ export function toBoardItem(item: TodoItemView): BoardItem {
     waitingKind: item.waitingOn.kind,
     reasons: item.reasons,
     poRaw: item.line?.poRaw ?? null,
-    productName: item.line?.nameRaw ?? null,
+    productName: displayName(item),
+    ...(item.ownerUserId === null && item.subject !== 'review' ? { isUnassigned: true } : {}),
     batchStatus: item.batch?.status ?? null,
     ...fulfillmentOf(item),
     ...replyOf(item.batch),
+    ...(item.reminderTarget === undefined ? {} : { nextFollowUpTarget: reminderLabel(item.reminderTarget) }),
   };
+}
+
+function reminderLabel(target: NonNullable<TodoItemView['reminderTarget']>): string {
+  if (target.kind === 'internal') return '内部跟进';
+  const name = target.name?.trim();
+  const action = target.kind === 'supplier' ? '催货' : '核对收货';
+  return `${action} · ${name || waitingLabels[target.kind]}`;
+}
+
+function displayName(item: TodoItemView): string | null {
+  if (item.subject === 'review') return '主数据审核';
+  if (item.subject === 'import') return '待确认导入批次';
+  return item.line?.nameRaw ?? null;
 }
 
 function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining' | 'inTransit'> {
@@ -26,9 +41,14 @@ function fulfillmentOf(item: TodoItemView): Pick<BoardItem, 'qty' | 'remaining' 
   const { unshippedQty, inTransitQty, unit } = fulfillment;
   return {
     qty: unshippedQty,
-    ...(item.reasons.includes('unshipped') ? { remaining: fulfillment } : {}),
-    ...(unshippedQty === 0 && inTransitQty !== null && inTransitQty > 0 && unit !== null ? { inTransit: { qty: inTransitQty, unit } } : {}),
+    ...(shouldShowRemaining({ reasons: item.reasons, unshippedQty }) ? { remaining: fulfillment } : {}),
+    ...(inTransitQty !== null && inTransitQty > 0 && unit !== null ? { inTransit: { qty: inTransitQty, unit } } : {}),
   };
+}
+
+function shouldShowRemaining({ reasons, unshippedQty }: { readonly reasons: TodoItemView['reasons']; readonly unshippedQty: number | null }): boolean {
+  if (reasons.includes('unshipped')) return true;
+  return unshippedQty !== null && unshippedQty > 0 && (reasons.includes('shipped_not_received') || reasons.includes('follow_up_scheduled'));
 }
 
 function replyOf(batch: TodoItemView['batch']): Pick<BoardItem, 'latestFollowUp' | 'latestPromise' | 'nextFollowUpAt'> {

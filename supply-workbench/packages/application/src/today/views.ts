@@ -69,6 +69,7 @@ export type TodoItemView = TodoItem & {
   readonly line: TodoLineView | null;
   readonly batch: TodoBatchView | null;
   readonly waitingOnParty: { readonly id: string | null; readonly displayName: string | null; readonly rawName: string | null } | null;
+  readonly reminderTarget?: { readonly kind: WaitingOnKind; readonly name: string | null };
   readonly exception: { readonly id: string; readonly type: string; readonly note: string } | null;
 };
 
@@ -93,14 +94,24 @@ export type PendingBatchRow = {
 
 export type TodaySort = { readonly kind: 'urgency' } | { readonly kind: 'bulk'; readonly unit: string };
 export type TodayFilter = { readonly reasons?: readonly TodoReason[]; readonly sort: TodaySort };
-export type TodayWorkFilter = 'factory_chase' | 'internal_note';
-export type TodayChaseQuery = TodayFilter & { readonly factoryId?: string; readonly itemId?: string; readonly work?: TodayWorkFilter };
+export type TodayWorkFilter = 'factory_chase' | 'internal_note' | 'all_unshipped';
+export type TodayInbox = 'today' | 'scheduled' | 'unassigned';
+type TodayCalendarQuery = LocalDate | 'today';
+type TodayCalendarDay = { readonly date: LocalDate; readonly count: number };
+type TodayCalendar = {
+  readonly date: LocalDate;
+  readonly days: readonly TodayCalendarDay[];
+  readonly scheduledDays?: readonly TodayCalendarDay[];
+};
+type TodayInboxQuery = { readonly inbox?: TodayInbox; readonly calendar?: TodayCalendarQuery };
+export type TodayChaseQuery = TodayFilter & TodayInboxQuery & { readonly factoryId?: string; readonly itemId?: string; readonly work?: TodayWorkFilter };
 export type TodayQuery = Omit<TodayFilter, 'sort'> & {
   readonly scope: 'mine' | 'all';
   readonly includePending?: boolean;
 };
-export type TodayPageQuery = TodayQuery & {
+export type TodayPageQuery = TodayQuery & TodayInboxQuery & {
   readonly page: { readonly number: number; readonly size: number };
+  readonly calendarFollowUps?: true;
   readonly sort: TodaySort;
   readonly work?: TodayWorkFilter;
   readonly focusId?: string;
@@ -113,17 +124,46 @@ export type TodayPaging = {
   readonly urgent: number;
   readonly reasonCounts: TodayResponse['counts'];
   readonly units: readonly string[];
-  readonly factories: readonly TodayFactory[];
+  readonly factories: readonly (TodayFactory & { readonly count?: number })[];
   readonly followUpCounts?: { readonly due: number; readonly scheduled: number };
   readonly chaseCounts?: { readonly all: number; readonly filtered: number };
   readonly internalNoteCount?: number;
+  readonly arrivalCount?: number;
   readonly chaseItemIds?: readonly string[];
+  /** 三个工作范围各自分页和筛选前的办件数。同一批次可有今天核收和已约跟进。 */
+  readonly inboxCounts?: Readonly<Record<TodayInbox, number>>;
+  /** 未分派范围内的共享主数据审核数，独立于当前筛选、日期和页码。 */
+  readonly unassignedReviewCount?: number;
+  /** 本人待建首批的订单行数，独立于统一分页的办件。 */
+  readonly pendingCount?: number;
+  readonly calendar?: TodayCalendar;
+  readonly focusInbox?: TodayInbox;
+  readonly focusDay?: LocalDate;
+  readonly focusWork?: 'all_unshipped';
 };
 export type TodayPageResponse = TodayResponse & { readonly paging: TodayPaging };
+export type PersonalTodayScope = 'pending' | 'scheduled' | 'all';
+export type PersonalTodayQuery = {
+  readonly scope: PersonalTodayScope;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly focusId?: string;
+  readonly calendar?: TodayCalendarQuery;
+};
+export type PersonalTodayResponse = {
+  readonly asOf: LocalDate;
+  readonly counts: Readonly<Record<Exclude<PersonalTodayScope, 'all'>, number>>;
+  readonly items: readonly TodoItemView[];
+  readonly page: number;
+  readonly pageSize: number;
+  readonly total: number;
+  readonly calendar?: TodayCalendar;
+};
 export type TodayChaseRow = Pick<TodoItem, 'id' | 'dueDate' | 'overdueDays' | 'reasons'> & {
   readonly factory: TodayFactory;
   readonly poRaw: string | null;
   readonly nameRaw: string | null;
+  readonly batchSeq?: number;
   readonly unshippedQty: number;
   readonly unit: string | null;
 };
@@ -164,6 +204,7 @@ export type TodoExceptionSource = {
   readonly type: string;
   readonly note: string;
   readonly openedBy: string;
+  readonly lineOwnerUserId?: string | null;
 };
 
 export type TodayCatalog = {

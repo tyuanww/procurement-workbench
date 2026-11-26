@@ -1,59 +1,55 @@
-import { Button, Flex, Pagination, Select, Typography } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
+import { Flex, Pagination, Select, Typography, type ModalProps } from 'antd';
 import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
-import type { ChaseScope } from './action-query.js';
-import type { FollowUpFilter } from './action-query.js';
+import type { CSSProperties } from 'react';
+import { isPriorityBatchSelection, type ChaseScope, type WorkspaceInbox } from './action-query.js';
+import type { ChasePreview } from './today-copy.js';
 
 export type ActionPageControls = {
   readonly paging: TodayPaging;
+  readonly reasons: readonly string[];
   readonly sort: TodaySort;
   readonly work: TodayWorkFilter | undefined;
+  readonly inbox: WorkspaceInbox | undefined;
+  readonly calendar: string | undefined;
   readonly isLoading: boolean;
   readonly isFiltered: boolean;
   readonly isSettled: boolean;
   readonly isCopying: boolean;
   readonly copyNotice: string;
+  readonly copyPreview?: ChasePreview | null;
   readonly factoryId: string | null;
   readonly loadError: string;
   readonly onPage: (page: number) => void;
-  readonly onSort: (sort: TodaySort) => void;
   readonly onWork: (work?: TodayWorkFilter) => void;
   readonly onFactory: (id: string) => void;
-  readonly onFollowUp: (reason: FollowUpFilter) => void;
   readonly onCopyChase: (scope: ChaseScope) => void;
+  readonly onConfirmCopy?: () => void;
+  readonly onCancelCopyPreview?: () => void;
   readonly onRetry: () => void;
 };
 
-export function ActionControls({ page }: { readonly page: ActionPageControls }) {
-  return <SortControls page={page} />;
-}
+export const actionDialogTarget: CSSProperties = { minBlockSize: 44, minInlineSize: 44 };
 
-export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
-  const counts = page.paging.chaseCounts;
-  return (
-    <div>
-      <Flex className="today-touch" align="center" gap="small" wrap>
-        <Button icon={<CopyOutlined aria-hidden />} disabled={page.isCopying || counts?.all === 0} onClick={() => page.onCopyChase({ kind: 'all' })}>
-          复制全部催单{counts === undefined ? '' : `（${counts.all} 批）`}
-        </Button>
-        {page.isFiltered ? <Button icon={<CopyOutlined aria-hidden />} disabled={!page.isSettled || page.isCopying || page.paging.factories.length === 0}
-          onClick={() => page.onCopyChase({ kind: 'filtered' })}>复制筛选催单{counts === undefined || !page.isSettled ? '' : `（${counts.filtered} 批）`}</Button> : null}
-        <FactoryCopy page={page} />
-      </Flex>
-    </div>
-  );
-}
+export const actionDialogStyles: ModalProps['styles'] = {
+  close: { inlineSize: 44, blockSize: 44, insetInlineEnd: 12, insetBlockStart: 10 },
+  header: { paddingInlineEnd: 44 },
+  body: { maxBlockSize: 'min(60dvh, 28rem)', overflowY: 'auto', overscrollBehavior: 'contain' },
+  wrapper: { overscrollBehavior: 'contain' },
+};
 
-function SortControls({ page }: { readonly page: ActionPageControls }) {
-  const { sort, paging, onSort } = page;
-  const selected = sort.kind === 'bulk' ? sort.unit : undefined;
-  const units = selected === undefined ? paging.units : [...new Set([...paging.units, selected])];
+export function SortControls({ sort, units: availableUnits, onSort }: {
+  readonly sort: TodaySort;
+  readonly units: readonly string[];
+  readonly onSort: (sort: TodaySort) => void;
+}) {
+  const units = sort.kind === 'bulk' ? [...new Set([...availableUnits, sort.unit])] : availableUnits;
   return (
-    <>
-      <Select<TodaySort['kind']> aria-label="排序" size="small" value={sort.kind} virtual={false}
+    <Flex gap="small" align="center" wrap>
+      <Select<TodaySort['kind']> aria-label="排序" value={sort.kind} virtual={false}
+        style={{ ...actionDialogTarget, inlineSize: 194 }}
         options={[
-          { value: 'urgency', label: '紧急优先' },
-          { value: 'bulk', label: '大批优先', disabled: units.length === 0 },
+          { value: 'urgency', label: '批次按紧急度' },
+          { value: 'bulk', label: '大批优先 · 同单位列表', disabled: units.length === 0 },
         ]}
         onChange={(kind) => {
           if (kind === 'urgency') onSort({ kind });
@@ -61,46 +57,61 @@ function SortControls({ page }: { readonly page: ActionPageControls }) {
         }}
       />
       {sort.kind !== 'bulk' ? null : (
-        <Select<string> aria-label="比较单位" size="small" value={sort.unit} virtual={units.length > 50}
+        <Select<string> aria-label="比较单位" value={sort.unit} virtual={units.length > 50}
+          style={{ ...actionDialogTarget, inlineSize: 108 }}
           options={units.map((unit) => ({ value: unit, label: unit }))}
           onChange={(unit) => onSort({ kind: 'bulk', unit })}
         />
       )}
-    </>
+    </Flex>
   );
 }
 
-function FactoryCopy({ page }: { readonly page: ActionPageControls }) {
-  const { factories } = page.paging;
-  const selected = factories.find((factory) => factory.id === page.factoryId) ?? (factories.length === 1 ? factories[0] : undefined);
-  const isDisabled = !page.isSettled || page.isCopying;
-  return (
-    <>
-      <Select<string> aria-label="催单工厂" placeholder="选择催单工厂" value={selected?.id ?? null} size="small" virtual={factories.length > 50}
-        disabled={factories.length === 0 || isDisabled} options={factories.map(({ id, name }) => ({ value: id, label: name }))}
-        onChange={page.onFactory}
-      />
-      <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={isDisabled || selected === undefined} onClick={() => { if (selected !== undefined) page.onCopyChase({ kind: 'factory', id: selected.id }); }}>
-        {page.isFiltered ? '复制该工厂筛选催单' : '复制该工厂催单'}
-      </Button>
-    </>
-  );
-}
-
-export function ActionPagination({ page }: { readonly page: ActionPageControls }) {
+export function ActionPagination({ page, isLocked }: { readonly page: ActionPageControls; readonly isLocked: boolean }) {
   const { paging } = page;
   if (paging.total <= paging.pageSize) return null;
   return (
-    <nav aria-label="行动板分页">
-      <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total} onChange={page.onPage} size="small" showSizeChanger={false} />
+    <nav aria-label="工作台待办分页" aria-disabled={isLocked || undefined}>
+      <Pagination current={paging.page} pageSize={paging.pageSize} total={paging.total}
+        onChange={(nextPage) => { if (!isLocked) page.onPage(nextPage); }} size="small" showSizeChanger={false} />
     </nav>
   );
 }
 
-export function ActionResult({ page }: { readonly page: ActionPageControls }) {
-  const { paging } = page;
-  const unit = page.work === 'factory_chase' ? '批待催货' : page.work === 'internal_note' ? '批等回单' : '条待办';
-  return <Typography.Text role="status" type="secondary">
-    {page.isLoading ? '正在更新行动板…' : page.loadError === '' ? `共 ${paging.total} ${unit}${paging.total > paging.pageSize ? ` · 第 ${paging.page} 页` : ''}` : '行动板更新失败'}
-  </Typography.Text>;
+export function ActionResult({ page, calendarCount }: { readonly page: ActionPageControls; readonly calendarCount?: number | null }) {
+  const message = actionResultMessage(page, calendarCount);
+  if (message === '') return null;
+  return <Typography.Text role="status" type="secondary">{message}</Typography.Text>;
 }
+
+function actionResultMessage(page: ActionPageControls, calendarCount: number | null | undefined): string {
+  if (page.isLoading) return '正在更新待办…';
+  if (page.loadError !== '') return '工作台待办更新失败';
+  const { paging } = page;
+  const hasPages = paging.total > paging.pageSize;
+  const pageLabel = hasPages ? ` · 第 ${paging.page} 页` : '';
+  if (calendarCount !== undefined) return calendarResultMessage(page, { count: calendarCount, pageLabel });
+  if (!page.isFiltered && !hasPages) return '';
+  const unit = page.sort.kind === 'bulk' ? `批未发 · 按${page.sort.unit}比较` : resultUnit(page);
+  return `${page.isFiltered ? '匹配' : '共'} ${paging.total} ${unit}${pageLabel}`;
+}
+
+function calendarResultMessage(page: ActionPageControls, { count, pageLabel }: { readonly count: number | null; readonly pageLabel: string }): string {
+  if (!page.isSettled) return '正在更新待办…';
+  if (count === null) return '正在统计待办…';
+  return `${page.isFiltered ? '匹配 ' : ''}${count} ${page.inbox === 'scheduled' ? '批' : '项'}${pageLabel}`;
+}
+
+function resultUnit(page: ActionPageControls): string {
+  if (page.work !== undefined) return WORK_RESULT_UNITS[page.work];
+  if (page.inbox === 'today' && isPriorityBatchSelection(page.reasons)) return '批';
+  return page.inbox === 'scheduled' ? '批已约跟进' : page.isFiltered ? '项' : '项批次与跟进待办';
+}
+
+const WORK_RESULT_UNITS: Record<TodayWorkFilter, string> = { factory_chase: '批待催货', internal_note: '批等回单', all_unshipped: '批未发' };
+
+export const workFilterLabels: Readonly<Record<TodayWorkFilter, string>> = {
+  factory_chase: '要催货',
+  internal_note: '内部等回单',
+  all_unshipped: '全部未发',
+};

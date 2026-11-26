@@ -4,26 +4,36 @@ import { actionsOf } from './actions.js';
 import { actionReasonText, orderCodes } from './codes.js';
 import { faceOf } from './face.js';
 import { nudgeOf } from './nudge.js';
+import { isPlanGroupMode } from './plan-board.js';
 import { resolveGroup } from './query.js';
 import type { BoardGroup, BoardItem, BoardRow, GroupMode, ReasonChip, ReasonCount, TodayBoard } from './types.js';
 
-const EMPTY_TEXT = '今天没有需要处理的事。下一步：去跟进中心看看。';
+const EMPTY_TEXT = '今天没有需要处理的事。';
+
+export const ACTION_LANES = [
+  { key: 'shipment', name: '跟进供应商' },
+  { key: 'receipt', name: '核对收货' },
+  { key: 'internal', name: '内部待办' },
+] as const;
 
 export function todayBoard(input: {
   readonly items: readonly BoardItem[];
   readonly reasons: readonly string[];
   readonly group: string | null;
   readonly buyerName: string;
+  readonly receiptActionIds?: ReadonlySet<string>;
   readonly page?: Pick<TodayPaging, 'reasonCounts'> & { readonly sort: TodaySort };
 }): TodayBoard {
-  const group = resolveGroup(input.group);
+  const isBulk = input.page?.sort.kind === 'bulk';
+  const group = isBulk && input.group === null ? 'priority' : resolveGroup(input.group);
   const groups = groupsOf({
     items: input.page === undefined ? sortTodos(filterReasons(input.items, input.reasons)) : input.items,
     isPaged: input.page !== undefined,
-    isBulk: input.page?.sort.kind === 'bulk',
+    isBulk,
     group,
     reasons: input.reasons,
     buyerName: input.buyerName,
+    receiptActionIds: input.receiptActionIds,
   });
   return { group, chips: chipsOf({ items: input.items, reasons: input.reasons, counts: input.page?.reasonCounts }), body: bodyOf(groups) };
 }
@@ -35,15 +45,29 @@ function groupsOf(input: {
   readonly isBulk: boolean;
   readonly reasons: readonly string[];
   readonly buyerName: string;
+  readonly receiptActionIds: ReadonlySet<string> | undefined;
 }): BoardGroup[] {
-  if (input.isBulk && (input.group === 'waiting' || input.group === 'reason' || input.group === 'date')) {
-    if (input.items.length === 0) return [];
+  if (input.items.length === 0 || isPlanGroupMode(input.group)) return [];
+  if (input.group === 'kanban') return kanbanGroups(input.items, input.receiptActionIds);
+  if (input.isBulk) {
     return [decorate({ key: 'bulk', name: '大批优先', items: input.items, buyerName: input.buyerName })];
+  }
+  if (input.group === 'priority') {
+    return [{ key: 'priority', name: '行动清单', counts: [], nudgeText: '', rows: rowsOf(input.items) }];
   }
   if (input.group === 'waiting') return waitingGroups(input.items, input.buyerName);
   if (input.group === 'reason') return reasonGroups(input);
-  if (input.group === 'date') return dateGroups(input.items, input.buyerName);
-  return [];
+  return dateGroups(input.items, input.buyerName);
+}
+
+function kanbanGroups(items: readonly BoardItem[], receiptActionIds: ReadonlySet<string> | undefined): BoardGroup[] {
+  const lanes: Record<typeof ACTION_LANES[number]['key'], BoardItem[]> = { shipment: [], receipt: [], internal: [] };
+  for (const item of items) {
+    if (receiptActionIds?.has(item.id) === true) lanes.receipt.push(item);
+    else if (item.waitingKind === 'supplier' && item.batchStatus !== null) lanes.shipment.push(item);
+    else lanes.internal.push(item);
+  }
+  return ACTION_LANES.map(({ key, name }) => ({ key, name, counts: [], nudgeText: '', rows: rowsOf(lanes[key]) }));
 }
 
 function waitingGroups(items: readonly BoardItem[], buyerName: string): BoardGroup[] {
@@ -108,8 +132,12 @@ function decorate(input: { readonly key: string; readonly name: string; readonly
     name: input.name,
     counts: countsOf(input.items),
     nudgeText: input.key === 'bulk' ? '' : nudgeOf({ items: input.items, buyerName: input.buyerName }),
-    rows: input.items.map((item) => ({ id: item.id, face: faceOf(item), actions: actionsOf(item) })),
+    rows: rowsOf(input.items),
   };
+}
+
+function rowsOf(items: readonly BoardItem[]): BoardRow[] {
+  return items.map((item) => ({ id: item.id, face: faceOf(item), reasons: orderCodes(item.reasons), actions: actionsOf(item) }));
 }
 
 function countsOf(items: readonly BoardItem[]): ReasonCount[] {

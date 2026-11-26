@@ -47,14 +47,17 @@ it('关闭或取消不再给出确认日和作废，已收货仍可以改确认�
   expect(page.includes('FulfillmentRecords')).toBe(true);
 });
 
-it('发货表单把错误留在上面，数量还在', () => {
+it('发货请求失败时保留顶部反馈和原来填写的数量', () => {
   const html = markup(RecordForm, {
-    draft: { kind: 'ship', batchId: 'batch-1', qty: 0, shippedOn: '2026-10-12' },
-    error: '',
+    id: 'shipment',
+    draft: { kind: 'ship', batchId: 'batch-1', qty: 2, shippedOn: '2026-10-12' },
+    error: '内部错误。已保留填写内容，可以重新确认。',
     warehouses: [],
     onChange: () => undefined,
+    onSubmit: () => undefined,
   });
-  expect(html).toContain('数量必须大于 0');
+  expect(html).toContain('内部错误。已保留填写内容，可以重新确认。');
+  expect(html).toContain('value="2"');
   expect(html).toContain('发货日');
 });
 

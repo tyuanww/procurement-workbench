@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { focusForRows, handleKey, rowsSettled, type KeyActions } from '../../apps/web/src/pages/today/today-keys.js';
 import { ScheduleView } from '../../apps/web/src/pages/today/ScheduleView.js';
-import type { PlanLoad } from '../../apps/web/src/features/today/index.js';
+import type { PlanLoad, PlanRow } from '../../apps/web/src/features/today/index.js';
 
 const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
 
@@ -60,7 +60,7 @@ describe('排期键盘只操作当前视图', () => {
     expect(rowsSettled({ isReady: true, isSchedule: true, plan: 'ready' })).toBe(true);
   });
 
-  it('键盘焦点画在当前排期行上', () => {
+  it('只在键盘定位的排期行显示选中态', () => {
     const html = render(ScheduleView, {
       group: 'schedule',
       load: readyPlan([FIRST, SECOND]),
@@ -69,9 +69,10 @@ describe('排期键盘只操作当前视图', () => {
       onOpen: () => undefined,
       onRetry: () => undefined,
     });
-    const rows = html.split('today-task-row');
-    expect(rows[1] ?? '').not.toContain('#805D9D');
-    expect(rows[2] ?? '').toContain('#805D9D');
+    const rows = html.split('<li').filter((part) => part.includes('today-task-row'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).not.toContain('data-current="true"');
+    expect(rows[1]).toContain('data-current="true"');
   });
 });
 
@@ -98,7 +99,7 @@ function key(value: string): { key: string; target: null; defaultPrevented: bool
 }
 
 function readyPlan(rowIds: readonly string[]): PlanLoad {
-  const rows = rowIds.map((id) => ({ id, workItemId: id, title: id, meta: '', tags: [] }));
+  const rows = rowIds.map((id): PlanRow => ({ id, workItemId: id, title: id, meta: '', tags: [], status: 'planned', timing: 'today', isHighPriority: false }));
   return {
     kind: 'ready',
     board: { kind: 'groups', groups: [{ key: 'due-today', name: '今天到期', counts: [], note: null, isUnassigned: false, rows }], rows },

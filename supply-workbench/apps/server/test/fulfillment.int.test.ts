@@ -5,6 +5,7 @@ import path from 'node:path';
 import { devAuth } from '@sw/auth';
 import { createDb, migrate, seed, userDirectory } from '@sw/persistence';
 import { FixedClock } from '../../../packages/testkit/src/index.js';
+import { countAudit } from '../../../packages/persistence/src/repositories/audit-log.js';
 import { composeFollowUp, followUpAttachmentMaxBytes } from '../src/composition/follow-up.js';
 import { buildHttpApp } from '../src/http/app.js';
 import { registerFollowUpRoutes } from '../src/http/follow-up/routes.js';
@@ -16,7 +17,15 @@ it('采购批次保存报发、核实实际发收并可按原依据与作废记�
   const handle = await createDb({ driver: 'pglite' });
   await migrate(handle);
   await seed(handle.exec);
-  const api = composeFollowUp({ db: handle.db, uploadDir, timeZone: 'Asia/Shanghai', clock });
+  const followUp = composeFollowUp({ db: handle.db, uploadDir, timeZone: 'Asia/Shanghai', clock });
+  let shouldHideReceiptResponse = false;
+  const api = { ...followUp, getBatch: async (...args: Parameters<typeof followUp.getBatch>) => {
+    if (shouldHideReceiptResponse) {
+      shouldHideReceiptResponse = false;
+      throw new Error('收货已写入，回读响应故障');
+    }
+    return followUp.getBatch(...args);
+  } };
   const app = await buildHttpApp({
     auth: devAuth({ directory: userDirectory(handle.db), accessCode: 'dev-code', secret: '0123456789abcdef0123456789abcdef' }),
     register: (server) => registerFollowUpRoutes({ app: server, api, attachmentMaxBytes: followUpAttachmentMaxBytes() }),
@@ -50,7 +59,20 @@ it('采购批次保存报发、核实实际发收并可按原依据与作废记�
     expect(shipped.statusCode).toBe(200);
     expect(shipped.json()).toMatchObject({ recordedAt: clock.now(), fulfillment: { ...linked.fulfillment, reviewReason: null } });
     expect((await post(`${batch}/shipments`, linked)).statusCode).toBe(409);
-    const receipt = await post(`${batch}/receipts`, receive);
+    const idempotencyKey = '0bd8fd24-62a8-4594-839f-a7a241c41682';
+    const replayReceipt = (payload = receive) => app.inject({ method: 'POST', url: `${batch}/receipts`, payload,
+      headers: { cookie, 'idempotency-key': idempotencyKey } });
+    const invalidAttempt = await app.inject({ method: 'POST', url: `${batch}/receipts`, payload: receive,
+      headers: { cookie, 'idempotency-key': 'invalid' } });
+    expect(invalidAttempt.statusCode).toBe(400);
+    shouldHideReceiptResponse = true;
+    expect((await replayReceipt()).statusCode).toBe(500);
+    const committedReceipt = (await read()).receipts[0];
+    const receipt = await replayReceipt();
+    expect(receipt.json().id).toBe(committedReceipt.id);
+    expect((await read()).receipts).toHaveLength(1);
+    expect(await countAudit(handle.db, committedReceipt.id)).toBe(1);
+    expect((await replayReceipt({ ...receive, qty: 3 })).statusCode).toBe(409);
     expect(receipt.statusCode).toBe(200);
     const accepted = { unshippedQty: 5000, inTransitQty: 3000, receivedQty: 2000, reviewCount: 0 };
     expect(await read()).toMatchObject({ shippedQty: 5000, receivedQty: 2000, status: 'partially_received', fulfillment: accepted });
@@ -97,6 +119,14 @@ it('采购批次保存报发、核实实际发收并可按原依据与作废记�
     expect.soft((await post(`${batch}/receipts`, { ...receive, receivedOn: tomorrow })).statusCode).toBe(400);
     expect.soft((await post(`${batch}/shipments`, { qty: 1, shippedOn: tomorrow })).statusCode).toBe(200);
     expect.soft((await post(`${batch}/receipts`, { qty: 1, receivedOn: tomorrow, category: 'packaging' })).statusCode).toBe(200);
+
+    const receiptAttempt = () => app.inject({ method: 'POST', url: `${batch}/receipts`,
+      payload: { qty: 1, receivedOn: day, category: 'packaging' },
+      headers: { cookie, 'idempotency-key': '064ec887-8f89-4ef2-8e49-69ae2f65b4e9' } });
+    const undoId = (await receiptAttempt()).json().id;
+    expect((await app.inject({ method: 'DELETE', url: `/api/v1/receipts/${undoId}`, headers: { cookie } })).statusCode).toBe(204);
+    expect((await receiptAttempt()).statusCode).toBe(409);
+    expect(await countAudit(handle.db, undoId)).toBe(2);
   } finally {
     await app.close();
     await handle.close();

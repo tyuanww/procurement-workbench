@@ -29,6 +29,13 @@ describe('催办文本', () => {
     expect(text).not.toContain('谢谢！—');
   });
 
+  it('未确认到货日的催单保留批次号和数量', () => {
+    const text = nudgeText({ waitingName: '宜侬', buyerName: '',
+      lines: [{ ...base, batchSeq: 2, unit: '件', status: 'unconfirmed', dueDate: null }] });
+    expect(text).toContain('PO1 第 2 批 面膜 未发 10 件，尚未确认到货日，请回复可到货日期');
+    expect(text).not.toContain('确认到货 —');
+  });
+
   it('勾选记跟进时条数等于批次数', () => {
     expect(followUpCount([baseLine('overdue'), baseLine('shipped')], true)).toBe(2);
     expect(followUpCount([baseLine('overdue')], false)).toBe(0);

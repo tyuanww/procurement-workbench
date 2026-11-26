@@ -1,5 +1,5 @@
-import { shortcutAction } from '../../features/today/index.js';
-import type { OpenForm } from './TodayForms.js';
+import { shortcutAction, type OpenForm } from '../../features/today/index.js';
+import { workspaceRowId, workspaceRowOf } from './today-focus.js';
 
 type Move = 'down' | 'up';
 
@@ -16,6 +16,10 @@ type KeyPress = {
   readonly key: string;
   readonly target: EventTarget | null;
   readonly defaultPrevented: boolean;
+  readonly isComposing?: boolean;
+  readonly altKey?: boolean;
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
   readonly preventDefault: () => void;
 };
 
@@ -31,46 +35,79 @@ export function rowsSettled(input: { readonly isReady: boolean; readonly isSched
   return input.plan === 'ready' || input.plan === 'error';
 }
 
-export function handleKey(input: {
+type KeyContext = {
   readonly event: KeyPress;
   readonly rows: readonly { readonly id: string }[];
   readonly focus: string | null;
   readonly hasDraft: boolean;
+  readonly hasDrawer?: boolean;
+  readonly isHelpOpen?: boolean;
   readonly isPlanMode?: boolean;
   readonly actions: KeyActions;
-}): void {
-  if (isTyping(input.event.target) || input.event.defaultPrevented) return;
-  if (input.event.key === 'Escape') {
+};
+
+export function handleKey(input: KeyContext): void {
+  const { event, actions } = input;
+  if (omitModifiedKey(event)) return;
+  if (event.key === 'Escape') {
     escape(input);
     return;
   }
-  if (isControl(input.event)) return;
-  if (input.event.key === 'Enter') {
-    if (isCurrentRow(input.rows, input.focus)) input.actions.openDrawer();
+  if (insideRecord(input)) return;
+  if (event.key === '?') {
+    if (input.isHelpOpen === true || !inDialog(event.target)) actions.toggleHelp();
     return;
   }
-  const arrow = arrowMove(input.event.key);
-  if (arrow !== null) {
-    input.event.preventDefault();
-    input.actions.setFocus(moveFocus({ rows: input.rows, focus: input.focus, action: arrow }));
+  if (input.isHelpOpen === true || inDialog(event.target) || isControl(event)) return;
+  handleRowKey(input);
+}
+
+function omitModifiedKey(event: KeyPress): boolean {
+  return event.defaultPrevented || event.isComposing === true || event.altKey === true || event.ctrlKey === true || event.metaKey === true;
+}
+
+function insideRecord(input: KeyContext): boolean {
+  return input.hasDrawer === true || input.hasDraft || isTyping(input.event.target);
+}
+
+function handleRowKey({ event, rows, focus, isPlanMode, actions }: KeyContext): void {
+  if (event.key === 'Enter') {
+    if (isCurrentRow(rows, focus)) {
+      event.preventDefault();
+      actions.openDrawer();
+    }
     return;
   }
-  const action = shortcutAction(input.event.key);
-  if (input.isPlanMode === true && !isNavigation(action)) return;
-  applyShortcut({ action, rows: input.rows, focus: input.focus, actions: input.actions });
+  const arrow = arrowMove(event.key);
+  const action = shortcutAction(event.key);
+  const move = arrow ?? navigationAction(action);
+  if (move !== null) {
+    const next = moveFocus({ rows, focus, action: move, canWrap: arrow === null });
+    if (next !== null) {
+      event.preventDefault();
+      actions.setFocus(next);
+    }
+    return;
+  }
+  if (isPlanMode !== true && isRecordAction(action) && isCurrentRow(rows, focus)) actions.open(action);
+}
+
+function navigationAction(action: ReturnType<typeof shortcutAction>): Move | null {
+  return action === 'down' || action === 'up' ? action : null;
 }
 
 function isCurrentRow(rows: readonly { readonly id: string }[], focus: string | null): boolean {
   return focus !== null && rows.some((row) => row.id === focus);
 }
 
-function isNavigation(action: ReturnType<typeof shortcutAction>): boolean {
-  return action === 'down' || action === 'up' || action === 'help';
-}
-
-function escape(input: { readonly hasDraft: boolean; readonly actions: KeyActions }): void {
-  if (input.hasDraft) input.actions.closeDraft();
-  else input.actions.closeDrawer();
+function escape(input: KeyContext): void {
+  const { event, actions } = input;
+  if (closest(event.target, '[role="combobox"][aria-expanded="true"]') !== null) return;
+  if (input.hasDraft) actions.closeDraft();
+  else if (input.hasDrawer === true) actions.closeDrawer();
+  else if (input.isHelpOpen === true) actions.toggleHelp();
+  else return;
+  event.preventDefault();
 }
 
 function arrowMove(key: string): Move | null {
@@ -79,37 +116,35 @@ function arrowMove(key: string): Move | null {
   return null;
 }
 
-function applyShortcut(input: {
-  readonly action: ReturnType<typeof shortcutAction>;
-  readonly rows: readonly { readonly id: string }[];
-  readonly focus: string | null;
-  readonly actions: KeyActions;
-}): void {
-  if (input.action === 'down' || input.action === 'up') {
-    input.actions.setFocus(moveFocus({ rows: input.rows, focus: input.focus, action: input.action }));
-    return;
-  }
-  if (input.action === 'help') {
-    input.actions.toggleHelp();
-    return;
-  }
-  if (input.action !== null && isCurrentRow(input.rows, input.focus)) input.actions.open(input.action);
+function moveFocus(input: { readonly rows: readonly { readonly id: string }[]; readonly focus: string | null; readonly action: Move; readonly canWrap: boolean }): string | null {
+  const { rows, focus, action, canWrap } = input;
+  const index = rows.findIndex((row) => row.id === focus);
+  if (index < 0) return rows[0]?.id ?? null;
+  const next = index + (action === 'down' ? 1 : -1);
+  const candidate = canWrap ? (next + rows.length) % rows.length : next;
+  return rows[candidate]?.id ?? null;
 }
 
-function moveFocus(input: { readonly rows: readonly { readonly id: string }[]; readonly focus: string | null; readonly action: Move }): string | null {
-  const index = input.rows.findIndex((row) => row.id === input.focus);
-  const next = input.action === 'down' ? index + 1 : index - 1;
-  return input.rows[next]?.id ?? input.rows[0]?.id ?? null;
+function isRecordAction(action: ReturnType<typeof shortcutAction>): action is OpenForm['kind'] {
+  return action === 'date' || action === 'ship' || action === 'receipt' || action === 'note' || action === 'exception';
 }
 
 function isTyping(target: EventTarget | null): boolean {
-  if (target === null || typeof HTMLInputElement === 'undefined') return false;
-  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+  return closest(target, 'input, textarea, select, [contenteditable]:not([contenteditable="false"])') !== null;
+}
+
+function inDialog(target: EventTarget | null): boolean {
+  return closest(target, '[role="dialog"]') !== null;
 }
 
 function isControl({ target, key }: KeyPress): boolean {
-  if (typeof Element === 'undefined' || !(target instanceof Element)) return false;
-  const control = target.closest('button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [role="menu"], [tabindex="0"]');
+  const control = closest(target, 'button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [role="menu"], [tabindex="0"]:not([role="tabpanel"]), .today-calendar');
   if (control === null) return false;
-  return !control.classList.contains('today-task-row') || key === 'Enter' || key === ' ';
+  const rowId = workspaceRowOf(control);
+  const isRowControl = control === target && rowId !== null && control.id === workspaceRowId(rowId);
+  return !isRowControl || key === 'Enter' || key === ' ';
+}
+
+function closest(target: EventTarget | null, selector: string): Element | null {
+  return typeof Element !== 'undefined' && target instanceof Element ? target.closest(selector) : null;
 }

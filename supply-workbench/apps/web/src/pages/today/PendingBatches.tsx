@@ -1,15 +1,18 @@
-import { useState } from 'react';
-import { Link } from 'react-router';
-import { Button, Flex, Pagination, Typography } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { TodayOrderLink } from '../../features/today/index.js';
+import { Button, Card, Flex, Pagination, Typography } from 'antd';
 import { HintBatchResultSchema, type TodayResponse } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../shared/api/client.js';
-import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
-import { MissingValue } from '../../shared/ui/widgets.js';
+import { formatQuantity } from '../../shared/ui/format.js';
+import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
+import { restoreWorkspaceLinkFocus, workspaceRowId } from './today-focus.js';
 
 type PendingBatch = NonNullable<TodayResponse['pendingBatch']>[number];
 const PAGE_SIZE = 50;
+export const PENDING_BATCH_TARGET = 'today-pending-batches';
+const jumpTarget = { id: PENDING_BATCH_TARGET, className: 'today-jump-target', tabIndex: -1 };
 
 const missingLabels = {
   quantity: '计划数量',
@@ -17,17 +20,21 @@ const missingLabels = {
   receiver: '收货方',
 } satisfies Record<PendingBatch['missingFields'][number], string>;
 
-export function PendingBatches({ rows, onChanged }: {
+type PendingBatchesProps = {
   readonly rows: readonly PendingBatch[];
+  readonly focusId: string | null;
+  readonly canFocus: boolean;
   readonly onChanged: (() => Promise<boolean>) | undefined;
-}) {
+};
+
+export function usePendingBatches({ rows, focusId, canFocus, onChanged }: PendingBatchesProps) {
   const canWrite = useCanWrite('lines.write');
   const [posting, setPosting] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
-  const [page, setPage] = useState(1);
+  const focusIndex = rows.findIndex((row) => row.orderLineId === focusId);
+  const [page, setPage] = useState(() => focusIndex < 0 ? 1 : Math.floor(focusIndex / PAGE_SIZE) + 1);
   const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
   if (currentPage !== page) setPage(currentPage);
-  if (rows.length === 0 && notice === '') return null;
   const start = (currentPage - 1) * PAGE_SIZE;
 
   async function create(orderLineId: string) {
@@ -45,15 +52,38 @@ export function PendingBatches({ rows, onChanged }: {
     }
   }
 
+  return {
+    rows: rows.slice(start, start + PAGE_SIZE), total: rows.length, currentPage, setPage, focusId, canFocus, notice, posting,
+    onCreate: canWrite && onChanged !== undefined ? create : undefined,
+  };
+}
+
+type PendingBatchView = ReturnType<typeof usePendingBatches>;
+
+export function pendingBatchRowId(orderLineId: string): string {
+  return `pending:${orderLineId}`;
+}
+
+export function pendingBatchCards(view: PendingBatchView, focus: string | null) {
+  return view.rows.map((row, index) => {
+    const id = pendingBatchRowId(row.orderLineId);
+    return (
+      <li key={id} className="today-jump-target" {...(index === 0 ? jumpTarget : {})}>
+        <article><Card className="today-row today-work-card today-batch-card" size="small" data-current={focus === id || undefined}>
+          <PendingBatchItem row={row} view={view} />
+        </Card></article>
+      </li>
+    );
+  });
+}
+
+export function PendingBatchPagination({ view, isCompact = false }: { readonly view: PendingBatchView; readonly isCompact?: boolean }) {
+  if (view.total <= PAGE_SIZE) return null;
   return (
-    <SectionGroup title="待建批次" meta={`${rows.length} 行`}>
-      <div role="status">{notice}</div>
-      {rows.slice(start, start + PAGE_SIZE).map((row) => (
-        <PendingBatchItem key={row.orderLineId} row={row} posting={posting} onCreate={canWrite && onChanged !== undefined ? create : undefined} />
-      ))}
-      <Pagination align="end" current={currentPage} pageSize={PAGE_SIZE} total={rows.length} onChange={setPage}
-        size="small" hideOnSinglePage showSizeChanger={false} style={{ marginTop: space[2] }} />
-    </SectionGroup>
+    <nav aria-label="待建批次分页" style={isCompact ? undefined : { marginTop: space[2] }}>
+      <Pagination align={isCompact ? 'start' : 'end'} current={view.currentPage} pageSize={PAGE_SIZE} total={view.total} onChange={view.setPage}
+        size="small" simple={isCompact} showSizeChanger={false} />
+    </nav>
   );
 }
 
@@ -67,27 +97,53 @@ async function createFirstBatch(orderLineId: string): Promise<string> {
   return result.created > 0 ? '已生成首批次' : result.skipped[0]?.reason ?? '请在订单详情核对';
 }
 
-function PendingBatchItem({ row, posting, onCreate }: {
+function PendingBatchItem({ row, view }: {
   readonly row: PendingBatch;
-  readonly posting: string | null;
-  readonly onCreate: ((orderLineId: string) => Promise<void>) | undefined;
+  readonly view: PendingBatchView;
 }) {
-  return (
-    <SectionRow action={
-      <Flex align="center" gap="small" wrap onKeyDown={(event) => event.stopPropagation()}>
-        <Link to={`/lines/${encodeURIComponent(row.orderLineId)}`}>查看订单</Link>
-        {row.action === 'create' && onCreate !== undefined ? (
-          <Button size="small" loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
-            生成首批次
-          </Button>
-        ) : null}
-      </Flex>
-    }>
-      <div style={{ overflowWrap: 'anywhere' }}><Typography.Text strong>{row.nameRaw || '品名未填写'}</Typography.Text>{' · '}{row.poRaw || <MissingValue reason="not_provided" />}</div>
-      <Typography.Text type="secondary">
-        订单数量 {row.qtyOrdered === null ? <MissingValue reason="not_provided" /> : row.qtyOrdered.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}{row.unit === null ? '' : ` ${row.unit}`}
-        {row.missingFields.length > 0 ? ` · 待补${row.missingFields.map((field) => missingLabels[field]).join('、')}` : (row.action === 'detail' ? ' · 在订单详情确认收货方' : '')}
-      </Typography.Text>
-    </SectionRow>
+  const { focusId, canFocus, posting, onCreate } = view;
+  const shouldFocus = canFocus && row.orderLineId === focusId;
+  const orderLink = useRef<HTMLAnchorElement>(null);
+  const restoredFocus = useRef(false);
+  useEffect(() => {
+    if (!shouldFocus || restoredFocus.current) return;
+    restoredFocus.current = true;
+    restoreWorkspaceLinkFocus(orderLink.current);
+  }, [shouldFocus]);
+  const canCreate = row.action === 'create' && onCreate !== undefined;
+  const actions = (
+    <Flex className="today-touch today-row-actions" align="center" gap={space[0]} wrap>
+      {canCreate ? (
+        <Button className="today-action-primary" color="default" variant="outlined"
+          loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
+          生成首批次
+        </Button>
+      ) : null}
+      <TodayOrderLink id={workspaceRowId(pendingBatchRowId(row.orderLineId))} order={{ lineId: row.orderLineId }} isPending focusRef={orderLink} primary={!canCreate}>查看订单</TodayOrderLink>
+    </Flex>
   );
+  return <div className="today-row-layout">
+    <PendingFacts row={row} />
+    <div className="today-row-details today-row-quantities">
+      <Typography.Text>订单数量 {row.qtyOrdered === null ? <MissingValue reason="not_provided" /> : formatQuantity(row.qtyOrdered)}{row.unit === null ? '' : ` ${row.unit}`}</Typography.Text>
+    </div>
+    {actions}
+  </div>;
+}
+
+function PendingFacts({ row }: { readonly row: PendingBatch }) {
+  const step = nextStep(row);
+  return <div className="today-row-facts">
+    <div className="today-row-line today-batch-title">
+      <StatusTag status="no_batch" label="待建批次" />
+      <Typography.Title level={3} className="today-row-title">{row.nameRaw || '品名未填写'}</Typography.Title>
+    </div>
+    <Typography.Text className="today-row-meta" type="secondary">{row.poRaw || <MissingValue reason="not_provided" />}</Typography.Text>
+    {step === '' ? null : <Typography.Text className="today-row-reason">{step}</Typography.Text>}
+  </div>;
+}
+
+function nextStep(row: PendingBatch) {
+  if (row.missingFields.length > 0) return `待补${row.missingFields.map((field) => missingLabels[field]).join('、')}`;
+  return row.action === 'detail' ? '在订单详情确认收货方' : '';
 }

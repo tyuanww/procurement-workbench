@@ -4,16 +4,14 @@ import { routeAccess, type NavRow } from '../features/shell/index.js';
 import { useActorRoles } from '../shared/actor.js';
 import { space } from '../theme/tokens.js';
 import { PAGE_MANIFEST, type PageManifestEntry } from './page-manifest.js';
-import { navigationSelection } from './shell-nav.js';
+import { navigationSelection, type NavSelection } from './shell-nav.js';
 
 export function WorkspaceBreadcrumb({ rows, inline = false }: { readonly rows: readonly NavRow[]; readonly inline?: boolean }) {
   const location = useLocation();
   const roles = useActorRoles();
   const page = PAGE_MANIFEST.find(({ path }) => matchPath(path, location.pathname) !== null);
   if (page === undefined || routeAccess({ roles, gate: page.gate ?? 'always' }) !== 'open') return null;
-  const active = navigationSelection(rows, location);
-  const trail = [active?.row.label, active?.destination?.label].filter((label) => label !== undefined);
-  trail.push(...pageLabels(page, location.search));
+  const trail = breadcrumbTrail({ page, active: navigationSelection(rows, location), search: location.search });
   if (trail.length === 0) return null;
   const items = trail.map((label, index) => ({
     title: index === trail.length - 1 ? <span aria-current="page">{label}</span> : label,
@@ -21,6 +19,12 @@ export function WorkspaceBreadcrumb({ rows, inline = false }: { readonly rows: r
   return <Breadcrumb aria-label="当前位置" items={items} style={inline
     ? { minWidth: 0, lineHeight: '20px' }
     : { marginBottom: space[3] }} />;
+}
+
+function breadcrumbTrail({ page, active, search }: { readonly page: PageManifestEntry; readonly active: NavSelection | undefined; readonly search: string }): readonly string[] {
+  const labels = pageLabels(page, search);
+  const destination = page.nav !== null && labels.length > 0 ? undefined : active?.destination?.label;
+  return [active?.row.label, destination, ...labels].filter((label) => label !== undefined);
 }
 
 function pageLabels(page: PageManifestEntry, search: string): readonly string[] {

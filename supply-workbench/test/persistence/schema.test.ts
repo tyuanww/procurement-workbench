@@ -80,6 +80,7 @@ function journalingStores({ users, audits, journal }: { readonly users: Map<stri
       },
     },
     audit: {
+      ...stores.audit,
       async record(entry: unknown) {
         journal.undo(() => {
           audits.pop();

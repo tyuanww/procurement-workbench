@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { todayMotionCss } from '../../apps/web/src/pages/today/today-style.js';
+import { todayMotionCss } from '../../apps/web/src/features/today/today-style.js';
 import { MissingValue, StatusTag } from '../../apps/web/src/shared/ui/widgets.js';
 import { TodayScreen } from '../../apps/web/src/pages/today/TodayBoard.js';
 import { DashboardPage } from '../../apps/web/src/pages/dashboard/DashboardPage.js';
@@ -13,13 +13,13 @@ describe('加载、错误和空态', () => {
   it('今日没读完是骨架，不是白屏', () => {
     const html = render(TodayScreen, todayProps({ isReady: false }));
     expect(html).toContain('ant-skeleton');
-    expect(html).toContain('今日');
+    expect(html).toContain('个人工作台');
   });
 
   it('今日读失败是 Result，带错误、重试和返回', () => {
     const html = render(TodayScreen, todayProps({ isReady: true, loadError: '网络断了' }));
     expect(html).toContain('ant-result');
-    expect(html).toContain('今日没有读出来');
+    expect(html).toContain('个人工作台没有读出来');
     expect(html).toContain('网络断了');
     const text = html.replace(/\s+/g, '');
     expect(text).toContain('重试');
@@ -41,11 +41,9 @@ describe('加载、错误和空态', () => {
 });
 
 describe('动效', () => {
-  it('今日淡出 180 毫秒，减少动态效果时关掉', () => {
+  it('今日淡出与当前项高亮只在允许动效时过渡', () => {
     const css = todayMotionCss();
-    expect(css).toContain('opacity 180ms');
-    expect(css).toContain('prefers-reduced-motion: reduce');
-    expect(css).toMatch(/transition:\s*none/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{\s*\.today-row\s*\{[^}]*opacity 180ms[^}]*background-color 150ms/);
   });
 });
 
@@ -76,8 +74,7 @@ describe('缺值和状态', () => {
 function todayProps(override: Record<string, unknown> = {}): Record<string, unknown> {
   const noop = () => undefined;
   return {
-    board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有待办。下一步：去跟进中心看看。' } },
-    insight: { total: 0, urgent: 0, overdue: 0, missingDate: 0 },
+    board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有需要处理的事。' } },
     focus: null,
     fading: null,
     drawerId: null,
@@ -89,7 +86,6 @@ function todayProps(override: Record<string, unknown> = {}): Record<string, unkn
     isHelpOpen: false,
     isReady: true,
     loadError: '',
-    onToggleReason: noop,
     onGroup: noop,
     onOpen: noop,
     onQuick: noop,

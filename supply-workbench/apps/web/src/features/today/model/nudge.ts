@@ -30,6 +30,7 @@ function chaseParties(rows: readonly TodayChaseRow[]): { readonly name: string; 
     party.lines.push({
       poRaw: missingGlyph(row.poRaw),
       nameRaw: missingGlyph(row.nameRaw),
+      ...(row.batchSeq === undefined ? {} : { batchSeq: row.batchSeq }),
       qty: row.unshippedQty,
       ...(row.unit === null ? {} : { unit: row.unit }),
       dueDate: row.dueDate,

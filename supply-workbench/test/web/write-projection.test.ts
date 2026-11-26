@@ -4,7 +4,7 @@ import { can, type PermissionAction, type Role } from '../../packages/domain/src
 import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { TaskActionBar } from '../../apps/web/src/features/plan/TaskDrawer.js';
 import { ActionBoard } from '../../apps/web/src/pages/today/ActionBoard.js';
-import { RecordFooter } from '../../apps/web/src/pages/today/TodayDrawer.js';
+import { RecordFooter } from '../../apps/web/src/features/today/TodayDrawer.js';
 import { ConflictSaveBar, ImportConflictDrawerFields } from '../../apps/web/src/pages/imports/ImportConflictDrawer.js';
 import type { ImportRowView } from '../../packages/contracts/src/index.js';
 import { ImportCenter } from '../../apps/web/src/pages/imports/ImportCenter.js';
@@ -65,10 +65,8 @@ function showNote(role: Role): string {
 function showShip(role: Role): string {
   return roleMarkup({ role, type: ActionBoard, props: {
     board: shipBoard(),
-    insight: { total: 1, urgent: 0, overdue: 0, missingDate: 0 },
     focus: null,
     fading: null,
-    onToggleReason: () => undefined,
     onGroup: () => undefined,
     onOpen: () => undefined,
     onQuick: () => undefined,
@@ -88,7 +86,7 @@ function showConfirm(role: Role): string {
   return roleMarkup({
     role,
     type: RecordFooter,
-    props: { draft: { kind: 'ship', qty: 1, shippedOn: '2026-11-10' }, hadDate: false, isSaving: false, onSubmit: () => undefined },
+    props: { formId: 'today-ship', isSaving: false, onCancel: () => undefined },
   });
 }
 

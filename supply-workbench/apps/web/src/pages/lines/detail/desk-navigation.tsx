@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
+import { businessToday } from '../../../features/follow-up/index.js';
+import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
   const isRouted = useInRouterContext();
@@ -7,12 +9,38 @@ export function LineDetailLink(props: { readonly href: string; readonly search: 
   return <Link to={props.href} state={{ lineDeskSearch: props.search }}>{props.children}</Link>;
 }
 
-export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } };
+export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } | { readonly todayPendingId: string } | { readonly todayArrivalId: string } };
 
-export function lineDetailBack(input: { readonly progress: string | null; readonly state: unknown; readonly lineId: string }): DetailBack | null {
+export function lineDetailBack(input: { readonly progress: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
   if (input.progress !== null) return { to: `/progress?${new URLSearchParams(input.progress).toString()}`, label: '返回管理店铺' };
+  const today = todayBack(input.state, input.todayBatch);
+  if (today !== null) return today;
+  if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
   const to = lineDeskAddress(input.state);
   return to === null ? null : { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
+}
+
+function todayBack(state: unknown, batchId: string | null | undefined): DetailBack | null {
+  if (typeof state !== 'object' || state === null) return null;
+  if ('personalTodaySearch' in state && typeof state.personalTodaySearch === 'string') {
+    return { to: legacyPersonalPath(state.personalTodaySearch, businessToday()), label: '返回个人工作台' };
+  }
+  if (!('todaySearch' in state) || typeof state.todaySearch !== 'string') return null;
+  const query = new URLSearchParams(state.todaySearch);
+  if (query.get('view') === 'arrivals' && batchId) {
+    query.set('focusBatch', batchId);
+    return { to: '/today?' + query, label: '返回在途待收' };
+  }
+  return actionBack(query, state);
+}
+
+function actionBack(query: URLSearchParams, state: object): DetailBack {
+  const pending = 'todayPendingId' in state && typeof state.todayPendingId === 'string' ? state.todayPendingId : null;
+  const to = query.size === 0 ? '/today' : '/today?' + query;
+  if (pending !== null) return { to, label: '返回待建批次', state: { todayPendingId: pending } };
+  const label = ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '') ? '返回今日排期' : '返回个人工作台';
+  const arrival = 'todayArrivalId' in state && typeof state.todayArrivalId === 'string' ? state.todayArrivalId : null;
+  return arrival === null ? { to, label } : { to, label, state: { todayArrivalId: arrival } };
 }
 
 export function readReturningLine(state: unknown): string | null {

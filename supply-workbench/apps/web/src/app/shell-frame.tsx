@@ -164,7 +164,7 @@ function ShellMenu(input: {
       theme="dark"
       mode="inline"
       inlineCollapsed={input.isCollapsed}
-      defaultOpenKeys={group === undefined ? [] : [group]}
+      defaultOpenKeys={[group].filter((key): key is string => key !== undefined && !input.isCollapsed)}
       selectedKeys={selected === undefined ? [] : [selected]}
       style={{ background: brand[800], width: menuWidth({ isCollapsed: input.isCollapsed }) }}
       items={navMenuItems({ ...input, location, selected, navigate })}

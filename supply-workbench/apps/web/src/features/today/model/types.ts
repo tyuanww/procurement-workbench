@@ -4,6 +4,7 @@ import type { TodoRow } from './group.js';
 export type BoardItem = TodoRow & {
   readonly poRaw: string | null;
   readonly productName: string | null;
+  readonly isUnassigned?: boolean;
   readonly qty: number | null;
   readonly batchStatus: BatchStatus | null;
   readonly waitingKind?: WaitingOnKind;
@@ -11,9 +12,10 @@ export type BoardItem = TodoRow & {
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;
+  readonly nextFollowUpTarget?: string;
 };
 
-export type GroupMode = 'waiting' | 'reason' | 'date' | 'schedule' | 'owner' | 'supplier';
+export type GroupMode = 'kanban' | 'priority' | 'waiting' | 'reason' | 'date' | 'schedule' | 'owner' | 'supplier';
 
 export type QuickAction = {
   readonly kind: 'receipt' | 'ship' | 'date' | 'note';
@@ -26,18 +28,22 @@ export type RowFace = {
   readonly overdueTone: 'danger' | 'quiet';
   readonly orderNo: string;
   readonly productName: string;
+  readonly isUnassigned?: boolean;
   readonly date: string;
   readonly remaining?: string;
   readonly inTransit?: string;
   readonly waiting?: string;
+  readonly waitingKind?: WaitingOnKind;
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;
+  readonly nextFollowUpTarget?: string;
 };
 
 export type BoardRow = {
   readonly id: string;
   readonly face: RowFace;
+  readonly reasons?: readonly string[];
   readonly actions: readonly QuickAction[];
 };
 
@@ -65,6 +71,6 @@ export type TodayBoard = {
   readonly group: GroupMode;
   readonly chips: readonly ReasonChip[];
   readonly body:
-    | { readonly kind: 'empty'; readonly text: '今天没有需要处理的事。下一步：去跟进中心看看。' }
+    | { readonly kind: 'empty'; readonly text: '今天没有需要处理的事。' }
     | { readonly kind: 'groups'; readonly groups: readonly BoardGroup[]; readonly rows: readonly BoardRow[] };
 };

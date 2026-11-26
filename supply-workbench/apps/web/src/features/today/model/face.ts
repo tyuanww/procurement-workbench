@@ -10,20 +10,27 @@ export function faceOf(item: BoardItem): RowFace {
     overdueTone: toneOf(overdueDays),
     orderNo: missingGlyph(item.poRaw),
     productName: missingGlyph(item.productName),
+    ...(item.isUnassigned === true ? { isUnassigned: true } : {}),
     date: item.dueDate === null ? MISSING : item.dueDate,
-    waiting: item.waitingKind === 'internal' && item.reasons.includes('note_missing') ? `${item.waitingName}（等回单）` : item.waitingName,
+    ...waitingOf(item),
     ...quantitiesOf(item),
     ...(item.latestFollowUp === undefined ? {} : { latestFollowUp: item.latestFollowUp }),
     ...(item.latestPromise === undefined ? {} : { latestPromise: item.latestPromise }),
     ...(item.nextFollowUpAt === undefined ? {} : { nextFollowUpAt: item.nextFollowUpAt }),
+    ...(item.nextFollowUpTarget === undefined ? {} : { nextFollowUpTarget: item.nextFollowUpTarget }),
   };
+}
+
+function waitingOf(item: BoardItem): Pick<RowFace, 'waiting' | 'waitingKind'> {
+  const waiting = item.waitingKind === 'internal' && item.reasons.includes('note_missing') ? `${item.waitingName}（等回单）` : item.waitingName;
+  return { waiting, ...(item.waitingKind === undefined ? {} : { waitingKind: item.waitingKind }) };
 }
 
 function quantitiesOf(item: BoardItem): Pick<RowFace, 'remaining' | 'inTransit'> {
   const remaining = item.qty === null ? MISSING : quantity.format(item.qty);
   return {
     ...(item.remaining === undefined ? {} : { remaining: `未发 ${remaining} ${item.remaining.unit ?? ''}`.trim() }),
-    ...(item.inTransit === undefined ? {} : { inTransit: `已全发 · 在途待收 ${quantity.format(item.inTransit.qty)} ${item.inTransit.unit}` }),
+    ...(item.inTransit === undefined ? {} : { inTransit: `${item.qty === 0 ? '已全发 · ' : ''}在途待收 ${quantity.format(item.inTransit.qty)} ${item.inTransit.unit}` }),
   };
 }
 

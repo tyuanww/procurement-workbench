@@ -1,5 +1,5 @@
 import type { useSearchParams } from 'react-router';
-import { actionFactoryParams, actionFollowUpParams, actionPageParams, actionSortParams, actionWorkParams, type ActionQuery } from './action-query.js';
+import { actionFactoryParams, actionPageParams, actionWorkParams, type ActionQuery } from './action-query.js';
 import type { ActionPageControls } from './ActionControls.js';
 import { useChaseCopy } from './today-copy.js';
 import type { useTodayData } from './today-load.js';
@@ -15,14 +15,17 @@ export function useTodayActionPage({ query, search, setParams, today, isSettled 
   const paging = today.data?.paging;
   if (paging === undefined) return undefined;
   return {
-    paging, sort: query.sort, work: query.work, isLoading: today.isLoading, isSettled, loadError: today.loadError,
+    paging, reasons: query.reasons, sort: query.sort, work: query.work, inbox: query.inbox, calendar: query.calendar,
+    isLoading: today.isLoading, isSettled, loadError: today.loadError,
     factoryId: new URLSearchParams(search).get('chaseFactory'),
     isFiltered: query.work !== undefined || query.reasons.length > 0 || query.sort.kind === 'bulk',
     onFactory: (id) => setParams(actionFactoryParams(search, id)),
-    onFollowUp: (reason) => setParams(actionFollowUpParams(search, reason)),
-    onPage: (page) => setParams(actionPageParams(search, page)),
-    onSort: (sort) => setParams(actionSortParams(search, sort)),
-    onWork: (work) => setParams(actionWorkParams(search, work)),
+    onPage: (page) => {
+      const params = actionPageParams(search, page);
+      params.delete('focusId');
+      setParams(params);
+    },
+    onWork: (work) => setParams(actionWorkParams(search, work), { preventScrollReset: true }),
     onRetry: today.retry,
     ...copy,
   };

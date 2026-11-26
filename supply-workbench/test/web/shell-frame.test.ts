@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { NAV_ROUTES } from '../../apps/web/src/app/page-manifest.js';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import type { Role } from '../../packages/domain/src/index.js';
 import { Shell } from '../../apps/web/src/app/Shell.js';
 import { ShellSider, ShellTop } from '../../apps/web/src/app/shell-frame.js';
 import { shellView, type NavRow, type ShellView } from '../../apps/web/src/features/shell/index.js';
@@ -71,6 +72,32 @@ describe('壳标记', () => {
   });
 
   it.each([
+    { roles: ['buyer'] satisfies Role[], count: 7, shown: '7', range: '本人' },
+    { roles: ['admin'] satisfies Role[], count: 12, shown: '12', range: '全范围' },
+    { roles: ['buyer', 'lead'] satisfies Role[], count: 123, shown: '123', range: '全范围' },
+    { roles: ['manager'] satisfies Role[], count: 1000, shown: '999+', range: '全范围' },
+  ])('今日事项展开时显示 $shown，收起时仍保留 $range 计数说明', ({ roles, count, shown, range }) => {
+    const nav = shellView({
+      user: { name: '测试用户', roles },
+      queue: { kind: 'unknown' },
+      today: { kind: 'complete', severities: Array.from({ length: count }, () => 2) },
+      procurementDate: null,
+      navRoutes: NAV_ROUTES,
+    }).nav;
+    const render = (isCollapsed: boolean) => inRouter(h(ShellSider, { chrome: sider(isCollapsed), nav, onToggle: () => undefined }));
+    const expanded = render(false);
+    const collapsed = render(true);
+    const badge = expanded.match(/<sup[^>]+class="[^"]*ant-badge-count[^>]*>(.*?)<\/sup>/)?.[1];
+    expect(badge?.replace(/<[^>]+>/g, '')).toBe(shown);
+    expect(expanded).toContain(`>${range}需关注</span>`);
+    for (const html of [expanded, collapsed]) {
+      expect(html).toContain(`hidden="">${range}需关注 ${count} 项</span>`);
+      expect(html).toContain('>今日事项<');
+    }
+    expect(collapsed).not.toContain('ant-badge-count');
+  });
+
+  it.each([
     { platform: 'MacIntel', shortcut: '⌘K', ariaKeys: 'Meta+K' },
     { platform: 'Win32', shortcut: 'Ctrl+K', ariaKeys: 'Control+K' },
   ])('顶栏吸顶，搜索按钮显示并声明 $platform 的快捷键', ({ platform, shortcut, ariaKeys }) => {
@@ -81,12 +108,12 @@ describe('壳标记', () => {
       onSearch: () => undefined,
       contentInset: 24,
       menuButton: null,
-      startContent: '今日事项 / 行动板',
+      startContent: '今日事项 / 个人工作台',
     }));
     expect(html).toMatch(/z-index:10(?!\d)/);
     expect(html).toContain('position:sticky');
     expect(html).toMatch(/top:0(?!\d)/);
-    expect(html).toContain('今日事项 / 行动板');
+    expect(html).toContain('今日事项 / 个人工作台');
     expect(html).not.toContain('开发登录');
     const searchButton = html.match(/<button\b[^>]*aria-label="搜索单号、品名、供应商"[^>]*>.*?<\/button>/)?.[0];
     expect(searchButton).toContain(`aria-keyshortcuts="${ariaKeys}"`);
@@ -129,7 +156,7 @@ describe('页标题', () => {
     const today = inRouter(h(TodayPage, null));
     const printed = inRouter(h(ReportPrintPage, null));
     expect(headingCount(today)).toBe(1);
-    expect(today).toContain('>今日事项<');
+    expect(today).toContain('>个人工作台<');
     expect(today).not.toContain('shell-page');
     expect(headingCount(printed)).toBe(1);
     expect(printed).toContain('>周报<');
