@@ -22,7 +22,6 @@ import {
   UpdateBatchRequestSchema,
   UpdateLineRequestSchema,
 } from '@sw/contracts';
-import { entityId } from '@sw/domain';
 import { z } from 'zod';
 import { requireActor } from '../app.js';
 import { HttpError } from '../plugins/errors.js';
@@ -111,7 +110,7 @@ export async function createReceipt(api: FollowUpApi, req: FastifyRequest): Prom
 
 function receiptAttemptId({ actorId, batchId, key }: { readonly actorId: string; readonly batchId: string; readonly key: string }) {
   const hash = createHash('sha256').update(JSON.stringify([actorId, batchId, key])).digest('hex');
-  return entityId('receipt-attempt:' + hash);
+  return parse(EntityIdSchema, 'receipt-attempt:' + hash);
 }
 
 export async function voidRecord({ api, kind, req }: { readonly api: FollowUpApi; readonly kind: 'shipment' | 'receipt' | 'delivery_note'; readonly req: FastifyRequest }) {
