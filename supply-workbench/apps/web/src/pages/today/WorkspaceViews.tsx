@@ -1,11 +1,12 @@
+import { TodayHighlight } from '../../features/today/index.js';
 import { AppstoreOutlined, CalendarOutlined, LeftOutlined, RightOutlined, UnorderedListOutlined } from '@ant-design/icons';
-import { Button, Calendar, Card, ConfigProvider, DatePicker, Flex, Typography, type ThemeConfig } from 'antd';
+import { Badge, Button, Calendar, Card, ConfigProvider, DatePicker, Flex, Typography, type ThemeConfig } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { useEffect, useId, useRef, useState, type ComponentRef, type KeyboardEvent } from 'react';
 import type { TodayPaging } from '@sw/contracts';
 import { ViewSwitch } from '../../shared/ui/view-switch.js';
-import { fontSize, space, text } from '../../theme/tokens.js';
+import { fontSize, space, statusColor, text } from '../../theme/tokens.js';
 import type { WorkspaceInbox, WorkspaceView } from './action-query.js';
 import { workspaceCalendarCss } from './workspace-calendar-style.js';
 
@@ -152,13 +153,19 @@ function CalendarDay({ day, count, selected, tabDate, onFocus }: {
   readonly onFocus: (date: string) => void;
 }) {
   const date = dateKey(day);
-  return <Button type="text" size="small" className="today-calendar-day" data-calendar-date={date}
+  const isSelected = date === selected;
+  return <div className="today-calendar-cell"><Button color="default" variant="text" size="small" className="today-calendar-day" data-calendar-date={date}
     aria-label={`${day.format('YYYY年M月D日')}${count === undefined ? '' : `，${count}`}`}
     aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-    aria-pressed={date === selected} tabIndex={date === tabDate ? undefined : -1}
+    aria-pressed={isSelected} tabIndex={date === tabDate ? undefined : -1}
     onFocus={() => onFocus(date)} onKeyDown={(event) => moveDateFocus(event, day)}>
-    {day.date()}{count === undefined ? null : <span className="today-calendar-count">{count}</span>}
-  </Button>;
+    {day.date()}{count === undefined ? null : <CalendarNotice count={count} />}
+  </Button><TodayHighlight active={isSelected} /></div>;
+}
+
+function CalendarNotice({ count }: { readonly count: string }) {
+  const color = count.endsWith('批') ? statusColor.info.text : statusColor.neutral.text;
+  return <span className="today-calendar-count" aria-hidden="true"><Badge color={color} text={count} /></span>;
 }
 
 function CalendarMonthNote({ month, calendarMonth, hasSchedulePreview }: {

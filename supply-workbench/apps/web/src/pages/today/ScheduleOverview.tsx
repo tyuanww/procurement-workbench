@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { PlanRow } from '../../features/today/index.js';
-import { MetricStrip, type MetricItem } from '../../shared/ui/analytics.js';
+import type { MetricItem } from '../../shared/ui/analytics.js';
+import { TodayMetricStrip } from './TodayMetricStrip.js';
+import { TodaySplit } from './TodaySplit.js';
 import { WorkspaceAssistant } from './WorkspaceAssistant.js';
 import { focusSection, workspaceRowId } from './today-focus.js';
 import { matchesScheduleFilter, type ScheduleFilter } from './schedule-filter.js';
@@ -21,11 +23,9 @@ export function ScheduleOverview({ rows, completeRows, children, selection, onOp
   const shortcuts = scheduleShortcuts({ pending: rows, overdue: rows.find((row) => row.timing === 'overdue'),
     blocked: rows.find((row) => row.status === 'blocked'), dueToday: rows.find((row) => row.timing === 'today'), onOpen });
   return <div className="today-schedule-overview">
-    <div className="today-action-summary"><MetricStrip items={metrics} ariaLabel="排期摘要" compact /></div>
-    <div className="today-actions-layout">
-      {children}
-      {shortcuts.length === 0 ? null : <WorkspaceAssistant title="排期助手" hint={shortcuts[0]?.hint ?? null} shortcuts={shortcuts} />}
-    </div>
+    <div className="today-action-summary"><TodayMetricStrip items={metrics} label="排期摘要" /></div>
+    {shortcuts.length === 0 ? children : <TodaySplit className="today-actions-layout" label="调整任务清单与排期助手宽度" defaultPrimary={76}
+      primary={children} secondary={<WorkspaceAssistant title="排期助手" hint={shortcuts[0]?.hint ?? null} shortcuts={shortcuts} />} />}
   </div>;
 }
 

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Flex, Spin, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -8,6 +8,8 @@ import { fontSize } from '../../theme/tokens.js';
 import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
+import { TodayLoadingCard } from './TodayLoadingCard.js';
+import { TodaySplit } from './TodaySplit.js';
 import { TodayGroup } from './TodayGroup.js';
 import { TodayRow, type CopyAction } from './TodayRow.js';
 import type { CalendarTodayAdditions } from './WorkspaceViews.js';
@@ -40,22 +42,17 @@ export type ActionBoardProps = ActionToolbarProps & {
 export function ActionBoard(props: ActionBoardProps): ReactNode {
   const { calendar, page, shortcuts } = props;
   const isList = calendar === undefined && !isKanban(props);
-  return (
-    <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
-      <div className="today-actions-layout">
-        <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
-          <ActionToolbar {...props} />
-          {calendar === undefined ? <div className="today-action-results-body">
-            {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
-          </div> : <div className="today-workspace-calendar-layout">
-            {calendar}
-            <CalendarResults {...props} />
-          </div>}
-        </Flex>
-        {shortcuts}
-      </div>
-    </section>
-  );
+  const main = <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
+    <ActionToolbar {...props} />
+    {calendar === undefined ? <div className="today-action-results-body">
+      {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+    </div> : <TodaySplit className="today-workspace-calendar-layout" defaultPrimary={40} label="调整工作日历与当日待办宽度"
+      primary={calendar} secondary={<CalendarResults {...props} />} />}
+  </Flex>;
+  return <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
+    {shortcuts == null ? main : <TodaySplit className="today-actions-layout" defaultPrimary={76}
+      label="调整行动清单与事项助手宽度" primary={main} secondary={shortcuts} />}
+  </section>;
 }
 
 function CalendarResults(props: ActionBoardProps) {
@@ -83,11 +80,9 @@ function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageContro
   return <>
     {props.calendar === undefined && !page.isFiltered ? <ActionResult page={page} /> : null}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
-    <Spin spinning={page.isLoading}>
-      <div aria-busy={page.isLoading} inert={!page.isSettled}>
-        <ActionGroups {...props} />
-      </div>
-    </Spin>
+    <div aria-busy={page.isLoading} inert={!page.isSettled && !page.isLoading}>
+      {page.isLoading ? <TodayLoadingCard label="正在读取待办" /> : <ActionGroups {...props} />}
+    </div>
     <ActionPagination page={page} />
   </>;
 }

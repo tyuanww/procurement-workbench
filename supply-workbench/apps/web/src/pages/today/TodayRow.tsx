@@ -1,7 +1,7 @@
 import { Button, Card, Dropdown, Flex, Tooltip, Typography, type ButtonProps } from 'antd';
 import { CopyOutlined, EllipsisOutlined } from '@ant-design/icons';
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { actionIcon, actionReasonText, TodayOrderLink, type BoardRow, type QuickAction, type RowFace, type TodayOrderRef } from '../../features/today/index.js';
+import { TodayHighlight, actionIcon, actionReasonText, TodayOrderLink, type BoardRow, type QuickAction, type RowFace, type TodayOrderRef } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { formatDateTime, formatQuantity, formatTableDate } from '../../shared/ui/format.js';
 import { isStatusKey } from '../../shared/ui/status.js';
@@ -53,6 +53,7 @@ export function TodayRow(props: RowProps): ReactNode {
     <RowFacts card={card} row={props.row} receipt={props.receipt} headingLevel={props.headingLevel}
       isScheduled={props.isScheduled} showReminder={props.showReminder === true} onOpen={props.onOpen} />
     <RowActions {...props} card={card} />
+    <TodayHighlight active={props.isFocused} />
   </div>;
   return props.isCard
     ? <article aria-label={card.identity}><Card className="today-row today-work-card today-batch-card" size="small" {...state}>{content}</Card></article>

@@ -1,8 +1,11 @@
-import { Link, useLocation } from 'react-router';
+import { Button } from 'antd';
+import { Link, useLinkClickHandler, useLocation } from 'react-router';
 import { useEffect, useRef } from 'react';
 import type { TodayResponse } from '@sw/contracts';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { statusColor, text } from '../../theme/tokens.js';
+
+import { TodayHighlight } from './TodayHighlight.js';
 
 type Memo = TodayResponse['arrivalMemos'][number];
 
@@ -32,14 +35,18 @@ function ArrivalMemoRow({ memo, hasTodayReturn, isFocused }: { readonly memo: Me
   const href = `/lines/${encodeURIComponent(memo.line.id)}?${query}`;
   const identity = `${memo.line.poRaw ?? '—'} · ${memo.line.nameRaw ?? '—'} · ${batch}`;
   const link = useRef<HTMLAnchorElement>(null);
+  const open = useLinkClickHandler<HTMLAnchorElement>(href, { state: { todaySearch: location.search } });
   useEffect(() => { if (isFocused) link.current?.focus(); }, [isFocused]);
   return (
-    <SectionRow action={<Link ref={link} to={href} state={hasTodayReturn ? { todaySearch: location.search } : undefined} aria-label={`查看批次 ${identity}`}>查看批次</Link>}>
+    <div className="today-arrival-row" data-current={isFocused || undefined}><SectionRow action={hasTodayReturn
+      ? <Button color="primary" variant="link" ref={link} href={href} aria-label={`查看批次 ${identity}`}
+        onClick={open}>查看批次</Button>
+      : <Link ref={link} to={href} aria-label={`查看批次 ${identity}`}>查看批次</Link>}>
       <div>{identity} · {memo.warehouse ?? '收货方未命名'}</div>
       <div style={{ color: memo.status === 'overdue' ? statusColor.danger.text : text.secondary }}>
         {labels[memo.status]} · 待收 {quantity(memo.inTransitQty, memo.unit)} · 实收 {quantity(memo.receivedQty, memo.unit)} · {memo.confirmedDate ?? '确认日未定'}
       </div>
-    </SectionRow>
+    </SectionRow><TodayHighlight active={isFocused} /></div>
   );
 }
 

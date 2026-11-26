@@ -1,5 +1,6 @@
 import { Input, InputNumber, Select } from 'antd';
 import type { ReceiptDisposition, ReceiptEvidenceInput, ShipmentEvidenceInput } from '@sw/domain';
+import { RecordDatePicker } from '../../../shared/ui/record-date-picker.js';
 import { businessToday } from './defaults.js';
 import { recordFieldErrors, type RecordDraft } from './drafts.js';
 import { RecordField, RecordFormLayout } from './RecordFields.js';
@@ -94,7 +95,7 @@ function QtyDate(props: {
         {(control) => <InputNumber {...control} value={props.qty} onChange={(value) => props.onQty(optionalNumber(value) ?? 0)} />}
       </RecordField>
       <RecordField label={props.label} required error={props.errors.date}>
-        {(control) => <Input {...control} placeholder="YYYY-MM-DD" value={props.date} onChange={(event) => props.onDate(event.target.value)} />}
+        {(control) => <RecordDatePicker {...control} value={props.date} onChange={props.onDate} />}
       </RecordField>
     </>
   );

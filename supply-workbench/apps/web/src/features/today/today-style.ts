@@ -3,6 +3,7 @@ import { bg, border, brand, fontSize, radiusCard, space, statusColor, text, topB
 import type { RowFace } from './model/types.js';
 import { workspaceAssistantCss } from './workspace-assistant-style.js';
 import { todayRowCss } from './today-row-style.js';
+import { todayHighlightCss } from './TodayHighlight.js';
 
 const [tiny, small, medium, regular] = space;
 
@@ -28,6 +29,7 @@ export function todayMotionCss(): string {
     ${todayWorkspaceCss}
     ${workspaceAssistantCss}
     ${todayRowInteractionCss}
+    ${todayHighlightCss}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     #today-chase { container: today-action / inline-size; }
@@ -53,7 +55,8 @@ export function todayMotionCss(): string {
 const todayRowInteractionCss = `
     .today-row { overflow-wrap: anywhere; }
     .today-row[data-fading="true"] { opacity: 0; }
-    .today-work-card[data-current="true"] { background-color: color-mix(in srgb, ${brand[100]} 40%, ${bg.surface}); }
+    :is(.today-work-card, .today-task-row, .today-metric-card, .today-arrival-row)[data-current="true"],
+    .today-list-panel .today-work-card[data-current="true"] { background-color: color-mix(in srgb, ${brand[100]} 40%, ${bg.surface}); }
     .today-action-list > [id^="today-row-"]:focus-visible {
       outline: 2px solid ${brand[600]}; outline-offset: -2px; border-radius: ${radiusCard}px;
     }
@@ -61,7 +64,7 @@ const todayRowInteractionCss = `
       .today-row { transition: opacity 180ms ease-out, background-color 150ms ease-out; }
     }
     @media (forced-colors: active) {
-      .today-work-card[data-current="true"] { outline: 1px solid Highlight; outline-offset: -1px; }
+      :is(.today-work-card, .today-task-row, .today-metric-card, .today-arrival-row)[data-current="true"] { outline: 1px solid Highlight; outline-offset: -1px; }
     }
   `;
 
@@ -80,18 +83,38 @@ const todayWorkspaceCss = `
     .today-section-tab [role="tab"]:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -3px; }
     .today-section-switch .today-section-indicator { block-size: 0; border-block-end: 3px solid ${brand[600]}; }
     .today-section-panel[aria-hidden="false"] { display: flex; flex-direction: column; gap: var(--today-workspace-gap, ${regular}px); }
-    .today-action-summary { --metric-padding: ${medium}px ${regular}px; }
+    .today-action-summary { --metric-padding: ${medium}px ${regular}px; --metric-height: 92px; }
     .today-action-summary .ant-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .today-action-summary .ant-btn, .today-action-summary .ant-card { border-radius: ${radiusCard}px; min-block-size: 92px; }
-    .today-action-summary .ant-btn > span { gap: ${small}px; }
-    .today-action-summary .ant-btn > span > span:first-child { display: flex; align-items: center; justify-content: space-between; }
-    .today-action-summary .ant-btn[aria-pressed="true"] > span > span:first-child { font-weight: 600; }
-    .today-action-summary .ant-btn .anticon-check { display: none; }
-    .today-action-summary .ant-btn > span > span:first-child::after { content: ''; inline-size: 5px; block-size: 5px; margin-inline-end: ${tiny}px; border-block-start: 1px solid currentColor; border-inline-end: 1px solid currentColor; transform: rotate(45deg); }
-    .today-action-summary strong > span { font-weight: 400; margin-inline-start: ${tiny}px; }
-    .today-action-summary .ant-btn > span > strong { line-height: 1.12; }
-    .today-actions-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: stretch; }
-    .today-actions-layout > *, .today-action-shortcuts { min-inline-size: 0; }
+    .today-metric-column { display: flex; min-inline-size: 0; }
+    .today-metric-card { inline-size: 100%; }
+    .today-metric-card .ant-btn {
+      height: auto; padding: 0; border: 0; border-radius: inherit; text-align: start; white-space: normal;
+    }
+    .today-metric-card .ant-btn:focus-visible { outline-offset: -3px; }
+    .today-metric-card .ant-btn > span { inline-size: 100%; }
+    .today-metric-content {
+      display: grid; align-content: center; gap: ${small}px;
+      min-block-size: var(--metric-height); min-inline-size: 0; padding: var(--metric-padding);
+    }
+    .today-metric-label { display: flex; align-items: center; justify-content: space-between; color: ${text.secondary}; font-size: ${fontSize.meta}px; }
+    .today-metric-card[data-current="true"] .today-metric-label { color: ${brand[800]}; font-weight: 600; }
+    .today-metric-label > .anticon { font-size: ${tiny * 2}px; }
+    .today-metric-value { font-size: ${fontSize.metric}px; line-height: 1.12; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .today-metric-value > span { font-size: ${fontSize.meta}px; font-weight: 400; margin-inline-start: ${tiny}px; }
+    .today-split > .ant-splitter-panel { display: flex; overflow: visible; }
+    .today-split-content { display: grid; min-inline-size: 0; inline-size: 100%; }
+    .today-split-content > * { min-inline-size: 0; }
+    .today-split-handle:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -2px; }
+    .today-schedule-item { position: relative; border-radius: ${radiusCard}px; }
+    @container today-workspace (min-width: 56rem) {
+      .today-actions-layout .today-split > .ant-splitter-panel:first-child { padding-inline-end: ${small}px; }
+      .today-actions-layout .today-split > .ant-splitter-panel:last-child { padding-inline-start: ${small}px; }
+    }
+    @container today-workspace (max-width: 55.999rem) {
+      .today-actions-layout .today-split { flex-direction: column; gap: ${regular}px; }
+      .today-actions-layout .today-split > .ant-splitter-panel { flex: none !important; }
+      .today-actions-layout .today-split > .ant-splitter-bar { display: none; }
+    }
     .today-action-main { border: 1px solid transparent; }
     .today-action-shortcuts { display: grid; }
     .today-action-shortcuts .ant-btn { text-align: start; justify-content: flex-start; block-size: auto; white-space: normal; }
@@ -105,9 +128,6 @@ const todayWorkspaceCss = `
     .today-list-panel .today-priority-list .today-work-card, .today-kanban .today-priority-list .today-work-card { border: 0; }
     .today-row-title > .ant-btn { color: inherit; padding: 0; block-size: auto; text-align: start; white-space: normal; font: inherit; }
     .today-row-title > .ant-btn:is(:hover, :focus-visible) { text-decoration: underline; }
-    @container today-workspace (min-width: 56rem) {
-      .today-actions-layout:has(> .today-action-shortcuts) { grid-template-columns: minmax(0, 1fr) minmax(15.5rem, 18.5rem); }
-    }
     .today-workspace-heading { display: flex; align-items: center; flex-wrap: wrap; gap: ${small}px; }
     .today-workspace-heading > .ant-typography { margin: 0; font-size: ${fontSize.section}px; }
     .today-workspace-heading h2 .ant-btn { font: inherit; padding-inline: 0 ${small}px; gap: ${small}px; }
@@ -127,9 +147,8 @@ const todayWorkspaceCss = `
     }
     @container today-workspace (max-width: 37.5rem) {
       .today-action-summary .ant-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .today-action-summary { --metric-padding: ${small}px ${medium}px; }
-      .today-action-summary .ant-btn, .today-action-summary .ant-card { min-block-size: 76px; }
-      .today-action-summary .ant-btn > span { gap: ${tiny}px; }
+      .today-action-summary { --metric-padding: ${small}px ${medium}px; --metric-height: 74px; }
+      .today-metric-content { gap: ${tiny}px; }
       .today-toolbar { padding-inline: ${small}px; }
       .today-workspace-heading .ant-btn { min-block-size: 44px; }
     }
@@ -152,12 +171,11 @@ const todayWorkspaceCss = `
     }
 
     @container today-workspace (max-width: 22rem) {
-      .today-procurement-summary { --metric-padding: ${tiny}px ${small}px; }
-      .today-procurement-summary .ant-btn, .today-procurement-summary .ant-card { min-block-size: 48px; }
-      .today-procurement-summary .ant-btn > span, .today-procurement-summary .ant-card-body {
-        display: grid; grid-template-columns: minmax(0, 1fr) fit-content(50%); align-items: center; gap: ${tiny}px;
+      .today-procurement-summary { --metric-padding: ${tiny}px ${small}px; --metric-height: 46px; }
+      .today-procurement-summary .today-metric-content {
+        grid-template-columns: minmax(0, 1fr) fit-content(50%); align-items: center;
       }
-      .today-procurement-summary .ant-btn > span > span:first-child::after { display: none; }
+      .today-procurement-summary .today-metric-label > .anticon { display: none; }
     }
   `;
 

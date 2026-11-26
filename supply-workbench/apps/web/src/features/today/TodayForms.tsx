@@ -1,6 +1,7 @@
 import { Input, Select } from 'antd';
 import { EXCEPTION_TYPE_LABELS, EXCEPTION_TYPES, FOLLOW_UP_KIND_LABELS, FOLLOW_UP_KINDS, type BatchFulfillment, type ExceptionType, type FollowUpKind, type ReceiptEvidenceInput, type ShipmentEvidenceInput } from '@sw/domain';
 import { businessDateError, businessToday, dateChangeErrors, exceptionErrors, followUpErrors, receiptDefaults, shipmentDefaults, recordFieldErrors, RecordField, RecordForm, RecordFormLayout, type RecordDraft } from '../../features/follow-up/index.js';
+import { RecordDatePicker } from '../../shared/ui/record-date-picker.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { followUpInstant, localFollowUpTime } from './follow-up-time.js';
 import type { BoardItem } from './model/types.js';
@@ -130,7 +131,7 @@ function DateFields({ draft, hadDate, onChange }: Fields<Extract<OpenForm, { kin
   return (
     <>
       <RecordField label="确认日" required error={errors.date}>
-        {(control) => <Input {...control} placeholder="YYYY-MM-DD" value={draft.date} onChange={(event) => onChange({ ...draft, date: event.target.value })} />}
+        {(control) => <RecordDatePicker {...control} value={draft.date} onChange={(date) => onChange({ ...draft, date })} />}
       </RecordField>
       <RecordField label="原因" required={hadDate} error={errors.reason}>
         {(control) => <Input {...control} value={draft.reason} onChange={(event) => onChange({ ...draft, reason: event.target.value })} />}
@@ -154,8 +155,8 @@ function NoteFields({ draft, onChange }: Fields<Extract<OpenForm, { kind: 'note'
       </RecordField>
       {draft.nextFollowUpLocal === undefined ? null : <RecordField label="下次跟进时间（选填）" error={errors.time}
         hint={`工作台时区 ${businessTimeZone()}。清空时间可取消本批次提醒。`}>
-        {(control) => <Input {...control} name="nextFollowUpAt" type="datetime-local" value={draft.nextFollowUpLocal}
-          onChange={(event) => onChange({ ...draft, nextFollowUpLocal: event.target.value })} />}
+        {(control) => <RecordDatePicker {...control} name="nextFollowUpAt" withTime value={draft.nextFollowUpLocal ?? ''}
+          onChange={(nextFollowUpLocal) => onChange({ ...draft, nextFollowUpLocal })} />}
       </RecordField>}
     </>
   );

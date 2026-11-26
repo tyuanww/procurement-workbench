@@ -1,11 +1,12 @@
 import { RightOutlined } from '@ant-design/icons';
-import { Alert, Button, Card, Empty, Flex, Result, Skeleton, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Result, Typography } from 'antd';
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
-import type { GroupMode, PlanBoardGroup, PlanLoad, PlanRow } from '../../features/today/index.js';
-import { border, brand, fontSize, rowComfort, space } from '../../theme/tokens.js';
+import { TodayHighlight, type GroupMode, type PlanBoardGroup, type PlanLoad, type PlanRow } from '../../features/today/index.js';
+import { border, fontSize, rowComfort, space } from '../../theme/tokens.js';
 import { TaskTagView } from '../../features/plan/index.js';
 import { useCan } from '../../shared/actor.js';
+import { TodayLoadingCard } from './TodayLoadingCard.js';
 import { TodayGrouping } from './TodayGroup.js';
 import { ScheduleOverview, type ScheduleSelection } from './ScheduleOverview.js';
 import { readScheduleFilter } from './schedule-filter.js';
@@ -90,7 +91,7 @@ function ScheduleBody(props: ScheduleViewProps & { readonly selection: ScheduleS
 
 function ScheduleFallback(props: ScheduleViewProps): ReactNode {
   const canReadImports = useCan('imports.read');
-  if (props.load.kind === 'idle' || props.load.kind === 'loading') return <Skeleton active paragraph={{ rows: 6 }} />;
+  if (props.load.kind === 'idle' || props.load.kind === 'loading') return <TodayLoadingCard label="正在读取今日排期" />;
   if (props.load.kind === 'error') return <Result status="error" title="排期没有读出来" subTitle={props.load.message} extra={<Button type="primary" onClick={props.onRetry}>重试</Button>} />;
   if (props.load.board.kind === 'empty') {
     return <Empty description={props.isMine === true ? '我没有到期的排期任务。' : props.load.board.text}>
@@ -115,9 +116,10 @@ function PlanGroupBlock(props: { readonly group: PlanBoardGroup; readonly focus:
       </Flex>
       {group.isUnassigned && group.note !== null ? <Alert type="warning" title={group.note} showIcon /> : null}
       <ul role="list" aria-labelledby={headingId} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {group.rows.map((row) => <li key={row.id} style={{ borderBlockStart: `1px solid ${border}` }}>
+        {group.rows.map((row) => <li key={row.id} className="today-schedule-item" style={{ borderBlockStart: `1px solid ${border}` }}>
           <PlanTaskRow row={row} showDue={group.key !== 'due-today'}
             isKeyboardFocused={focus === row.id} onOpen={() => onOpen(row.id)} />
+          <TodayHighlight active={focus === row.id} />
         </li>)}
       </ul>
     </section>
@@ -138,7 +140,7 @@ function PlanTaskRow(props: {
   const details = tags.filter((tag) => !isState(tag)).map(({ label }) => label).join(' · ');
   const states = tags.filter((tag) => isState(tag) && (props.showDue || tag.key !== 'due'));
   return (
-    <Button id={workspaceRowId(props.row.id)} className="today-task-row today-jump-target" type="text" block style={rowStyle(props.isKeyboardFocused)}
+    <Button id={workspaceRowId(props.row.id)} className="today-task-row today-jump-target" color="default" variant="text" block style={rowStyle} data-current={props.isKeyboardFocused || undefined}
       aria-labelledby={titleId} aria-describedby={states.length === 0 ? contextId : `${contextId} ${stateId}`}
       aria-haspopup="dialog" onClick={props.onOpen}>
       <Flex component="span" wrap align="center" gap={`${space[0]}px ${space[2]}px`} style={{ flex: 1, minInlineSize: 0 }}>
@@ -157,14 +159,11 @@ function PlanTaskRow(props: {
   );
 }
 
-function rowStyle(isFocused: boolean): CSSProperties {
-  return {
-    height: 'auto',
-    minBlockSize: rowComfort,
-    justifyContent: 'space-between',
-    whiteSpace: 'normal',
-    textAlign: 'start',
-    padding: `${space[1]}px ${space[0]}px`,
-    ...(isFocused ? { outline: `2px solid ${brand[600]}`, outlineOffset: 2 } : {}),
-  };
-}
+const rowStyle: CSSProperties = {
+  height: 'auto',
+  minBlockSize: rowComfort,
+  justifyContent: 'space-between',
+  whiteSpace: 'normal',
+  textAlign: 'start',
+  padding: `${space[1]}px ${space[0]}px`,
+};

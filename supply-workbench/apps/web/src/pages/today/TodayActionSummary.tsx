@@ -1,5 +1,6 @@
-import { MetricStrip, type MetricItem } from '../../shared/ui/analytics.js';
+import type { MetricItem } from '../../shared/ui/analytics.js';
 import { arrivalShortcutPath } from '../../features/today/index.js';
+import { TodayMetricStrip } from './TodayMetricStrip.js';
 import type { ActionPageControls } from './ActionControls.js';
 
 export function TodayActionSummary({ page, search, onArrivals, onPending }: {
@@ -19,5 +20,5 @@ export function TodayActionSummary({ page, search, onArrivals, onPending }: {
     { key: 'pending', label: '待建批次', value: paging.pendingCount ?? '—', unit: ' 行',
       ...(paging.pendingCount ? { action: { select: onPending } } : {}) },
   ];
-  return <div className="today-action-summary today-procurement-summary"><MetricStrip items={items} ariaLabel="行动摘要" compact /></div>;
+  return <div className="today-action-summary today-procurement-summary"><TodayMetricStrip items={items} label="行动摘要" /></div>;
 }

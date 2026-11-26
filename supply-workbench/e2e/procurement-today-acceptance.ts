@@ -398,7 +398,12 @@ async function recordKeyboardReceipt(page: Page, { before, recv, evidence }: { r
   await page.waitForURL((url) => url.searchParams.get('drawer') === 'batch:' + batch && url.searchParams.get('draft') === 'receipt');
   assert.equal(Number(await qty.inputValue()), before);
   await qty.fill(String(recv));
-  await dialog.getByLabel('收货日', { exact: true }).fill('2025-02-02');
+  const date = dialog.getByLabel('收货日', { exact: true });
+  await date.fill('2025-02-30');
+  await qty.focus();
+  await dialog.getByText('请输入有效的收货日（YYYY-MM-DD）', { exact: true }).waitFor();
+  assert.equal(await date.inputValue(), '2025-02-30');
+  await date.fill('2025-02-02');
   await dialog.getByLabel('收货及归批依据', { exact: true }).fill(evidence);
   const resumeToday = await pauseTodayRefresh(page);
   try {

@@ -76,6 +76,6 @@ export function RecordField(props: {
 
 const recordTouchCss = `
   @media (max-width: 575px) {
-    .record-form .ant-input, .record-form .ant-input-number, .record-form .ant-select, .record-form-footer .ant-btn { min-block-size: 44px; }
+    .record-form .ant-input, .record-form .ant-input-number, .record-form .ant-select, .record-form .ant-picker, .record-form-footer .ant-btn { min-block-size: 44px; }
   }
 `;

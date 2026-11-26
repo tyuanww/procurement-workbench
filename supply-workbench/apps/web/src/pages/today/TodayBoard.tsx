@@ -1,5 +1,5 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { Button, Card, Empty, Flex, Modal, Result, Skeleton, Typography } from 'antd';
+import { Button, Card, Empty, Flex, Modal, Result, Typography } from 'antd';
 import { useCallback, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
@@ -16,6 +16,7 @@ import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
 import { PLAN_TASK_TARGET, arrivalWork, planTaskCards } from './TodayAgenda.js';
 import { TodayAgendaShortcuts, TodayLinks, useAgendaJump } from './TodayLinks.js';
+import { TodayLoadingCard } from './TodayLoadingCard.js';
 import { TodayActionSummary } from './TodayActionSummary.js';
 import { ActionAssistant } from './ActionAssistant.js';
 import { TodaySectionNavigation } from './TodaySectionNavigation.js';
@@ -88,7 +89,7 @@ export function TodayScreen(props: TodayScreenProps): ReactNode {
   </section>;
   if (!props.isReady || props.loadError !== '') return <section style={screenStyle()}>
     <PageHeader title="在途待收" />
-    {props.isReady ? <TodayError {...props} /> : <Skeleton active paragraph={{ rows: 8 }} />}
+    {props.isReady ? <TodayError {...props} /> : <TodayLoadingCard label="正在读取在途待收" />}
   </section>;
   return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
 }
@@ -107,7 +108,7 @@ function TodayError(props: TodayScreenProps): ReactNode {
 
 function WorkspaceBody(props: TodayScreenProps): ReactNode {
   const isSchedule = todayViewOf(props.board.group) === 'schedule';
-  if (!isSchedule && !props.isReady) return <Skeleton active paragraph={{ rows: 8 }} />;
+  if (!isSchedule && !props.isReady) return <TodayLoadingCard label="正在读取个人工作台" />;
   if (!isSchedule && props.loadError !== '') return <TodayError {...props} />;
   const receipts = workspaceReceipts(props);
   return (
@@ -136,6 +137,7 @@ function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['
   const rows = view.timing === undefined ? memos : memos.filter((memo) => memo.status === view.timing);
   const title = view.timing === 'overdue' ? '到仓逾期' : view.timing === 'due_today' ? '今日应到' : '在途待收';
   return <section style={screenStyle()}>
+    <style>{todayMotionCss()}</style>
     <PageHeader title={title} />
     <Flex align="center" gap="small" wrap><Link to={returnPath}>返回个人工作台</Link>
       {view.timing === undefined ? null : <Link to={arrivalShortcutPath({ returnSearch })}>查看全部在途</Link>}<ProcurementCutoff />

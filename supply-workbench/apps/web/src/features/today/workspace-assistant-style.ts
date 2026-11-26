@@ -27,15 +27,6 @@ export const workspaceAssistantCss = `
   font-size: var(--ant-font-size-lg);
 }
 
-.today-schedule-overview .today-action-summary .ant-card-body {
-  display: grid;
-  gap: var(--ant-padding-xs);
-}
-
-.today-schedule-overview .ant-statistic-content-suffix {
-  font-size: var(--ant-font-size-sm);
-}
-
 .today-assistant h3 {
   color: var(--ant-color-text-secondary);
   font-size: var(--ant-font-size-sm);
