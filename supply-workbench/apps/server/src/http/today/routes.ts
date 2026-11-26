@@ -17,6 +17,7 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
     }
     const input = parse(TodayPageQuerySchema, {
       ...common, ...inboxQuery(raw), page: { number: raw.page, size: raw.pageSize }, sort: sortQuery(raw),
+      ...(raw.calendarFollowUps === undefined ? {} : { calendarFollowUps: raw.calendarFollowUps === 'true' ? true : raw.calendarFollowUps }),
       ...(raw.work === undefined ? {} : { work: raw.work }),
       ...(raw.focusId === undefined ? {} : { focusId: raw.focusId }),
     });
@@ -43,7 +44,7 @@ export function registerTodayRoutes(app: FastifyInstance, api: TodayApi): void {
 }
 
 function isPaged(raw: Record<string, unknown>): boolean {
-  return ['page', 'pageSize', 'sort', 'unit', 'focusId', 'work', 'inbox', 'calendar'].some((key) => raw[key] !== undefined);
+  return ['page', 'pageSize', 'sort', 'unit', 'focusId', 'work', 'inbox', 'calendar', 'calendarFollowUps'].some((key) => raw[key] !== undefined);
 }
 
 function inboxQuery(raw: Record<string, unknown>) {

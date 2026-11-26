@@ -79,8 +79,12 @@ function responseOf({ read, matched, shown, memos = readArrivals(read), includeP
 }
 
 function pageOf({ read, input, timeZone }: { readonly read: TodayRead; readonly input: TodayPageQuery; readonly timeZone: string }): TodayPageResponse {
-  const { items, chaseScope, followUpCounts, extras, memos } = pageScope({ read, input, timeZone });
+  const { items, chaseScope, followUpCounts, extras, memos, scheduledForCalendar } = pageScope({ read, input, timeZone });
   const { candidates, matched, reasonCounts, calendar } = matchPage({ items, input, read, timeZone });
+  const scheduledDays = calendar !== undefined && scheduledForCalendar !== undefined
+    ? calendarOf({ candidates: scheduledForCalendar, date: calendar.date, asOf: read.asOf, timeZone }).view.days
+      .filter(({ date }) => date > read.asOf)
+    : undefined;
   const { number, size } = input.page;
   const page = locatePage({ matched, number, size, focusId: input.focusId });
   const start = (page - 1) * size;
@@ -102,7 +106,7 @@ function pageOf({ read, input, timeZone }: { readonly read: TodayRead; readonly 
       },
       internalNoteCount: items.filter(isInternalNote).length,
       chaseItemIds: shown.filter((item) => chase.ids.has(item.id)).map((item) => item.id),
-      ...(calendar === undefined ? {} : { calendar }),
+      ...(calendar === undefined ? {} : { calendar: { ...calendar, ...(scheduledDays === undefined ? {} : { scheduledDays }) } }),
       ...extras,
     },
   };
@@ -112,7 +116,7 @@ function pageScope({ read, input, timeZone }: { readonly read: TodayRead; readon
   const { inbox } = input;
   if (inbox === undefined) {
     const counts = countsOf(read.projected);
-    return { items: read.projected, chaseScope: read.projected, extras: {}, memos: () => readArrivals(read),
+    return { items: read.projected, chaseScope: read.projected, extras: {}, memos: () => readArrivals(read), scheduledForCalendar: undefined,
       followUpCounts: { due: counts.follow_up_due, scheduled: counts.follow_up_scheduled } };
   }
   const inboxes = readInboxes(read);
@@ -124,6 +128,7 @@ function pageScope({ read, input, timeZone }: { readonly read: TodayRead; readon
   };
   return {
     items: inboxCandidates(inboxes, { ...input, inbox }), chaseScope: inbox === 'today' ? today : [], extras,
+    scheduledForCalendar: inbox === 'today' && input.calendarFollowUps === true ? scheduled : undefined,
     followUpCounts: { due: today.filter((item) => item.reasons.includes('follow_up_due')).length, scheduled: scheduled.length },
     memos: (shown: readonly Projected[]) => inbox === 'scheduled' ? [] : shown.flatMap((item) => {
       const memo = inboxes.arrivals.get(item.id);

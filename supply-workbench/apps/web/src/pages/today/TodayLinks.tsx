@@ -40,6 +40,7 @@ type TodayLinksProps = {
 
 export function TodayLinks(props: TodayLinksProps) {
   const { page, pending, myPlan, inbox, onInbox } = props;
+  const isOtherDay = page?.calendar !== undefined && page.calendar !== 'today' && page.calendar !== props.asOf;
   const pendingCount = page?.paging.pendingCount ?? pending;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
   const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable: myPlan?.kind === 'error' });
@@ -49,7 +50,7 @@ export function TodayLinks(props: TodayLinksProps) {
       <MetricStrip compact ariaLabel="工作范围" items={inboxes.map(({ key, label, unit }) => ({
         key, label, value: counts[key] ?? '—', ...(counts[key] === undefined ? {} : { unit }),
         ...(key === 'today' && isTodayPartial ? { hint: '已加载 · 排期未读' } : {}),
-        action: { isActive: key === inbox, select: () => { if (key !== inbox) onInbox(key); } },
+        action: { isActive: key === inbox, select: () => { if (key !== inbox || (key === 'today' && isOtherDay)) onInbox(key); } },
       }))} />
       <TodayShortcuts {...props} pendingCount={pendingCount} planCount={planCount} />
     </Flex>

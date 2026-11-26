@@ -97,7 +97,12 @@ export type TodayFilter = { readonly reasons?: readonly TodoReason[]; readonly s
 export type TodayWorkFilter = 'factory_chase' | 'internal_note' | 'all_unshipped';
 export type TodayInbox = 'today' | 'scheduled' | 'unassigned';
 type TodayCalendarQuery = LocalDate | 'today';
-type TodayCalendar = { readonly date: LocalDate; readonly days: readonly { readonly date: LocalDate; readonly count: number }[] };
+type TodayCalendarDay = { readonly date: LocalDate; readonly count: number };
+type TodayCalendar = {
+  readonly date: LocalDate;
+  readonly days: readonly TodayCalendarDay[];
+  readonly scheduledDays?: readonly TodayCalendarDay[];
+};
 type TodayInboxQuery = { readonly inbox?: TodayInbox; readonly calendar?: TodayCalendarQuery };
 export type TodayChaseQuery = TodayFilter & TodayInboxQuery & { readonly factoryId?: string; readonly itemId?: string; readonly work?: TodayWorkFilter };
 export type TodayQuery = Omit<TodayFilter, 'sort'> & {
@@ -106,6 +111,7 @@ export type TodayQuery = Omit<TodayFilter, 'sort'> & {
 };
 export type TodayPageQuery = TodayQuery & TodayInboxQuery & {
   readonly page: { readonly number: number; readonly size: number };
+  readonly calendarFollowUps?: true;
   readonly sort: TodaySort;
   readonly work?: TodayWorkFilter;
   readonly focusId?: string;

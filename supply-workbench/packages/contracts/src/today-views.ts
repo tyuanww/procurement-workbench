@@ -112,7 +112,8 @@ export const TodayResponseSchema: z.ZodType<TodayResponse> = todayResponse;
 const todayFactory = strictObject({ id: z.string(), name: z.string() });
 export const TodayInboxSchema = z.enum(['today', 'scheduled', 'unassigned']);
 const calendarDate = z.union([LocalDateSchema, z.literal('today')]);
-const todayCalendar = strictObject({ date: LocalDateSchema, days: z.array(strictObject({ date: LocalDateSchema, count: z.int().positive() })) });
+const calendarDays = z.array(strictObject({ date: LocalDateSchema, count: z.int().positive() }));
+const todayCalendar = strictObject({ date: LocalDateSchema, days: calendarDays, scheduledDays: optional(calendarDays) });
 export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayResponse.extend({
   paging: strictObject({
     page: z.int().positive(),
@@ -170,6 +171,7 @@ export type TodayWorkFilter = z.infer<typeof TodayWorkFilterSchema>;
 export const TodayPageQuerySchema: z.ZodType<TodayPageQuery> = todayQuery.extend({
   inbox: optional(TodayInboxSchema),
   calendar: optional(calendarDate),
+  calendarFollowUps: optional(z.literal(true)),
   page: strictObject({
     number: z.coerce.number().int().positive().default(1),
     size: z.coerce.number().int().min(1).max(100).default(50),

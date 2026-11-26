@@ -76,7 +76,10 @@ export function actionPageSearch(query: ActionQuery): string {
   params.set('scope', 'mine');
   params.set('includePending', 'true');
   if (query.inbox !== undefined) params.set('inbox', query.inbox);
-  if (query.calendar !== undefined) params.set('calendar', query.calendar);
+  if (query.calendar !== undefined) {
+    params.set('calendar', query.calendar);
+    if (query.inbox === 'today') params.set('calendarFollowUps', 'true');
+  }
   params.set('page', String(query.page));
   params.set('pageSize', String(ACTION_PAGE_SIZE));
   return params.toString();

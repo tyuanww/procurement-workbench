@@ -63,9 +63,10 @@ function workspaceControls({ route, asOf }: { readonly route: WorkspaceRoute; re
     onInbox: (inbox) => setParams(workspaceInboxParams(search, inbox)),
     onView: (view) => setParams(workspaceViewParams(search, view)),
     onDay: (date) => {
-      if (date === (query.calendar === 'today' ? asOf : query.calendar)) return;
-      const destination = query.inbox === 'today' && asOf !== undefined && date > asOf
-        ? workspaceInboxParams(search, 'scheduled').toString() : search;
+      const selected = query.calendar === 'today' ? asOf : query.calendar;
+      const opensScheduled = query.inbox === 'today' && asOf !== undefined && date > asOf;
+      if (date === selected && !opensScheduled) return;
+      const destination = opensScheduled ? workspaceInboxParams(search, 'scheduled').toString() : search;
       setParams(workspaceDayParams(destination, date));
     },
   };

@@ -99,6 +99,51 @@ it('今天的范围和日历计数包含本人排期和待建首批，分页后�
   }
 });
 
+it('日历提前显示未来预约，空日期可从今天入口返回业务日', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?view=calendar'));
+  const date = localDate('2026-11-21');
+  const tomorrow = localDate('2026-11-22');
+  const yesterday = localDate('2026-11-20');
+  const base = pageBody(1);
+  const daily: DailyPlan = { date, asOf: date, total: 0, overdueCount: 0, items: [], byOwner: [], bySupplier: [], byFactory: [] };
+  const today = { ...base, items: [batchTodo(1)], paging: { ...base.paging, calendar: { date, days: [{ date, count: 1 }], scheduledDays: [{ date: tomorrow, count: 1 }] } } };
+  const past = { ...today, items: [], paging: { ...today.paging, total: 0, calendar: { ...today.paging.calendar, date: yesterday } } };
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: 'calendar=today', status: 200, body: today });
+    });
+    await act(() => { fulfill({ urlPart: '/api/v1/plan/daily', status: 200, body: daily }); });
+    click(calendarCell(yesterday));
+    await act(() => { fulfill({ urlPart: 'calendar=2026-11-20', status: 200, body: past }); });
+    expect(textOf('#today-chase')).toContain('这天没有待办');
+    click(button('今天要办1项'));
+    expect(new URLSearchParams(textOf('output')).has('date')).toBe(false);
+    await act(() => { fulfill({ urlPart: 'calendar=today', status: 200, body: today }); });
+    expect(calendarCell(date).textContent).toContain('1项');
+    expect(calendarCell(tomorrow).textContent).toContain('1批');
+    expect(document.querySelector('[role="combobox"][aria-label="日历年份"]')).not.toBeNull();
+    expect(document.querySelector('[role="combobox"][aria-label="日历月份"]')).not.toBeNull();
+    click(calendarCell(tomorrow));
+    const params = new URLSearchParams(textOf('output'));
+    expect(params.get('inbox')).toBe('scheduled');
+    expect(params.get('date')).toBe(tomorrow);
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
+function calendarCell(date: string): HTMLElement {
+  const cell = document.querySelector<HTMLElement>(`[aria-label="工作台日历"] td[title="${date}"]`);
+  if (cell === null) throw new Error('没有显示该日');
+  return cell;
+}
+
 function planTask(ownerUserId: string, title: string): WorkItem {
   const date = localDate('2026-11-21');
   return { id: ownerUserId, ownerUserId, ownerName: null, title, subjectType: 'order_line', subjectId: 'line', kind: 'milestone',

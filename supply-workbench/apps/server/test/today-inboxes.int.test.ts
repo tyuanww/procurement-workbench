@@ -60,6 +60,13 @@ it('本人已约按下次时间和业务日排列，未分派和审核另有入�
       calendar: { date: '2099-01-11', days: [{ date: '2099-01-11', count: 2 }, { date: '2099-01-12', count: 1 }] },
     });
     expect(calendar.items.map(({ id }) => id)).toEqual(['batch:inbox-3']);
+    const preview = await page('inbox=today&scope=all&calendar=today&calendarFollowUps=true');
+    expect(preview.paging.calendar).toEqual({
+      date: '2099-01-10', days: [{ date: '2099-01-10', count: preview.paging.total }],
+      scheduledDays: [{ date: '2099-01-11', count: 2 }, { date: '2099-01-12', count: 1 }],
+    });
+    expect(preview.items.map(({ id }) => id)).toContain('batch:inbox-3');
+    expect((await page('inbox=today&calendar=today')).paging.calendar?.scheduledDays).toBeUndefined();
     const focused = await page('inbox=today&focusId=batch:inbox-4');
     expect(focused.paging).toMatchObject({ focusInbox: 'scheduled', focusDay: '2099-01-11' });
     const foreign = await page('inbox=today&scope=all&focusId=batch:inbox-6');

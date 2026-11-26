@@ -180,13 +180,13 @@ function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFoc
 function actionDisplay({ workspace, actionPage, asOf, search, myPlan }: TodayScreenProps) {
   if (workspace === undefined) return {};
   const calendar = actionPage?.paging.calendar;
-  const date = calendar?.date ?? asOf;
-  const unit = workspace.inbox === 'scheduled' ? '批' : '项';
+  const selectedDate = actionPage?.calendar;
+  const date = selectedDate === 'today' ? asOf : selectedDate ?? asOf;
   return {
     viewControls: <WorkspaceViewControls view={workspace.view} onView={workspace.onView} />,
     utilityLinks: <WorkspaceDestinations search={search ?? ''} />,
     calendar: workspace.view === 'calendar' && date !== undefined
-      ? <WorkspaceCalendar calendar={calendar} date={date} unit={unit} onDay={workspace.onDay}
+      ? <WorkspaceCalendar calendar={calendar} date={date} inbox={workspace.inbox} onDay={workspace.onDay}
         todayAdditions={workspace.inbox === 'today' ? calendarAdditions({ actionPage, asOf, myPlan }) : undefined} /> : undefined,
   };
 }
@@ -194,8 +194,10 @@ function actionDisplay({ workspace, actionPage, asOf, search, myPlan }: TodayScr
 function calendarAdditions({ actionPage, asOf, myPlan }: Pick<TodayScreenProps, 'actionPage' | 'asOf' | 'myPlan'>) {
   if (actionPage?.isFiltered !== false || asOf === undefined) return undefined;
   const pending = actionPage.paging.pendingCount;
-  const count = myPlan?.kind !== 'ready' || pending === undefined ? undefined : pending + myPlan.rows.length;
-  return { day: asOf, count };
+  const isPartial = myPlan?.kind === 'error' && pending !== undefined;
+  const count = pending === undefined ? undefined : myPlan?.kind === 'ready'
+    ? pending + myPlan.rows.length : isPartial ? pending : undefined;
+  return { day: asOf, count, isPartial };
 }
 
 function SchedulePane(props: TodayScreenProps): ReactNode {
