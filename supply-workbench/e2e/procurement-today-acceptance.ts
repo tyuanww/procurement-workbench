@@ -98,15 +98,26 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.equal(await order('HZ09-0002').count(), 0);
   await page.setViewportSize({ width: 320, height: 800 });
   await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor();
-  await page.getByRole('button', { name: '清除筛选', exact: true }).click();
+  const clearFilters = page.getByRole('button', { name: '清除筛选', exact: true });
+  await clearFilters.click();
+  await clearFilters.waitFor({ state: 'hidden' });
+  await page.waitForURL(({ searchParams }) => !['reasons', 'sort', 'unit', 'work'].some((key) => searchParams.has(key)));
   const clearedFilterUrl = page.url();
   await page.getByRole('button', { name: filterName, exact: true }).click();
   const filters = page.getByRole('dialog', { name: filterName, exact: true });
   await filters.getByRole('button', { name: /^要催货/ }).click();
+  await filters.getByRole('button', { name: /^要催货/, pressed: true }).waitFor();
   assert.equal(page.url(), clearedFilterUrl);
   await filters.getByRole('button', { name: '应用筛选', exact: true }).click();
+  await page.waitForURL(({ searchParams }) => searchParams.get('work') === 'factory_chase' && !searchParams.has('sort'));
   await filters.waitFor({ state: 'hidden' });
-  await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批待催货/ }).waitFor();
+  const status = page.getByRole('status');
+  try {
+    await status.filter({ hasText: /匹配\s*501\s*批待催货/ }).waitFor();
+  } catch (error) {
+    await page.screenshot({ path: join(out, 'procurement-chase-filter-failure.png'), animations: 'disabled' });
+    throw new Error(`催货筛选结果 ${JSON.stringify(await status.allTextContents())}，URL ${page.url()}`, { cause: error });
+  }
   await page.getByRole('region', { name: '工作台待办' }).and(page.locator(':focus')).waitFor();
   assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
   await page.goto(bulk);
