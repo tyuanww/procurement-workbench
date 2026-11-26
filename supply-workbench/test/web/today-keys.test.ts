@@ -60,7 +60,7 @@ describe('排期键盘只操作当前视图', () => {
     expect(rowsSettled({ isReady: true, isSchedule: true, plan: 'ready' })).toBe(true);
   });
 
-  it('键盘焦点画在当前排期行上', () => {
+  it('只在键盘定位的排期行显示选中态和高光', () => {
     const html = render(ScheduleView, {
       group: 'schedule',
       load: readyPlan([FIRST, SECOND]),
@@ -69,9 +69,12 @@ describe('排期键盘只操作当前视图', () => {
       onOpen: () => undefined,
       onRetry: () => undefined,
     });
-    const rows = html.split('today-task-row');
-    expect(rows[1] ?? '').not.toContain('#805D9D');
-    expect(rows[2] ?? '').toContain('#805D9D');
+    const rows = html.split('<li').filter((part) => part.includes('today-task-row'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).not.toContain('data-current="true"');
+    expect(rows[0]).not.toContain('today-highlight-host');
+    expect(rows[1]).toContain('data-current="true"');
+    expect(rows[1]).toContain('today-highlight-host');
   });
 });
 
