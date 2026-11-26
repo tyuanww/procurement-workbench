@@ -33,6 +33,7 @@ export function useChaseCopy({ query, buyerName }: { readonly query: ActionQuery
       }
       await navigator.clipboard.writeText(text);
       if (!signal.aborted) showCopySuccess({ message, copied: rows.length });
+      return undefined;
     });
   }
 
