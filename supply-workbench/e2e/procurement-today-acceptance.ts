@@ -475,16 +475,14 @@ export async function checkFirstBatch({ page, origin, buyer, warehouse }: {
   assert.ok(line.ok());
   const { line: { id } } = await line.json();
   assert.equal(typeof id, 'string');
-  const dialog = page.getByRole('dialog', { name: filterName, exact: true });
-  const shortcut = dialog.getByRole('link', { name: /^待建批次 / });
+  const summary = page.getByRole('group', { name: '行动摘要', exact: true });
+  const shortcut = summary.getByRole('button', { name: /^待建批次\s*\d+\s*行$/u });
   const order = page.getByRole('link', { name: '查看订单', exact: true }).and(page.locator('a[href="/lines/' + encodeURIComponent(id) + '"]'));
   for (const filter of ['reasons=unshipped', 'work=factory_chase', 'group=priority&reasons=unshipped']) {
     await page.goto(new URL('/today?' + filter, origin).href);
-    await page.getByRole('button', { name: filterName, exact: true }).click();
     await shortcut.waitFor();
     assert.equal(await order.count(), 0);
     await shortcut.click();
-    await dialog.waitFor({ state: 'hidden' });
     await page.waitForURL((url) => !url.searchParams.has('work') && !url.searchParams.has('reasons'));
     await page.waitForFunction(() => document.activeElement?.id === 'today-pending-batches');
     await order.waitFor();
