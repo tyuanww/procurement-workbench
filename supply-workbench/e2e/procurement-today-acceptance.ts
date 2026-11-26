@@ -214,9 +214,10 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
 
   await filters.click();
   await dialog.getByRole('button', { name: /^仍待发/, pressed: true }).waitFor();
-  await groups.getByRole('radio', { name: '原因', exact: true }).press('Space');
+  const reasonGroup = groups.getByRole('radio', { name: '原因', exact: true });
+  await reasonGroup.press('Space');
   await groups.getByRole('radio', { name: '原因', exact: true, checked: true }).waitFor({ state: 'attached' });
-  await page.keyboard.press('Escape');
+  await reasonGroup.press('Escape');
   await dialog.waitFor({ state: 'hidden' });
   assert.equal(page.url(), initialUrl);
 
@@ -241,7 +242,7 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   await page.waitForURL((url) => url.searchParams.get('view') === 'board' && url.searchParams.get('reasons') === 'unshipped' && url.searchParams.get('page') === '11');
   await page.getByRole('region', { name: '跟进供应商', exact: true }).getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
   await filters.click();
-  await dialog.waitFor();
+  await dialog.getByRole('button', { name: '应用筛选', exact: true }).and(page.locator(':focus')).waitFor();
   assert.equal(await groups.count(), 0);
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'hidden' });
