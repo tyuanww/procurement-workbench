@@ -120,7 +120,8 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.deepEqual(purchaseOrders(await clipboardText(page)), ['HZ09-0501']);
   const memos = arrivalMemos(page);
   const sourceSearch = new URL(page.url()).search;
-  await page.getByRole('link', { name: '在途待收', exact: true }).click();
+  await page.getByRole('button', { name: '打开菜单', exact: true }).click();
+  await page.getByRole('dialog', { name: '导航' }).getByRole('link', { name: '在途待收', exact: true }).click();
   await page.getByText(/待收 25,000 件/).waitFor();
   await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/today' && url.search === sourceSearch);
