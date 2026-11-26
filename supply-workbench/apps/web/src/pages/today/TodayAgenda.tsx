@@ -3,6 +3,7 @@ import { Button, Card, Flex, Typography } from 'antd';
 import type { TodayResponse } from '@sw/contracts';
 import { rowStyle, TodayOrderLink, type BoardRow, type PlanRow } from '../../features/today/index.js';
 import { space } from '../../theme/tokens.js';
+import { workspaceRowId } from './today-focus.js';
 
 export const PLAN_TASK_TARGET = 'today-plan-tasks';
 
@@ -28,7 +29,7 @@ export function planTaskCards({ tasks, focus, onOpen }: {
     <article><Card className="today-row" size="small" style={rowStyle({ isFocused: focus === task.id, isFading: false })}>
       <Flex className="today-touch" vertical align="start" gap={space[0]}>
         <Typography.Text type="secondary">排期任务</Typography.Text>
-        <Button type="link" onClick={() => onOpen(task.id)} style={{ padding: 0, height: 'auto', maxWidth: '100%', whiteSpace: 'normal', textAlign: 'start' }}>
+        <Button id={workspaceRowId(task.id)} className="today-jump-target" type="link" onClick={() => onOpen(task.id)} style={{ padding: 0, height: 'auto', maxWidth: '100%', whiteSpace: 'normal', textAlign: 'start' }}>
           {task.title}
         </Button>
         <Typography.Text type="secondary">{task.meta}</Typography.Text>

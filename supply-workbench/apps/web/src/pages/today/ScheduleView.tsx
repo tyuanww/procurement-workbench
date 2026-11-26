@@ -7,6 +7,7 @@ import { brand, fontSize, space, statusColor } from '../../theme/tokens.js';
 import { TaskTagView } from '../../features/plan/index.js';
 import { useCan } from '../../shared/actor.js';
 import { TodayGroup, TodayGrouping } from './TodayGroup.js';
+import { workspaceRowId } from './today-focus.js';
 
 const SCHEDULE_MODES: readonly { readonly id: GroupMode; readonly label: string }[] = [
   { id: 'schedule', label: '排期' },
@@ -75,7 +76,7 @@ function PlanTaskRow(props: { readonly row: PlanRow; readonly isKeyboardFocused:
   const { title, meta, tags } = props.row;
   const label = [title, meta, ...tags.map((tag) => tag.label), '打开'].filter(Boolean).join(' · ');
   return (
-    <Button className="today-task-row" type="text" block style={rowStyle(props.isKeyboardFocused)}
+    <Button id={workspaceRowId(props.row.id)} className="today-task-row today-jump-target" type="text" block style={rowStyle(props.isKeyboardFocused)}
       aria-label={label} onClick={props.onOpen}>
       <TaskFace row={props.row} />
       <Typography.Text type="secondary" style={{ flexShrink: 0 }}>打开</Typography.Text>

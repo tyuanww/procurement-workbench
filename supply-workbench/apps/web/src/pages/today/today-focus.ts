@@ -4,8 +4,35 @@ import type { TodayPaging } from '@sw/contracts';
 import { fetchTodayPage } from '../../shared/api/catalog.js';
 import { actionQuery, workspaceFocusParams, type ActionQuery } from './action-query.js';
 
+const ROW_PREFIX = 'today-row-';
+const ROW_SELECTOR = `[id^="${ROW_PREFIX}"]`;
+
 export function workspaceRowId(id: string): string {
-  return 'today-row-' + id;
+  return ROW_PREFIX + id;
+}
+
+export function workspaceRowOf(target: EventTarget | null): string | null {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) return null;
+  return rowIdOf(target.closest(ROW_SELECTOR));
+}
+
+export function workspaceKeyboardRows(): readonly { readonly id: string }[] {
+  return [...document.querySelectorAll(ROW_SELECTOR)].flatMap((row) => {
+    const id = rowIdOf(row);
+    return id === null || row.closest('[inert]') !== null ? [] : [{ id }];
+  });
+}
+
+export function focusWorkspaceRow(id: string): HTMLElement | null {
+  const row = document.getElementById(workspaceRowId(id));
+  if (row === null) return null;
+  row.focus({ preventScroll: true });
+  (row.closest('.today-jump-target') ?? row).scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  return row;
+}
+
+function rowIdOf(row: Element | null): string | null {
+  return row === null ? null : row.id.slice(ROW_PREFIX.length);
 }
 
 export function focusLocation({ query, paging, asOf }: { readonly query: ActionQuery; readonly paging: TodayPaging | undefined; readonly asOf: string | undefined }) {

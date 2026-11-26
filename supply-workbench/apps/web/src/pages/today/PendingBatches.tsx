@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { TodayOrderLink } from '../../features/today/index.js';
+import { rowStyle, TodayOrderLink } from '../../features/today/index.js';
 import { Button, Card, Flex, Pagination, Typography } from 'antd';
 import { HintBatchResultSchema, type TodayResponse } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { MissingValue } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
+import { workspaceRowId } from './today-focus.js';
 
 type PendingBatch = NonNullable<TodayResponse['pendingBatch']>[number];
 const PAGE_SIZE = 50;
@@ -58,12 +59,21 @@ export function usePendingBatches({ rows, focusId, canFocus, onChanged }: Pendin
 
 type PendingBatchView = ReturnType<typeof usePendingBatches>;
 
-export function pendingBatchCards(view: PendingBatchView) {
-  return view.rows.map((row, index) => (
-    <li key={`line:${row.orderLineId}`} {...(index === 0 ? jumpTarget : {})}>
-      <article><Card className="today-row today-work-card" size="small"><PendingBatchItem row={row} view={view} /></Card></article>
-    </li>
-  ));
+export function pendingBatchRowId(orderLineId: string): string {
+  return `pending:${orderLineId}`;
+}
+
+export function pendingBatchCards(view: PendingBatchView, focus: string | null) {
+  return view.rows.map((row, index) => {
+    const id = pendingBatchRowId(row.orderLineId);
+    return (
+      <li key={id} className="today-jump-target" {...(index === 0 ? jumpTarget : {})}>
+        <article><Card className="today-row today-work-card" size="small" style={rowStyle({ isFocused: focus === id, isFading: false })}>
+          <PendingBatchItem row={row} view={view} />
+        </Card></article>
+      </li>
+    );
+  });
 }
 
 export function PendingBatchPagination({ view, isCompact = false }: { readonly view: PendingBatchView; readonly isCompact?: boolean }) {
@@ -101,13 +111,13 @@ function PendingBatchItem({ row, view }: {
   }, [shouldFocus]);
   const canCreate = row.action === 'create' && onCreate !== undefined;
   const actions = (
-    <Flex className="today-touch today-row-actions today-pending-actions" align="center" gap={space[0]} wrap onKeyDown={(event) => event.stopPropagation()}>
+    <Flex className="today-touch today-row-actions today-pending-actions" align="center" gap={space[0]} wrap>
       {canCreate ? (
         <Button type="primary" size="small" loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
           生成首批次
         </Button>
       ) : null}
-      <TodayOrderLink order={{ lineId: row.orderLineId }} isPending focusRef={orderLink} primary={!canCreate}>查看订单</TodayOrderLink>
+      <TodayOrderLink id={workspaceRowId(pendingBatchRowId(row.orderLineId))} order={{ lineId: row.orderLineId }} isPending focusRef={orderLink} primary={!canCreate}>查看订单</TodayOrderLink>
     </Flex>
   );
   const facts = <>

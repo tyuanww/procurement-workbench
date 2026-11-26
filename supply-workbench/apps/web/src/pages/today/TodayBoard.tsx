@@ -1,5 +1,5 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { Button, Card, Empty, Flex, Result, Skeleton, Typography } from 'antd';
+import { Button, Card, Empty, Flex, Modal, Result, Skeleton, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
@@ -56,6 +56,7 @@ export type TodayScreenProps = {
   readonly notice: string;
   readonly saveError: string;
   readonly isHelpOpen: boolean;
+  readonly onCloseHelp?: () => void;
   readonly isReady: boolean;
   readonly loadError: string;
   readonly onToggleReason: (code: string) => void;
@@ -114,14 +115,16 @@ function TodayReady(props: TodayScreenProps): ReactNode {
       <PageHeader title={isSchedule ? '今日排期' : '个人工作台'} />
       {isSchedule ? <SchedulePane {...props} /> : <ActionPane {...props} />}
       <PageDrawers {...props} />
-      <ShortcutHelp isOpen={props.isHelpOpen} isNavigationOnly={isSchedule || props.canRecord === false} />
+      <ShortcutHelp isOpen={props.isHelpOpen} isNavigationOnly={isSchedule || props.canRecord === false} onClose={props.onCloseHelp ?? noop} />
       <div role="status" style={helpStyle()}>{props.notice}</div>
     </section>
   );
 }
 
-function ShortcutHelp({ isOpen, isNavigationOnly }: { readonly isOpen: boolean; readonly isNavigationOnly: boolean }) {
-  return isOpen ? <p style={helpStyle()}>{isNavigationOnly ? SCHEDULE_HELP : ACTION_HELP}</p> : null;
+function ShortcutHelp({ isOpen, isNavigationOnly, onClose }: { readonly isOpen: boolean; readonly isNavigationOnly: boolean; readonly onClose: () => void }) {
+  return <Modal title="快捷键帮助" open={isOpen} onCancel={onClose} footer={null} centered destroyOnHidden closable={{ 'aria-label': '关闭快捷键帮助' }}>
+    {isOpen ? <Typography.Paragraph>{isNavigationOnly ? SCHEDULE_HELP : ACTION_HELP}</Typography.Paragraph> : null}
+  </Modal>;
 }
 
 function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: NonNullable<TodayScreenProps['arrivalsView']>; readonly search: string }): ReactNode {
@@ -157,7 +160,7 @@ function ActionPane(props: TodayScreenProps): ReactNode {
       myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
     <ActionBoard {...props} page={page} receiptOf={(id) => receipts.get(id)}
-      internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending)]}
+      internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
       internalPagination={<PendingBatchPagination view={pending} />} {...actionDisplay(props)} />
     {workspace === undefined ? null : <Typography.Text type="secondary"><Link to="/today/personal?preview=1">打开合成预览</Link></Typography.Text>}
   </>;

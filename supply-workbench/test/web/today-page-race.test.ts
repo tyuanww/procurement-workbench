@@ -55,20 +55,22 @@ it('行动板同名批次可用键盘打开指定抽屉，关闭后保留清单'
     expect(textOf('nav[aria-label="我的待办入口"]')).toContain('业务日 2026-11-21');
     expect(textOf('body')).not.toContain('用 j k 移动');
     pressTodayKey('?');
-    expect(textOf('body')).toContain('j k 或方向键移动，Enter 打开');
-    pressTodayKey('?');
-    expect(textOf('body')).not.toContain('j k 或方向键移动');
+    expect(textOf('[role="dialog"]')).toContain('j k 或方向键移动，Enter 打开');
+    pressTodayKey('Escape');
     pressTodayKey('j');
     expect(keyboardRow()).toContain('第 1 批');
+    expect(document.activeElement?.textContent).toContain('第 1 批');
     pressTodayKey('ArrowDown');
     expect(keyboardRow()).toContain('第 2 批');
+    expect(document.activeElement?.textContent).toContain('第 2 批');
     pressTodayKey('k');
     expect(keyboardRow()).toContain('第 1 批');
     pressTodayKey('ArrowDown');
     pressTodayKey('Enter');
-    await waitFor(() => textOf('[role="dialog"]').includes('第 2 批'));
-    expect(textOf('[role="dialog"]')).not.toContain('第 1 批');
-    expect(textOf('[role="dialog"]')).toContain('批次交付数量待核实');
+    const batchDrawer = '.ant-drawer [role="dialog"]';
+    await waitFor(() => textOf(batchDrawer).includes('第 2 批'));
+    expect(textOf(batchDrawer)).not.toContain('第 1 批');
+    expect(textOf(batchDrawer)).toContain('批次交付数量待核实');
     expect(new URLSearchParams(textOf('output')).get('drawer')).toBe('batch:batch-2');
     pressTodayKey('Escape');
     await waitFor(() => !new URLSearchParams(textOf('output')).has('drawer'));
@@ -198,6 +200,7 @@ function locatedPage({ target, isPresent }: { readonly target: string; readonly 
 it('排期行获得焦点时仍能用 j 移动，行内按钮保留自己的键盘事件', () => {
   const row = document.createElement('div');
   row.className = 'today-task-row';
+  row.id = 'today-row-task:a';
   row.setAttribute('role', 'button');
   row.tabIndex = 0;
   const child = document.createElement('button');
@@ -214,6 +217,34 @@ it('排期行获得焦点时仍能用 j 移动，行内按钮保留自己的键�
     });
   }
   expect(focused).toEqual(['task:b']);
+});
+
+it('在表单中按 Esc 回到详情，组合框展开时先交给组合框处理', () => {
+  const field = document.createElement('input');
+  const actionsTaken: string[] = [];
+  const actions: KeyActions = {
+    closeDraft: () => { actionsTaken.push('draft'); },
+    closeDrawer: () => { actionsTaken.push('drawer'); },
+    openDrawer: () => { actionsTaken.push('open'); },
+    open: () => { actionsTaken.push('write'); },
+    setFocus: () => { actionsTaken.push('move'); },
+    toggleHelp: () => { actionsTaken.push('help'); },
+  };
+  const handle = (key: string) => handleKey({
+    event: { key, target: field, defaultPrevented: false, preventDefault: () => undefined },
+    rows: [{ id: 'batch:a' }], focus: 'batch:a', hasDraft: true, hasDrawer: true, actions,
+  });
+  handle('j');
+  handle('n');
+  handle('Enter');
+  expect(actionsTaken).toEqual([]);
+  field.setAttribute('role', 'combobox');
+  field.setAttribute('aria-expanded', 'true');
+  handle('Escape');
+  expect(actionsTaken).toEqual([]);
+  field.setAttribute('aria-expanded', 'false');
+  handle('Escape');
+  expect(actionsTaken).toEqual(['draft']);
 });
 
 function BoardRead() {

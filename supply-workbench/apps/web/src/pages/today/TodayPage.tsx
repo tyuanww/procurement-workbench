@@ -8,9 +8,11 @@ import {
 import { actionQuery, actionReasonParams, workspaceDayParams, workspaceInboxParams, workspaceViewParams, type ActionQuery } from './action-query.js';
 import { useTodayActionPage } from './use-today-action-page.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
-import { focusForRows, handleKey, rowsSettled } from './today-keys.js';
+import { focusForRows, rowsSettled } from './today-keys.js';
 import { restoreReminderLocation, useWorkspaceFocus } from './today-focus.js';
 import { openQuick } from './today-open.js';
+import { pendingBatchRowId } from './PendingBatches.js';
+import { useTodayKeys } from './use-today-keys.js';
 import { arrivalReturnId, pendingReturnId, screenView, useAppliedPage, useTodaySession } from './today-session.js';
 import { TodayScreen, type TodayScreenProps } from './TodayBoard.js';
 import { sessionRows, useTodayPlan } from './use-today-plan.js';
@@ -81,7 +83,7 @@ function useScreenSession({ state, today, route, board, actionBoard, plan, isInt
   const { query, search, setParams, isPlanMode, arrivalsView } = route;
   const canRecord = useCanWrite('records.write');
   const myPlan = isInternalWorkVisible ? plan.mine : undefined;
-  const visible = sessionRows({ board, plan, myPlan });
+  const visible = [...sessionRows({ board, plan, myPlan }), ...visiblePending({ state, isInternalWorkVisible })];
   const isRedirecting = useWorkspaceFocus({
     target: state.drawerId === null && !route.hasDrawer ? query.focusId : null,
     ready: today.isLoadedForQuery, search, query, paging: state.paging, asOf: state.asOf, setParams,
@@ -97,7 +99,7 @@ function useScreenSession({ state, today, route, board, actionBoard, plan, isInt
     rows: sessionRows({ board: actionBoard, plan }),
     isReady: isSettled || (isPlanMode && query.focusId === null),
   });
-  useTodayKeys({ state, visible, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, canRecord });
+  useTodayKeys({ state, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, canRecord });
   return { actionPage, closeSession, canRecord };
 }
 
@@ -152,43 +154,11 @@ function boardOf({ state, sort, group, reasons }: {
   });
 }
 
-function useTodayKeys(input: {
+function visiblePending({ state, isInternalWorkVisible }: {
   readonly state: ReturnType<typeof useTodayState>;
-  readonly visible: readonly { readonly id: string }[];
-  readonly isSettled: boolean;
-  readonly isPlanMode: boolean;
-  readonly isArrivalsView: boolean;
-  readonly closeSession: ReturnType<typeof useTodaySession>;
-  readonly canRecord: boolean;
-}): void {
-  const { state, visible, isSettled, isPlanMode, isArrivalsView, closeSession, canRecord } = input;
-  useEffect(() => {
-    if (isArrivalsView) return;
-    const onKey = (event: KeyboardEvent) => handleKey({
-      event,
-      rows: isSettled || isPlanMode ? visible : [],
-      focus: state.focus,
-      hasDraft: state.draft !== null,
-      isPlanMode,
-      actions: {
-        setFocus: state.setFocus,
-        toggleHelp: () => state.setHelp((value) => !value),
-        closeDraft: () => closeSession(state.drawerId),
-        closeDrawer: () => { if (state.drawerId !== null) closeSession(null); },
-        openDrawer: () => {
-          if (state.focus === null) return;
-          state.setDrawerId(state.focus);
-          state.setDraft(null);
-        },
-        open: (kind) => {
-          if (state.focus === null || !canRecord) return;
-          openQuick({ id: state.focus, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError });
-        },
-      },
-    });
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [state, visible, isSettled, isPlanMode, isArrivalsView, closeSession, canRecord]);
+  readonly isInternalWorkVisible: boolean;
+}) {
+  return isInternalWorkVisible ? state.pendingBatch.map(({ orderLineId }) => ({ id: pendingBatchRowId(orderLineId) })) : [];
 }
 
 type ScreenInput = {
@@ -221,6 +191,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     isSaving: state.isSaving,
     notice: state.notice,
     isHelpOpen: state.isHelpOpen,
+    onCloseHelp: () => state.setHelp(false),
     isReady: state.isReady,
     loadError: state.loadError,
     onToggleReason: (code) => setParams(actionReasonParams(search, code)),
