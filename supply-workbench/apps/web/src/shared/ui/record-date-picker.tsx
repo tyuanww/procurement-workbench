@@ -1,7 +1,7 @@
-import { DatePicker } from 'antd';
+import { DatePicker, Input, type InputRef } from 'antd';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat.js';
-import { createContext, useContext, type ComponentProps, type ComponentPropsWithRef } from 'react';
+import { createContext, useCallback, useContext, type ComponentProps, type Ref } from 'react';
 
 dayjs.extend(customParseFormat);
 
@@ -11,14 +11,19 @@ type FormDateControl = Pick<ComponentProps<typeof DatePicker>,
 type DateDraft = { readonly value: string; readonly invalid: boolean; readonly onChange: (value: string) => void };
 const DateDraftContext = createContext<DateDraft | null>(null);
 
-function DateDraftInput(props: ComponentPropsWithRef<'input'>) {
+function DateDraftInput({ ref, ...props }: Omit<ComponentProps<typeof Input>, 'ref'> & { readonly ref?: Ref<HTMLInputElement> }) {
   const draft = useContext(DateDraftContext);
-  if (draft === null) return <input {...props} />;
+  const inputRef = useCallback((input: InputRef | null) => {
+    const element = input?.input ?? null;
+    if (typeof ref === 'function') return ref(element);
+    if (ref != null) ref.current = element;
+  }, [ref]);
   // DatePicker commits parsed dates. The form also needs the exact text to validate invalid drafts.
-  return <input {...props} value={draft.value} aria-invalid={draft.invalid || props['aria-invalid']}
+  return <Input {...props} ref={inputRef} variant="borderless" style={{ ...props.style, padding: 0, minBlockSize: 0 }}
+    value={draft?.value ?? props.value} aria-invalid={draft?.invalid === true || props['aria-invalid']}
     onChange={(event) => {
       props.onChange?.(event);
-      draft.onChange(event.currentTarget.value);
+      draft?.onChange(event.currentTarget.value);
     }} />;
 }
 
