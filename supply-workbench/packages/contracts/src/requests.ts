@@ -259,6 +259,14 @@ export const SetProductContactsRequestSchema = strictObject({
 });
 export type SetProductContactsRequest = z.output<typeof SetProductContactsRequestSchema>;
 
+export const PRODUCT_OWNER_NAME_MAX_LENGTH = 100;
+const productOwnerName = z.string().trim().min(1).max(PRODUCT_OWNER_NAME_MAX_LENGTH);
+export const SetProductOwnerRequestSchema = strictObject({
+  partCodeRaw: nullable(z.string().min(1)),
+  ownerName: nullable(productOwnerName),
+});
+export const SetProductOwnerResultSchema = strictObject({ ownerName: nullable(productOwnerName) });
+
 export const GenerateWeeklyReportRequestSchema = strictObject({ weekStart: LocalDateSchema });
 export type GenerateWeeklyReportRequest = z.output<typeof GenerateWeeklyReportRequestSchema>;
 

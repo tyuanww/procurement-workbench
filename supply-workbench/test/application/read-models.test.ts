@@ -40,8 +40,8 @@ it('ImportBatchSummary 和 DetectResponse 的字段和 05 第 4.6 节一致', ()
 });
 
 it('产品档案读模型和 05 第 4.10 节一致', () => {
-  lock<ProductCard>()(['id', 'skuName', 'filingName', 'barcodeRaw', 'isChannelVariant', 'netContent', 'casePack', 'thumbnail', 'openPurchaseLines', 'factoryStock', 'bomPartCount', 'materialLinkCoverage', 'contactsAssigned']);
-  lock<ProductOverview>()(['product', 'images', 'contacts', 'cards', 'bomHeader', 'handlingHints']);
+  lock<ProductCard>()(['id', 'skuName', 'filingName', 'filingNo', 'barcodeRaw', 'isChannelVariant', 'netContent', 'casePack', 'thumbnail', 'packagingImages', 'openPurchaseLines', 'factoryStock', 'bomPartCount', 'materialLinkCoverage', 'contactsAssigned', 'ownerName']);
+  lock<ProductOverview>()(['product', 'images', 'ownerName', 'contacts', 'cards', 'bomHeader', 'handlingHints']);
   lock<ProductPurchases>()(['scope', 'rows', 'inTransit', 'byStage', 'byReportedStatus']);
   lock<ProductStock>()(['ownWarehouse', 'factory']);
   lock<Extract<ProductMaterials, { readonly kind: 'no_bom' }>>()(['kind']);

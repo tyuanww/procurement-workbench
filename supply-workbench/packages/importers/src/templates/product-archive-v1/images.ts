@@ -12,7 +12,7 @@ export type ArchiveImage = {
 export function mountImages(sheet: SheetLike, columns: ReadonlyMap<string, number>): readonly ArchiveImage[] {
   const inner = columns.get(INNER_IMAGE);
   const outer = columns.get(OUTER_IMAGE);
-  return (sheet.images ?? []).flatMap((image) => mounted({ image, inner, outer }));
+  return (sheet.images ?? []).flatMap((image) => image.unresolved ? [] : mounted({ image, inner, outer }));
 }
 
 function mounted({ image, inner, outer }: { readonly image: { readonly row: number; readonly col: number; readonly fileName: string }; readonly inner: number | undefined; readonly outer: number | undefined }): ArchiveImage[] {

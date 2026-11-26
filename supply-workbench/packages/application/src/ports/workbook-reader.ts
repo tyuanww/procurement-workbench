@@ -12,9 +12,10 @@ export interface SheetLike {
   readonly name: string;
   readonly hidden: boolean;
   readonly rowCount: number;
+  readonly columnCount: number;
   cell(row: number, col: number): CellLike | null;
   readonly merges: readonly { readonly r1: number; readonly c1: number; readonly r2: number; readonly c2: number }[];
-  readonly images?: readonly { readonly row: number; readonly col: number; readonly fileName: string; readonly data: Uint8Array }[];
+  readonly images?: readonly { readonly row: number; readonly col: number; readonly fileName: string; readonly data: Uint8Array; readonly unresolved?: true }[];
 }
 
 export interface WorkbookLike {

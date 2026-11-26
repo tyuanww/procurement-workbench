@@ -1,6 +1,6 @@
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { Alert, Button, Empty, Flex, Form, Select, Skeleton, Typography } from 'antd';
 import { ImportBatchListItemSchema, listResponseSchema, type ImportBatchListItem } from '@sw/contracts';
 import { IMPORT_STATUSES, TEMPLATE_IDS, importStatusLabel, templateIdLabel } from '@sw/domain';
@@ -24,13 +24,14 @@ type Load =
 
 export function ImportBatchHistory() {
   const [search, setSearch] = useSearchParams();
+  const { state } = useLocation();
   const template = TEMPLATE_IDS.find((id) => id === search.get('template')) ?? '';
   const status = IMPORT_STATUSES.find((id) => id === search.get('status')) ?? '';
   const page = pageNumber(search.get('page'));
   const query = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
   if (template !== '') query.set('template', template);
   if (status !== '') query.set('status', status);
-  const update = (patch: Record<string, string | null>) => setSearch(writeUrlState(search.toString(), patch));
+  const update = (patch: Record<string, string | null>) => setSearch(writeUrlState(search.toString(), patch), { state });
   const historySearch = search.toString();
   return (
     <SectionGroup title="导入批次历史" meta="按导入时间从新到旧">
@@ -107,6 +108,7 @@ function HistoryRows({ load, historySearch, onRetry }: {
 }
 
 function HistoryRow({ item, historySearch }: { readonly item: ImportBatchListItem; readonly historySearch: string }) {
+  const { state } = useLocation();
   const created = formatDateTime(item.createdAt) ?? '—';
   const committed = formatDateTime(item.committedAt);
   const detailPath = `/imports/${encodeURIComponent(item.id)}`;
@@ -115,7 +117,7 @@ function HistoryRow({ item, historySearch }: { readonly item: ImportBatchListIte
     <SectionRow action={<ImportStatusTag status={item.status} />}>
       <Flex vertical gap={space[1]}>
         <Link {...focus} style={{ overflowWrap: 'anywhere', scrollMarginBlockStart: topBar + space[2] }}
-          to={{ pathname: detailPath, search: historySearch }}>{item.originalName}</Link>
+          to={{ pathname: detailPath, search: historySearch }} state={{ ...state, ...focus.state }}>{item.originalName}</Link>
         <Typography.Text type="secondary">
           {templateIdLabel(item.template)}
           {item.factoryParty === null ? '' : ` · ${item.factoryParty.displayName}`}

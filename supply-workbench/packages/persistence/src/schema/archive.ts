@@ -1,5 +1,7 @@
+import type { WorkbookSession } from '@sw/application';
+import type { Product } from '@sw/domain';
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { at, day, id, qty, timestamps } from './columns.js';
 
 function meta() {
@@ -68,12 +70,39 @@ export const products = pgTable(
     outerSize: text('outer_size'),
     productLine: text('product_line'),
     fieldSources: jsonb('field_sources').notNull(),
+    workbookFieldSources: jsonb('workbook_field_sources').$type<NonNullable<Product['workbookFieldSources']>>().notNull().default({}),
     importBatchId: text('import_batch_id'),
     rowNo: integer('row_no'),
     editedBy: text('edited_by'),
     editedAt: at('edited_at'),
   },
   (table) => [uniqueIndex('products_barcode_raw').on(table.barcodeRaw), index('products_barcode_base').on(table.barcodeBase)],
+);
+
+export const productArchiveOwners = pgTable(
+  'product_archive_owners',
+  {
+    productId: text('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+    partCodeRaw: text('part_code_raw').notNull(),
+    ownerName: text('owner_name').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.productId, table.partCodeRaw] }),
+    check('product_archive_owners_name_check', sql`char_length(trim(${table.ownerName})) between 1 and 100`),
+  ],
+);
+
+export const productWorkbookImports = pgTable(
+  'product_workbook_imports',
+  {
+    id: id(),
+    anchorId: text('anchor_id').references(() => products.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').notNull(),
+    fileHash: text('file_hash').notNull(),
+    createdAt: at('created_at').notNull().defaultNow(),
+    session: jsonb('session').$type<WorkbookSession>().notNull(),
+  },
+  (table) => [index('product_workbook_imports_upload').on(table.anchorId, table.createdBy, table.fileHash, table.createdAt.desc())],
 );
 
 export const productImages = pgTable('product_images', {
@@ -88,7 +117,7 @@ export const productImages = pgTable('product_images', {
   hiddenAt: at('hidden_at'),
   hiddenBy: text('hidden_by'),
   hiddenReason: text('hidden_reason'),
-});
+}, (table) => [index('product_images_visible_file').on(table.fileId).where(sql`${table.hiddenAt} IS NULL`)]);
 
 export const productContacts = pgTable(
   'product_contacts',

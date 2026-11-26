@@ -27,6 +27,7 @@ export function overviewOf(facts: ProductArchiveFacts): ProductOverview {
   const purchases = purchaseDistribution({ lines: facts.purchaseLines, product, scope: 'all_channels' });
   return {
     product: productFields(product),
+    ...(facts.ownerName === undefined ? {} : { ownerName: facts.ownerName }),
     images: facts.images.map((image) => ({ id: image.id, slot: image.slot, fileId: image.fileId, source: image.source, hidden: image.hiddenAt !== null })),
     contacts: PRODUCT_CONTACT_ROLES.map((role) => ({ role, people: peopleOf(facts, role) })),
     cards: {
@@ -77,11 +78,13 @@ export function cardOf(source: ProductListSource, asOf: string): ProductCard {
     id: source.id,
     skuName: source.skuName,
     filingName: source.filingName,
+    ...(source.filingNo === undefined ? {} : { filingNo: source.filingNo }),
     barcodeRaw: source.barcodeRaw,
     isChannelVariant: comparableBarcode(source.barcodeRaw) !== barcodeBase(source.barcodeRaw),
     netContent: source.netContent,
     casePack: source.casePack,
     thumbnail: source.thumbnail,
+    ...(source.packagingImages === undefined ? {} : { packagingImages: source.packagingImages }),
     openPurchaseLines: {
       allChannels: countOpenPurchaseLines({ lines: source.lines, product, scope: 'all_channels' }),
       reportedInProgress: inProgress(source.lines, product),
@@ -90,6 +93,7 @@ export function cardOf(source: ProductListSource, asOf: string): ProductCard {
     bomPartCount: 'kind' in coverage ? null : coverage.total,
     materialLinkCoverage: 'kind' in coverage ? null : { linked: coverage.linked, total: coverage.total },
     contactsAssigned: source.contactsAssigned,
+    ...(source.ownerName === undefined ? {} : { ownerName: source.ownerName }),
   };
 }
 
@@ -165,6 +169,8 @@ function textField({ product, field, value }: { readonly product: Product; reado
 function provenanceOf(product: Product, field: string): Provenance {
   const at = product.editedAt ?? product.updatedAt;
   if (product.fieldSources[field] === 'workbench' && product.editedBy !== null) return { kind: 'manual', by: product.editedBy, at };
+  const workbook = product.workbookFieldSources?.[field];
+  if (workbook !== undefined) return workbook;
   if (product.importBatchId !== null && product.rowNo !== null) {
     return { kind: 'import', importBatchId: product.importBatchId, template: 'product-archive-v1', sheet: '', rowNo: product.rowNo, at };
   }

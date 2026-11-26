@@ -1,4 +1,4 @@
-import { barcodeBase, entityId, productId, productImageId, spuKey, type EntityId, type Product, type ProductId } from '@sw/domain';
+import { barcodeBase, entityId, productId, productImageId, spuKey, type EntityId, type ImportRow, type Product, type ProductId } from '@sw/domain';
 import type { ProductArchivePayload } from '../../ports/parsed-rows.js';
 import { isTextCell } from './parsed-cells.js';
 import { mountsOf } from '../use-cases/archive-images.js';
@@ -6,6 +6,13 @@ import type { CommitContext, CommitResult } from './context.js';
 import { findCommittedProduct, mergeExistingProduct } from './product-merge.js';
 
 export async function commitProductArchive(ctx: CommitContext): Promise<CommitResult> {
+  if (ctx.tx.products.lockBarcodes !== undefined) {
+    const barcodes = ctx.rows.flatMap((row) => {
+      const barcode = row.action === 'skip' ? null : payloadOf(row.parsed)?.barcodeRaw.value;
+      return barcode === null || barcode === undefined ? [] : [barcode];
+    });
+    await ctx.tx.products.lockBarcodes(barcodes);
+  }
   for (const row of ctx.rows) {
     if (row.action === 'skip') continue;
     await writeProduct(ctx, row);
@@ -13,17 +20,23 @@ export async function commitProductArchive(ctx: CommitContext): Promise<CommitRe
   return { affectedLineIds: [], presentLineIds: [] };
 }
 
-async function writeProduct(ctx: CommitContext, row: import('@sw/domain').ImportRow): Promise<void> {
+async function writeProduct(ctx: CommitContext, row: ImportRow): Promise<void> {
   const payload = payloadOf(row.parsed);
   if (payload === null) return;
   const barcode = payload.barcodeRaw.value;
   if (barcode === null) return;
-  const current = row.targetId === null ? await findCommittedProduct(ctx, barcode) : await ctx.tx.products.find(row.targetId);
+  const current = await committedProductFor(ctx, { row, barcode });
   if (current === undefined) {
     await createProduct(ctx, { row, payload, barcode });
     return;
   }
   await mergeExistingProduct({ ctx, row, payload, current });
+}
+
+function committedProductFor(ctx: CommitContext, { row, barcode }: { readonly row: ImportRow; readonly barcode: string }): Promise<Product | undefined> {
+  if (ctx.tx.products.findByBarcode !== undefined) return ctx.tx.products.findByBarcode(barcode);
+  if (row.targetId !== null) return ctx.tx.products.find(row.targetId);
+  return findCommittedProduct(ctx, barcode);
 }
 
 async function createProduct(ctx: CommitContext, input: { readonly row: import('@sw/domain').ImportRow; readonly payload: ProductArchivePayload; readonly barcode: string }): Promise<void> {

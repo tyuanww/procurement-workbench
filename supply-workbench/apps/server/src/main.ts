@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { createDb, fileStore, oauthStateRepository, userDirectory } from '@sw/persistence';
+import { createDb, fileStore, fileStoreWithProductWorkbookImages, oauthStateRepository, userDirectory } from '@sw/persistence';
 import { workbookReader } from '@sw/importers';
 import { feishuOAuthClient } from '@sw/auth';
 import { authConfig, feishuApp, loadConfig } from './config.js';
@@ -45,7 +45,7 @@ export async function main(): Promise<void> {
     db: handle.db,
     timeZone: config.TZ_BUSINESS,
     weeklyCron: config.WEEKLY_REPORT_CRON ?? null,
-    files: fileStore(config.UPLOAD_DIR),
+    files: fileStoreWithProductWorkbookImages(config.UPLOAD_DIR, handle.db),
     health: () => platformHealth(handle.exec),
   });
   const app = await httpApp({ config, db: handle.db, api: composed.api });

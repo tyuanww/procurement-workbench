@@ -20,10 +20,10 @@ it('platform、today、search 和 performance 的公开入口', () => {
   names(performance, ['makeGetStuckBatches', 'makeGetSupplierPerformance', 'makeGetBuyerLoad', 'makeGetBuyerDrill', 'scopedSupplierIds', 'supplierEvents', 'supplierEventFigures']);
 });
 
-it('imports、reporting、product-archive 的用例名和 08 第 9 节一致', () => {
+it('imports、reporting、product-archive 的公开用例入口', () => {
   names(imports, ['makeDetectImportFile', 'makeStartImport', 'makeSaveImportDecisions', 'makeCommitImport', 'makeDiscardImport', 'makeDiscardStaleImports', 'makeGetImportBatch', 'makeGetProcurementPreview', 'makeListImportBatches', 'makeListImportRows', 'makeGetImportTemplate']);
   names(reporting, ['makeGenerateWeeklyReport', 'makeExportWeeklyReport', 'makePublishWeeklyReportToFeishu', 'makeListWeeklyReports', 'makeGetWeeklyReport', 'makeManagementMeeting']);
-  names(productArchive, ['makeListProducts', 'makeGetProductOverview', 'makeGetProductPurchases', 'makeGetProductStock', 'makeGetProductMaterials', 'makeUpdateProduct', 'makeAddProductImage', 'makeHideProductImage', 'makeUnhideProductImage', 'makeSetProductContacts']);
+  names(productArchive, ['makeListProducts', 'makeGetProductOverview', 'makeGetProductPurchases', 'makeGetProductStock', 'makeGetProductMaterials', 'makeUpdateProduct', 'makeAddProductImage', 'makeHideProductImage', 'makeUnhideProductImage', 'makeSetProductContacts', 'makeSetProductOwner', 'makeProductWorkbookImports']);
 });
 
 it('follow-up 和 master-data 的用例名和 08 第 9 节一致', () => {

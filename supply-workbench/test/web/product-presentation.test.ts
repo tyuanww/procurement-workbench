@@ -41,6 +41,7 @@ const FULL: ProductCard = {
   ...BASE,
   id: 'product-2',
   filingName: '海葡萄补水面膜',
+  filingNo: '合成备案编号A-002',
   barcodeRaw: '6975002',
   isChannelVariant: true,
   thumbnail: { fileId: 'file-9' },
@@ -48,6 +49,7 @@ const FULL: ProductCard = {
   bomPartCount: 4,
   materialLinkCoverage: { linked: 2, total: 3 },
   contactsAssigned: 0,
+  ownerName: '合成负责人',
 };
 
 const detailLabels = ['采购中', '工厂库存', 'BOM', '物料关联', '联系人'];
@@ -77,7 +79,7 @@ describe('产品卡片图片', () => {
 describe('产品表格列宽', () => {
   it('品名和条码保留足够宽度，所有列宽不小于各自最小值', () => {
     expect(PRODUCT_COLUMN_SPECS.map((spec) => spec.title)).toEqual([
-      '品名', '条码', '备案名', '净含量', '箱规', '规格',
+      '品名', '条码', '备案名', '备案编号', '净含量', '箱规', '负责人', '规格',
     ]);
     const name = PRODUCT_COLUMN_SPECS.find((spec) => spec.key === 'skuName');
     const barcode = PRODUCT_COLUMN_SPECS.find((spec) => spec.key === 'barcodeRaw');
@@ -88,19 +90,19 @@ describe('产品表格列宽', () => {
 
   it('手机端保留品名和条码两列', () => {
     const hidden = PRODUCT_COLUMN_SPECS.filter((spec) => spec.isPhoneHidden).map((spec) => spec.key);
-    expect(hidden).toEqual(['filingName', 'netContent', 'casePack', 'spec']);
+    expect(hidden).toEqual(['filingName', 'filingNo', 'netContent', 'casePack', 'ownerName', 'spec']);
   });
 
   it('初始宽度等于设计宽度，表格最小宽度按可见列求和', () => {
     const widths = initialColumnWidths();
     expect(PRODUCT_COLUMN_SPECS.map((spec) => widthOf(widths, spec))).toEqual(PRODUCT_COLUMN_SPECS.map((spec) => spec.width));
-    expect(tableScrollWidth(widths)).toBe(896);
+    expect(tableScrollWidth(widths)).toBe(1192);
   });
 
   it('拖动后表格最小宽度跟随列宽变化，缺列回落到设计宽度', () => {
     const widths = { ...initialColumnWidths(), skuName: 300 };
     expect(widthOf(widths, specOf('skuName'))).toBe(300);
-    expect(tableScrollWidth(widths)).toBe(956);
+    expect(tableScrollWidth(widths)).toBe(1252);
     expect(widthOf({}, specOf('barcodeRaw'))).toBe(160);
   });
 
@@ -118,12 +120,13 @@ describe('产品卡片渲染', () => {
     const html = markup(h(ProductCards, { items: [FULL] }));
     expect(html).toContain('href="/products/product-2"');
     expect(html).toContain('src="/files/file-9"');
-    expect(html).toContain('渠道规格');
+    expect(html).toContain('渠道装');
     expect(html).toContain('海葡萄面膜');
     expect(html).toContain('6975002');
-    expect(html).toContain('备案名 海葡萄补水面膜');
-    expect(html).toContain('净含量 25ml');
-    expect(html).toContain('箱规 10片/盒');
+    expect(html).toContain('备案名 海葡萄补水面膜</div><div>备案编号 合成备案编号A-002');
+    expect(html).toContain('<dt>净含量</dt><dd>25ml</dd>');
+    expect(html).toContain('<dt>箱规</dt><dd>10片/盒</dd>');
+    expect(html).toContain('<dt>负责人</dt><dd>合成负责人</dd>');
     for (const label of detailLabels) expect(html).not.toContain(label);
     expect(html).not.toContain('无图');
   });
@@ -131,8 +134,9 @@ describe('产品卡片渲染', () => {
   it('没有缩略图时是占位，不出现破图地址', () => {
     const html = markup(h(ProductCards, { items: [BASE] }));
     expect(html).toContain('aria-label="海葡萄面膜 无图"');
-    expect(html).toContain('标准规格');
-    expect(html).toContain('备案名 待补充');
+    expect(html).toContain('普通装');
+    expect(html).toContain('备案名 待补充</div><div>备案编号 待补充');
+    expect(html).toContain('<dt>负责人</dt><dd>未指定</dd>');
     expect(html).not.toContain('/files/');
     expect(html).toContain('href="/products/product-1"');
   });
@@ -145,11 +149,15 @@ describe('产品表格渲染', () => {
     expect(html).toContain('href="/products/product-1"');
     expect(html).toContain('href="/products/product-2"');
     expect(html).toContain('待补充');
-    for (const title of ['品名', '条码', '备案名', '净含量', '箱规', '规格']) expect(html).toContain(title);
+    expect(html).toContain('合成负责人');
+    expect(html).toContain('未指定');
+    expect(html).toContain('合成备案编号A-002');
+    for (const spec of PRODUCT_COLUMN_SPECS) expect(html).toContain(spec.title);
     for (const label of detailLabels) expect(html).not.toContain(label);
     expect(html).toContain('role="separator"');
     expect(html).toContain('aria-label="调整品名列宽"');
     expect(html).not.toContain('ant-table-row-expand-icon');
+    expect(html).not.toContain('/files/file-9');
   });
 });
 

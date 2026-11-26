@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { deriveBatchStatus, projectLine } from '@sw/domain';
 import { currentMigration, databaseHealth, deliveryBatchRepository, followUpRepository, migrate, orderLineRepository } from '@sw/persistence';
 import type { AppHandle } from '@sw/persistence';
-import { MIGRATIONS } from '../../../packages/persistence/src/migrate.js';
+import { LATEST_MIGRATION, MIGRATIONS } from '../../../packages/persistence/src/migrate.js';
 import { arrivalTestDatabase } from './helpers/arrival-database.js';
 
 const migration = '0023_fulfillment_placeholder_projection';
@@ -42,7 +42,7 @@ async function verifyFollowUpUpgrade(handle: AppHandle): Promise<void> {
     VALUES ('projection-note', '${stamp}', '${stamp}', 'projection-no-date', 'projection-no-date', 'note', '原跟进记录', 'projection-buyer')
   `);
   await migrate(handle);
-  expect(await databaseHealth(handle.exec)).toEqual({ ok: true, db: 'up', migration: '0024_follow_up_reminder' });
+  expect(await databaseHealth(handle.exec)).toEqual({ ok: true, db: 'up', migration: LATEST_MIGRATION });
   const kept = await followUpRepository(handle.db).get('projection-note');
   expect(kept).toMatchObject({ batchId: 'projection-no-date', text: '原跟进记录' });
   expect(kept.nextFollowUpAt).toBeUndefined();

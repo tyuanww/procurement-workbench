@@ -8,6 +8,7 @@ export * from './master-data/index.js';
 export * from './performance/index.js';
 export * from './reporting/index.js';
 export * from './product-archive/index.js';
+export { archiveFields, productContactDisplay } from './product-archive/workbook/model.js';
 export * from './search/index.js';
 
 export * from './plan/index.js';

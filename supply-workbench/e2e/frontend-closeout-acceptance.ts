@@ -418,7 +418,7 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   }
   await page.screenshot({ path: join(out, 'closeout-product-archive.png'), animations: 'disabled' });
   await product.click();
-  await page.getByRole('heading', { name: '产品 演示净润洁面乳', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '演示净润洁面乳', exact: true }).waitFor();
   const tabs = page.getByRole('tablist', { name: '产品详情内容' });
   await tabs.getByRole('tab', { name: '采购', exact: true }).click();
   await page.getByText('采购 4 行', { exact: true }).waitFor();
@@ -428,19 +428,21 @@ async function checkProductArchive(page: Page, out: string): Promise<void> {
   assert.ok(await exact.isChecked() && await exact.evaluate((node) => node === document.activeElement));
   await tabs.getByRole('tab', { name: '库存', exact: true }).click();
   await page.reload();
-  await page.getByRole('tabpanel', { name: '库存', exact: true }).waitFor();
+  const stockPanel = page.getByRole('tabpanel', { name: '库存', exact: true });
+  await stockPanel.waitFor();
   const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
   assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['产品档案', '产品详情', '库存']);
-  await page.getByText('库存 1 行', { exact: true }).waitFor();
+  await stockPanel.getByText(/^共 1 行来源记录/u).waitFor();
+  await stockPanel.getByText('320', { exact: true }).waitFor();
   const stock = await page.request.get(new URL('/api/v1/products/ui-demo-cleanser/stock', page.url()).href);
   assert.equal((await stock.json()).factory.total.value, 320);
   const source = await page.request.get(new URL('/api/v1/imports/ui-demo-stock-batch', page.url()).href);
   assert.equal(source.status(), 200);
   await tabs.getByRole('tab', { name: '组成物料', exact: true }).click();
-  await page.getByText('子件 2', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: '组成物料 · 2 行子件', exact: true }).waitFor();
   await page.goto(new URL(cream, page.url()).href);
   await tabs.getByRole('tab', { name: '组成物料', exact: true }).click();
-  await page.getByText('没有 BOM', { exact: true }).waitFor();
+  await page.getByText('本条码暂无 BOM。', { exact: true }).waitFor();
 }
 
 async function checkProductSearch(page: Page, origin: URL): Promise<void> {
@@ -478,13 +480,14 @@ async function checkProductPackagingReturn(page: Page, origin: URL): Promise<voi
     await page.goto(source.href);
     const results = page.getByRole('region', { name: '产品查询结果', exact: true });
     const channel = results.locator(`a[href="${cleanser}-channel"]`);
-    await results.getByText('标准规格', { exact: true }).waitFor();
-    await results.getByText('渠道规格', { exact: true }).waitFor();
+    await results.getByText('普通装', { exact: true }).waitFor();
+    await results.getByText('渠道装', { exact: true }).waitFor();
     await results.getByText(/24 件\/箱/).waitFor();
     await results.getByText(/12 件\/箱/).waitFor();
     await channel.press('Enter');
-    await page.getByRole('heading', { name: '产品 演示净润洁面乳渠道装', exact: true }).waitFor();
-    for (const text of ['渠道规格', `${barcode}-1`, '100 mL', '12 件/箱']) {
+    await page.waitForURL((url) => url.pathname === `${cleanser}-channel`);
+    await page.getByRole('heading', { name: '演示净润洁面乳渠道装', exact: true, level: 1 }).waitFor();
+    for (const text of ['渠道装', `${barcode}-1`, '100 mL', '12 件/箱']) {
       await page.getByText(text, { exact: true }).waitFor();
     }
     await page.reload();

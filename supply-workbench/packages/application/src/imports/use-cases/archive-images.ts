@@ -20,6 +20,7 @@ export async function archiveImageMounts(
   const columns = headerColumns(sheet);
   const mounts: ArchiveImageMount[] = [];
   for (const image of sheet.images) {
+    if (image.unresolved) continue;
     const slot = slotOf(image.col, columns);
     if (slot === null) continue;
     mounts.push({ rowNo: image.row, slot, sha256: await put(image.data, image.fileName) });

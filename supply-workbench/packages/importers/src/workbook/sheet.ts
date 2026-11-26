@@ -4,7 +4,7 @@ export type CellDraft = Omit<CellLike, 'mergedFrom'>;
 
 export type MergeRange = { readonly r1: number; readonly c1: number; readonly r2: number; readonly c2: number };
 
-export type ImageAnchor = { readonly row: number; readonly col: number; readonly fileName: string; readonly data: Uint8Array };
+export type ImageAnchor = NonNullable<SheetLike['images']>[number];
 
 export function buildSheet(input: {
   readonly name: string;
@@ -13,11 +13,10 @@ export function buildSheet(input: {
   readonly merges: readonly MergeRange[];
   readonly images?: readonly ImageAnchor[];
 }): SheetLike {
-  const rowCount = maxRow(input.cells, input.merges);
   return {
     name: input.name,
     hidden: input.hidden,
-    rowCount,
+    ...dimensions(input.cells, input.merges),
     merges: input.merges,
     ...(input.images === undefined ? {} : { images: input.images }),
     cell(row, col) {
@@ -60,12 +59,17 @@ function isOriginCell({ merge, row, col }: { readonly merge: MergeRange; readonl
   return row === merge.r1 && col === merge.c1;
 }
 
-function maxRow(cells: ReadonlyMap<string, CellDraft>, merges: readonly MergeRange[]): number {
-  let row = 0;
+function dimensions(cells: ReadonlyMap<string, CellDraft>, merges: readonly MergeRange[]) {
+  let rowCount = 0;
+  let columnCount = 0;
   for (const key of cells.keys()) {
-    const parsed = Number(key.split(':')[0]);
-    if (parsed > row) row = parsed;
+    const [row, column] = key.split(':').map(Number);
+    if (row !== undefined && row > rowCount) rowCount = row;
+    if (column !== undefined && column > columnCount) columnCount = column;
   }
-  for (const merge of merges) if (merge.r2 > row) row = merge.r2;
-  return row;
+  for (const merge of merges) {
+    rowCount = Math.max(rowCount, merge.r2);
+    columnCount = Math.max(columnCount, merge.c2);
+  }
+  return { rowCount, columnCount };
 }

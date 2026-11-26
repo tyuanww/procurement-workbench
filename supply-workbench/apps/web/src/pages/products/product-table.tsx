@@ -4,7 +4,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { ProductCard } from '@sw/contracts';
 import { useShellViewport } from '../../features/shell/index.js';
 import { border, brand, space } from '../../theme/tokens.js';
-import { CatalogProductLink, filingNameText, ProductBarcode, ProductPackagingText, ProductVariantTag } from './product-cards.js';
+import { filingText, ProductBarcode, ProductPackagingText, ProductVariantTag } from './product-cards.js';
+import { ProductNamePreview, ProductTablePreviews } from './product-name-preview.js';
 
 export type ProductColumnSpec = {
   readonly key: string;
@@ -20,11 +21,13 @@ export const MAX_COLUMN_WIDTH = 480;
 export const KEYBOARD_RESIZE_STEP = space[3];
 
 export const PRODUCT_COLUMN_SPECS: readonly ProductColumnSpec[] = [
-  { key: 'skuName', title: '品名', width: 240, minWidth: 160, isPhoneHidden: false, cell: (item) => <CatalogProductLink id={item.id}>{item.skuName}</CatalogProductLink> },
+  { key: 'skuName', title: '品名', width: 240, minWidth: 160, isPhoneHidden: false, cell: (item) => <ProductNamePreview item={item} /> },
   { key: 'barcodeRaw', title: '条码', width: 160, minWidth: 120, isPhoneHidden: false, cell: (item, exactBarcode) => <ProductBarcode item={item} exactBarcode={exactBarcode} /> },
-  { key: 'filingName', title: '备案名', width: 200, minWidth: 120, isPhoneHidden: true, cell: (item) => filingNameText(item.filingName) },
+  { key: 'filingName', title: '备案名', width: 200, minWidth: 120, isPhoneHidden: true, cell: (item) => filingText(item.filingName) },
+  { key: 'filingNo', title: '备案编号', width: 168, minWidth: 112, isPhoneHidden: true, cell: (item) => filingText(item.filingNo) },
   { key: 'netContent', title: '净含量', width: 100, minWidth: 80, isPhoneHidden: true, cell: (item) => item.netContent ?? '—' },
   { key: 'casePack', title: '箱规', width: 100, minWidth: 80, isPhoneHidden: true, cell: (item) => item.casePack ?? '—' },
+  { key: 'ownerName', title: '负责人', width: 128, minWidth: MIN_COLUMN_WIDTH, isPhoneHidden: true, cell: (item) => item.ownerName ?? '未指定' },
   { key: 'spec', title: '规格', width: 96, minWidth: MIN_COLUMN_WIDTH, isPhoneHidden: true, cell: (item) => <ProductVariantTag isChannelVariant={item.isChannelVariant} /> },
 ];
 
@@ -96,7 +99,7 @@ export function useColumnResize(): ColumnResize {
 export function ProductTable({ items, exactBarcode = '' }: { readonly items: readonly ProductCard[]; readonly exactBarcode?: string }): ReactNode {
   const isPhone = useShellViewport().band === 'phone';
   const resize = useColumnResize();
-  return (
+  return <ProductTablePreviews narrow={isPhone}>
     <Table<ProductCard>
       rowKey="id"
       size="small"
@@ -104,10 +107,10 @@ export function ProductTable({ items, exactBarcode = '' }: { readonly items: rea
       dataSource={[...items]}
       pagination={false}
       styles={{ body: { cell: { overflowWrap: 'anywhere' } } }}
-      {...(isPhone ? { expandable: { expandedRowRender: productMobileDetails } } : { scroll: { x: tableScrollWidth(resize.widths) } })}
+      {...(isPhone ? { expandable: { columnWidth: 44, expandedRowRender: productMobileDetails } } : { scroll: { x: tableScrollWidth(resize.widths) } })}
       columns={columnDefs({ isPhone, resize, exactBarcode })}
     />
-  );
+  </ProductTablePreviews>;
 }
 
 function columnDefs(input: { readonly isPhone: boolean; readonly resize: ColumnResize; readonly exactBarcode: string }): TableColumnsType<ProductCard> {
@@ -115,7 +118,7 @@ function columnDefs(input: { readonly isPhone: boolean; readonly resize: ColumnR
   return specs.map((spec) => ({
     key: spec.key,
     title: input.isPhone ? spec.title : <HeaderTitle spec={spec} resize={input.resize} />,
-    ...(input.isPhone ? {} : { width: widthOf(input.resize.widths, spec) }),
+    ...(input.isPhone ? (spec.key === 'barcodeRaw' ? { width: 138 } : {}) : { width: widthOf(input.resize.widths, spec) }),
     render: (_value: unknown, item: ProductCard) => {
       const cell = spec.cell(item, input.exactBarcode);
       return input.isPhone ? <MobileProductCell field={spec.key} item={item}>{cell}</MobileProductCell> : cell;
@@ -189,13 +192,19 @@ function specOf(key: string): ProductColumnSpec {
 
 function productMobileDetails(item: ProductCard): ReactNode {
   return <Descriptions size="small" column={1}
-    items={[{ key: 'filingName', label: '备案名', children: filingNameText(item.filingName) }]} />;
+    items={[
+      { key: 'filingName', label: '备案名', children: filingText(item.filingName) },
+      { key: 'filingNo', label: '备案编号', children: filingText(item.filingNo) },
+    ]} />;
 }
 
 function MobileProductCell({ field, item, children }: { readonly field: string; readonly item: ProductCard; readonly children: ReactNode }) {
   return <Flex vertical align="start" gap={space[1]}>
     {children}
-    {field === 'skuName' ? <ProductVariantTag isChannelVariant={item.isChannelVariant} /> : <ProductPackagingText item={item} />}
+    {field === 'skuName' ? <>
+      <ProductVariantTag isChannelVariant={item.isChannelVariant} />
+      <span className="dossier-note">负责人 {item.ownerName ?? '未指定'}</span>
+    </> : <ProductPackagingText item={item} />}
   </Flex>;
 }
 

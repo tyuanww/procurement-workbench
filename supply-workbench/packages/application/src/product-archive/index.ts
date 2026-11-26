@@ -8,4 +8,7 @@ export { makeAddProductImage } from './use-cases/add-product-image.js';
 export { makeHideProductImage } from './use-cases/hide-product-image.js';
 export { makeUnhideProductImage } from './use-cases/unhide-product-image.js';
 export { makeSetProductContacts } from './use-cases/set-product-contacts.js';
+export { makeSetProductOwner } from './use-cases/set-product-owner.js';
 export type * from './boundary.js';
+export type * from './workbook/model.js';
+export { makeProductWorkbookImports } from './workbook/service.js';

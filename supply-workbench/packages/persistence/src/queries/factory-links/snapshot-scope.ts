@@ -24,7 +24,7 @@ type FactoryBatchScopeRow = {
 };
 
 /** 每个 source 的最新 committed 快照里取唯一一个；给读路径当 inArray 白名单。 */
-export async function activeFactoryBatchIds(db: AppDatabase): Promise<ReadonlySet<string>> {
+export async function activeFactoryBatchIds(db: Pick<AppDatabase, 'select'>): Promise<ReadonlySet<string>> {
   const rows = await db.select(FACTORY_BATCH_COLUMNS).from(importBatches).where(eq(importBatches.template, 'factory-progress-v1'));
   return latestFactoryBatchIds(rows);
 }
