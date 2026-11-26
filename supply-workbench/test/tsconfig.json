@@ -10,6 +10,7 @@
     "allowImportingTsExtensions": true
   },
   "include": [
+    "../apps/web/src/vite-env.d.ts",
     "./**/*.test.ts",
     "./web/jsdom.d.ts",
     "./web/task-status-drawer-dom.ts",

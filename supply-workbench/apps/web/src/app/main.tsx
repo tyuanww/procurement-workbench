@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router';
 import { App as AntApp, Button, ConfigProvider, Result, Skeleton } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import 'antd/dist/reset.css';
+import '../pages/products/dossier-review.css';
 import { antdTheme, themePatchCss } from '../theme/antd.js';
 import { SessionMetaSchema, type MeResponse } from '@sw/contracts';
 import { ApiError, apiGet } from '../shared/api/client.js';

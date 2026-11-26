@@ -1,6 +1,7 @@
 import type { EntityId, EntityMeta, IsoInstant } from './entity-meta.js';
 import type { DeliveryBatchId, OrderLineId, ProductId } from '../values/ids.js';
 import type { LocalDate } from '../values/local-date.js';
+import type { Provenance } from '../values/provenance.js';
 import type {
   CodeType,
   ExceptionStatus,
@@ -114,6 +115,7 @@ export type Product = EntityMeta<ProductId> & {
   readonly outerSize: string | null;
   readonly productLine: string | null;
   readonly fieldSources: Readonly<Record<string, FieldSource>>;
+  readonly workbookFieldSources?: Readonly<Record<string, Extract<Provenance, { readonly kind: 'product_workbook' }>>>;
   readonly importBatchId: EntityId | null;
   readonly rowNo: number | null;
   readonly editedBy: EntityId | null;

@@ -1,7 +1,7 @@
 import { productSection, productSectionLabels } from './product-section.js';
-import { Button, Descriptions, Empty, Flex, Image, Modal, Result, Select, Skeleton, Table, Typography } from 'antd';
+import { Alert, Button, Descriptions, Empty, Flex, Image, Modal, Result, Select, Skeleton, Table, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { ProductDrillLink } from './product-journey.js';
 import {
   ProductMaterialsSchema,
   ProductPurchasesSchema,
@@ -11,9 +11,9 @@ import {
   type ProductPurchases,
   type ProductStock,
 } from '@sw/contracts';
-import { missingReasonLabel } from '@sw/domain';
-import { imageLabel, isChannelVariant, materialsCopy, purchaseStageButtons, stockMissingText, templateCells, type TemplateInput } from '../../features/product-archive/index.js';
-import { useCanWrite } from '../../shared/actor.js';
+import { channelMatchLabel, imageSlotLabel, lineStageText } from '@sw/domain';
+import { isChannelVariant } from '../../features/product-archive/index.js';
+import { useCan } from '../../shared/actor.js';
 import { apiGetWithSignal } from '../../shared/api/client.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
 import { formatQuantity } from '../../shared/ui/format.js';
@@ -21,6 +21,7 @@ import { ContentTabs, ViewSwitch } from '../../shared/ui/view-switch.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
 import { ProductVariantTag } from './product-cards.js';
+import { OwnerNameForm } from './product-owner-editor.js';
 
 type ProductPanelLoad<T> =
   | { readonly kind: 'loading' }
@@ -31,104 +32,97 @@ type ProductDetailInput = {
   readonly id: string;
   readonly overview: ProductOverview;
   readonly search: URLSearchParams;
+  readonly archiveRevision?: number;
   readonly patch: (params: Record<string, string | null>) => void;
 };
 
-export function ProductDetailBody({ id, overview, search, patch }: ProductDetailInput) {
+export function ProductDetailBody({ id, overview, search, archiveRevision, patch }: ProductDetailInput) {
   const path = `/api/v1/products/${encodeURIComponent(id)}`;
+  const openSection: ProductDetailInput['patch'] = params => {
+    patch(params);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('.dossier-detail [role="tab"][aria-selected="true"]')?.focus());
+  };
   const items = [
-    { key: 'archive', label: productSectionLabels.archive, children: <ArchivePanel overview={overview} /> },
+    { key: 'archive', label: productSectionLabels.archive, children: <ArchivePanel overview={overview} patch={openSection} /> },
     { key: 'purchases', label: productSectionLabels.purchases, children: <PurchaseTab path={path} search={search} patch={patch} /> },
     { key: 'stock', label: productSectionLabels.stock, children: <ProductPanel path={`${path}/stock`} schema={ProductStockSchema}>
-      {(stock) => <StockPanel overview={overview} stock={stock} />}
+      {(stock) => <StockPanel overview={overview} stock={stock} patch={openSection} />}
     </ProductPanel> },
-    { key: 'materials', label: productSectionLabels.materials, children: <ProductPanel path={`${path}/materials`} schema={ProductMaterialsSchema}>
-      {(materials) => <MaterialsPanel materials={materials} />}
+    { key: 'materials', label: productSectionLabels.materials, children: <ProductPanel key={archiveRevision} path={`${path}/materials?owners=1`} schema={ProductMaterialsSchema}>
+      {(materials) => <MaterialsPanel productId={id} materials={materials} />}
     </ProductPanel> },
   ];
   const activeKey = productSection(search);
   return <Flex vertical gap={space[2]}>
-    <ProductPackaging product={overview.product} />
-    <ContentTabs aria-label="产品详情内容" destroyOnHidden items={items} activeKey={activeKey}
+    <ProductPackaging overview={overview} />
+    <ContentTabs tabBarGutter={16} aria-label="产品详情内容" destroyOnHidden items={items} activeKey={activeKey}
       onChange={(key) => patch({ card: key === 'archive' ? null : key })} />
   </Flex>;
 }
 
-function ProductPackaging({ product }: { readonly product: ProductOverview['product'] }) {
-  return <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 4 }} items={[
-    { key: 'variant', label: '规格', children: <ProductVariantTag isChannelVariant={isChannelVariant(product.barcodeRaw)} /> },
-    { key: 'barcode', label: '条码', children: product.barcodeRaw },
-    { key: 'content', label: '净含量', children: product.netContent.value ?? '—' },
-    { key: 'case', label: '箱规', children: product.casePack.value ?? '—' },
-  ]} styles={{ content: { overflowWrap: 'anywhere' } }} />;
+function ProductPackaging({ overview }: Pick<ProductDetailInput, 'overview'>) {
+  const { product, ownerName } = overview;
+  return <dl className="dossier-identity">
+    <div><dt>规格</dt><dd><ProductVariantTag isChannelVariant={isChannelVariant(product.barcodeRaw)} /></dd></div>
+    <div><dt>条码</dt><dd>{product.barcodeRaw}</dd></div>
+    <div><dt>净含量</dt><dd>{product.netContent.value ?? '—'}</dd></div>
+    <div><dt>箱规</dt><dd>{product.casePack.value ?? '—'}</dd></div>
+    <div><dt>项目推荐人</dt><dd>{ownerName ?? '未指定'}</dd></div>
+  </dl>;
 }
 
-function ArchivePanel({ overview }: { readonly overview: ProductOverview }) {
-  const [imageIndex, setImageIndex] = useState<number | null>(null);
+function ArchivePanel({ overview, patch }: Pick<ProductDetailInput, 'overview' | 'patch'>) {
+  const { purchases, stock, materials } = overview.cards;
+  const total = Object.values(purchases.byStage).reduce((sum, n) => sum + n, 0);
+  const entries = [
+    { key: 'purchases', title: '采购订单', value: `全部渠道 · ${total} 行` },
+    { key: 'stock', title: '工厂库存', value: stock.kind === 'linked' ? `${stock.rowCount} 行来源记录` : '暂无匹配记录' },
+    { key: 'materials', title: '组成物料', value: materials.kind === 'no_bom' ? '暂无 BOM' : `${materials.partCount} 行子件` },
+  ];
+  const product = overview.product;
+  const fields = [
+    { key: 'filingName', label: '备案名称', children: product.filingName.value ?? '待补充' },
+    { key: 'filingNo', label: '备案编号', children: product.filingNo.value ?? '待补充' },
+    { key: 'line', label: '产品线', children: product.productLine.value ?? '待补充' },
+    { key: 'size', label: '外包装尺寸（mm）', children: product.outerSize.value ?? '待补充' },
+  ];
+  return <>
+    <div className="dossier-archive-layout">
+      <PackagingImages overview={overview} />
+      <section aria-label="备案与包装">
+        <Typography.Title level={2}>备案与包装</Typography.Title>
+        <Descriptions size="small" column={1} items={fields} />
+      </section>
+    </div>
+    <div className="dossier-summary">{entries.map(item => <Button key={item.key} className="dossier-summary-link"
+      onClick={() => patch(item.key === 'purchases' ? { card: item.key, scope: null, stage: null } : { card: item.key })}>
+      <b>{item.title} ›</b><span>{item.value}</span>
+    </Button>)}</div>
+  </>;
+}
+
+function PackagingImages({ overview }: Pick<ProductDetailInput, 'overview'>) {
   const visible = overview.images.filter((image) => !image.hidden);
-  return (
-    <Flex vertical gap={space[2]}>
-      <TemplateTable input={templateOf(overview, visible.length)} />
-      {visible.length === 0 ? null : <div><ImageStrip visible={visible} imageIndex={imageIndex} setImageIndex={setImageIndex} /></div>}
-    </Flex>
-  );
-}
-
-function TemplateTable({ input }: { readonly input: TemplateInput }) {
-  return (
-    <Descriptions
-      bordered
-      size="small"
-      column={{ xs: 1, sm: 2 }}
-      items={templateCells(input).filter((cell) => cell.label !== '条码')
-        .map((cell) => ({ key: cell.label, label: cell.label, children: cell.value }))}
-    />
-  );
+  return <section aria-label="包装图片">
+        <Typography.Title level={2}>包装图片</Typography.Title>
+        <div className="dossier-gallery">
+          {(['inner', 'outer'] as const).map(slot => {
+            const label = imageSlotLabel(slot);
+            const pictures = visible.filter(image => image.slot === slot);
+            const emptyText = overview.images.some(image => image.slot === slot && image.hidden) ? '暂无可见图片' : '原档未附图';
+            return <figure key={slot}>
+              <figcaption>{label}</figcaption>
+              {pictures.length === 0 ? <span className="dossier-note">{emptyText}</span> : pictures.map(image =>
+                <Image key={image.id} src={`/files/${image.fileId}`} alt={`${overview.product.skuName.value ?? '产品'} · ${label}`}
+                  width="100%" styles={{ image: { objectFit: 'contain' } }} />)}
+            </figure>;
+          })}
+        </div>
+      </section>;
 }
 
 export function productHeading(overview: ProductOverview | null): string {
-  return `产品 ${skuTitle(overview)}`;
-}
-
-function skuTitle(overview: ProductOverview | null): string {
-  return overview?.product.skuName.value ?? '待补充';
-}
-
-function templateOf(overview: ProductOverview, imageCount: number): TemplateInput {
-  return {
-    filingName: overview.product.filingName.value,
-    skuName: overview.product.skuName.value,
-    image: imageCount === 0 ? imageLabel(false) : '已有图片',
-    supplier: null,
-    cycle: null,
-  };
-}
-
-function ImageStrip(props: {
-  readonly visible: readonly ProductOverview['images'][number][];
-  readonly imageIndex: number | null;
-  readonly setImageIndex: (index: number | null) => void;
-}) {
-  const { visible, imageIndex, setImageIndex } = props;
-  return (
-    <>
-      <Button onClick={() => setImageIndex(0)}>{imageLabel(true)}</Button>
-      <Modal
-        open={imageIndex !== null && visible[imageIndex] !== undefined}
-        title="产品图片"
-        onCancel={() => setImageIndex(null)}
-        footer={[
-          <Button key="prev" onClick={() => setImageIndex(imageIndex === null || imageIndex === 0 ? visible.length - 1 : imageIndex - 1)}>上一张</Button>,
-          <Button key="next" onClick={() => setImageIndex(imageIndex === null || imageIndex + 1 >= visible.length ? 0 : imageIndex + 1)}>下一张</Button>,
-          <Button key="close" onClick={() => setImageIndex(null)}>关闭</Button>,
-        ]}
-      >
-        {imageIndex === null || visible[imageIndex] === undefined ? null : (
-          <Image alt="" src={`/files/${visible[imageIndex].fileId}`} style={{ width: '100%' }} />
-        )}
-      </Modal>
-    </>
-  );
+  return overview === null ? '产品详情' : overview.product.skuName.value ?? '品名待补充';
 }
 
 function ProductPanel<T>({ path, schema, children }: {
@@ -178,85 +172,131 @@ function PurchasesPanel(props: {
   readonly purchases: ProductPurchases;
   readonly patch: ProductDetailInput['patch'];
 }) {
-  const stages = purchaseStageButtons(props.purchases.byStage);
-  const stage = stages.find(({ code }) => code === props.stage)?.code ?? null;
-  const rows = props.purchases.rows.filter(({ orderLine }) => stage === null || orderLine.stage === stage);
-  return (
-    <div id="purchases" style={{ width: '100%' }}>
-      <Select<string> aria-label="采购阶段" value={stage ?? ''} virtual={false} onChange={(value) => props.patch({ stage: value })}
-        options={[{ label: '全部阶段', value: '' }, ...stages.map(({ code, text }) => ({ label: text, value: code }))]} />
-      <Typography.Paragraph style={{ marginTop: space[3] }}>采购 {rows.length} 行</Typography.Paragraph>
-      <Table<ProductPurchases['rows'][number]>
-        size="small" rowKey={(row) => row.orderLine.id} pagination={false} dataSource={rows} scroll={{ x: 420 }}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此范围没有采购记录。" /> }}
-        columns={[
-          { title: '单号', key: 'po', render: (_, { orderLine }) => <Link to={`/lines/${encodeURIComponent(orderLine.id)}`}>{orderLine.po.poRaw ?? '查看订单行'}</Link> },
-          { title: '品名', key: 'name', render: (_, { orderLine }) => orderLine.nameRaw ?? '—' },
-          { title: '阶段', key: 'stage', render: (_, { orderLine }) => <StatusTag status={orderLine.stage} /> },
-        ]}
-      />
-    </div>
-  );
-}
-
-function StockPanel({ overview, stock }: { readonly overview: ProductOverview; readonly stock: ProductStock }) {
-  const canReview = useCanWrite('master.review');
-  const card = overview.cards.stock;
-  if (card?.kind === 'missing') {
-    const reason = missingReasonLabel(card.reason);
-    return (
-      <div id="stock">
-        <p>{canReview ? stockMissingText(reason) : `${reason}。`}</p>
-        {canReview ? <Link to="/master">去主数据审核</Link> : null}
-      </div>
-    );
-  }
-  const { rows } = stock.factory;
-  return (
-    <div id="stock">
-      <Typography.Paragraph>库存 {rows.length} 行</Typography.Paragraph>
-      <FactoryStockTable rows={rows} />
-    </div>
-  );
-}
-
-function FactoryStockTable({ rows }: { readonly rows: ProductStock['factory']['rows'] }) {
-  return (
-    <Table<ProductStock['factory']['rows'][number]>
-      size="small" rowKey="id" pagination={false} dataSource={rows} scroll={{ x: 420 }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可显示的工厂库存记录。" /> }}
+  const options = Object.entries(props.purchases.byStage).map(([value, count]) => ({
+    value, label: `${lineStageText(value)} ${count} 行`,
+  }));
+  const stage = options.find(option => option.value === props.stage)?.value ?? '';
+  const rows = props.purchases.rows.filter(({ orderLine }) => !stage || orderLine.stage === stage);
+  return <div id="purchases" style={{ width: '100%' }}>
+    <Flex align="center" wrap gap={space[2]}>
+      <Select aria-label="采购阶段" value={stage} virtual={false} style={{ width: 152, maxWidth: '100%' }}
+        popupMatchSelectWidth={200} onChange={value => props.patch({ stage: value || null })}
+        options={[{ value: '', label: '全部阶段' }, ...options]} />
+      <span role="status">采购 {rows.length} 行</span>
+    </Flex>
+    <Table<ProductPurchases['rows'][number]> size="small" rowKey={row => row.orderLine.id}
+      className="dossier-result" pagination={false} dataSource={rows} tableLayout="fixed"
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此范围没有采购记录。">
+        {stage ? <Button onClick={() => props.patch({ stage: null })}>查看全部阶段</Button> : null}
+      </Empty> }}
       columns={[
-        { title: '物料编码', key: 'code', render: (_, row) => row.payload.itemCodeRaw.value ?? '—' },
-        { title: '库存数量', key: 'quantity', align: 'right', render: (_, row) => formatQuantity(row.payload.qtyOnHand.value) },
-        { title: '来源', key: 'source', render: (_, row) => `${row.sheetName} · 第 ${row.rowNo} 行` },
-      ]}
-    />
-  );
+        { title: '采购单 / 商品条码', key: 'order', render: (_, { orderLine, channelMatch }) => <div>
+          <ProductDrillLink to={`/lines/${encodeURIComponent(orderLine.id)}`} tabLabel="采购">{orderLine.po.poRaw ?? '查看订单行'}</ProductDrillLink>
+          {orderLine.nameRaw && <div className="dossier-note dossier-purchase-name">{orderLine.nameRaw}</div>}
+          <div className="dossier-note">{orderLine.barcodeRaw}</div>
+          {props.purchases.scope === 'all_channels' && <span className="dossier-note">{channelMatchLabel(channelMatch)}</span>}
+        </div> },
+        { title: '品名', key: 'sku', responsive: ['sm'], render: (_, { orderLine }) => orderLine.nameRaw ?? '—' },
+        { title: '采购阶段', key: 'stage', width: 100, render: (_, { orderLine }) => <StatusTag status={orderLine.stage} /> },
+      ]} />
+  </div>;
 }
 
-function MaterialsPanel({ materials }: { readonly materials: ProductMaterials }) {
-  return (
-    <div id="materials">
-      <Typography.Paragraph type="secondary">{materialsCopy()}</Typography.Paragraph>
-      {!('parts' in materials)
-        ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有 BOM" /> : <MaterialsTable parts={materials.parts} />}
-    </div>
-  );
+function missingStockReason(summary: ProductOverview['cards']['stock']) {
+  if (summary.kind !== 'missing') return '暂时没有可回查的库存来源行。';
+  return summary.nextStep === 'review_code_links' ? '本条码尚无已审核的库存编码关联。' : '本条码已有编码关联，当前生效的工厂表没有对应库存行。';
+}
+
+function MissingFactoryStock({ overview, patch }: Pick<ProductDetailInput, 'overview' | 'patch'>) {
+  const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
+  const canReview = useCan('master.review');
+  const canReadImports = useCan('imports.read');
+  const summary = overview.cards.stock;
+  const isMissingLink = summary.kind === 'missing' && summary.nextStep === 'review_code_links';
+  const reason = missingStockReason(summary);
+  const handoff = [overview.product.skuName.value, overview.product.barcodeRaw, reason].filter(Boolean).join(' · ');
+  const copyForReview = async () => {
+    try {
+      await navigator.clipboard.writeText(handoff);
+      setCopy('copied');
+    } catch {
+      setCopy('manual');
+    }
+  };
+  return <Alert type="info" showIcon title="代工厂表无对应记录。" description={<>
+      <div>{reason}</div>
+      <Flex wrap gap={12} align="center" style={{marginTop:8}}>
+        <Button onClick={() => patch({ card: 'purchases', scope: 'exact', stage: null })}>查看本条码采购</Button>
+        {isMissingLink && !canReview && <Button type="link" onClick={copyForReview}>复制给审核人核对</Button>}
+        {isMissingLink && canReview ? <ProductDrillLink to="/master?tab=factory-link&scope=active" tabLabel="库存">查看当前工厂关联诊断</ProductDrillLink> : null}
+        {!isMissingLink && canReadImports ? <ProductDrillLink to="/imports?template=factory-progress-v1&status=committed" tabLabel="库存">查看导入记录</ProductDrillLink> : null}
+      </Flex>
+      {copy === 'copied' ? <span role="status">已复制品名、条码和缺失原因。</span> : null}
+      {copy === 'manual' ? <div role="status">请选中并复制：<span style={{userSelect:'all'}}>{handoff}</span></div> : null}
+    </>} />;
+}
+
+function StockPanel({ overview, stock, patch }: Pick<ProductDetailInput,'overview' | 'patch'> & { stock: ProductStock }) {
+  const rows = stock.factory.rows;
+  const canReadImports = useCan('imports.read');
+  return <section id="stock">
+    <Typography.Title level={2}>代工厂库存</Typography.Title>
+    {rows.length === 0 ? <MissingFactoryStock overview={overview} patch={patch} /> : <>
+      <p className="dossier-note">共 {rows.length} 行来源记录 · 数量单位未提供</p>
+      {rows.map(row => <article className="dossier-stock-record" key={row.id}>
+        <h3>{row.payload.nameRaw.value ?? row.payload.itemCodeRaw.value ?? '工厂库存行'}</h3>
+        <dl className="dossier-identity">
+          <div><dt>库存数量</dt><dd>{formatQuantity(row.payload.qtyOnHand.value)}</dd></div>
+          <div><dt>物料编码</dt><dd>{row.payload.itemCodeRaw.value ?? '—'}</dd></div>
+          <div><dt>批号</dt><dd>{row.payload.lotRaw.value ?? '—'}</dd></div>
+        </dl>
+        <p>来源 {row.sheetName} · 第 {row.rowNo} 行</p>
+        {canReadImports && <ProductDrillLink to={`/imports/${encodeURIComponent(row.importBatchId)}`} sourceLink={`stock:${row.id}`} tabLabel="库存">查看导入批次</ProductDrillLink>}
+      </article>)}
+    </>}
+    <p className="dossier-note">自有仓库存：暂无数据来源。</p>
+  </section>;
 }
 
 type MaterialPart = Extract<ProductMaterials, { readonly parts: unknown }>['parts'][number];
 
-function MaterialsTable({ parts }: { readonly parts: readonly MaterialPart[] }) {
-  return (
-    <>
-      <Typography.Paragraph>子件 {parts.length}</Typography.Paragraph>
-      <Table
-        size="small" rowKey="index" pagination={false} dataSource={parts.map((part, index) => ({ ...part, index }))} scroll={{ x: 320 }}
-        columns={[
-          { title: '子件编码', dataIndex: 'partCodeRaw', key: 'code' },
-          { title: '子件名称', dataIndex: 'partName', key: 'name' },
-        ]}
-      />
-    </>
-  );
+function MaterialsPanel({ productId, materials }: { readonly productId: string; readonly materials: ProductMaterials }) {
+  const canMaintain = useCan('products.maintain');
+  const [changed, setChanged] = useState<ReadonlyMap<string, string | null>>(() => new Map());
+  const [editing, setEditing] = useState<MaterialPart | null>(null);
+  const [isSaving, setSaving] = useState(false);
+  if (!('parts' in materials)) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本条码暂无 BOM。" />;
+  const rows = materials.parts.map((part, index) => ({
+    ...part,
+    ownerName: changed.has(part.partCodeRaw) ? changed.get(part.partCodeRaw) ?? null : part.ownerName ?? null,
+    index,
+  }));
+  return <>
+    <Typography.Title level={2}>组成物料 · {materials.parts.length} 行子件</Typography.Title>
+    <p className="dossier-note">按本条码的 BOM 核对子件。齐套情况需另查物料记录。</p>
+    <Table size="small" pagination={false} dataSource={rows} rowKey="index" tableLayout="fixed" columns={[
+      { title: '子件名称', key: 'partName', render: (_, part) => <>
+        <span>{part.partName}</span>
+        <div className="dossier-note dossier-material-code">{part.partCodeRaw}</div>
+      </> },
+      { title: '子件编码', dataIndex: 'partCodeRaw', responsive: ['sm'] },
+      { title: '子件负责人', key: 'ownerName', render: (_, part) => <Flex align="center" wrap gap={space[1]}>
+        <span>{part.ownerName ?? '未指定'}</span>
+        {canMaintain && (part.partCodeRaw === '' ? <span className="dossier-note">补齐子件编码后可指定</span> : <Button type="link" className="dossier-assign-owner"
+          aria-label={`${part.ownerName === null ? '指定' : '修改'}子件负责人 ${part.partCodeRaw}`}
+          onClick={() => setEditing(part)}>{part.ownerName === null ? '指定' : '修改'}</Button>)}
+      </Flex> },
+    ]} />
+    <Modal open={editing !== null} title="编辑子件负责人" footer={null}
+      closable={{ disabled: isSaving }} keyboard={!isSaving} mask={{ closable: !isSaving }}
+      onCancel={() => { if (!isSaving) setEditing(null); }}>
+      {editing !== null && <>
+        <p className="dossier-note">{editing.partName} · {editing.partCodeRaw}</p>
+        <OwnerNameForm productId={productId} partCodeRaw={editing.partCodeRaw} ownerName={editing.ownerName ?? null}
+          isSaving={isSaving} onSavingChange={setSaving} onSave={(ownerName) => {
+          setChanged((previous) => new Map(previous).set(editing.partCodeRaw, ownerName));
+        }} />
+      </>}
+    </Modal>
+  </>;
 }

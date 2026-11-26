@@ -33,7 +33,7 @@ function sheetRefs(workbook: string, rels: string): SheetRef[] {
   return [...workbook.matchAll(/<sheet\b([^>]*)\/>/g)].map((match) => {
     const attrs = match[1] ?? '';
     const id = attr(attrs, 'r:id');
-    return { name: decodeXml(attr(attrs, 'name')), hidden: /state="hidden"/.test(attrs), path: `xl/${targets.get(id) ?? ''}` };
+    return { name: decodeXml(attr(attrs, 'name')), hidden: /state="hidden"/.test(attrs), path: resolvePath('xl/workbook.xml', targets.get(id) ?? '') };
   });
 }
 
@@ -124,23 +124,28 @@ function imagesOf(files: ZipFiles, sheetPath: string): ImageAnchor[] {
   const drawingXml = xmlText(files, drawingPath);
   if (drawingXml === null) return [];
   const media = relationshipTargets(xmlText(files, relsPath(drawingPath)) ?? '');
-  return [...drawingXml.matchAll(/<xdr:twoCellAnchor\b[\s\S]*?<xdr:from>([\s\S]*?)<\/xdr:from>[\s\S]*?r:embed="([^"]+)"/g)].map((match) => {
-    const from = match[1] ?? '';
-    const file = media.get(match[2] ?? '') ?? '';
-    const mediaPath = resolvePath(drawingPath, file);
-    return {
-      row: Number(tag(from, 'xdr:row') ?? '0') + 1,
-      col: Number(tag(from, 'xdr:col') ?? '0') + 1,
-      fileName: mediaPath.split('/').pop() ?? mediaPath,
-      data: files.get(mediaPath) ?? new Uint8Array(),
-    };
+  const anchors = drawingXml.matchAll(/<(?:[\w.-]+:)?(?:two|one)CellAnchor\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?(?:two|one)CellAnchor>/g);
+  return [...anchors].flatMap((anchor): ImageAnchor[] => {
+    const body = anchor[1] ?? '';
+    const embed = attr(body, '[\\w.-]+:embed');
+    if (embed === '') return [];
+    const target = media.get(embed);
+    const from = tag(body, '(?:[\\w.-]+:)?from') ?? '';
+    const row = Number(tag(from, '(?:[\\w.-]+:)?row') ?? '0') + 1;
+    const col = Number(tag(from, '(?:[\\w.-]+:)?col') ?? '0') + 1;
+    if (target === undefined) return [{ row, col, fileName: '', data: new Uint8Array(), unresolved: true }];
+    const path = resolvePath(drawingPath, target);
+    return [{ row, col, fileName: path.split('/').pop() ?? path, data: files.get(path) ?? new Uint8Array() }];
   });
 }
 
 function relationshipTargets(rels: string): Map<string, string> {
   const targets = new Map<string, string>();
-  for (const match of rels.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
-    if (match[1] !== undefined && match[2] !== undefined) targets.set(match[1], match[2]);
+  for (const match of rels.matchAll(/<(?:[\w.-]+:)?Relationship\b([^>]*)>/g)) {
+    const attrs = match[1] ?? '';
+    const id = attr(attrs, 'Id');
+    const target = attr(attrs, 'Target');
+    if (id !== '' && target !== '' && attr(attrs, 'TargetMode') !== 'External') targets.set(id, decodeXml(target));
   }
   return targets;
 }
@@ -151,10 +156,10 @@ function relsPath(path: string): string {
 }
 
 function resolvePath(from: string, target: string): string {
-  const base = from.split('/').slice(0, -1);
+  const base = target.startsWith('/') ? [] : from.split('/').slice(0, -1);
   for (const part of target.split('/')) {
     if (part === '..') base.pop();
-    else if (part !== '.') base.push(part);
+    else if (part !== '.' && part !== '') base.push(part);
   }
   return base.join('/');
 }

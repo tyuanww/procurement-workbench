@@ -1,4 +1,4 @@
-import type { AddProductImage, GetProductMaterials, GetProductOverview, GetProductPurchases, GetProductStock, HideProductImage, ListProducts, SetProductContacts, UpdateProduct } from '@sw/application';
+import type { makeProductWorkbookImports, AddProductImage, GetProductMaterials, GetProductOverview, GetProductPurchases, GetProductStock, HideProductImage, ListProducts, SetProductContacts, SetProductOwner, UpdateProduct } from '@sw/application';
 
 export type ProductApi = {
   list: ListProducts;
@@ -11,4 +11,7 @@ export type ProductApi = {
   hideImage: HideProductImage;
   unhideImage: HideProductImage;
   contacts: SetProductContacts;
+  setOwner: SetProductOwner;
+  workbookMaxBytes: number;
+  workbooks: ReturnType<typeof makeProductWorkbookImports>;
 };

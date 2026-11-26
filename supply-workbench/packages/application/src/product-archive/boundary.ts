@@ -3,7 +3,7 @@ import type { Clock } from '../ports/clock.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { ProductQueries } from '../ports/product-queries.js';
-import type { UnitOfWork } from '../ports/unit-of-work.js';
+import type { UnitOfWork, UnitOfWorkStores } from '../ports/unit-of-work.js';
 import type {
   AddProductImageInput,
   HideProductImageInput,
@@ -16,6 +16,7 @@ import type {
   ProductPurchasesQuery,
   ProductStock,
   SetProductContactsInput,
+  SetProductOwnerInput,
   UpdateProductInput,
 } from './views.js';
 
@@ -42,3 +43,12 @@ export type HideProductImageDeps = Maintain;
 export type HideProductImage = (input: HideProductImageInput, actor: Actor) => Promise<{ readonly imageId: string }>;
 export type SetProductContactsDeps = Maintain;
 export type SetProductContacts = (input: SetProductContactsInput, actor: Actor) => Promise<{ readonly productId: string }>;
+
+export interface ProductArchiveOwnerRepository {
+  hasPart(input: { readonly productBarcodeRaw: string; readonly partCodeRaw: string }): Promise<boolean>;
+  set(input: Omit<SetProductOwnerInput, 'partCodeRaw'> & { readonly partCodeRaw: string }): Promise<void>;
+}
+
+type OwnerStores = UnitOfWorkStores & { readonly productOwners: ProductArchiveOwnerRepository };
+export type SetProductOwnerDeps = { readonly uow: UnitOfWork<OwnerStores>; readonly clock: Clock };
+export type SetProductOwner = (input: SetProductOwnerInput, actor: Actor) => Promise<Pick<SetProductOwnerInput, 'ownerName'>>;

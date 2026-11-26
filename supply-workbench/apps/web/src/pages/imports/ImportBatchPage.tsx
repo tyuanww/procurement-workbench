@@ -29,7 +29,9 @@ function ImportBatchContent({ id }: { readonly id: string }) {
   const { pathname, state } = useLocation();
   const [search, setParams] = useSearchParams();
   const backSearch = writeUrlState(search.toString(), { drawer: null });
-  const back = <Link to={{ pathname: '/imports', search: backSearch }} state={detailReturnState(state, pathname)}>返回导入中心</Link>;
+  const returnFocus = detailReturnState(state, pathname);
+  const returnState = state?.productOrigin === undefined ? returnFocus : { ...returnFocus, productOrigin: state.productOrigin };
+  const back = <Link to={{ pathname: '/imports', search: backSearch }} state={returnState}>返回导入中心</Link>;
   const { load, retry, setSummary } = useImportBatch(id);
   const [request, setRequest] = useState<CommitRequest>({ kind: 'idle' });
   const [reasons, setReasons] = useState<readonly string[]>([]);

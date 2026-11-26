@@ -170,6 +170,7 @@ export {
   ProductOverviewSchema,
   ProductPurchasesSchema,
   ProductStockSchema,
+  ProductWorkbookPreviewSchema,
 } from './product-views.js';
 export type { ProductCard, ProductList, ProductMaterials, ProductOverview, ProductPurchases, ProductStock } from '@sw/application';
 
@@ -231,6 +232,9 @@ export {
   PartyListQuerySchema,
   ReasonRequestSchema,
   SetProductContactsRequestSchema,
+  SetProductOwnerRequestSchema,
+  SetProductOwnerResultSchema,
+  PRODUCT_OWNER_NAME_MAX_LENGTH,
   StartImportRequestSchema,
   UpdateBatchRequestSchema,
   UpdateLineRequestSchema,

@@ -9,6 +9,7 @@ export const makeUnhideProductImage =
     authorize(actor, 'products.maintain');
     const at = deps.clock.now();
     await deps.uow.run(async (tx) => {
+      await tx.products.get(input.productId);
       const image = await tx.productImages.get(input.imageId);
       if (image.productId !== input.productId) throw new NotFoundError('产品图片', input.imageId);
       if (image.hiddenAt === null) throw new StateConflictError('visible');

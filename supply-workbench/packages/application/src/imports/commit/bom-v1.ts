@@ -4,7 +4,7 @@ import type { CommitContext, CommitResult } from './context.js';
 export async function commitBom(ctx: CommitContext): Promise<CommitResult> {
   const grouped = new Map<string, BomLine[]>();
   for (const row of ctx.rows) addLine(grouped, bomLine(ctx, row));
-  for (const [barcode, lines] of grouped) await ctx.tx.bomLines.replace(barcode, lines);
+  for (const barcode of [...grouped.keys()].sort()) await ctx.tx.bomLines.replace(barcode, grouped.get(barcode) ?? []);
   return { affectedLineIds: [], presentLineIds: [] };
 }
 

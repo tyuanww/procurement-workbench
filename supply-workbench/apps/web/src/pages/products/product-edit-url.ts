@@ -10,3 +10,10 @@ export function writeProductEdit(input: {
 }): URLSearchParams {
   return new URLSearchParams(writeUrlState(input.search, { drawer: input.isOpen ? 'edit' : null }));
 }
+
+export function writeWorkbookBatch(input: {
+  readonly search: string;
+  readonly batchId: string | null;
+}): URLSearchParams {
+  return new URLSearchParams(writeUrlState(input.search, { workbookBatch: input.batchId }));
+}

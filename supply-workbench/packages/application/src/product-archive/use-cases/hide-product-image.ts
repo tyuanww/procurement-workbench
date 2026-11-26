@@ -11,6 +11,7 @@ export const makeHideProductImage =
     if (reason === '') throw new ValidationFailedError('隐藏要写原因');
     const at = deps.clock.now();
     await deps.uow.run(async (tx) => {
+      await tx.products.get(input.productId);
       const image = await tx.productImages.get(input.imageId);
       if (image.productId !== input.productId) throw new NotFoundError('产品图片', input.imageId);
       if (image.hiddenAt !== null) throw new StateConflictError('hidden');

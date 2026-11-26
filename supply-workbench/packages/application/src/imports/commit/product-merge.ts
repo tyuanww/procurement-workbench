@@ -111,6 +111,7 @@ function fieldsOf(payload: ProductArchivePayload) {
 function applied(current: Product, fields: { readonly filingName?: string | null; readonly filingNo?: string | null; readonly skuName?: string | null; readonly netContent?: string | null; readonly casePack?: string | null; readonly outerSize?: string | null }): Product {
   return {
     ...current,
+    workbookFieldSources: retainedWorkbookSources(current, fields),
     filingName: fields.filingName === undefined ? current.filingName : fields.filingName,
     filingNo: fields.filingNo === undefined ? current.filingNo : fields.filingNo,
     skuName: fields.skuName ?? current.skuName,
@@ -118,6 +119,12 @@ function applied(current: Product, fields: { readonly filingName?: string | null
     casePack: fields.casePack === undefined ? current.casePack : fields.casePack,
     outerSize: fields.outerSize === undefined ? current.outerSize : fields.outerSize,
   };
+}
+
+function retainedWorkbookSources(current: Product, fields: object): NonNullable<Product['workbookFieldSources']> {
+  const retained = { ...current.workbookFieldSources };
+  for (const field of Object.keys(fields)) delete retained[field];
+  return retained;
 }
 
 function reimportImage(image: ProductImage): ReimportImage {

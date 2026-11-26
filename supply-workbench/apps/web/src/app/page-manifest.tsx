@@ -1,3 +1,4 @@
+import { ProductOriginReturn } from '../pages/products/product-journey.js';
 import { settingsSection, settingsSectionLabels } from '../pages/settings/settings-section.js';
 import { productSection, productSectionLabels } from '../pages/products/product-section.js';
 import type { ReactNode } from 'react';
@@ -50,7 +51,7 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="schedule" /> },
   { path: '/progress/development', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="development" /> },
   { path: '/lines', nav: { label: '跟进中心' }, gate: 'always', element: <LineListPage /> },
-  { path: '/lines/:id', nav: null, breadcrumb: '订单行详情', element: <LineDetailPage /> },
+  { path: '/lines/:id', nav: null, breadcrumb: '订单行详情', element: <ProductOriginReturn><LineDetailPage /></ProductOriginReturn> },
   { path: '/dashboard', nav: { label: '管理看板' }, gate: 'oversight', element: <DashboardPage /> },
   { path: '/reports', nav: null, gate: 'oversight', menuParent: '/dashboard', element: <ReportListPage /> },
   { path: '/reports/:id', nav: null, breadcrumb: '周报详情', gate: 'oversight', element: <ReportDetailPage /> },
@@ -58,9 +59,9 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/parties/:id', nav: null, breadcrumb: '主体详情', element: <PartyPage /> },
   { path: '/products', nav: { label: '产品档案' }, gate: 'always', element: <ProductListPage /> },
   { path: '/products/:id', nav: null, breadcrumb: (params) => ['产品详情', productSectionLabels[productSection(params)]], element: <ProductDetailPage /> },
-  { path: '/imports', nav: { label: '导入与审核' }, gate: 'imports', element: <ImportCenter /> },
-  { path: '/imports/:id', nav: null, breadcrumb: '导入批次', gate: 'imports', menuParent: '/imports', element: <ImportBatchPage /> },
-  { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <MasterPage /> },
+  { path: '/imports', nav: { label: '导入与审核' }, gate: 'imports', element: <ProductOriginReturn><ImportCenter /></ProductOriginReturn> },
+  { path: '/imports/:id', nav: null, breadcrumb: '导入批次', gate: 'imports', menuParent: '/imports', element: <ProductOriginReturn><ImportBatchPage /></ProductOriginReturn> },
+  { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <ProductOriginReturn><MasterPage /></ProductOriginReturn> },
   { path: SETTINGS_PATH, nav: null, breadcrumb: (params) => ['系统设置', settingsSectionLabels[settingsSection(params).activeKey]], gate: 'admin', element: <SettingsPage /> },
 ];
 

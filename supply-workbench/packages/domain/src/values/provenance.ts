@@ -18,6 +18,13 @@ export type Provenance =
       readonly rowNo: number;
       readonly at: string;
     }
+  | {
+      readonly kind: 'product_workbook';
+      readonly receiptId: string;
+      readonly anchorProductId: string | null;
+      readonly rowNo: number;
+      readonly at: string;
+    }
   | { readonly kind: 'system'; readonly rule: string; readonly at: string };
 
 export type Missing = {

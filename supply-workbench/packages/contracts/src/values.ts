@@ -60,6 +60,7 @@ export const ProvenanceSchema: z.ZodType<Provenance> = z.discriminatedUnion('kin
     rowNo: z.number(),
     at: z.string(),
   }),
+  strictObject({ kind: z.literal('product_workbook'), receiptId: z.string(), anchorProductId: nullable(z.string()), rowNo: z.number(), at: z.string() }),
   strictObject({ kind: z.literal('system'), rule: z.string(), at: z.string() }),
 ]);
 

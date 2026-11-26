@@ -19,16 +19,19 @@ export type ProductCard = {
   readonly id: string;
   readonly skuName: string;
   readonly filingName: string | null;
+  readonly filingNo?: string | null;
   readonly barcodeRaw: string;
   readonly isChannelVariant: boolean;
   readonly netContent: string | null;
   readonly casePack: string | null;
-  readonly thumbnail: { readonly fileId: string } | null;
+  readonly thumbnail: { readonly fileId: string; readonly slot?: ImageSlot } | null;
+  readonly packagingImages?: readonly { readonly fileId: string; readonly slot: ImageSlot }[];
   readonly openPurchaseLines: { readonly allChannels: number; readonly reportedInProgress: number };
   readonly factoryStock: Provenanced<number>;
   readonly bomPartCount: number | null;
   readonly materialLinkCoverage: { readonly linked: number; readonly total: number } | null;
   readonly contactsAssigned: number;
+  readonly ownerName?: string | null;
 };
 
 export type ProductList = {
@@ -60,6 +63,7 @@ export type ProductOverview = {
     readonly source: ImageSource;
     readonly hidden: boolean;
   }[];
+  readonly ownerName?: string | null;
   readonly contacts: readonly {
     readonly role: ProductContactRole;
     readonly people: readonly {
@@ -117,6 +121,7 @@ export type ProductMaterials =
       readonly parts: readonly {
         readonly partCodeRaw: string;
         readonly partName: string;
+        readonly ownerName?: string | null;
         readonly links: {
           readonly materialLines: number;
           readonly demandRows: number;
@@ -128,8 +133,14 @@ export type ProductMaterials =
       }[];
     };
 
-export type ProductListQuery = PageQuery & { readonly q?: string; readonly productLine?: string };
-export type ProductIdInput = { readonly productId: string };
+type OwnerProjection = { readonly owners?: true };
+export type ProductListQuery = PageQuery & OwnerProjection & { readonly q?: string; readonly productLine?: string; readonly cover?: 'packaging'; readonly filing?: true };
+export type ProductIdInput = OwnerProjection & { readonly productId: string };
+export type SetProductOwnerInput = {
+  readonly productId: ProductId;
+  readonly partCodeRaw: string | null;
+  readonly ownerName: string | null;
+};
 export type ProductPurchasesQuery = { readonly productId: string; readonly scope?: PurchaseScope; readonly stage?: LineStage };
 export type UpdateProductInput = {
   readonly productId: ProductId;

@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, notExists, sql, type SQL } from 'drizzle-orm';
 import { NotFoundError, StateConflictError } from '@sw/application/errors';
 import type { BomLine, Product, ProductContact, ProductContactRole, ProductImage } from '@sw/domain';
 import type { BomLineRepository } from '../../../application/src/ports/bom-line-repository.js';
@@ -6,7 +6,7 @@ import type { ProductContactRepository } from '../../../application/src/ports/pr
 import type { ProductImageRepository } from '../../../application/src/ports/product-image-repository.js';
 import type { ProductRepository } from '../../../application/src/ports/product-repository.js';
 import type { AppDatabase } from '../client.js';
-import { bomLines, productContacts, productImages, products } from '../schema/archive.js';
+import { bomLines, productArchiveOwners, productContacts, productImages, products } from '../schema/archive.js';
 import { entityId, entityIdOrNull, productId } from '../mappers/id.js';
 import { instant, instantOrNull } from '../mappers/time.js';
 import { violatesUnique } from './unique-violation.js';
@@ -14,11 +14,16 @@ import { violatesUnique } from './unique-violation.js';
 export function productRepository(db: AppDatabase): ProductRepository {
   return {
     async get(id) {
-      const found = await findProduct(db, id);
+      const [key] = await db.select({ barcode: products.barcodeRaw }).from(products).where(eq(products.id, id)).limit(1);
+      if (key === undefined) throw new NotFoundError('产品', id);
+      await lockProductBarcodes(db, [key.barcode]);
+      const found = await findProduct(db, eq(products.id, id));
       if (found === undefined) throw new NotFoundError('产品', id);
       return found;
     },
-    find: (id) => findProduct(db, id),
+    find: (id) => findProduct(db, eq(products.id, id)),
+    findByBarcode: (barcode) => findProductByBarcode(db, barcode),
+    lockBarcodes: (barcodes) => lockProductBarcodes(db, barcodes),
     async save(entity) {
       try {
         await db.insert(products).values(entity).onConflictDoUpdate({ target: products.id, set: entity });
@@ -43,10 +48,21 @@ function bomInsert(line: BomLine): typeof bomLines.$inferInsert {
 }
 
 export async function replaceBomLines({ db, productBarcodeRaw, lines }: { readonly db: AppDatabase; readonly productBarcodeRaw: string; readonly lines: readonly (typeof bomLines.$inferInsert)[] }): Promise<void> {
-  await db.execute(sql`select pg_advisory_xact_lock(hashtext('supply-bom'), hashtext(${productBarcodeRaw}))`);
+  await lockBom({ db, productBarcodeRaw });
   await db.delete(bomLines).where(eq(bomLines.productBarcodeRaw, productBarcodeRaw));
-  if (lines.length === 0) return;
-  await db.insert(bomLines).values([...lines]);
+  if (lines.length > 0) await db.insert(bomLines).values([...lines]);
+  await db.delete(productArchiveOwners).where(and(
+    inArray(productArchiveOwners.productId, db.select({ id: products.id }).from(products).where(eq(products.barcodeRaw, productBarcodeRaw))),
+    ne(productArchiveOwners.partCodeRaw, ''),
+    notExists(db.select({ partCodeRaw: bomLines.partCodeRaw }).from(bomLines).where(and(
+      eq(bomLines.productBarcodeRaw, productBarcodeRaw),
+      eq(bomLines.partCodeRaw, productArchiveOwners.partCodeRaw),
+    ))),
+  ));
+}
+
+export async function lockBom({ db, productBarcodeRaw }: { readonly db: AppDatabase; readonly productBarcodeRaw: string }): Promise<void> {
+  await db.execute(sql`select pg_advisory_xact_lock(hashtext('supply-bom'), hashtext(${productBarcodeRaw}))`);
 }
 
 export function productImageRepository(db: AppDatabase): ProductImageRepository {
@@ -96,9 +112,29 @@ function contactRole(value: string): ProductContactRole {
   return 'product_info';
 }
 
-async function findProduct(db: AppDatabase, id: string): Promise<Product | undefined> {
-  const row = (await db.select().from(products).where(eq(products.id, id)))[0];
-  return row === undefined ? undefined : { ...row, id: productId(row.id), importBatchId: entityIdOrNull(row.importBatchId), editedBy: entityIdOrNull(row.editedBy), fieldSources: sourcesOf(row.fieldSources), createdAt: instant(row.createdAt), updatedAt: instant(row.updatedAt), editedAt: instantOrNull(row.editedAt) };
+export function findProductByBarcode(db: AppDatabase, barcode: string): Promise<Product | undefined> {
+  return findProduct(db, eq(products.barcodeRaw, barcode));
+}
+
+export async function lockProductBarcodes(db: AppDatabase, barcodes: readonly string[]): Promise<void> {
+  for (const productBarcodeRaw of [...new Set(barcodes)].sort()) await lockBom({ db, productBarcodeRaw });
+}
+
+async function findProduct(db: AppDatabase, match: SQL): Promise<Product | undefined> {
+  const [row] = await db.select().from(products).where(match).limit(1);
+  if (row === undefined) return undefined;
+  const { workbookFieldSources, ...stored } = row;
+  return {
+    ...stored,
+    id: productId(row.id),
+    importBatchId: entityIdOrNull(row.importBatchId),
+    editedBy: entityIdOrNull(row.editedBy),
+    fieldSources: sourcesOf(row.fieldSources),
+    ...(Object.keys(workbookFieldSources).length === 0 ? {} : { workbookFieldSources }),
+    createdAt: instant(row.createdAt),
+    updatedAt: instant(row.updatedAt),
+    editedAt: instantOrNull(row.editedAt),
+  };
 }
 
 function sourcesOf(value: unknown): Product['fieldSources'] {

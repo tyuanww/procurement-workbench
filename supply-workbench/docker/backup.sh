@@ -24,7 +24,7 @@ checksums="backup-$stamp.sha256"
 
 pg_dump -Fc -f "$stage/$dump"
 pg_restore --list "$stage/$dump" >/dev/null
-tar -C "$uploads_dir" -czf "$stage/$archive" .
+tar -C "$uploads_dir" -czf "$stage/$archive" --exclude='.file-store-pending' .
 tar -tzf "$stage/$archive" >/dev/null
 (
   cd -- "$stage"

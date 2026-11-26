@@ -1,6 +1,7 @@
 import type { ApprovedCodeLink, BomUse, LineStage, PartLink, Product, ProductContact, ProductImage, PurchaseLine, StockRow } from '@sw/domain';
 import type { Page } from '../shared/page.js';
 import type {
+  ProductCard,
   ProductIdInput,
   ProductList,
   ProductListQuery,
@@ -17,6 +18,7 @@ export type ProductArchiveFacts = {
   readonly product: Product;
   readonly images: readonly ProductImage[];
   readonly contacts: readonly ProductContact[];
+  readonly ownerName?: string | null;
   readonly purchaseLines: readonly PurchaseLine[];
   readonly stockRows: readonly StockRow[];
   readonly approvedLinks: readonly ApprovedCodeLink[];
@@ -37,10 +39,13 @@ export type ProductListSource = {
   readonly barcodeRaw: string;
   readonly barcodeBase: string;
   readonly filingName: string | null;
+  readonly filingNo?: string | null;
   readonly netContent: string | null;
   readonly casePack: string | null;
-  readonly thumbnail: { readonly fileId: string } | null;
+  readonly thumbnail: ProductCard['thumbnail'];
+  readonly packagingImages?: ProductCard['packagingImages'];
   readonly contactsAssigned: number;
+  readonly ownerName?: string | null;
   readonly lines: readonly PurchaseLine[];
   readonly stockRows: readonly StockRow[];
   readonly approvedLinks: readonly ApprovedCodeLink[];

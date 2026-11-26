@@ -5,6 +5,7 @@ import type {
   ProductOverview,
   ProductPurchases,
   ProductStock,
+  ProductWorkbookPreview,
 } from '@sw/application';
 import { z } from 'zod';
 import { ChannelMatchSchema, FieldSourceSchema, ImageSlotSchema, ImageSourceSchema, ProductContactRoleSchema, PurchaseScopeSchema } from './enums.js';
@@ -32,16 +33,19 @@ export const ProductCardSchema: z.ZodType<ProductCard> = strictObject({
   id: z.string(),
   skuName: z.string(),
   filingName: nullable(z.string()),
+  filingNo: optional(nullable(z.string())),
   barcodeRaw: z.string(),
   isChannelVariant: z.boolean(),
   netContent: nullable(z.string()),
   casePack: nullable(z.string()),
-  thumbnail: nullable(strictObject({ fileId: z.string() })),
+  thumbnail: nullable(strictObject({ fileId: z.string(), slot: optional(ImageSlotSchema) })),
+  packagingImages: optional(z.array(strictObject({ fileId: z.string(), slot: ImageSlotSchema }))),
   openPurchaseLines: strictObject({ allChannels: z.number(), reportedInProgress: z.number() }),
   factoryStock: numberProvenance,
   bomPartCount: nullable(z.number()),
   materialLinkCoverage: nullable(strictObject({ linked: z.number(), total: z.number() })),
   contactsAssigned: z.number(),
+  ownerName: optional(nullable(z.string())),
 });
 
 export const ProductListSchema: z.ZodType<ProductList> = strictObject({
@@ -81,6 +85,7 @@ export const ProductOverviewSchema: z.ZodType<ProductOverview> = strictObject({
     source: ImageSourceSchema,
     hidden: z.boolean(),
   })),
+  ownerName: optional(nullable(z.string())),
   contacts: z.array(strictObject({
     role: ProductContactRoleSchema,
     people: z.array(strictObject({
@@ -136,6 +141,7 @@ export const ProductMaterialsSchema: z.ZodType<ProductMaterials> = z.union([
     parts: z.array(strictObject({
       partCodeRaw: z.string(),
       partName: z.string(),
+      ownerName: optional(nullable(z.string())),
       links: strictObject({
         materialLines: z.number(),
         demandRows: z.number(),
@@ -147,3 +153,28 @@ export const ProductMaterialsSchema: z.ZodType<ProductMaterials> = z.union([
     })),
   }),
 ]);
+
+export const ProductWorkbookPreviewSchema: z.ZodType<ProductWorkbookPreview> = strictObject({
+  id: z.string(),
+  fileName: z.string(),
+  status: z.enum(['ready', 'blocked', 'unchanged', 'committed', 'stale']),
+  products: z.array(strictObject({
+    id: nullable(z.string()),
+    barcode: z.string(),
+    name: z.string(),
+    changes: z.array(strictObject({
+      section: z.enum(['product', 'image', 'bom']),
+      label: z.string(),
+      before: nullable(z.string()),
+      after: nullable(z.string()),
+      beforeImageUrl: optional(z.string()),
+      afterImageUrl: optional(z.string()),
+    })),
+  })),
+  issues: z.array(strictObject({
+    sheet: z.string(),
+    row: nullable(z.number()),
+    field: nullable(z.string()),
+    message: z.string(),
+  })),
+});
