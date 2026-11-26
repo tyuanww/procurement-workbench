@@ -116,15 +116,23 @@ function ReceiptFacts({ receipt }: { readonly receipt: ReceiptWork }) {
 }
 
 function RowFollowUp({ face, receipt, isScheduled }: { readonly face: RowFace; readonly receipt: ReceiptWork | undefined; readonly isScheduled: boolean }) {
-  const followUp = face.nextFollowUpAt === undefined ? null : formatDateTime(face.nextFollowUpAt);
   return <div className="today-row-follow-up">
     <div className="today-row-line">
-      {followUp === null ? null : <Typography.Text>下次跟进 · {followUp}</Typography.Text>}
       {receipt === undefined ? null : <ReceiptFollowUp face={face} receipt={receipt} />}
-      {face.waiting === undefined ? null : <Typography.Text type="secondary">{receipt === undefined ? '等待方' : '跟进等待方'} · {face.waiting}</Typography.Text>}
+      {face.waiting === undefined || (isScheduled && face.nextFollowUpTarget !== undefined) ? null :
+        <Typography.Text type="secondary">{receipt === undefined ? '等待方' : '今日等待方'} · {face.waiting}</Typography.Text>}
       {face.isUnassigned === true ? <Typography.Text type="secondary">未分配</Typography.Text> : null}
     </div>
+    <NextFollowUp face={face} />
     {isScheduled ? <ScheduledNotes face={face} /> : null}
+  </div>;
+}
+
+function NextFollowUp({ face }: { readonly face: RowFace }) {
+  if (face.nextFollowUpAt === undefined) return null;
+  return <div className="today-row-line">
+    <Typography.Text>下次跟进 · {formatDateTime(face.nextFollowUpAt)}</Typography.Text>
+    {face.nextFollowUpTarget === undefined ? null : <Typography.Text type="secondary">{face.nextFollowUpTarget}</Typography.Text>}
   </div>;
 }
 

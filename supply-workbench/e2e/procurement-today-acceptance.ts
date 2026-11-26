@@ -45,9 +45,19 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.screenshot({ path: join(out, 'procurement-last-page.png'), animations: 'disabled' });
 
   await page.getByRole('button', { name: /筛选与复制催单/ }).click();
-  await page.getByRole('button', { name: /复制当前范围催单/ }).click();
+  const copiedBeforePreview = await clipboardText(page);
+  const filteredCopy = page.getByRole('button', { name: /复制当前范围催单/ });
+  await filteredCopy.click();
+  const preview = page.getByRole('dialog', { name: '预览跨厂催货汇总' });
+  await preview.getByText(/当前筛选.*2 家工厂.*501 批/).waitFor();
+  assert.equal(await clipboardText(page), copiedBeforePreview);
+  await preview.getByRole('button', { name: '返回' }).click();
+  await preview.waitFor({ state: 'hidden' });
+  assert.equal(await clipboardText(page), copiedBeforePreview);
+  await copyChaseSummary(page, filteredCopy);
   await page.getByRole('status').filter({ hasText: '已复制 501 条催单' }).waitFor();
   const allText = await clipboardText(page);
+  assert.ok(allText.startsWith('【内部催货汇总 · 2 家工厂】'));
   assert.deepEqual(purchaseOrders(allText), sampleOrders(501));
   assert.ok(allText.includes('合成催货甲厂') && allText.includes('合成催货乙厂'));
   await page.getByRole('button', { name: /复制合成催货甲厂催单/ }).click();
@@ -120,16 +130,21 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.equal(await order('HZ09-0501').count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: /筛选与复制催单/ }).click();
-  await page.getByRole('button', { name: /复制当前范围催单/ }).click();
+  await copyChaseSummary(page, page.getByRole('button', { name: /复制当前范围催单/ }));
   await page.getByRole('status').filter({ hasText: '已复制 499 条催单' }).waitFor();
   const after = purchaseOrders(await clipboardText(page));
   assert.deepEqual(after, sampleOrders(501).filter((po) => po !== 'HZ09-0501' && po !== 'HZ09-0002'));
-  await page.getByRole('button', { name: /复制全部可催/ }).click();
+  await copyChaseSummary(page, page.getByRole('button', { name: /复制全部可催/ }));
   await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
   assert.deepEqual(purchaseOrders(await clipboardText(page)), sampleOrders(501).filter((po) => po !== 'HZ09-0501'));
   return { total: 501, lastPage: 11, allCopied: 501, factoryCopied: 500, oldDrawerLinkRestored: true, bulkFirst: 'HZ09-0501', batchCopied: 1, remainingAfterPartial: 5_000, inTransitAtEnd: 30_000,
     followUp: await checkFollowUpReminder({ page, origin, row: order('HZ09-0501'), out }),
   };
+}
+
+async function copyChaseSummary(page: Page, button: Locator): Promise<void> {
+  await button.click();
+  await page.getByRole('dialog', { name: '预览跨厂催货汇总' }).getByRole('button', { name: '复制内部汇总' }).click();
 }
 
 async function checkActionViewSwitch(page: Page): Promise<void> {

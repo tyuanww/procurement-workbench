@@ -17,6 +17,7 @@ export function faceOf(item: BoardItem): RowFace {
     ...(item.latestFollowUp === undefined ? {} : { latestFollowUp: item.latestFollowUp }),
     ...(item.latestPromise === undefined ? {} : { latestPromise: item.latestPromise }),
     ...(item.nextFollowUpAt === undefined ? {} : { nextFollowUpAt: item.nextFollowUpAt }),
+    ...(item.nextFollowUpTarget === undefined ? {} : { nextFollowUpTarget: item.nextFollowUpTarget }),
   };
 }
 

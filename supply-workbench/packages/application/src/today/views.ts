@@ -69,6 +69,7 @@ export type TodoItemView = TodoItem & {
   readonly line: TodoLineView | null;
   readonly batch: TodoBatchView | null;
   readonly waitingOnParty: { readonly id: string | null; readonly displayName: string | null; readonly rawName: string | null } | null;
+  readonly reminderTarget?: { readonly kind: WaitingOnKind; readonly name: string | null };
   readonly exception: { readonly id: string; readonly type: string; readonly note: string } | null;
 };
 
@@ -153,6 +154,7 @@ export type TodayChaseRow = Pick<TodoItem, 'id' | 'dueDate' | 'overdueDays' | 'r
   readonly factory: TodayFactory;
   readonly poRaw: string | null;
   readonly nameRaw: string | null;
+  readonly batchSeq?: number;
   readonly unshippedQty: number;
   readonly unit: string | null;
 };

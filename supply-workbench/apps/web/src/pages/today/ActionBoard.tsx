@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
 import { ACTION_LANES, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
 import { fontSize } from '../../theme/tokens.js';
-import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
+import { ActionPagination, ActionResult, ChasePreviewDialog, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodayGroup } from './TodayGroup.js';
 import { TodayRow, type CopyAction } from './TodayRow.js';
-import { workspaceRowId } from './today-focus.js';
+import { focusSection, workspaceRowId } from './today-focus.js';
 
 type BatchSequence = (rowId: string) => number | undefined;
 export type ActionBoardProps = ActionToolbarProps & {
@@ -41,6 +41,7 @@ function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageContro
   const { page } = props;
   return <>
     <ActionResult page={page} />
+    <ChasePreviewDialog page={page} />
     {page.copyNotice === '' ? null : <Typography.Text role="status">{page.copyNotice}</Typography.Text>}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
     <Spin spinning={page.isLoading}>
@@ -69,6 +70,8 @@ function ActionGroups(props: ActionBoardProps): ReactNode {
 
 function PriorityActions(props: ActionBoardProps & { readonly rows: readonly BoardRow[] }) {
   return <>
+    {props.board.group === 'priority' && props.rows.length > 0 && Boolean(props.internalCards?.length) ?
+      <Typography.Text type="secondary">批次按紧急度排列，之后是到期排期和待建批次。</Typography.Text> : null}
     <ActionRows {...props} isPriorityList headingLevel={2} extras={props.internalCards} />
     {props.internalPagination}
   </>;
@@ -91,12 +94,21 @@ export function isActionFiltered({ board, page }: Pick<ActionBoardProps, 'board'
 
 function ActionKanban(props: ActionBoardProps) {
   const groups = props.board.body.kind === 'groups' ? props.board.body.groups : [];
-  return <div className="today-kanban">
-    {ACTION_LANES.map(({ key, name }) => {
-      const rows = groups.find((group) => group.key === key)?.rows ?? [];
-      const extras = key === 'internal' ? props.internalCards : undefined;
-      const count = rows.length + (extras?.length ?? 0);
-      return <section key={key} className="today-kanban-lane" aria-label={name}>
+  const lanes = ACTION_LANES.map(({ key, name }) => {
+    const rows = groups.find((group) => group.key === key)?.rows ?? [];
+    const extras = key === 'internal' ? props.internalCards : undefined;
+    return { key, name, rows, extras, count: rows.length + (extras?.length ?? 0), id: `today-lane-${key}` };
+  });
+  return <>
+    <nav aria-label="看板分组" className="today-lane-links today-touch">
+      {lanes.map(({ id, name, count }) => <Button key={id} size="small" href={`#${id}`} onClick={(event) => {
+        event.preventDefault();
+        focusSection(id);
+      }}>{name} {count} 项</Button>)}
+    </nav>
+    <div className="today-kanban">
+      {lanes.map(({ key, name, rows, extras, count, id }) => <section key={key} id={id} tabIndex={-1}
+        className="today-kanban-lane today-jump-target" aria-label={name}>
         <Flex align="center" gap="small" wrap>
           <Typography.Title level={2} style={{ margin: 0, fontSize: fontSize.section }}>{name}</Typography.Title>
           <Typography.Text type="secondary">{count} 项</Typography.Text>
@@ -104,9 +116,9 @@ function ActionKanban(props: ActionBoardProps) {
         {count === 0 ? <Typography.Text type="secondary">暂无待办</Typography.Text> :
           <ActionRows {...props} rows={rows} isPriorityList headingLevel={3} extras={extras} />}
         {key === 'internal' ? props.internalPagination : null}
-      </section>;
-    })}
-  </div>;
+      </section>)}
+    </div>
+  </>;
 }
 
 function groupCopy({ group, page, onCopy }: { readonly group: BoardGroup; readonly page: ActionBoardProps['page']; readonly onCopy: ActionBoardProps['onCopy'] }): CopyAction | null {

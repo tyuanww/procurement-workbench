@@ -23,6 +23,7 @@ export function todayMotionCss(): string {
     .today-priority-list { display: flex; flex-direction: column; gap: ${small}px; }
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
+    .today-lane-links { display: flex; flex-wrap: wrap; gap: ${tiny}px; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
     ${todayCardCss()}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
@@ -40,6 +41,7 @@ export function todayMotionCss(): string {
     }
     @container today-action (min-width: 60rem) {
       .today-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .today-lane-links { display: none; }
     }
     @media (any-pointer: coarse) {
       .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a {

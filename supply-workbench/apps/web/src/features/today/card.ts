@@ -18,7 +18,15 @@ export function toBoardItem(item: TodoItemView): BoardItem {
     batchStatus: item.batch?.status ?? null,
     ...fulfillmentOf(item),
     ...replyOf(item.batch),
+    ...(item.reminderTarget === undefined ? {} : { nextFollowUpTarget: reminderLabel(item.reminderTarget) }),
   };
+}
+
+function reminderLabel(target: NonNullable<TodoItemView['reminderTarget']>): string {
+  if (target.kind === 'internal') return '内部跟进';
+  const name = target.name?.trim();
+  const action = target.kind === 'supplier' ? '催货' : '核对收货';
+  return `${action} · ${name || waitingLabels[target.kind]}`;
 }
 
 function displayName(item: TodoItemView): string | null {

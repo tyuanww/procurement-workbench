@@ -1,10 +1,11 @@
-import { Button, Flex, Pagination, Select, Typography } from 'antd';
+import { Button, Flex, Modal, Pagination, Select, Typography } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
 import type { ReactNode } from 'react';
 import type { ChaseScope, WorkspaceInbox } from './action-query.js';
 import type { FollowUpFilter } from './action-query.js';
 import { focusSection } from './today-focus.js';
+import type { ChasePreview } from './today-copy.js';
 
 export type ActionPageControls = {
   readonly paging: TodayPaging;
@@ -17,6 +18,7 @@ export type ActionPageControls = {
   readonly isSettled: boolean;
   readonly isCopying: boolean;
   readonly copyNotice: string;
+  readonly copyPreview?: ChasePreview | null;
   readonly factoryId: string | null;
   readonly loadError: string;
   readonly onPage: (page: number) => void;
@@ -25,6 +27,8 @@ export type ActionPageControls = {
   readonly onFactory: (id: string) => void;
   readonly onFollowUp: (reason: FollowUpFilter) => void;
   readonly onCopyChase: (scope: ChaseScope) => void;
+  readonly onConfirmCopy?: () => void;
+  readonly onCancelCopy?: () => void;
   readonly onRetry: () => void;
 };
 
@@ -43,9 +47,22 @@ export function ActionControls({ page, utilityLinks, isNarrow = false }: {
 
 export function ChaseControls({ page }: { readonly page: ActionPageControls }) {
   return <Flex className="today-touch" align="center" gap="small" wrap>
-    <ChaseCopyButtons page={page} />
     <FactoryCopy page={page} />
+    <ChaseCopyButtons page={page} />
   </Flex>;
+}
+
+export function ChasePreviewDialog({ page }: { readonly page: ActionPageControls }) {
+  const preview = page.copyPreview;
+  return <Modal open={preview != null} title="预览跨厂催货汇总" okText="复制内部汇总" cancelText="返回"
+    onOk={() => page.onConfirmCopy?.()} onCancel={() => page.onCancelCopy?.()} confirmLoading={page.isCopying}
+    cancelButtonProps={{ autoFocus: true }} mask={{ closable: false }} focusable={{ trap: true, focusTriggerAfterClose: true }}>
+    {preview == null ? null : <>
+      <Typography.Paragraph>{preview.scope === 'all' ? '今日可催' : '当前筛选'} · {preview.factories.length} 家工厂 · {preview.count} 批</Typography.Paragraph>
+      <ul>{preview.factories.map((factory) => <li key={factory.id}>{factory.name} · {factory.count} 批</li>)}</ul>
+      <Typography.Paragraph>汇总供内部核对。发给工厂时，请选择对应工厂复制。</Typography.Paragraph>
+    </>}
+  </Modal>;
 }
 
 function ChaseCopyButtons({ page }: { readonly page: ActionPageControls }) {
@@ -55,21 +72,23 @@ function ChaseCopyButtons({ page }: { readonly page: ActionPageControls }) {
   const todayCount = page.work === 'all_unshipped' ? undefined : counts?.all;
   return (
     <>
-      <ChaseCopyButton copy={page.onCopyChase} scope="all" label="复制全部可催（今日）" count={todayCount} disabled={page.isCopying} />
+      <ChaseCopyButton copy={page.onCopyChase} scope="all" label="复制全部可催（今日汇总）" count={todayCount} busy={page.isCopying} />
       {isFiltered ? <ChaseCopyButton copy={page.onCopyChase} scope="filtered"
-        label="复制当前范围催单" count={filteredCount} disabled={page.isCopying || !page.isSettled} /> : null}
+        label="复制当前范围催单汇总" count={filteredCount} busy={page.isCopying} disabled={!page.isSettled} /> : null}
     </>
   );
 }
 
-function ChaseCopyButton({ copy, scope, label, count, disabled }: {
+function ChaseCopyButton({ copy, scope, label, count, busy, disabled }: {
   readonly copy: ActionPageControls['onCopyChase'];
   readonly scope: Extract<ChaseScope, { readonly kind: 'all' | 'filtered' }>['kind'];
   readonly label: string;
   readonly count: number | undefined;
-  readonly disabled: boolean;
+  readonly busy: boolean;
+  readonly disabled?: boolean;
 }) {
-  return <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={disabled || count === 0} onClick={() => copy({ kind: scope })}>
+  return <Button size="small" icon={<CopyOutlined aria-hidden />} disabled={disabled || count === 0} aria-busy={busy}
+    onClick={() => { if (!busy) copy({ kind: scope }); }}>
     {label}{count === undefined ? '' : `（${count} 批）`}
   </Button>;
 }
@@ -82,8 +101,8 @@ function SortControls({ page }: { readonly page: ActionPageControls }) {
     <>
       <Select<TodaySort['kind']> aria-label="排序" size="small" value={sort.kind} virtual={false}
         options={[
-          { value: 'urgency', label: '紧急优先' },
-          { value: 'bulk', label: '大批优先', disabled: units.length === 0 },
+          { value: 'urgency', label: '批次按紧急度' },
+          { value: 'bulk', label: '大批优先 · 同单位列表', disabled: units.length === 0 },
         ]}
         onChange={(kind) => {
           if (kind === 'urgency') onSort({ kind });
@@ -139,8 +158,13 @@ function actionResultMessage(page: ActionPageControls): string {
   const { paging } = page;
   const hasPages = paging.total > paging.pageSize;
   if (!page.isFiltered && !hasPages) return '';
-  const unit = page.work === undefined ? (page.inbox === 'scheduled' ? '批已约跟进' : '项批次与跟进待办') : WORK_RESULT_UNITS[page.work];
+  const unit = page.sort.kind === 'bulk' ? `批未发 · 按${page.sort.unit}比较` : resultUnit(page);
   return `共 ${paging.total} ${unit}${hasPages ? ` · 第 ${paging.page} 页` : ''}`;
+}
+
+function resultUnit(page: ActionPageControls): string {
+  if (page.work !== undefined) return WORK_RESULT_UNITS[page.work];
+  return page.inbox === 'scheduled' ? '批已约跟进' : '项批次与跟进待办';
 }
 
 const WORK_RESULT_UNITS: Record<TodayWorkFilter, string> = { factory_chase: '批待催货', internal_note: '批等回单', all_unshipped: '批未发' };

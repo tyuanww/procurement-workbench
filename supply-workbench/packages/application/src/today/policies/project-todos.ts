@@ -1,12 +1,13 @@
 import { can, compareDates, compareUnshipped, diffDays, localDate, type BatchFulfillment, type LocalDate, type Settings } from '@sw/domain';
 import type { Actor } from '../../shared/actor.js';
 import type { TodoItem, TodoInput } from '../views.js';
-import { TODO_RULES, MID_SEVERITY, type TodoContext, type TodoRule } from './rules.js';
+import { TODO_RULES, MID_SEVERITY, type TodoContext, type TodoRule, type WaitingOn } from './rules.js';
 
 export type ProjectedTodo = Omit<TodoItem, 'reasons'> & {
   readonly reasons: readonly string[];
   readonly remaining?: BatchFulfillment;
   readonly nextFollowUpAt?: string;
+  readonly reminderWaitingOn?: WaitingOn;
 };
 
 export function projectTodos({ input, today, now, settings, rules = TODO_RULES }: {
@@ -34,6 +35,7 @@ export function projectBatch({ batch, ctx, rules }: { readonly batch: TodoInput[
   const reasons = matched.map((rule) => rule.reason);
   if (batch.ownerUserId === null) reasons.push('unassigned');
   const lead = matched.reduce((current, rule) => (rule.severity(batch, ctx) > current.severity(batch, ctx) ? rule : current));
+  const reminder = matched.find((rule) => isFollowUpReason(rule.reason));
   return [{
     id: `batch:${batch.id}`,
     subject: 'batch',
@@ -42,7 +44,9 @@ export function projectBatch({ batch, ctx, rules }: { readonly batch: TodoInput[
     ownerUserId: batch.ownerUserId,
     waitingOn: lead.waitingOn(batch),
     ...(reasons.includes('unshipped') ? { remaining: batch.fulfillment } : {}),
-    ...(batch.nextFollowUpAt !== undefined && reasons.some(isFollowUpReason) ? { nextFollowUpAt: batch.nextFollowUpAt } : {}),
+    ...(batch.nextFollowUpAt === undefined || reminder === undefined ? {} : {
+      nextFollowUpAt: batch.nextFollowUpAt, reminderWaitingOn: reminder.waitingOn(batch),
+    }),
     dueDate: batch.dateBuyerConfirmed,
     overdueDays: batch.overdueDays,
     refs: { orderLineId: batch.orderLineId, batchId: batch.id },

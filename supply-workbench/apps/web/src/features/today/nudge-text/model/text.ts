@@ -1,6 +1,7 @@
 export type NudgeLine = {
   readonly poRaw: string;
   readonly nameRaw: string;
+  readonly batchSeq?: number;
   readonly qty: number | null;
   readonly unit?: string;
   readonly dueDate: string | null;
@@ -19,8 +20,12 @@ export function followUpCount(lines: readonly NudgeLine[], recordFollowUp: boole
 }
 
 function lineOf(line: NudgeLine): string {
-  if (line.unit !== undefined) return `${line.poRaw} ${line.nameRaw} 未发 ${line.qty ?? '—'} ${line.unit}，确认到货 ${line.dueDate ?? '—'}，${replyText(line.status)}。`;
-  return `${line.poRaw} ${line.nameRaw} ${line.qty ?? '—'}，确认到货 ${line.dueDate ?? '—'}，${statusText(line)}，${replyText(line.status)}。`;
+  const batch = line.batchSeq === undefined ? '' : ` 第 ${line.batchSeq} 批`;
+  const date = line.status === 'unconfirmed' && line.dueDate === null ? '尚未确认到货日' : `确认到货 ${line.dueDate ?? '—'}`;
+  const product = `${line.poRaw}${batch} ${line.nameRaw}`;
+  if (line.unit !== undefined) return `${product} 未发 ${line.qty ?? '—'} ${line.unit}，${date}，${replyText(line.status)}。`;
+  const status = line.status === 'unconfirmed' && line.dueDate === null ? '' : `，${statusText(line)}`;
+  return `${product} ${line.qty ?? '—'}，${date}${status}，${replyText(line.status)}。`;
 }
 
 function statusText(line: NudgeLine): string {

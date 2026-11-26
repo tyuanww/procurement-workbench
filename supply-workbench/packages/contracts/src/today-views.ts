@@ -60,6 +60,7 @@ export const TodoItemViewSchema: z.ZodType<TodoItemView> = z.intersection(TodoIt
     displayName: nullable(z.string()),
     rawName: nullable(z.string()),
   })),
+  reminderTarget: optional(strictObject({ kind: WaitingOnKindSchema, name: nullable(z.string()) })),
   exception: nullable(strictObject({ id: z.string(), type: z.string(), note: z.string() })),
 }));
 
@@ -196,6 +197,7 @@ export const TodayChaseResponseSchema: z.ZodType<readonly TodayChaseRow[]> = z.a
   factory: todayFactory,
   poRaw: nullable(z.string()),
   nameRaw: nullable(z.string()),
+  batchSeq: optional(z.int().positive()),
   unshippedQty: z.number().positive(),
   unit: nullable(z.string()),
 }));

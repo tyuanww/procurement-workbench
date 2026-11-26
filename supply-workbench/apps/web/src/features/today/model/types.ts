@@ -12,6 +12,7 @@ export type BoardItem = TodoRow & {
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;
+  readonly nextFollowUpTarget?: string;
 };
 
 export type GroupMode = 'kanban' | 'priority' | 'waiting' | 'reason' | 'date' | 'schedule' | 'owner' | 'supplier';
@@ -35,6 +36,7 @@ export type RowFace = {
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;
+  readonly nextFollowUpTarget?: string;
 };
 
 export type BoardRow = {

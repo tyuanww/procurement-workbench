@@ -67,10 +67,11 @@ function responseOf({ read, matched, shown, memos = readArrivals(read), includeP
   readonly includePending?: boolean;
 }): TodayResponse {
   const { asOf, exceptions, pending, lines, batches, names } = read;
+  const reminderTargets = new Map(read.projected.map((item) => [item.id, item.reminderWaitingOn]));
   return {
     asOf,
     counts: countsOf(matched),
-    items: shown.map((item) => toView({ item, lines, batches, names, exceptions })),
+    items: shown.map((item) => toView({ item, lines, batches, names, exceptions, reminder: reminderTargets.get(item.id) })),
     ...(!includePending || pending === undefined ? {} : { pendingBatch: pending }),
     arrivalMemos: memos,
     truncated: shown.length < matched.length,
@@ -163,7 +164,7 @@ function personalPage({ read, input, timeZone }: { readonly read: TodayRead; rea
   const start = (page - 1) * input.pageSize;
   return {
     asOf: read.asOf, counts: { pending: owned.length - scheduled, scheduled }, page, pageSize: input.pageSize, total: matched.length,
-    items: matched.slice(start, start + input.pageSize).map((item) => toView({ ...read, item })),
+    items: matched.slice(start, start + input.pageSize).map((item) => toView({ ...read, item, reminder: item.reminderWaitingOn })),
     ...(calendar === undefined ? {} : { calendar: calendar.view }),
   };
 }
@@ -199,17 +200,23 @@ function chaseRows({ items, read, factoryId }: ChaseInput & { readonly factoryId
   return items.flatMap((item) => {
     const eligible = chaseEligibility(item, read);
     if (eligible === null || (factoryId !== undefined && eligible.factory.id !== factoryId)) return [];
-    return [toChaseRow({ item, eligible, line: lookup(item.refs.orderLineId, read.lines) })];
+    return [toChaseRow({ item, eligible, line: lookup(item.refs.orderLineId, read.lines), batch: lookup(item.refs.batchId, read.batches) })];
   });
 }
 
 type ChaseEligibility = Pick<TodayChaseRow, 'factory' | 'unshippedQty' | 'unit'>;
 
-function toChaseRow({ item, eligible, line }: { readonly item: Projected; readonly eligible: ChaseEligibility; readonly line: TodoLineView | null }): TodayChaseRow {
+function toChaseRow({ item, eligible, line, batch }: {
+  readonly item: Projected;
+  readonly eligible: ChaseEligibility;
+  readonly line: TodoLineView | null;
+  readonly batch: TodoBatchView | null;
+}): TodayChaseRow {
   return {
     ...eligible,
     id: item.id, reasons: knownReasons(item.reasons), dueDate: item.dueDate, overdueDays: item.overdueDays,
     poRaw: line?.poRaw ?? null, nameRaw: line?.nameRaw ?? null,
+    ...(batch === null ? {} : { batchSeq: batch.seq }),
   };
 }
 
@@ -240,11 +247,13 @@ function toView(input: {
   readonly lines: ReadonlyMap<string, TodoLineView>;
   readonly batches: ReadonlyMap<string, TodoBatchView>;
   readonly names: ReadonlyMap<string, string>;
+  readonly reminder: Projected['reminderWaitingOn'];
   readonly exceptions: readonly { readonly id: string; readonly type: string; readonly note: string }[];
 }): TodoItemView {
   const exception = input.exceptions.find((row) => row.id === input.item.refs.exceptionId);
   const batch = lookup(input.item.refs.batchId, input.batches);
   const { nextFollowUpAt } = input.item;
+  const { reminder, names } = input;
   return {
     id: input.item.id,
     subject: input.item.subject,
@@ -258,6 +267,9 @@ function toView(input: {
     line: lookup(input.item.refs.orderLineId, input.lines),
     batch: batch === null || nextFollowUpAt === undefined ? batch : { ...batch, nextFollowUpAt },
     waitingOnParty: partyOf(input.item.waitingOn.partyId, input.names),
+    ...(nextFollowUpAt === undefined || reminder === undefined ? {} : {
+      reminderTarget: { kind: reminder.kind, name: reminder.partyId === null ? null : names.get(reminder.partyId) ?? null },
+    }),
     exception: exception === undefined ? null : { id: exception.id, type: exception.type, note: exception.note },
   };
 }

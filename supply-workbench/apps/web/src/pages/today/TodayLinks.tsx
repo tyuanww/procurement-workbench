@@ -42,11 +42,13 @@ export function TodayLinks(props: TodayLinksProps) {
   const { page, pending, myPlan, inbox, onInbox } = props;
   const pendingCount = page?.paging.pendingCount ?? pending;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
-  const counts = workspaceCounts({ paging: page?.paging, planCount });
+  const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable: myPlan?.kind === 'error' });
+  const isTodayPartial = myPlan?.kind === 'error' && counts.today !== undefined;
   return <nav className="today-touch" aria-label="我的待办入口">
     <Flex vertical gap="small">
       <MetricStrip compact ariaLabel="工作范围" items={inboxes.map(({ key, label, unit }) => ({
         key, label, value: counts[key] ?? '—', ...(counts[key] === undefined ? {} : { unit }),
+        ...(key === 'today' && isTodayPartial ? { hint: '已加载 · 排期未读' } : {}),
         action: { isActive: key === inbox, select: () => { if (key !== inbox) onInbox(key); } },
       }))} />
       <TodayShortcuts {...props} pendingCount={pendingCount} planCount={planCount} />
@@ -54,11 +56,16 @@ export function TodayLinks(props: TodayLinksProps) {
   </nav>;
 }
 
-function workspaceCounts({ paging, planCount }: { readonly paging: TodayPaging | undefined; readonly planCount: number | undefined }) {
+function workspaceCounts({ paging, planCount, isPlanUnavailable }: {
+  readonly paging: TodayPaging | undefined;
+  readonly planCount: number | undefined;
+  readonly isPlanUnavailable: boolean;
+}) {
   const counts = paging?.inboxCounts;
   const pendingCount = paging?.pendingCount;
-  const today = counts === undefined || pendingCount === undefined || planCount === undefined
-    ? undefined : counts.today + pendingCount + planCount;
+  const loadedPlanCount = isPlanUnavailable ? 0 : planCount;
+  const today = counts === undefined || pendingCount === undefined || loadedPlanCount === undefined
+    ? undefined : counts.today + pendingCount + loadedPlanCount;
   return { today, scheduled: counts?.scheduled, unassigned: counts?.unassigned };
 }
 
