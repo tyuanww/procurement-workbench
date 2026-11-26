@@ -78,21 +78,24 @@ const todayWorkspaceCss = `
     .today-action-summary .ant-btn, .today-action-summary .ant-card { border-radius: ${radiusCard}px; min-block-size: 92px; }
     .today-action-summary .ant-btn > span { gap: ${small}px; }
     .today-action-summary .ant-btn > span > span:first-child { display: flex; align-items: center; justify-content: space-between; }
+    .today-action-summary .ant-btn[aria-pressed="true"] > span > span:first-child { font-weight: 600; }
+    .today-action-summary .ant-btn .anticon-check { display: none; }
     .today-action-summary .ant-btn > span > span:first-child::after { content: ''; inline-size: 5px; block-size: 5px; margin-inline-end: ${tiny}px; border-block-start: 1px solid currentColor; border-inline-end: 1px solid currentColor; transform: rotate(45deg); }
     .today-action-summary strong > span { font-weight: 400; margin-inline-start: ${tiny}px; }
     .today-action-summary .ant-btn > span > strong { line-height: 1.12; }
     .today-actions-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: stretch; }
     .today-actions-layout > *, .today-action-shortcuts { min-inline-size: 0; }
+    .today-action-main { border: 1px solid transparent; }
     .today-action-shortcuts { display: grid; }
     .today-action-shortcuts .ant-btn { text-align: start; justify-content: flex-start; block-size: auto; white-space: normal; }
     .today-list-panel { align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
     .today-list-panel .today-priority-list { gap: 0; }
     .today-list-panel .today-work-card { border-radius: 0; background: transparent; }
-    .today-list-panel > .today-touch:not(.today-toolbar), .today-list-panel > nav { padding: ${small}px ${regular}px; }
+    .today-list-panel > .today-touch:not(.today-toolbar), .today-list-panel .today-action-results-body > nav { padding: ${small}px ${regular}px; }
     .today-list-panel .today-action-list > li:last-child .today-work-card { border-end-start-radius: ${radiusCard}px; border-end-end-radius: ${radiusCard}px; }
     .today-list-panel .ant-empty { padding: ${regular}px; }
-    .today-actions-layout .today-priority-list > li + li { border-block-start: 1px solid ${border}; }
-    .today-actions-layout .today-priority-list .today-work-card { border: 0; }
+    .today-list-panel .today-priority-list > li + li, .today-kanban .today-priority-list > li + li { border-block-start: 1px solid ${border}; }
+    .today-list-panel .today-priority-list .today-work-card, .today-kanban .today-priority-list .today-work-card { border: 0; }
     .today-row-title > .ant-btn { color: inherit; padding: 0; block-size: auto; text-align: start; white-space: normal; font: inherit; }
     .today-row-title > .ant-btn:is(:hover, :focus-visible) { text-decoration: underline; }
     @container today-workspace (min-width: 56rem) {
@@ -103,8 +106,7 @@ const todayWorkspaceCss = `
     .today-workspace-heading h2 .ant-btn { font: inherit; padding-inline: 0 ${small}px; gap: ${small}px; }
     .today-workspace-heading .anticon { font-size: ${fontSize.meta}px; color: ${text.secondary}; }
     .today-review-scope { display: flex; gap: ${small}px; align-items: center; flex-wrap: wrap; }
-    .today-toolbar { justify-content: space-between; padding-block-end: ${small}px; border-block-end: 1px solid ${border}; }
-    .today-list-panel > .today-toolbar { min-block-size: 56px; padding: ${small}px ${regular}px; }
+    .today-toolbar { justify-content: space-between; min-block-size: 56px; padding: ${small}px ${regular}px; border-block-end: 1px solid ${border}; }
     .today-toolbar-main { min-inline-size: 0; }
     .today-toolbar-compact, .today-scope-short { display: none; }
     .today-toolbar .today-workspace-views { box-shadow: inset 0 0 0 1px ${border}; }
@@ -121,15 +123,17 @@ const todayWorkspaceCss = `
       .today-action-summary { --metric-padding: ${small}px ${medium}px; }
       .today-action-summary .ant-btn, .today-action-summary .ant-card { min-block-size: 76px; }
       .today-action-summary .ant-btn > span { gap: ${tiny}px; }
-      .today-list-panel > .today-toolbar { padding-inline: ${small}px; }
+      .today-toolbar { padding-inline: ${small}px; }
       .today-workspace-heading .ant-btn { min-block-size: 44px; }
     }
     @media (max-width: 22rem) {
       .today-workspace-screen { --today-workspace-gap: ${medium}px; }
     }
     @container today-action (max-width: 26rem) {
+      .today-list-panel > .today-touch:not(.today-toolbar) { padding-block: 0; }
+      .today-list-panel > .today-touch:not(.today-toolbar) .ant-btn { min-block-size: 44px; }
       .today-toolbar { column-gap: ${tiny}px; }
-      .today-toolbar-main { gap: ${tiny}px; }
+      .today-toolbar-context, .today-toolbar-main { gap: ${tiny}px; }
       .today-toolbar-compact { display: inline-flex; padding-inline: ${tiny}px; min-block-size: 44px; min-inline-size: 44px; }
       .today-scope-short { display: inline; }
       .today-toolbar .today-toolbar-buttons, .today-toolbar .today-priority-switch, .today-scope-full { display: none; }

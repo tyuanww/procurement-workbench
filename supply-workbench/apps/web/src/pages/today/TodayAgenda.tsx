@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Button, Card, Flex, Typography } from 'antd';
 import { rowStyle, TodayReceiptLink, type BoardRow, type PlanRow, type ReceiptWork } from '../../features/today/index.js';
 import { space } from '../../theme/tokens.js';
-import { workspaceRowId } from './today-focus.js';
+import { restoreWorkspaceLinkFocus, workspaceRowId } from './today-focus.js';
 
 export const PLAN_TASK_TARGET = 'today-plan-tasks';
 
@@ -42,6 +42,6 @@ export function planTaskCards({ tasks, focus, onOpen }: {
 
 export function ReceiptAction({ memo, isFocused }: { readonly memo: ReceiptWork; readonly isFocused: boolean }) {
   const link = useRef<HTMLAnchorElement>(null);
-  useEffect(() => { if (isFocused) link.current?.focus(); }, [isFocused]);
+  useEffect(() => { if (isFocused) restoreWorkspaceLinkFocus(link.current); }, [isFocused]);
   return <TodayReceiptLink memo={memo} focusRef={link} />;
 }

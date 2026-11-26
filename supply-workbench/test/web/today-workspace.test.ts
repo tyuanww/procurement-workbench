@@ -101,10 +101,7 @@ it('工作台不显示混合总数，日历日期计数保留本人排期和待�
     expect(textOf('[aria-label="工作台日历"]')).toContain('53项');
     expect(textOf('#today-chase')).not.toContain('首批待建样品');
     expect(textOf('#today-chase')).not.toContain('本人里程碑');
-    click(button('筛选待办'));
-    const jump = document.querySelector<HTMLAnchorElement>('a[href="#today-pending-batches"]');
-    if (jump === null) throw new Error('没有待建跳转');
-    click(jump);
+    click(button('待建批次1行'));
     await waitFor(() => !new URLSearchParams(textOf('output')).has('page'));
     await act(() => { fulfill({ urlPart: 'page=1', status: 200, body: response(1) }); });
     expect(document.querySelector('.today-workspace-heading h2')?.getAttribute('aria-label')).toBe('我的行动清单');
@@ -169,10 +166,52 @@ it('浏览年月保留当前结果，选择日期才切换待办结果或已约�
     const params = new URLSearchParams(textOf('output'));
     expect(params.get('inbox')).toBe('scheduled');
     expect(params.get('date')).toBe(tomorrow);
+    await act(() => { fulfill({ urlPart: 'inbox=scheduled&calendar=2026-11-22', status: 200, body: { ...today, paging: { ...today.paging, calendar: { date: tomorrow, days: [{ date: tomorrow, count: 1 }] } } } }); });
+    button('回到业务日');
+    click(calendarCell(date));
+    const returned = new URLSearchParams(textOf('output'));
+    expect(returned.get('inbox')).toBe('today');
+    expect(returned.has('date')).toBe(false);
+    await act(() => { fulfill({ urlPart: 'inbox=today&calendar=today', status: 200, body: today }); });
+    expect(textOf('#today-chase')).toContain('同名样品');
   } finally {
     act(() => { root.unmount(); });
     resetDom();
     emptyReads();
+  }
+});
+
+it('直接打开已约跟进后可以查看业务日预约，自动预约返回保留今天的原筛选', async () => {
+  const date = localDate('2026-11-21');
+  const tomorrow = localDate('2026-11-22');
+  const base = pageBody(1);
+  for (const isAutomatic of [false, true]) {
+    emptyReads();
+    installMatchMedia();
+    installFetch();
+    const query = new URLSearchParams({ view: 'calendar', inbox: 'scheduled', date: tomorrow });
+    if (isAutomatic) query.set('calendarReturn', 'work=factory_chase');
+    const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?' + query));
+    try {
+      await act(() => {
+        fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+        fulfill({ urlPart: 'inbox=scheduled&calendar=2026-11-22', status: 200, body: { ...base, paging: { ...base.paging, calendar: { date: tomorrow, days: [{ date: tomorrow, count: 1 }] } } } });
+      });
+      if (isAutomatic) click(button('回到业务日'));
+      else {
+        expect(textOf('#today-chase')).not.toContain('回到业务日');
+        click(calendarCell(date));
+      }
+      const returned = new URLSearchParams(textOf('output'));
+      expect(returned.get('inbox')).toBe(isAutomatic ? 'today' : 'scheduled');
+      expect(returned.get('date')).toBe(isAutomatic ? null : date);
+      expect(returned.get('work')).toBe(isAutomatic ? 'factory_chase' : null);
+      expect(returned.has('calendarReturn')).toBe(false);
+    } finally {
+      act(() => { root.unmount(); });
+      resetDom();
+      emptyReads();
+    }
   }
 });
 

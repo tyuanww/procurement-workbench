@@ -5,7 +5,7 @@ import { useCanWrite } from '../../shared/actor.js';
 import {
   todayBoard, todayViewOf, withGroup, type OpenForm, type TodayBoard, type Undo,
 } from '../../features/today/index.js';
-import { actionQuery, workspaceDayParams, workspaceFilterParams, workspaceInboxParams, workspaceViewParams, type ActionQuery } from './action-query.js';
+import { actionQuery, CALENDAR_RETURN, selectedCalendarDay, workspaceCalendarParams, workspaceFilterParams, workspaceInboxParams, workspaceViewParams, type ActionQuery } from './action-query.js';
 import { useTodayActionPage } from './use-today-action-page.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, rowsSettled } from './today-keys.js';
@@ -64,18 +64,22 @@ type WorkspaceRoute = ReturnType<typeof useWorkspaceRoute>;
 
 function workspaceControls({ route, asOf }: { readonly route: WorkspaceRoute; readonly asOf: string | undefined }): WorkspaceControls {
   const { query, search, setParams, workspaceView } = route;
+  const onDay = (date: string) => {
+    const next = workspaceCalendarParams({ search, query, date, asOf });
+    if (next.toString() !== search) setParams(next);
+  };
   return {
     inbox: query.inbox ?? 'today', view: workspaceView,
     onInbox: (inbox) => setParams(workspaceInboxParams(search, inbox)),
-    onView: (view) => setParams(workspaceViewParams(search, view)),
-    onDay: (date) => {
-      const selected = query.calendar === 'today' ? asOf : query.calendar;
-      const shouldOpenScheduled = query.inbox === 'today' && asOf !== undefined && date > asOf;
-      if (date === selected && !shouldOpenScheduled) return;
-      const destination = shouldOpenScheduled ? workspaceInboxParams(search, 'scheduled').toString() : search;
-      setParams(workspaceDayParams(destination, date));
-    },
+    onView: (view) => setParams(workspaceViewParams(search, view), { replace: true, preventScrollReset: true }),
+    onDay,
+    onBusinessDay: asOf !== undefined && canReturnToBusinessDay(route, asOf) ? () => onDay(asOf) : undefined,
   };
+}
+
+function canReturnToBusinessDay({ query, search }: WorkspaceRoute, asOf: string): boolean {
+  if (query.inbox === 'scheduled') return new URLSearchParams(search).has(CALENDAR_RETURN);
+  return query.inbox === 'today' && query.calendar !== undefined && selectedCalendarDay(query.calendar, asOf) !== asOf;
 }
 
 function showPlanRows({ query, asOf }: { readonly query: ActionQuery; readonly asOf: string | undefined }): boolean {

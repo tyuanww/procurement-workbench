@@ -126,7 +126,7 @@ async function checkScheduledReceipt({ buyer, origin, expectReceiptFailure }: {
   await buyer.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await buyer.waitForURL(today.href);
   await receipt.and(buyer.locator(':focus')).waitFor();
-  await buyer.getByRole('button', { name: '切换工作范围', exact: true }).click();
+  await buyer.getByRole('button', { name: /切换工作范围$/u }).click();
   await buyer.getByRole('menuitem', { name: /^已约跟进/ }).click();
   await card.getByText('下次跟进 · 2099-01-12 10:00', { exact: true }).waitFor();
   assert.equal(await card.getByRole('button', { name: '复制本批催单' }).count(), 0);

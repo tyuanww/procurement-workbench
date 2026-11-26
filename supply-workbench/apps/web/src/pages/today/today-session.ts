@@ -27,8 +27,8 @@ function workspaceScreen({ params, group }: { readonly params: URLSearchParams; 
 
 function readWorkspaceView({ params, group }: { readonly params: URLSearchParams; readonly group: GroupMode }): WorkspaceView {
   const view = params.get('view');
-  if (view === 'list' || view === 'calendar') return view;
-  const isBoard = view === 'board' || (group === 'kanban' && (params.has('group') || view === 'actions'));
+  if (view === 'list' || view === 'calendar' || view === 'board') return view;
+  const isBoard = group === 'kanban' && (params.has('group') || view === 'actions');
   return isBoard && params.get('sort') !== 'bulk' ? 'board' : 'list';
 }
 

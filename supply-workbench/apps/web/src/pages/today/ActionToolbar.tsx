@@ -100,12 +100,14 @@ function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls' | 'scopeC
   readonly onChase: () => void;
 }) {
   return <Flex className="today-touch today-toolbar" align="center" gap="small" wrap>
-    {props.scopeControls}
+    <Flex className="today-toolbar-context" align="center" gap="small" wrap>
+      {props.scopeControls}
+      {props.viewControls}
+    </Flex>
     <Flex className="today-toolbar-main" align="center" gap="small" wrap>
       {props.preset === null ? null : <ViewSwitch className="today-priority-switch" aria-label="批次优先范围"
         options={[{ value: 'all', label: '全部' }, { value: 'priority', label: '优先', tooltip: '逾期或今日应到的批次' }]}
         value={props.preset.isActive ? 'priority' : 'all'} onChange={(value) => props.preset?.select(value === 'priority')} />}
-      {props.viewControls}
       <CompactActionMenu preset={props.preset} trigger={props.toolsButton} canChase={props.chasePage !== undefined} onFilter={props.onFilter} onChase={props.onChase} />
       <Flex className="today-toolbar-buttons" gap="small" wrap>
         <Button className="today-toolbar-filter" ref={props.filterButton} icon={<FilterOutlined aria-hidden />}
@@ -191,7 +193,10 @@ function appliedFilterLabels({ chips, page, preset }: {
 }): readonly string[] {
   if (preset?.isActive) return ['逾期或今日应到的批次'];
   const selection = chips.filter((chip) => chip.isSelected).map((chip) => chip.label);
-  if (page?.work !== undefined) selection.unshift(workFilterLabels[page.work]);
+  // The ordinary list result already names the work type beside its matched batch count.
+  if (page?.work !== undefined && (page.calendar !== undefined || page.sort.kind === 'bulk' || !page.isSettled)) {
+    selection.unshift(workFilterLabels[page.work]);
+  }
   if (page?.sort.kind === 'bulk') selection.push(`大批优先（${page.sort.unit}）`);
   return selection;
 }

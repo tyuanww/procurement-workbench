@@ -68,7 +68,7 @@ function scheduleDrawerProps(): TodayScreenProps {
   const noop = () => undefined;
   const row: BoardRow = { id: 'todo-missing', face: { reason: '缺确认日期', overdue: '—', overdueTone: 'quiet', orderNo: 'PO-todo-missing', productName: '缺日期产品', date: '—' }, actions: [] };
   const actionBoard: TodayBoard = { group: 'waiting', chips: [], body: { kind: 'groups', groups: [], rows: [row] } };
-  const board: TodayBoard = { group: 'schedule', chips: [], body: { kind: 'empty', text: '今天没有需要处理的事。下一步：去跟进中心看看。' } };
+  const board: TodayBoard = { group: 'schedule', chips: [], body: { kind: 'empty', text: '今天没有需要处理的事。' } };
   return {
     board,
     actionBoard,

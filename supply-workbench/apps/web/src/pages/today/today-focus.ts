@@ -31,6 +31,10 @@ export function focusWorkspaceRow(id: string): HTMLElement | null {
   return row;
 }
 
+export function restoreWorkspaceLinkFocus(link: HTMLAnchorElement | null): void {
+  if (document.activeElement === document.body) link?.focus();
+}
+
 function rowIdOf(row: Element | null): string | null {
   return row === null ? null : row.id.slice(ROW_PREFIX.length);
 }
@@ -68,7 +72,8 @@ export function useWorkspaceFocus({ target, ready, search, query, paging, asOf, 
     setParams(workspaceFocusParams({ search, query, destination, date, work, id }), { replace: true });
   }, [id, destination, date, work, search, query, setParams]);
   useEffect(() => {
-    if (target !== null && ready && id === undefined) document.getElementById(workspaceRowId(target))?.focus();
+    if (target === null || !ready || id !== undefined || document.activeElement?.closest('.today-workspace-views')) return;
+    document.getElementById(workspaceRowId(target))?.focus();
   }, [target, ready, id]);
   return location !== null;
 }

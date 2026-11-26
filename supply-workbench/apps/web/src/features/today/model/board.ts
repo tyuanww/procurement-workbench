@@ -8,7 +8,7 @@ import { isPlanGroupMode } from './plan-board.js';
 import { resolveGroup } from './query.js';
 import type { BoardGroup, BoardItem, BoardRow, GroupMode, ReasonChip, ReasonCount, TodayBoard } from './types.js';
 
-const EMPTY_TEXT = '今天没有需要处理的事。下一步：去跟进中心看看。';
+const EMPTY_TEXT = '今天没有需要处理的事。';
 
 export const ACTION_LANES = [
   { key: 'shipment', name: '跟进供应商' },
@@ -24,11 +24,12 @@ export function todayBoard(input: {
   readonly receiptActionIds?: ReadonlySet<string>;
   readonly page?: Pick<TodayPaging, 'reasonCounts'> & { readonly sort: TodaySort };
 }): TodayBoard {
-  const group = resolveGroup(input.group);
+  const isBulk = input.page?.sort.kind === 'bulk';
+  const group = isBulk && input.group === null ? 'priority' : resolveGroup(input.group);
   const groups = groupsOf({
     items: input.page === undefined ? sortTodos(filterReasons(input.items, input.reasons)) : input.items,
     isPaged: input.page !== undefined,
-    isBulk: input.page?.sort.kind === 'bulk',
+    isBulk,
     group,
     reasons: input.reasons,
     buyerName: input.buyerName,
@@ -47,10 +48,10 @@ function groupsOf(input: {
   readonly receiptActionIds: ReadonlySet<string> | undefined;
 }): BoardGroup[] {
   if (input.items.length === 0 || isPlanGroupMode(input.group)) return [];
+  if (input.group === 'kanban') return kanbanGroups(input.items, input.receiptActionIds);
   if (input.isBulk) {
     return [decorate({ key: 'bulk', name: '大批优先', items: input.items, buyerName: input.buyerName })];
   }
-  if (input.group === 'kanban') return kanbanGroups(input.items, input.receiptActionIds);
   if (input.group === 'priority') {
     return [{ key: 'priority', name: '行动清单', counts: [], nudgeText: '', rows: rowsOf(input.items) }];
   }

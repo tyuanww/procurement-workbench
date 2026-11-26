@@ -10,7 +10,7 @@ import {
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { ActionPageControls } from './ActionControls.js';
-import { ActionBoard, isActionFiltered, type ActionBoardProps, type ActionLane } from './ActionBoard.js';
+import { ActionBoard, isActionFiltered, isBusinessDay, type ActionBoardProps, type ActionLane } from './ActionBoard.js';
 import { PENDING_BATCH_TARGET, PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendingBatches } from './PendingBatches.js';
 import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
@@ -158,23 +158,24 @@ function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<s
     onChanged: props.onPendingBatchChanged,
   });
   const display = actionDisplay(props);
-  const overview = actionOverview({ props, inbox, jump, receipts });
+  const overview = actionOverview({ props, jump, receipts });
   return <>
     {overview.metrics}
     <div role="status" style={pending.notice === '' ? { position: 'absolute' } : helpStyle()}>{pending.notice}</div>
     <ActionBoard {...props} {...navigation} page={page} receiptOf={(id) => receipts.get(id)}
       internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
       internalPagination={<PendingBatchPagination view={pending} />} {...display}
-      scopeControls={<TodayLinks page={page} asOf={props.asOf}
-      myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop} />}
+      scopeControls={<TodayLinks page={page}
+      myPlan={props.myPlan} onRetryPlan={summary.onRetryPlan} inbox={inbox} onInbox={workspace?.onInbox ?? noop}
+      onBusinessDay={workspace?.onBusinessDay} />}
       shortcuts={overview.shortcuts}
       utilityLinks={actionDestinations({ inbox, pendingCount: pending.total, page, myPlan: props.myPlan, jump, hasPlanShortcut: overview.shortcuts !== undefined, hasPendingSummary: overview.metrics !== undefined })} />
   </>;
 }
 
-function actionOverview({ props, inbox, jump, receipts }: { readonly props: TodayScreenProps; readonly inbox: WorkspaceInbox; readonly jump: (id: string) => void; readonly receipts: ReadonlyMap<string, ReceiptWork> }) {
-  const { actionPage: page, onOpenArrivals, search = '' } = props;
-  if (inbox !== 'today' || page === undefined || page.calendar !== undefined || onOpenArrivals === undefined) return {};
+function actionOverview({ props, jump, receipts }: { readonly props: TodayScreenProps; readonly jump: (id: string) => void; readonly receipts: ReadonlyMap<string, ReceiptWork> }) {
+  const { actionPage: page, asOf, onOpenArrivals, search = '' } = props;
+  if (page === undefined || !isBusinessDay({ page, asOf }) || onOpenArrivals === undefined) return {};
   return {
     metrics: <TodayActionSummary page={page} search={search} onArrivals={onOpenArrivals} onPending={() => jump(PENDING_BATCH_TARGET)} />,
     shortcuts: props.workspace?.view === 'list' ? actionShortcuts({ props, page, jump, receipts }) : undefined,
@@ -225,11 +226,11 @@ function useBoardNavigation(props: TodayScreenProps, inbox: WorkspaceInbox) {
   } };
 }
 
-function boardFocusId({ pendingFocusId, arrivalFocusId, search }: TodayScreenProps): string | null {
+function boardFocusId({ pendingFocusId, arrivalFocusId, search, focus }: TodayScreenProps): string | null {
   if (pendingFocusId != null) return pendingBatchRowId(pendingFocusId);
   if (arrivalFocusId != null) return 'batch:' + arrivalFocusId;
   const params = new URLSearchParams(search);
-  return params.get('drawer') ?? params.get('focusId');
+  return params.get('drawer') ?? params.get('focusId') ?? focus;
 }
 
 function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, onRetryPlan, board, actionPage }: TodayScreenProps) {

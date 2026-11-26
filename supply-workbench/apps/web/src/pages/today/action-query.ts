@@ -13,6 +13,7 @@ export function isPriorityBatchSelection(reasons: readonly string[]): boolean {
 
 export type WorkspaceView = 'list' | 'board' | 'calendar';
 export type WorkspaceInbox = TodayInbox;
+export const CALENDAR_RETURN = 'calendarReturn';
 
 export type ActionQuery = {
   readonly page: number;
@@ -118,6 +119,8 @@ export function actionPageParams(search: string, page: number): URLSearchParams 
 
 function actionSortParams(search: string, sort: TodaySort): URLSearchParams {
   const params = newSelection(search);
+  params.delete('listPage');
+  params.delete('listFocusId');
   if (sort.kind === 'bulk') {
     params.set('sort', 'bulk');
     params.set('unit', sort.unit);
@@ -175,26 +178,89 @@ export function workspaceInboxParams(search: string, inbox: WorkspaceInbox): URL
   else params.set('inbox', inbox);
   params.delete('date');
   params.delete('chaseFactory');
+  params.delete(CALENDAR_RETURN);
   return params;
 }
 
 export function workspaceViewParams(search: string, view: WorkspaceView): URLSearchParams {
-  const current = new URLSearchParams(search);
-  const shouldReset = (current.get('view') === 'calendar') !== (view === 'calendar')
-    || (view === 'board' && current.get('sort') === 'bulk');
-  const params = shouldReset ? newSelection(search) : current;
+  const params = new URLSearchParams(search);
+  const isCalendar = params.get('view') === 'calendar';
+  // 日历按选定工作日分页，清单与看板共享同一个范围和位置。
+  if (!isCalendar && view === 'calendar') {
+    moveParam(params, { from: 'page', to: 'listPage' });
+    moveParam(params, { from: 'focusId', to: 'listFocusId' });
+  } else if (isCalendar && view !== 'calendar') {
+    restoreListPosition(params);
+  }
   params.set('view', view);
   if (params.get('group') === 'kanban') params.delete('group');
-  if (view === 'board' && params.get('sort') === 'bulk') {
-    params.delete('sort');
-    params.delete('unit');
-  }
   return params;
 }
 
-export function workspaceDayParams(search: string, date: string): URLSearchParams {
+function restoreListPosition(params: URLSearchParams): void {
+  moveParam(params, { from: 'listPage', to: 'page' });
+  moveParam(params, { from: 'listFocusId', to: 'focusId' });
+}
+
+function moveParam(params: URLSearchParams, { from, to }: { readonly from: string; readonly to: string }): void {
+  const value = params.get(from);
+  params.delete(from);
+  if (value === null) params.delete(to);
+  else params.set(to, value);
+}
+
+function workspaceDayParams(search: string, date: string | undefined): URLSearchParams {
   const params = newSelection(search);
+  if (date === undefined) params.delete('date');
+  else params.set('date', date);
+  return params;
+}
+
+export function workspaceCalendarParams({ search, query, date, asOf }: {
+  readonly search: string;
+  readonly query: ActionQuery;
+  readonly date: string;
+  readonly asOf: string | undefined;
+}): URLSearchParams {
+  const current = new URLSearchParams(search);
+  const origin = current.get(CALENDAR_RETURN);
+  const isFuture = asOf !== undefined && date > asOf;
+  const todayDate = date === asOf ? undefined : date;
+  if (isFuture && query.inbox === 'today') return scheduledDayParams({ current, query, date });
+  if (!isFuture && query.inbox === 'scheduled' && origin !== null) return todayDayParams({ current, origin, date: todayDate });
+  if (date === selectedCalendarDay(query.calendar, asOf)) return current;
+  return workspaceDayParams(search, query.inbox === 'today' ? todayDate : date);
+}
+
+export function selectedCalendarDay(calendar: string | undefined, asOf: string | undefined): string | undefined {
+  return calendar === 'today' ? asOf : calendar;
+}
+
+const listPositionKeys = ['listPage', 'listFocusId'] as const;
+const savedCalendarKeys = ['reasons', 'work', 'sort', 'unit', ...listPositionKeys] as const;
+
+function scheduledDayParams({ current, query, date }: { readonly current: URLSearchParams; readonly query: ActionQuery; readonly date: string }) {
+  const origin = actionFilters(query);
+  for (const key of listPositionKeys) {
+    const value = current.get(key);
+    if (value !== null) origin.set(key, value);
+  }
+  const params = workspaceInboxParams(current.toString(), 'scheduled');
+  params.set(CALENDAR_RETURN, origin.toString());
   params.set('date', date);
+  return params;
+}
+
+function todayDayParams({ current, origin, date }: { readonly current: URLSearchParams; readonly origin: string; readonly date: string | undefined }) {
+  const params = workspaceInboxParams(current.toString(), 'today');
+  const saved = new URLSearchParams(origin);
+  params.set('inbox', 'today');
+  for (const key of savedCalendarKeys) {
+    const value = saved.get(key);
+    if (value !== null) params.set(key, value);
+  }
+  if (date !== undefined) params.set('date', date);
+  if (params.get('view') !== 'calendar') restoreListPosition(params);
   return params;
 }
 

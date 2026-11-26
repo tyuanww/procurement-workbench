@@ -3,7 +3,7 @@ import path from 'node:path';
 import { vi } from 'vitest';
 
 type ReactNode = unknown;
-type Root = { unmount(): void };
+type Root = { render(node: ReactNode): void; unmount(): void };
 type ReactApi = {
   act: (action: () => void | Promise<void>) => void | Promise<void>;
   createElement: (type: unknown, props?: unknown) => ReactNode;
@@ -136,7 +136,7 @@ function react(): ReactApi {
   return value;
 }
 
-function client(): { createRoot: (container: Element) => { render(node: ReactNode): void; unmount(): void } } {
+function client(): { createRoot: (container: Element) => Root } {
   const value: unknown = requireWeb('react-dom/client');
   if (!isClient(value)) throw new Error('react-dom 模块不齐');
   return value;
@@ -152,7 +152,7 @@ function isReact(value: unknown): value is ReactApi {
   return isRecord(value) && typeof value.act === 'function' && typeof value.createElement === 'function' && typeof value.useState === 'function';
 }
 
-function isClient(value: unknown): value is { createRoot: (container: Element) => { render(node: ReactNode): void; unmount(): void } } {
+function isClient(value: unknown): value is { createRoot: (container: Element) => Root } {
   return isRecord(value) && typeof value.createRoot === 'function';
 }
 

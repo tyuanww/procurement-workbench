@@ -35,22 +35,22 @@ export type ActionBoardProps = ActionToolbarProps & {
 };
 
 export function ActionBoard(props: ActionBoardProps): ReactNode {
-  const { page } = props;
-  const isList = props.calendar === undefined && !isKanban(props);
-  const toolbar = <ActionToolbar {...props} />;
+  const { calendar, page, shortcuts } = props;
+  const isList = calendar === undefined && !isKanban(props);
   return (
     <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
-      <Flex vertical gap="small">
-        {isList ? null : toolbar}
-        <div className={props.calendar === undefined ? 'today-actions-layout' : 'today-workspace-calendar-layout'}>
-          {props.calendar}
-          <div className={isList ? 'today-workspace-results today-list-panel' : isKanban(props) ? undefined : 'today-workspace-results'}>
-            {isList ? toolbar : null}
-            {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+      <div className="today-actions-layout">
+        <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
+          <ActionToolbar {...props} />
+          <div className={calendar === undefined ? undefined : 'today-workspace-calendar-layout'}>
+            {calendar}
+            <div className={calendar === undefined ? 'today-action-results-body' : 'today-workspace-results'}>
+              {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+            </div>
           </div>
-          {props.shortcuts}
-        </div>
-      </Flex>
+        </Flex>
+        {shortcuts}
+      </div>
     </section>
   );
 }
@@ -97,7 +97,7 @@ function PriorityActions(props: ActionBoardProps & { readonly rows: readonly Boa
   </>;
 }
 
-function isBusinessDay({ page, asOf }: Pick<ActionBoardProps, 'page' | 'asOf'>): boolean {
+export function isBusinessDay({ page, asOf }: Pick<ActionBoardProps, 'page' | 'asOf'>): boolean {
   return page?.inbox === 'today' && (page.calendar === undefined || page.calendar === 'today' || page.calendar === asOf);
 }
 
@@ -108,8 +108,8 @@ function ActionEmpty({ page, board, description }: ActionBoardProps & { readonly
   return <Empty description={page?.calendar === undefined ? description : '这天没有待办'}><Button href="/lines">去跟进中心</Button></Empty>;
 }
 
-export function isKanban({ board, page }: Pick<ActionBoardProps, 'board' | 'page'>): boolean {
-  return board.group === 'kanban' && page?.sort.kind !== 'bulk';
+function isKanban({ board }: Pick<ActionBoardProps, 'board'>): boolean {
+  return board.group === 'kanban';
 }
 
 export function isActionFiltered({ board, page }: Pick<ActionBoardProps, 'board' | 'page'>): boolean {

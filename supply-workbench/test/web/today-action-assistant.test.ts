@@ -18,7 +18,7 @@ it('第二页按批次的今日等待方计数，部分到仓仍提示核对实�
       toBoardItem({ ...batchTodo(3), id: 'review:example', subject: 'review', batch: null, waitingOn: { kind: 'internal', partyId: null } })],
     reasons: [], group: 'priority', buyerName: '采购甲',
   });
-  const page = { paging: { ...pageBody(53).paging, page: 2 }, reasons: [], isLoading: false, isSettled: true, loadError: '' };
+  const page = { paging: { ...pageBody(53).paging, page: 2 }, reasons: [], work: undefined, isLoading: false, isSettled: true, loadError: '' };
   const props = { page, board, receipts: new Map([[receipt.id, memo]]), planCount: 1,
     onOverdue: () => undefined, onFollowUp: () => undefined, onPlan: () => undefined };
   const root = mount(antdApp(element(ActionAssistant, props)));
@@ -33,6 +33,9 @@ it('第二页按批次的今日等待方计数，部分到仓仍提示核对实�
     document.body.append(batchRow);
     click(button('定位逾期核收'));
     expect(document.activeElement).toBe(batchRow);
+    act(() => root.render(antdApp(element(ActionAssistant, { ...props, page: { ...page, work: 'factory_chase' } }))));
+    expect(textOf('aside p')).toContain('发货安排');
+    expect(textOf('aside')).not.toContain('定位逾期核收');
   } finally {
     act(() => { root.unmount(); });
     resetDom();

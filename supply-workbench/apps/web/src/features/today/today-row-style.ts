@@ -37,6 +37,13 @@ const responsiveRows = `
       .today-row-details { grid-column: 2; }
       .today-row-quantities, .today-row-delivery { flex-direction: column; align-items: start; }
       .today-row-actions { grid-column: 3; }
+      .today-list-panel .today-row-actions { justify-content: start; }
+    }
+    @container today-card (min-width: 46rem) {
+      .today-list-panel .today-row-layout { grid-template-columns: minmax(0, 1fr) 12rem 10.5rem; }
+      .today-list-panel .today-batch-card > .ant-card-body {
+        display: grid; align-content: center; min-block-size: 76px;
+      }
     }
     @container today-card (max-width: 34.999rem) {
       .today-batch-card > .ant-card-body { padding-inline: ${medium}px; }
@@ -49,6 +56,11 @@ const responsiveRows = `
       .today-row-layout .today-row-actions {
         flex-direction: column; align-items: end; gap: 0;
         inline-size: max-content; max-inline-size: 7.5rem;
+      }
+      .today-list-panel .today-row-layout { grid-template-columns: minmax(0, 1fr); row-gap: ${tiny}px; }
+      .today-list-panel .today-row-layout .today-row-actions {
+        grid-column: 1; flex-direction: row; align-items: center; justify-content: start;
+        inline-size: 100%; max-inline-size: none; gap: ${tiny}px;
       }
     }
     @media (max-width: 520px), (any-pointer: coarse) {

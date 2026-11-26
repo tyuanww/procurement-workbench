@@ -71,6 +71,6 @@ export type TodayBoard = {
   readonly group: GroupMode;
   readonly chips: readonly ReasonChip[];
   readonly body:
-    | { readonly kind: 'empty'; readonly text: '今天没有需要处理的事。下一步：去跟进中心看看。' }
+    | { readonly kind: 'empty'; readonly text: '今天没有需要处理的事。' }
     | { readonly kind: 'groups'; readonly groups: readonly BoardGroup[]; readonly rows: readonly BoardRow[] };
 };

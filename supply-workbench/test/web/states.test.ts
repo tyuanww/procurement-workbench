@@ -76,7 +76,7 @@ describe('缺值和状态', () => {
 function todayProps(override: Record<string, unknown> = {}): Record<string, unknown> {
   const noop = () => undefined;
   return {
-    board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有待办。下一步：去跟进中心看看。' } },
+    board: { group: 'waiting', chips: [], body: { kind: 'empty', text: '今天没有需要处理的事。' } },
     focus: null,
     fading: null,
     drawerId: null,

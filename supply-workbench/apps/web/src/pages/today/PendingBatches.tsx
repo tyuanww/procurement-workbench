@@ -7,7 +7,7 @@ import { apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { formatQuantity } from '../../shared/ui/format.js';
 import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
-import { workspaceRowId } from './today-focus.js';
+import { restoreWorkspaceLinkFocus, workspaceRowId } from './today-focus.js';
 
 type PendingBatch = NonNullable<TodayResponse['pendingBatch']>[number];
 const PAGE_SIZE = 50;
@@ -108,7 +108,7 @@ function PendingBatchItem({ row, view }: {
   useEffect(() => {
     if (!shouldFocus || restoredFocus.current) return;
     restoredFocus.current = true;
-    orderLink.current?.focus();
+    restoreWorkspaceLinkFocus(orderLink.current);
   }, [shouldFocus]);
   const canCreate = row.action === 'create' && onCreate !== undefined;
   const actions = (

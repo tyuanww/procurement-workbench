@@ -84,8 +84,8 @@ async function checkActionBoard(page: Page): Promise<void> {
   await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
   await page.getByRole('heading', { name: '个人工作台', level: 1, exact: true }).waitFor();
   await page.getByRole('heading', { name: '我的行动清单', level: 2, exact: true }).waitFor();
-  const switchScope = page.getByRole('button', { name: '切换工作范围', exact: true });
-  await checkQuickMenuDismissal(page, '切换工作范围');
+  const switchScope = page.getByRole('button', { name: /切换工作范围$/u });
+  await checkQuickMenuDismissal(page, /我的行动清单.*切换工作范围$/u);
   await switchScope.press('Enter');
   await page.getByRole('menuitem').and(page.locator(':focus')).waitFor();
   await page.getByRole('menuitem', { name: /^已约跟进/u }).waitFor();
@@ -161,7 +161,7 @@ async function checkBatchPriorityFilter(page: Page) {
   await undated.waitFor();
 }
 
-async function checkQuickMenuDismissal(page: Page, label: string) {
+async function checkQuickMenuDismissal(page: Page, label: string | RegExp) {
   const trigger = page.getByRole('button', { name: label, exact: true });
   await trigger.press('Enter');
   await page.keyboard.press('Escape');

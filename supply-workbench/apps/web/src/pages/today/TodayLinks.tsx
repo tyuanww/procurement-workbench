@@ -2,7 +2,7 @@ import { Button, Typography } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import type { TodayPaging, TodayResponse } from '@sw/contracts';
+import type { TodayPaging } from '@sw/contracts';
 import type { ActionPageControls } from './ActionControls.js';
 import { focusSection } from './today-focus.js';
 import { PENDING_BATCH_TARGET } from './PendingBatches.js';
@@ -18,12 +18,12 @@ const inboxes: readonly { readonly key: WorkspaceInbox; readonly label: string; 
 ];
 
 type TodayLinksProps = {
-  readonly asOf: TodayResponse['asOf'] | undefined;
   readonly page: ActionPageControls | undefined;
   readonly myPlan: MyPlan | undefined;
   readonly onRetryPlan: () => void;
   readonly inbox: WorkspaceInbox;
   readonly onInbox: (inbox: WorkspaceInbox) => void;
+  readonly onBusinessDay: (() => void) | undefined;
 };
 
 export function TodayLinks(props: TodayLinksProps) {
@@ -35,21 +35,22 @@ export function TodayLinks(props: TodayLinksProps) {
   }));
   const title = inbox === 'today' ? '我的行动清单' : (scopeOptions.find((scope) => scope.key === inbox)?.label ?? '工作范围');
   const titleId = useId();
+  const switchId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, props.asOf);
   return <div className="today-workspace-intro">
     <nav className="today-workspace-heading today-touch" aria-label="工作范围">
       <Typography.Title level={2} aria-label={title}>
-        <WorkspaceMenu trigger={trigger} button={{ type: 'text', 'aria-label': '切换工作范围', 'aria-describedby': titleId }}
+        <WorkspaceMenu trigger={trigger} button={{ type: 'text', 'aria-labelledby': `${titleId} ${switchId}` }}
           menu={{ selectable: true, selectedKeys: [inbox], items: scopeOptions, onClick: ({ key }) => {
             const scope = inboxes.find((item) => item.key === key);
             if (scope !== undefined) onInbox(scope.key);
           } }}>
           <ScopeCaption id={titleId} title={title} inbox={inbox} />
+          <span hidden id={switchId}>切换工作范围</span>
           <DownOutlined aria-hidden />
         </WorkspaceMenu>
       </Typography.Title>
-      {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
+      {props.onBusinessDay === undefined ? null : <Button onClick={props.onBusinessDay}>回到业务日</Button>}
     </nav>
     {isPlanUnavailable ? <div className="today-review-scope today-touch">
       <Typography.Text type="secondary">排期未读</Typography.Text><Button onClick={onRetryPlan}>重试排期</Button>
@@ -75,10 +76,6 @@ function scopeLabel(scope: (typeof inboxes)[number], hasReviews: boolean): strin
 
 function hasSharedReviews(page: ActionPageControls | undefined): boolean {
   return (page?.paging.unassignedReviewCount ?? 0) > 0;
-}
-
-function isOtherWorkDay(date: string | undefined, businessDate: string | undefined): boolean {
-  return date !== undefined && date !== 'today' && date !== businessDate;
 }
 
 function ReviewScopeNote({ page }: { readonly page: ActionPageControls | undefined }) {

@@ -21,6 +21,7 @@ export type WorkspaceControls = {
   readonly onInbox: (inbox: WorkspaceInbox) => void;
   readonly onView: (view: WorkspaceView) => void;
   readonly onDay: (date: string) => void;
+  readonly onBusinessDay: (() => void) | undefined;
 };
 
 export function WorkspaceViewControls({ view, onView }: Pick<WorkspaceControls, 'view' | 'onView'>) {
