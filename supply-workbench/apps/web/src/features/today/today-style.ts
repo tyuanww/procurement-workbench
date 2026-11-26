@@ -116,10 +116,11 @@ const todayWorkspaceCss = `
       .today-actions-layout > .today-split > .ant-splitter-panel { flex: none !important; }
       .today-actions-layout > .today-split > .ant-splitter-bar { display: none; }
     }
-    .today-action-main { border: 1px solid transparent; }
+    .today-action-main { align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
+    .today-action-view-inset { padding: ${small}px; }
+    .today-action-assistant-slot { display: grid; }
     .today-action-shortcuts { display: grid; }
     .today-action-shortcuts .ant-btn { text-align: start; justify-content: flex-start; block-size: auto; white-space: normal; }
-    .today-list-panel { align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
     .today-batch-card, .today-batch-card > .ant-card-body { position: relative; }
     .today-batch-card > .ant-card-body { border-radius: inherit; }
     .today-row-beam-host { display: none; }
@@ -128,7 +129,9 @@ const todayWorkspaceCss = `
     }
     .today-list-panel .today-priority-list { gap: 0; }
     .today-list-panel .today-work-card { border-radius: 0; background: transparent; }
-    .today-list-panel > .today-touch:not(.today-toolbar), .today-list-panel .today-action-results-body > nav { padding: ${small}px ${regular}px; }
+    .today-action-main > .today-touch:not(.today-toolbar), .today-list-panel .today-action-rows > nav,
+    .today-list-panel .today-action-results-body > [role="status"] { padding: ${small}px ${regular}px; }
+    .today-action-results-body > [role="status"] { display: block; }
     .today-list-panel .today-action-list > li:last-child .today-work-card { border-end-start-radius: ${radiusCard}px; border-end-end-radius: ${radiusCard}px; }
     .today-list-panel .ant-empty { padding: ${regular}px; }
     .today-list-panel .today-priority-list > li + li, .today-kanban .today-priority-list > li + li { border-block-start: 1px solid ${border}; }
@@ -163,8 +166,8 @@ const todayWorkspaceCss = `
       .today-workspace-screen { --today-workspace-gap: ${medium}px; }
     }
     @container today-action (max-width: 26rem) {
-      .today-list-panel > .today-touch:not(.today-toolbar) { padding-block: 0; }
-      .today-list-panel > .today-touch:not(.today-toolbar) .ant-btn { min-block-size: 44px; }
+      .today-action-main > .today-touch:not(.today-toolbar), .today-action-view-inset { padding-block: 0; }
+      .today-action-main > .today-touch:not(.today-toolbar) .ant-btn { min-block-size: 44px; }
       .today-toolbar { column-gap: ${tiny}px; }
       .today-toolbar-context, .today-toolbar-main { gap: ${tiny}px; }
       .today-toolbar-compact { display: inline-flex; padding-inline: ${tiny}px; min-block-size: 44px; min-inline-size: 44px; }

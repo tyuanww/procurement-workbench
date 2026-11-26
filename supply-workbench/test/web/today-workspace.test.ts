@@ -161,6 +161,7 @@ it('浏览年月保留当前结果，选择日期才切换待办结果或已约�
     click(calendarCell(yesterday));
     expect(document.activeElement).toBe(calendarCell(yesterday));
     expect(textOf('[aria-label="2026-11-20 星期五 待办"] [role="status"]')).toBe('正在更新待办…');
+    expect(textOf('[aria-label="2026-11-20 星期五 待办"]')).not.toContain('同名样品');
     await act(() => { fulfill({ urlPart: 'calendar=2026-11-20', status: 200, body: past }); });
     expect(textOf('#today-chase')).toContain('这天没有待办');
     expect(textOf('[aria-label="2026-11-20 星期五 待办"] [role="status"]')).toBe('0 项');

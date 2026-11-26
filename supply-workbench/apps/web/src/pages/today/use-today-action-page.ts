@@ -25,7 +25,7 @@ export function useTodayActionPage({ query, search, setParams, today, isSettled 
       params.delete('focusId');
       setParams(params);
     },
-    onWork: (work) => setParams(actionWorkParams(search, work)),
+    onWork: (work) => setParams(actionWorkParams(search, work), { preventScrollReset: true }),
     onRetry: today.retry,
     ...copy,
   };

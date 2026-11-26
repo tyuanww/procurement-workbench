@@ -47,7 +47,7 @@ function useTodayScreen(): TodayScreenProps {
     onOpenArrivals: (path) => { void navigate(path); },
     onApplyFilters: (selection) => {
       const params = workspaceFilterParams(route.search, selection);
-      if (params.toString() !== route.search) route.setParams(params);
+      if (params.toString() !== route.search) route.setParams(params, { preventScrollReset: true });
     },
   };
 }

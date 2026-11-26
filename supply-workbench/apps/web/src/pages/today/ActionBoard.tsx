@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Empty, Flex, Typography } from 'antd';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ACTION_LANES, type ActionDetail, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
@@ -8,7 +8,6 @@ import { fontSize } from '../../theme/tokens.js';
 import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
-import { TodayLoadingCard } from './TodayLoadingCard.js';
 import { TodaySplit } from './TodaySplit.js';
 import { TodayGroup } from './TodayGroup.js';
 import { TodayRow, type CopyAction } from './TodayRow.js';
@@ -40,32 +39,91 @@ export type ActionBoardProps = ActionToolbarProps & {
 };
 
 export function ActionBoard(props: ActionBoardProps): ReactNode {
-  const { calendar, page, shortcuts } = props;
-  const isList = calendar === undefined && !isKanban(props);
-  const main = <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
+  const displayed = useDisplayedResults(props);
+  const layout = displayed ?? props;
+  const isList = resultView(layout) === 'list';
+  const main = <Flex vertical className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
     <ActionToolbar {...props} />
-    {calendar === undefined ? <div className="today-action-results-body">
-      {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
-    </div> : <TodaySplit className="today-workspace-calendar-layout" defaultPrimary={46} label="调整工作日历与当日待办宽度"
-      primary={calendar} secondary={<CalendarResults {...props} />} />}
+    <ActionView layout={layout} displayed={displayed} current={props} isList={isList} />
   </Flex>;
   return <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
     <TodaySplit className="today-actions-layout" defaultPrimary={76}
-      label="调整行动清单与事项助手宽度" primary={main} secondary={shortcuts} />
+      label="调整行动清单与事项助手宽度" primary={main}
+      secondary={layout.shortcuts === undefined ? undefined :
+        <div className="today-action-assistant-slot" inert={displayed !== props}>{layout.shortcuts}</div>} />
   </section>;
 }
 
-function CalendarResults(props: ActionBoardProps) {
+function useDisplayedResults(props: ActionBoardProps) {
+  const [lastSettled, setLastSettled] = useState<ActionBoardProps>();
+  const { page } = props;
+  if (page === undefined) return props;
+  if (page.isSettled) {
+    if (lastSettled !== props) setLastSettled(props);
+    return props;
+  }
+  if (lastSettled === undefined || !sameResultDay(lastSettled, props)) return undefined;
+  if (page.loadError !== '' && resultView(lastSettled) !== resultView(props)) return undefined;
+  return lastSettled;
+}
+
+function resultView({ calendar, board }: ActionBoardProps) {
+  if (calendar !== undefined) return 'calendar';
+  return isKanban({ board }) ? 'board' : 'list';
+}
+
+function resultDay({ page, asOf }: ActionBoardProps) {
+  return selectedCalendarDay(page?.calendar, asOf) ?? (page?.inbox === 'today' ? asOf : undefined);
+}
+
+function sameResultDay(previous: ActionBoardProps, current: ActionBoardProps) {
+  return previous.page?.inbox === current.page?.inbox && resultDay(previous) === resultDay(current);
+}
+
+function ActionView({ layout, displayed, current, isList }: {
+  readonly layout: ActionBoardProps;
+  readonly displayed: ActionBoardProps | undefined;
+  readonly current: ActionBoardProps;
+  readonly isList: boolean;
+}) {
+  const { calendar } = layout;
+  const { page } = current;
+  const view = useRef<HTMLDivElement>(null);
+  const signature = displayed === undefined ? null : resultSignature(displayed);
+  const lastSignature = useRef(signature);
+  useLayoutEffect(() => {
+    if (signature === null || signature === lastSignature.current) return;
+    lastSignature.current = signature;
+    if (!window.matchMedia('(prefers-reduced-motion: no-preference)').matches) return;
+    const animation = view.current?.animate?.([{ translate: '0 4px' }, { translate: '0 0' }], { duration: 180, easing: 'ease-out' });
+    return () => animation?.cancel();
+  }, [signature]);
+
+  return <div ref={view} className={isList ? 'today-action-view' : 'today-action-view today-action-view-inset'}>
+    {calendar === undefined ? <div className="today-action-results-body">
+      <ResultGroups page={page} displayed={displayed} showStatus={!page?.isFiltered || page.calendar !== undefined} />
+    </div> : <TodaySplit className="today-workspace-calendar-layout" defaultPrimary={46} label="调整工作日历与当日待办宽度"
+      primary={current.calendar ?? <div inert>{calendar}</div>}
+      secondary={<CalendarResults {...current} displayed={displayed} />} />}
+  </div>;
+}
+
+function resultSignature({ board, calendar, page }: ActionBoardProps) {
+  return JSON.stringify([calendar !== undefined, board.group, page?.inbox, page?.calendar, page?.work, page?.reasons, page?.sort, page?.paging.page]);
+}
+
+function CalendarResults({ displayed, ...props }: ActionBoardProps & { readonly displayed: ActionBoardProps | undefined }) {
   const { page, asOf } = props;
-  const day = selectedCalendarDay(page?.calendar, asOf) ?? asOf;
+  const day = resultDay(props) ?? asOf;
   const label = day === undefined ? undefined : `${day} ${dayjs(day).locale('zh-cn').format('dddd')}`;
   return <Card size="small" className="today-workspace-results today-calendar-results" role="region"
     aria-label={label === undefined ? '当日结果' : `${label} ${page?.inbox === 'scheduled' ? '已约跟进' : '待办'}`}>
     <Flex className="today-calendar-heading today-calendar-result-heading" align="center" gap="small" wrap>
       {day === undefined ? null : <Typography.Title className="today-calendar-desktop" level={2}><time dateTime={day}>{label}</time></Typography.Title>}
-      {page === undefined ? null : <ActionResult page={page} calendarCount={calendarResultTotal(props, page.paging.total)} />}
+      {page === undefined || (page.isFiltered && props.calendar === undefined) ? null :
+        <ActionResult page={page} calendarCount={calendarResultTotal(props, page.paging.total)} />}
     </Flex>
-    {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+    <ResultGroups page={page} displayed={displayed} />
   </Card>;
 }
 
@@ -75,15 +133,19 @@ function calendarResultTotal(props: ActionBoardProps, total: number): number | n
   return additions.count === undefined ? null : total + additions.count;
 }
 
-function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageControls }) {
-  const { page } = props;
+function ResultGroups({ page, displayed, showStatus }: {
+  readonly page: ActionPageControls | undefined;
+  readonly displayed: ActionBoardProps | undefined;
+  readonly showStatus?: boolean;
+}) {
+  if (page === undefined) return displayed === undefined ? null : <ActionGroups {...displayed} />;
   return <>
-    {props.calendar === undefined && !page.isFiltered ? <ActionResult page={page} /> : null}
+    {showStatus ? <ActionResult page={page} /> : null}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
-    <div aria-busy={page.isLoading} inert={!page.isSettled && !page.isLoading}>
-      {page.isLoading ? <TodayLoadingCard label="正在读取待办" /> : <ActionGroups {...props} />}
+    <div className="today-action-rows" aria-busy={page.isLoading} inert={!page.isSettled}>
+      {displayed === undefined ? null : <ActionGroups {...displayed} />}
+      {displayed?.page === undefined ? null : <ActionPagination page={displayed.page} />}
     </div>
-    <ActionPagination page={page} />
   </>;
 }
 
