@@ -240,12 +240,8 @@ function SearchButton({ onSearch, hitPx }: { readonly onSearch: () => void; read
         }
         : searchButtonStyle()}
     >
-      {isPhone ? '搜索' : (
-        <>
-          <span style={searchTextStyle()}>{searchLabel}</span>
-          <span aria-hidden="true" style={{ flexShrink: 0 }}>{hint.label}</span>
-        </>
-      )}
+      <span style={searchTextStyle()}>{isPhone ? '搜索' : searchLabel}</span>
+      {isPhone ? null : <span aria-hidden="true" style={{ flexShrink: 0 }}>{hint.label}</span>}
     </Button>
   );
 }

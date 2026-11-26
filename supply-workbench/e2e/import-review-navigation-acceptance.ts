@@ -114,6 +114,12 @@ async function checkAccountFocusExit(page: Page, origin: URL) {
       for (const box of [navBox, searchBox, accountBox]) {
         assert.ok(box.width >= 44 && box.height >= 44, '手机顶栏的点击区应至少为 44 × 44');
       }
+    } else {
+      const hint = search.getByText(/^(Ctrl\+K|⌘K)$/u);
+      const hintBox = await hint.boundingBox();
+      assert.ok(hintBox, '桌面应显示快捷键提示');
+      const hintInset = searchBox.x + searchBox.width - hintBox.x - hintBox.width;
+      assert.ok(hintInset >= 0 && hintInset <= 24, '桌面快捷键提示应贴近搜索按钮右侧');
     }
     await trigger.press('Enter');
     await settings.waitFor();
