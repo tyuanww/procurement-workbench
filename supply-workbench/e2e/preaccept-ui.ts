@@ -11,7 +11,7 @@ import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
-import { checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
+import { checkAccountLogout, checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
 import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
 import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
@@ -158,6 +158,9 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
     expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
   });
+  result.checks.accountLogout = await checkAccountLogout(buyer, origin, (path) => {
+    expectedFailures.push({ role: 'buyer', path, status: 503 });
+  });
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
@@ -252,6 +255,7 @@ async function open(role: Role, path: string, landing = path) {
     const url = new URL(response.url);
     if (url.origin !== origin.origin) return;
     if (url.pathname === loginPath && response.status === 200) signedIn = true;
+    if (url.pathname === '/api/v1/auth/logout' && response.status === 204) signedIn = false;
     result.network.push({ role, session, path: url.pathname, status: response.status, signedIn });
   });
   devtools.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {

@@ -95,7 +95,7 @@ function AccountPanel(input: {
   readonly onFail: () => void;
 }) {
   const { token } = theme.useToken();
-  const roles = input.entries.filter((entry) => entry.kind === 'role' && entry.label !== input.label);
+  const roles = input.entries.filter((entry) => entry.kind === 'role');
   const actions = input.entries.filter((entry) => entry.kind === 'settings' || entry.kind === 'logout');
   return (
     <div ref={input.panelRef} id={input.id} className="shell-account-panel" style={{ boxShadow: token.boxShadowSecondary }}>
