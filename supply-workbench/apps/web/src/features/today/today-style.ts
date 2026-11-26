@@ -88,9 +88,9 @@ const todayWorkspaceCss = `
     .today-metric-column { display: flex; min-inline-size: 0; }
     .today-metric-card { inline-size: 100%; }
     .today-metric-card .ant-btn {
-      height: auto; padding: 0; border: 0; border-radius: inherit; text-align: start; white-space: normal;
+      height: auto; padding: 0; border-radius: inherit; text-align: start; white-space: normal;
     }
-    .today-metric-card .ant-btn:focus-visible { outline-offset: -3px; }
+    .today-metric-card .ant-btn:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -3px; }
     .today-metric-card .ant-btn > span { inline-size: 100%; }
     .today-metric-content {
       display: grid; align-content: center; gap: ${small}px;
@@ -107,13 +107,13 @@ const todayWorkspaceCss = `
     .today-split-handle:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -2px; }
     .today-schedule-item { position: relative; border-radius: ${radiusCard}px; }
     @container today-workspace (min-width: 56rem) {
-      .today-actions-layout .today-split > .ant-splitter-panel:first-child { padding-inline-end: ${small}px; }
-      .today-actions-layout .today-split > .ant-splitter-panel:last-child { padding-inline-start: ${small}px; }
+      .today-actions-layout > .today-split > .ant-splitter-panel:first-child:not(:only-child) { padding-inline-end: ${small}px; }
+      .today-actions-layout > .today-split > .ant-splitter-panel:last-child:not(:only-child) { padding-inline-start: ${small}px; }
     }
     @container today-workspace (max-width: 55.999rem) {
-      .today-actions-layout .today-split { flex-direction: column; gap: ${regular}px; }
-      .today-actions-layout .today-split > .ant-splitter-panel { flex: none !important; }
-      .today-actions-layout .today-split > .ant-splitter-bar { display: none; }
+      .today-actions-layout > .today-split { flex-direction: column; gap: ${regular}px; }
+      .today-actions-layout > .today-split > .ant-splitter-panel { flex: none !important; }
+      .today-actions-layout > .today-split > .ant-splitter-bar { display: none; }
     }
     .today-action-main { border: 1px solid transparent; }
     .today-action-shortcuts { display: grid; }

@@ -20,7 +20,7 @@ function TodayMetricCard({ item }: { readonly item: MetricItem }) {
   </span>;
   return <Card size="small" className="today-metric-card" data-current={action?.isActive} styles={{ body: { padding: 0 } }}
     style={{ borderBlockStartColor: accent }}>
-    {action === undefined ? content : <Button color="default" variant="text" block aria-pressed={action.isActive} onClick={action.select}>{content}</Button>}
+    {action === undefined ? content : <Button color="default" variant="text" block style={{ borderColor: 'transparent' }} aria-pressed={action.isActive} onClick={action.select}>{content}</Button>}
     <TodayHighlight active={action?.isActive === true} />
   </Card>;
 }

@@ -13,6 +13,7 @@ export function TodaySplit({ primary, secondary, defaultPrimary, label, classNam
   readonly className?: string;
 }) {
   const [primaryPercent, setPrimaryPercent] = useState(defaultPrimary);
+  const hasSecondary = secondary != null;
   const root = useRef<HTMLDivElement>(null);
   const primaryId = useId();
   useEffect(() => {
@@ -22,7 +23,7 @@ export function TodaySplit({ primary, secondary, defaultPrimary, label, classNam
     handle.tabIndex = 0;
     handle.setAttribute('aria-label', label);
     handle.setAttribute('aria-controls', primaryId);
-  }, [label, primaryId]);
+  }, [hasSecondary, label, primaryId]);
 
   function resizeFromKeys(event: KeyboardEvent<HTMLDivElement>) {
     if (!(event.target instanceof HTMLElement) || !event.target.classList.contains(separatorClass)) return;
@@ -37,10 +38,10 @@ export function TodaySplit({ primary, secondary, defaultPrimary, label, classNam
     <Splitter className="today-split" classNames={{ dragger: separatorClass }} lazy
       onResizeEnd={([first = 0, second = 0]) => { if (first + second > 0) setPrimaryPercent(clamp(first / (first + second) * 100)); }}
       onDraggerDoubleClick={() => setPrimaryPercent(defaultPrimary)}>
-      <Splitter.Panel size={`${primaryPercent}%`} min={`${minPrimary}%`} max={`${maxPrimary}%`}>
+      <Splitter.Panel size={hasSecondary ? `${primaryPercent}%` : '100%'} min={`${minPrimary}%`} max={hasSecondary ? `${maxPrimary}%` : '100%'}>
         <div id={primaryId} className="today-split-content">{primary}</div>
       </Splitter.Panel>
-      <Splitter.Panel size={`${100 - primaryPercent}%`}><div className="today-split-content">{secondary}</div></Splitter.Panel>
+      {hasSecondary ? <Splitter.Panel size={`${100 - primaryPercent}%`}><div className="today-split-content">{secondary}</div></Splitter.Panel> : null}
     </Splitter>
   </div>;
 }

@@ -50,8 +50,8 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
       primary={calendar} secondary={<CalendarResults {...props} />} />}
   </Flex>;
   return <section id="today-chase" className="today-jump-target" tabIndex={-1} aria-label="工作台待办">
-    {shortcuts == null ? main : <TodaySplit className="today-actions-layout" defaultPrimary={76}
-      label="调整行动清单与事项助手宽度" primary={main} secondary={shortcuts} />}
+    <TodaySplit className="today-actions-layout" defaultPrimary={76}
+      label="调整行动清单与事项助手宽度" primary={main} secondary={shortcuts} />
   </section>;
 }
 
