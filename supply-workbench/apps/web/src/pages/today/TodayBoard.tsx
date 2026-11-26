@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
 import {
-  ArrivalMemos, TodayDrawer, arrivalShortcutPath, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf,
+  ArrivalMemos, TodayDrawer, arrivalShortcutPath, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf, type ArrivalsView,
   type ActionDetail, type ArrivalTiming, type BoardRow, type GroupMode, type OpenForm, type PlanLoad, type QuickAction, type ReceiptWork, type TodayBoard,
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
@@ -20,7 +20,6 @@ import { TodayActionSummary } from './TodayActionSummary.js';
 import { ActionAssistant } from './ActionAssistant.js';
 import { TodaySectionNavigation } from './TodaySectionNavigation.js';
 import { focusSection } from './today-focus.js';
-import type { ArrivalsView } from './today-session.js';
 import type { CalendarBusinessDayPreview } from './use-calendar-business-day.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
