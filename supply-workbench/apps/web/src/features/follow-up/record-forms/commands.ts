@@ -16,19 +16,23 @@ export function postShipment(input: {
   });
 }
 
-export function postReceipt(input: {
+const receiptAttempts = new Map<string, string>();
+
+export async function postReceipt(input: {
   readonly batchId: string;
   readonly qty: number;
   readonly receivedOn: string;
   readonly category: ReceiptCategory;
   readonly fulfillment?: ReceiptEvidenceInput;
 }): Promise<ReceiptView> {
-  return apiSend({
-    path: `/api/v1/batches/${encodeURIComponent(input.batchId)}/receipts`,
-    method: 'POST',
-    body: { qty: input.qty, receivedOn: input.receivedOn, category: input.category, ...evidenceBody(input.fulfillment) },
-    schema: ReceiptViewSchema,
-  });
+  const path = `/api/v1/batches/${encodeURIComponent(input.batchId)}/receipts`;
+  const body = { qty: input.qty, receivedOn: input.receivedOn, category: input.category, ...evidenceBody(input.fulfillment) };
+  const attempt = JSON.stringify([path, body]);
+  const key = receiptAttempts.get(attempt) ?? crypto.randomUUID();
+  receiptAttempts.set(attempt, key);
+  const saved = await apiSend({ path, method: 'POST', body, headers: { 'idempotency-key': key }, schema: ReceiptViewSchema });
+  if (receiptAttempts.get(attempt) === key) receiptAttempts.delete(attempt);
+  return saved;
 }
 
 function evidenceBody<T extends ShipmentEvidenceInput | ReceiptEvidenceInput>(facts: T | undefined): { readonly fulfillment?: T } {

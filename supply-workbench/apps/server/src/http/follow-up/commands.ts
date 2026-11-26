@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { BatchView, DeliveryNoteView, ExceptionView, FollowUpView, ReceiptView, ShipmentView } from '@sw/application';
 import {
@@ -21,6 +22,7 @@ import {
   UpdateBatchRequestSchema,
   UpdateLineRequestSchema,
 } from '@sw/contracts';
+import { entityId } from '@sw/domain';
 import { z } from 'zod';
 import { requireActor } from '../app.js';
 import { HttpError } from '../plugins/errors.js';
@@ -31,6 +33,7 @@ const OrderLineParams = z.object({ id: OrderLineIdSchema }).strict();
 const BatchParams = z.object({ id: DeliveryBatchIdSchema }).strict();
 const EntityParams = z.object({ id: EntityIdSchema }).strict();
 const RowParams = z.object({ rowId: EntityIdSchema }).strict();
+const ReceiptAttemptHeaders = z.object({ 'idempotency-key': z.uuidv4().optional() });
 
 export function orderLineIdOf(req: FastifyRequest) {
   return parse(OrderLineParams, req.params).id;
@@ -100,8 +103,15 @@ export async function createShipment(api: FollowUpApi, req: FastifyRequest): Pro
 export async function createReceipt(api: FollowUpApi, req: FastifyRequest): Promise<ReceiptView> {
   const actor = requireActor(req);
   const batchId = deliveryBatchIdOf(req);
-  const created = await api.recordReceipt({ batchId, ...parse(CreateReceiptRequestSchema, req.body) }, actor);
+  const { 'idempotency-key': key } = parse(ReceiptAttemptHeaders, req.headers);
+  const attempt = key === undefined ? {} : { attemptReceiptId: receiptAttemptId({ actorId: actor.id, batchId, key }) };
+  const created = await api.recordReceipt({ batchId, ...parse(CreateReceiptRequestSchema, req.body), ...attempt }, actor);
   return receiptOf(await api.getBatch({ batchId }, actor), created.receiptId);
+}
+
+function receiptAttemptId({ actorId, batchId, key }: { readonly actorId: string; readonly batchId: string; readonly key: string }) {
+  const hash = createHash('sha256').update(JSON.stringify([actorId, batchId, key])).digest('hex');
+  return entityId('receipt-attempt:' + hash);
 }
 
 export async function voidRecord({ api, kind, req }: { readonly api: FollowUpApi; readonly kind: 'shipment' | 'receipt' | 'delivery_note'; readonly req: FastifyRequest }) {

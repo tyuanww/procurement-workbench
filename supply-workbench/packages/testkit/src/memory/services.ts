@@ -103,6 +103,10 @@ export function auditLog(box: MemoryBox): AuditLog {
       if (box.depth === 0) throw new Error('审计只能在工作单元里写');
       box.current.audit.push(entry);
     },
+    async hasEntry(query) {
+      return box.current.audit.some((entry) => entry.entity === query.entity && entry.entityId === query.entityId
+        && entry.action === query.action && entry.actorUserId === query.actorUserId);
+    },
   };
 }
 

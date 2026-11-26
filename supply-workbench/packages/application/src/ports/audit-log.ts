@@ -11,4 +11,5 @@ export interface AuditEntry {
 export interface AuditLog {
   /** 只在工作单元内调用。工作单元回滚时这次记录也不留下。 */
   record(entry: AuditEntry): Promise<void>;
+  hasEntry(input: Pick<AuditEntry, 'action' | 'actorUserId' | 'entity' | 'entityId'>): Promise<boolean>;
 }
