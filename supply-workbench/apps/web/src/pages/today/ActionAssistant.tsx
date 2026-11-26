@@ -20,7 +20,7 @@ export function ActionAssistant(props: AssistantProps) {
   if (page.isLoading || !page.isSettled || page.loadError !== '') return null;
   const batches = board.body.kind === 'groups' ? board.body.rows.filter((row) => row.id.startsWith('batch:')) : [];
   const overdueReceipt = page.work === undefined ? batches.find((row) => receipts.get(row.id)?.status === 'overdue') : undefined;
-  const hint = overdueReceipt === undefined ? priorityHint(batches, receipts, page.work) : '先核对到仓逾期批次的实收数量。';
+  const hint = overdueReceipt === undefined ? priorityHint(batches, props) : '先核对到仓逾期批次的实收数量。';
   const shortcuts = availableShortcuts(props, overdueReceipt);
   if (batches.length === 0 && shortcuts.length === 0) return null;
   const isPaged = page.paging.total > page.paging.pageSize;
@@ -29,11 +29,11 @@ export function ActionAssistant(props: AssistantProps) {
   </WorkspaceAssistant>;
 }
 
-function priorityHint(batches: readonly BoardRow[], receipts: AssistantProps['receipts'], work: ActionPageControls['work']): string | null {
+function priorityHint(batches: readonly BoardRow[], { receipts, page }: AssistantProps): string | null {
   if (batches.length === 0) return null;
-  if (work === 'internal_note') return '先核对内部待补的回单。';
+  if (page.work === 'internal_note') return '先核对内部待补的回单。';
   if (batches.some((row) => row.face.overdueTone === 'danger')) return '先确认逾期未发批次的发货安排。';
-  if (work === 'factory_chase' || work === 'all_unshipped') return '先确认未发批次的发货安排。';
+  if (page.work === 'factory_chase' || page.work === 'all_unshipped') return '先确认未发批次的发货安排。';
   if (batches.some((row) => receipts.get(row.id)?.status === 'due_today')) return '先核对今日应到批次的实收数量。';
   if (batches.some((row) => row.reasons?.includes('follow_up_due'))) return '先查看已到跟进时间的批次。';
   if (batches.some((row) => row.face.waitingKind === 'internal' && row.reasons?.includes('note_missing'))) return '先核对内部待补的回单。';
