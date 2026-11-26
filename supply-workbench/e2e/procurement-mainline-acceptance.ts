@@ -597,7 +597,8 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
 
   const batchNote = '合成批次等待承运回复';
   await page.goto(new URL(`/today?drawer=batch%3A${batchId}&draft=note`, origin).href);
-  const followUp = page.getByRole('dialog', { name: '合成待催 250', exact: true });
+  const followUp = page.getByRole('dialog', { name: '记跟进', exact: true });
+  await followUp.getByText(/合成待催 250/).first().waitFor();
   await select(followUp.getByRole('combobox', { name: '类型', exact: true }), page, '备注');
   await followUp.getByLabel('内容', { exact: true }).fill(batchNote);
   assert.deepEqual(await recordOrderFollowUp(page, followUp.getByRole('button', { name: /^确\s*认$/ })), {
