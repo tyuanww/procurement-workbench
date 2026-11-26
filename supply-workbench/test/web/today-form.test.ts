@@ -92,6 +92,14 @@ it('行或批次缺失时记跟进不打开，两者都在时记跟进打开', a
   expect(present[0]?.kind).toBe('note');
 });
 
+it.each(['', 'abc', '2026-13-40', '2026-02-29'])('今日登记表单拒绝无效业务日期 %j', (date) => {
+  const today = '2026-10-12';
+  const actionErrors = (draft: OpenForm) => formErrors({ draft, hadDate: true, today });
+  expect(actionErrors({ kind: 'date', date, reason: '工厂回报' })).toHaveLength(1);
+  expect(actionErrors({ kind: 'ship', qty: 1, shippedOn: date })).toHaveLength(1);
+  expect(actionErrors({ kind: 'receipt', qty: 1, receivedOn: date })).toHaveLength(1);
+});
+
 it('当前确认日已清空但首次确认日还在时，改期仍要带原因', async () => {
   const kept = await loadTarget(batch({ dateBuyerConfirmed: null, firstConfirmedDate: localDate('2026-10-02') }));
   expect(kept.hadDate).toBe(true);
