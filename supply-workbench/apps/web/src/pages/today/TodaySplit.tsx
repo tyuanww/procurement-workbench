@@ -35,8 +35,8 @@ export function TodaySplit({ primary, secondary, defaultPrimary, label, classNam
   }
 
   return <div ref={root} className={className} onKeyDown={resizeFromKeys}>
-    <Splitter className="today-split" classNames={{ dragger: separatorClass }} lazy
-      onResizeEnd={([first = 0, second = 0]) => { if (first + second > 0) setPrimaryPercent(clamp(first / (first + second) * 100)); }}
+    <Splitter className="today-split" classNames={{ dragger: { default: separatorClass, active: 'today-split-handle-dragging' } }}
+      onResize={([first = 0, second = 0]) => { if (first + second > 0) setPrimaryPercent(clamp(first / (first + second) * 100)); }}
       onDraggerDoubleClick={() => setPrimaryPercent(defaultPrimary)}>
       <Splitter.Panel size={hasSecondary ? `${primaryPercent}%` : '100%'} min={`${minPrimary}%`} max={hasSecondary ? `${maxPrimary}%` : '100%'}>
         <div id={primaryId} className="today-split-content">{primary}</div>

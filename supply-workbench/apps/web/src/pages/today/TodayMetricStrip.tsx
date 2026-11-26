@@ -1,6 +1,5 @@
 import { RightOutlined } from '@ant-design/icons';
 import { Button, Card, Col, Row } from 'antd';
-import { TodayHighlight } from '../../features/today/index.js';
 import type { MetricItem } from '../../shared/ui/analytics.js';
 import { formatQuantity } from '../../shared/ui/format.js';
 import { space, statusColor } from '../../theme/tokens.js';
@@ -21,6 +20,5 @@ function TodayMetricCard({ item }: { readonly item: MetricItem }) {
   return <Card size="small" className="today-metric-card" data-current={action?.isActive} styles={{ body: { padding: 0 } }}
     style={{ borderBlockStartColor: accent }}>
     {action === undefined ? content : <Button color="default" variant="text" block style={{ border: 0 }} aria-pressed={action.isActive} onClick={action.select}>{content}</Button>}
-    <TodayHighlight active={action?.isActive === true} />
   </Card>;
 }

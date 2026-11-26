@@ -2,7 +2,7 @@ import { RightOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Empty, Flex, Result, Typography } from 'antd';
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
-import { TodayHighlight, type GroupMode, type PlanBoardGroup, type PlanLoad, type PlanRow } from '../../features/today/index.js';
+import { type GroupMode, type PlanBoardGroup, type PlanLoad, type PlanRow } from '../../features/today/index.js';
 import { border, fontSize, rowComfort, space } from '../../theme/tokens.js';
 import { TaskTagView } from '../../features/plan/index.js';
 import { useCan } from '../../shared/actor.js';
@@ -116,10 +116,9 @@ function PlanGroupBlock(props: { readonly group: PlanBoardGroup; readonly focus:
       </Flex>
       {group.isUnassigned && group.note !== null ? <Alert type="warning" title={group.note} showIcon /> : null}
       <ul role="list" aria-labelledby={headingId} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {group.rows.map((row) => <li key={row.id} className="today-schedule-item" style={{ borderBlockStart: `1px solid ${border}` }}>
+        {group.rows.map((row) => <li key={row.id} style={{ borderBlockStart: `1px solid ${border}` }}>
           <PlanTaskRow row={row} showDue={group.key !== 'due-today'}
             isKeyboardFocused={focus === row.id} onOpen={() => onOpen(row.id)} />
-          <TodayHighlight active={focus === row.id} />
         </li>)}
       </ul>
     </section>

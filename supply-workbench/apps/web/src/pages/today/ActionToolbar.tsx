@@ -17,6 +17,7 @@ export type ActionToolbarProps = {
   readonly board: TodayBoard;
   readonly page: ActionPageControls | undefined;
   readonly viewControls?: ReactNode;
+  readonly motionControl?: ReactNode;
   readonly scopeControls?: ReactNode;
   readonly utilityLinks?: ((onJump: CloseAndJump) => ReactNode) | undefined;
   readonly calendar?: ReactNode;
@@ -67,7 +68,7 @@ export function ActionToolbar(props: ActionToolbarProps) {
   }
 
   return <>
-    <ToolbarActions preset={preset} scopeControls={props.scopeControls} viewControls={viewControls} filterButton={filterButton} filterLabel={filterLabel} toolsButton={toolsButton} isFilterOpen={draft !== null}
+    <ToolbarActions preset={preset} scopeControls={props.scopeControls} viewControls={viewControls} motionControl={props.motionControl} filterButton={filterButton} filterLabel={filterLabel} toolsButton={toolsButton} isFilterOpen={draft !== null}
       chasePage={chasePage} isChaseOpen={isChaseOpen} onFilter={openFilters}
       onChase={() => {
         chasePage?.onCancelCopyPreview?.();
@@ -95,7 +96,7 @@ function priorityPreset({ board, page, onApplyFilters }: ActionToolbarProps): Pr
   return { isActive, select: (active) => onApplyFilters({ ...CLEARED_FILTERS, reasons: active ? PRIORITY_BATCH_REASONS : [] }) };
 }
 
-function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls' | 'scopeControls'> & {
+function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls' | 'scopeControls' | 'motionControl'> & {
   readonly preset: PriorityPreset | null;
   readonly filterButton: Ref<HTMLButtonElement>;
   readonly filterLabel: string;
@@ -129,6 +130,7 @@ function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls' | 'scopeC
             props.onChase();
           }}>{COPY_TITLE}</Button>}
       </Flex>
+      {props.motionControl}
     </Flex>
   </Flex>;
 }

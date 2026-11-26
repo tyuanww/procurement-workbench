@@ -84,6 +84,7 @@ async function checkActionBoard(page: Page): Promise<void> {
   await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
   await page.getByRole('heading', { name: '个人工作台', level: 1, exact: true }).waitFor();
   await page.getByRole('heading', { name: '我的行动清单', level: 2, exact: true }).waitFor();
+  await checkActionListMotion(page);
   const switchScope = page.getByRole('button', { name: /切换工作范围$/u });
   await checkQuickMenuDismissal(page, /我的行动清单.*切换工作范围$/u);
   await switchScope.press('Enter');
@@ -108,8 +109,19 @@ async function checkActionBoard(page: Page): Promise<void> {
   await taskDetail.waitFor({ state: 'hidden' });
   const views = board.getByRole('radiogroup', { name: '工作台视图', exact: true });
   await views.getByRole('radio', { name: '日历', exact: true }).press('Space');
-  const selectedDay = board.getByRole('region', { name: '工作台日历' }).getByRole('button', { pressed: true });
-  assert.match(await selectedDay.getAttribute('aria-label') ?? '', /\d{4}年\d+月\d+日/u);
+  const calendar = board.getByRole('region', { name: '工作台日历' });
+  const selectedDay = calendar.getByRole('button', { pressed: true, name: /待办 \d+项/u });
+  assert.match(await selectedDay.getAttribute('aria-label') ?? '', /\d{4}年\d+月\d+日，待办 \d+项/u);
+  const workDay = await selectedDay.getAttribute('data-calendar-date');
+  assert.ok(workDay);
+  const beforeYear = page.url();
+  await calendar.getByRole('radiogroup', { name: '日历显示周期' }).getByRole('radio', { name: '年', exact: true }).press('Space');
+  const month = calendar.locator(`[data-calendar-month="${workDay.slice(0, 7)}"]`);
+  assert.match(await month.getAttribute('aria-label') ?? '', /待办 \d+项/u);
+  await month.press('Enter');
+  await selectedDay.and(page.locator(':focus')).waitFor();
+  assert.equal(await selectedDay.getAttribute('data-calendar-date'), workDay);
+  assert.equal(page.url(), beforeYear);
   await checkCalendarBesideResults(page);
   await pending.waitFor();
   await task.waitFor();
@@ -122,6 +134,62 @@ async function checkActionBoard(page: Page): Promise<void> {
   await page.keyboard.press('Escape');
   await factoryDialog.waitFor({ state: 'hidden' });
   await chase.and(page.locator(':focus')).waitFor();
+}
+
+async function checkActionListMotion(page: Page) {
+  const beam = page.locator('.today-list-panel .today-list-beam');
+  const playState = () => beam.evaluate((element) => getComputedStyle(element, '::before').animationPlayState);
+  await beam.waitFor();
+  const animation = await beam.evaluate((element) => {
+    const style = getComputedStyle(element, '::before');
+    return [style.animationDuration, style.animationIterationCount];
+  });
+  assert.deepEqual(animation, ['4.8s', 'infinite']);
+  assert.equal(await page.locator('.today-work-card .ant-border-beam, .today-metric-card .ant-border-beam').count(), 0);
+  await page.getByRole('button', { name: '暂停清单流光' }).press('Enter');
+  assert.equal(await playState(), 'paused');
+  await page.getByRole('button', { name: '播放清单流光' }).press('Enter');
+  assert.equal(await playState(), 'running');
+
+  const divider = page.getByRole('separator', { name: '调整行动清单与事项助手宽度' });
+  const list = page.locator('.today-list-panel');
+  const width = () => list.evaluate((element) => element.getBoundingClientRect().width);
+  const initial = await width();
+  await divider.press('ArrowLeft');
+  await page.waitForFunction((initialWidth) => {
+    const panel = document.querySelector('.today-list-panel');
+    return panel !== null && panel.getBoundingClientRect().width < initialWidth - 20;
+  }, initial);
+  const beforeDrag = await width();
+  const handle = await divider.boundingBox();
+  assert.ok(handle);
+  const x = handle.x + handle.width / 2;
+  const y = Math.max(0, handle.y) + 32;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  const assistant = page.locator('.today-action-shortcuts');
+  const assistantWidth = () => assistant.evaluate((element) => element.getBoundingClientRect().width);
+  const beforeAssistant = await assistantWidth();
+  let draggedAssistant = beforeAssistant;
+  try {
+    await page.mouse.move(x - 100, y, { steps: 5 });
+    assert.ok(await width() < beforeDrag - 45, '松开鼠标前应看到清单变窄');
+    draggedAssistant = await assistantWidth();
+    assert.ok(draggedAssistant > beforeAssistant + 45, '松开鼠标前应看到事项助手变宽');
+  } finally {
+    await page.mouse.up();
+  }
+  assert.ok(Math.abs(await assistantWidth() - draggedAssistant) <= 1, '松手后保留两栏留白和助手宽度');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await divider.dblclick({ position: { x: handle.width / 2, y: 64 } });
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  try {
+    await beam.waitFor({ state: 'hidden' });
+    assert.equal(await page.getByRole('button', { name: '暂停清单流光' }).count(), 0);
+  } finally {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+  }
 }
 
 async function measureTodayLayout(page: Page) {

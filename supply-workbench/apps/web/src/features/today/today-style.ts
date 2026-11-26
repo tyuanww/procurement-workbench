@@ -3,7 +3,6 @@ import { bg, border, brand, fontSize, radiusCard, space, statusColor, text, topB
 import type { RowFace } from './model/types.js';
 import { workspaceAssistantCss } from './workspace-assistant-style.js';
 import { todayRowCss } from './today-row-style.js';
-import { todayHighlightCss } from './TodayHighlight.js';
 
 const [tiny, small, medium, regular] = space;
 
@@ -29,7 +28,6 @@ export function todayMotionCss(): string {
     ${todayWorkspaceCss}
     ${workspaceAssistantCss}
     ${todayRowInteractionCss}
-    ${todayHighlightCss}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     #today-chase { container: today-action / inline-size; }
@@ -105,10 +103,13 @@ const todayWorkspaceCss = `
     .today-split-content { display: grid; min-inline-size: 0; inline-size: 100%; }
     .today-split-content > * { min-inline-size: 0; }
     .today-split-handle:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -2px; }
-    .today-schedule-item { position: relative; border-radius: ${radiusCard}px; }
+    @media (prefers-reduced-motion: no-preference) {
+      .today-split:has(> .ant-splitter-bar > .today-split-handle:focus-visible):not(:has(> .ant-splitter-bar > .today-split-handle-dragging))
+        > .ant-splitter-panel { transition: flex-basis 120ms ease-out; }
+    }
     @container today-workspace (min-width: 56rem) {
-      .today-actions-layout > .today-split > .ant-splitter-panel:first-child:not(:only-child) { padding-inline-end: ${small}px; }
-      .today-actions-layout > .today-split > .ant-splitter-panel:last-child:not(:only-child) { padding-inline-start: ${small}px; }
+      .today-actions-layout > .today-split > .ant-splitter-panel:has(~ .ant-splitter-panel) { padding-inline-end: ${small}px; }
+      .today-actions-layout > .today-split > .ant-splitter-panel ~ .ant-splitter-panel { padding-inline-start: ${small}px; }
     }
     @container today-workspace (max-width: 55.999rem) {
       .today-actions-layout > .today-split { flex-direction: column; gap: ${regular}px; }
@@ -118,7 +119,13 @@ const todayWorkspaceCss = `
     .today-action-main { border: 1px solid transparent; }
     .today-action-shortcuts { display: grid; }
     .today-action-shortcuts .ant-btn { text-align: start; justify-content: flex-start; block-size: auto; white-space: normal; }
-    .today-list-panel { align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
+    .today-list-panel { position: relative; align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
+    .today-list-beam-host, .today-toolbar .today-list-beam-control { display: none; }
+    @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+      .today-list-beam-host { display: block; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+      .today-toolbar .today-list-beam-control { display: inline-flex; }
+      .today-list-panel[data-beam-paused="true"] .today-list-beam::before { animation-play-state: paused; }
+    }
     .today-list-panel .today-priority-list { gap: 0; }
     .today-list-panel .today-work-card { border-radius: 0; background: transparent; }
     .today-list-panel > .today-touch:not(.today-toolbar), .today-list-panel .today-action-results-body > nav { padding: ${small}px ${regular}px; }

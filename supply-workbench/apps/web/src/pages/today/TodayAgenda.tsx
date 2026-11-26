@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Button, Card, Flex, Typography } from 'antd';
-import { TodayHighlight, TodayReceiptLink, type BoardRow, type PlanRow, type ReceiptWork } from '../../features/today/index.js';
+import { TodayReceiptLink, type BoardRow, type PlanRow, type ReceiptWork } from '../../features/today/index.js';
 import { space } from '../../theme/tokens.js';
 import { restoreWorkspaceLinkFocus, workspaceRowId } from './today-focus.js';
 
@@ -36,7 +36,6 @@ export function planTaskCards({ tasks, focus, onOpen }: {
         <Typography.Text type="secondary">{task.meta}</Typography.Text>
         <span>{task.tags.filter(({ key }) => key === 'due' || key === 'status').map(({ label }) => label).join(' · ')}</span>
       </Flex>
-      <TodayHighlight active={focus === task.id} />
     </Card></article>
   </li>);
 }

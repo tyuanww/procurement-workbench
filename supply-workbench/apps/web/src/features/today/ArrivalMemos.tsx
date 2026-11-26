@@ -5,8 +5,6 @@ import type { TodayResponse } from '@sw/contracts';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
 import { statusColor, text } from '../../theme/tokens.js';
 
-import { TodayHighlight } from './TodayHighlight.js';
-
 type Memo = TodayResponse['arrivalMemos'][number];
 
 const labels = {
@@ -46,7 +44,7 @@ function ArrivalMemoRow({ memo, hasTodayReturn, isFocused }: { readonly memo: Me
       <div style={{ color: memo.status === 'overdue' ? statusColor.danger.text : text.secondary }}>
         {labels[memo.status]} · 待收 {quantity(memo.inTransitQty, memo.unit)} · 实收 {quantity(memo.receivedQty, memo.unit)} · {memo.confirmedDate ?? '确认日未定'}
       </div>
-    </SectionRow><TodayHighlight active={isFocused} /></div>
+    </SectionRow></div>
   );
 }
 

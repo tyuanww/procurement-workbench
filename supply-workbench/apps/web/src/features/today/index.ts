@@ -36,4 +36,3 @@ export { toBoardItem } from './card.js';
 export { localFollowUpTime } from './follow-up-time.js';
 export { saveTodayNote } from './save-today-note.js';
 export { helpStyle, screenStyle, todayMotionCss } from './today-style.js';
-export { TodayHighlight } from './TodayHighlight.js';
