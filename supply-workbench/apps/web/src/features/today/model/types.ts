@@ -33,6 +33,7 @@ export type RowFace = {
   readonly remaining?: string;
   readonly inTransit?: string;
   readonly waiting?: string;
+  readonly waitingKind?: WaitingOnKind;
   readonly latestFollowUp?: string;
   readonly latestPromise?: string;
   readonly nextFollowUpAt?: string;

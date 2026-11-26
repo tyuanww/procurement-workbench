@@ -9,7 +9,7 @@ import { useCanWrite } from '../../shared/actor.js';
 import { formatDateTime } from '../../shared/ui/format.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { drawerWidth, space } from '../../theme/tokens.js';
-import { TodayOrderLink, type TodayOrderRef } from './TodayOrderLink.js';
+import { TodayOrderLink, TodayReceiptLink, type ReceiptWork, type TodayOrderRef } from './TodayOrderLink.js';
 import type { BoardRow, QuickAction, RowFace } from './model/types.js';
 import { ActionForm, type OpenForm } from './TodayForms.js';
 import { BatchProgress } from './batch-progress.js';
@@ -25,6 +25,7 @@ type TodayDrawerProps = {
   readonly detail?: ActionDetail | undefined;
   readonly batchSeq?: number | undefined;
   readonly fulfillment?: BatchFulfillment | undefined;
+  readonly receipt?: ReceiptWork | undefined;
   readonly isOpen: boolean;
   readonly keyboard?: boolean;
   readonly draft: OpenForm | null;
@@ -42,6 +43,7 @@ export function TodayDrawer(props: TodayDrawerProps) {
   const canRecord = useCanWrite('records.write');
   const formId = useId();
   const draft = canRecord ? props.draft : null;
+  const isReceiptDetail = draft === null && props.receipt !== undefined;
   return (
     <Drawer
       rootClassName="today-action-drawer"
@@ -52,7 +54,7 @@ export function TodayDrawer(props: TodayDrawerProps) {
       keyboard={props.keyboard ?? false}
       focusable={{ trap: true, focusTriggerAfterClose: true }}
       title={drawerTitle(props.row, draft)}
-      extra={props.detail?.kind === 'order' ? <TodayOrderLink order={props.detail.order}>打开订单详情</TodayOrderLink> : null}
+      extra={props.detail?.kind === 'order' && !isReceiptDetail ? <TodayOrderLink order={props.detail.order}>打开订单详情</TodayOrderLink> : null}
       footer={draft === null ? null : <RecordFooter formId={formId} isSaving={props.isSaving} onCancel={props.onClose} />}
     >
       {props.saveError === '' ? null : <Alert style={{ marginBlockEnd: space[3] }} type="error" showIcon title={props.saveError} />}
@@ -82,20 +84,27 @@ function ExceptionNote({ exception }: { readonly exception: NonNullable<Extract<
   return <Alert type="warning" showIcon title={type === undefined ? '已登记异常' : EXCEPTION_TYPE_LABELS[type]} description={exception.note} />;
 }
 
-function DrawerBatch({ row, batchSeq, draft, fulfillment, isOpen, canRecord, onQuick }: TodayDrawerProps & { readonly canRecord: boolean }) {
+function DrawerBatch({ row, batchSeq, draft, fulfillment, receipt, isOpen, canRecord, onQuick }: TodayDrawerProps & { readonly canRecord: boolean }) {
   if (row === null) return null;
-  const shouldShowProgress = isOpen && draft === null && batchSeq !== undefined;
-  const actions = draft === null && canRecord ? row.actions : [];
+  if (draft !== null) return <EditContext face={row.face} batchSeq={batchSeq} draftKind={draft.kind} />;
+  const shouldShowProgress = isOpen && batchSeq !== undefined;
   return <>
-    {draft === null
-      ? <DetailContext face={row.face} batchSeq={batchSeq} shouldShowQuantities={!shouldShowProgress || fulfillment === undefined} />
-      : <EditContext face={row.face} batchSeq={batchSeq} draftKind={draft.kind} />}
+    <DetailContext face={row.face} batchSeq={batchSeq} receipt={receipt} shouldShowQuantities={!shouldShowProgress || fulfillment === undefined} />
     {shouldShowProgress ? <BatchProgress facts={fulfillment} /> : null}
-    {actions.length === 0 ? null : <Flex wrap gap="small" className="today-touch" style={{ marginBlock: 12 }}>
-      {actions.map((action, index) => <Button key={action.kind} type={index === 0 ? 'primary' : 'default'}
-        icon={actionIcon(action.kind)} onClick={() => onQuick(action.kind)}>{action.label}</Button>)}
-    </Flex>}
+    <DrawerActions receipt={receipt} actions={canRecord ? row.actions : []} onQuick={onQuick} />
   </>;
+}
+
+function DrawerActions({ actions, receipt, onQuick }: Pick<TodayDrawerProps, 'receipt' | 'onQuick'> & {
+  readonly actions: readonly QuickAction[];
+}) {
+  if (receipt === undefined && actions.length === 0) return null;
+  return <Flex wrap gap="small" className="today-touch" style={{ marginBlock: 12 }}>
+    {receipt === undefined ? null : <TodayReceiptLink memo={receipt} />}
+    {actions.map((action, index) => <Button key={action.kind}
+      type={receipt === undefined ? (index === 0 ? 'primary' : 'default') : 'text'}
+      icon={actionIcon(action.kind)} onClick={() => onQuick(action.kind)}>{action.label}</Button>)}
+  </Flex>;
 }
 
 export function RecordFooter(props: {
@@ -135,7 +144,10 @@ function EditContext({ face, batchSeq, draftKind }: BatchIdentity & { readonly d
   );
 }
 
-function DetailContext({ face, batchSeq, shouldShowQuantities }: BatchIdentity & { readonly shouldShowQuantities: boolean }) {
+function DetailContext({ face, batchSeq, receipt, shouldShowQuantities }: BatchIdentity & {
+  readonly receipt: ReceiptWork | undefined;
+  readonly shouldShowQuantities: boolean;
+}) {
   return (
     <Flex vertical gap={space[0]}>
       <OrderIdentity face={face} batchSeq={batchSeq} />
@@ -143,7 +155,7 @@ function DetailContext({ face, batchSeq, shouldShowQuantities }: BatchIdentity &
         <Typography.Text style={reasonStyle()}>{face.reason}</Typography.Text>
         {face.overdueTone === 'quiet' ? null : <span style={overdueStyle(face.overdueTone)}>{face.overdue}</span>}
       </Flex>
-      <FaceMeta face={face} />
+      <FaceMeta face={face} receipt={receipt} />
       {shouldShowQuantities ? <FaceQuantities face={face} /> : null}
       {face.nextFollowUpAt === undefined ? null : <div style={metaStyle()}>
         下次跟进 · {formatDateTime(face.nextFollowUpAt)}{face.nextFollowUpTarget === undefined ? '' : ` · ${face.nextFollowUpTarget}`}
@@ -173,11 +185,23 @@ function FollowUpFacts({ face }: { readonly face: RowFace }) {
   </>;
 }
 
-function FaceMeta({ face }: { readonly face: RowFace }) {
-  const date = face.date === '—' ? [] : [face.date];
-  const waiting = face.waiting === undefined ? [] : ['等待方 · ' + face.waiting];
-  const parts = [...date, ...waiting, ...(face.isUnassigned === true ? ['未分配'] : [])];
+function FaceMeta({ face, receipt }: { readonly face: RowFace; readonly receipt?: ReceiptWork | undefined }) {
+  const facts = receipt === undefined ? (face.date === '—' ? [] : [face.date]) : receiptFacts(face, receipt);
+  const waiting = waitingFact(face, receipt);
+  const parts = [...facts, ...waiting, ...(face.isUnassigned === true ? ['未分配'] : [])];
   return parts.length === 0 ? null : <Typography.Text type="secondary">{parts.join(' · ')}</Typography.Text>;
+}
+
+function receiptFacts(face: RowFace, receipt: ReceiptWork): string[] {
+  const facts = [`采购确认到仓日 · ${receipt.confirmedDate ?? '未确认'}`, `收货方 · ${receipt.warehouse ?? '未命名'}`];
+  if (face.date !== '—' && face.date !== receipt.confirmedDate) facts.push(`待办日期 · ${face.date}`);
+  return facts;
+}
+
+function waitingFact(face: RowFace, receipt: ReceiptWork | undefined): string[] {
+  if (face.waiting === undefined || (receipt !== undefined && face.waitingKind === 'receiver')) return [];
+  const label = receipt !== undefined && face.waitingKind === 'supplier' ? '催货对象' : '等待方';
+  return [`${label} · ${face.waiting}`];
 }
 
 export function actionIcon(kind: QuickAction['kind']): ReactNode {

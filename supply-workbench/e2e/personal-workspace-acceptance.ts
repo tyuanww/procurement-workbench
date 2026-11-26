@@ -107,7 +107,15 @@ async function checkScheduledReceipt({ buyer, origin, expectReceiptFailure }: {
   const target = new URL(await receipt.getAttribute('href') ?? '', origin);
   assert.equal(target.pathname, '/lines/' + lineId);
   assert.equal(target.searchParams.get('focusBatch'), batchId);
-  await receipt.click();
+  await card.getByRole('button', { name: /^查看详情 HZ09-0001/ }).click();
+  const detail = buyer.getByRole('dialog');
+  await detail.getByText(/收货方 ·/).waitFor();
+  const checkReceipt = detail.getByRole('link', { name: /^核对收货 HZ09-0001/ });
+  assert.match(await checkReceipt.getAttribute('class') ?? '', /\bant-btn-variant-outlined\b/);
+  assert.match(await detail.getByRole('button', { name: '登记发货', exact: true }).getAttribute('class') ?? '', /\bant-btn-variant-text\b/);
+  await buyer.waitForURL((url) => url.searchParams.get('drawer') === 'batch:' + batchId);
+  await checkReceipt.click();
+  await buyer.waitForURL(target.href);
   const batches = buyer.getByRole('region', { name: '批次', exact: true });
   await batches.getByText('未发 6,000 件 · 待收 3,000 件 · 实收 1,000 件', { exact: true }).waitFor();
   await batches.getByRole('button', { name: '登记收货', exact: true }).click();

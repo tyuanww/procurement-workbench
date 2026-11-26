@@ -141,7 +141,9 @@ function ActionKanban(props: ActionBoardProps) {
   return <>
     <nav aria-label="看板分组" className="today-lane-links today-touch">
       {lanes.map(({ key, id, name, count }) => <Button key={key} size="small" aria-controls={id} aria-pressed={key === active}
-        onClick={() => props.onSelectLane?.(key)}>{name}<span>{count} 项</span></Button>)}
+        aria-label={`${name} ${count} 项`} onClick={() => props.onSelectLane?.(key)}>
+        <span className="today-lane-name">{name}</span><span className="today-lane-count">{count}</span>
+      </Button>)}
     </nav>
     <div className="today-kanban">
       {lanes.map(({ key, name, rows, extras, count, id }) => <section key={key} id={id} tabIndex={-1}

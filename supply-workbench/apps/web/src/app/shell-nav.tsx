@@ -2,9 +2,10 @@ import { Tooltip, type MenuProps } from 'antd';
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { Link, matchPath } from 'react-router';
 import type { NavPath, NavRow } from '../features/shell/index.js';
+import { arrivalShortcutPath, todayArrivalsPath } from '../features/today/index.js';
 import type { NavDestination } from '../shared/page-manifest.js';
 import { navGlyph } from '../shared/ui/nav-glyph.js';
-import { space } from '../theme/tokens.js';
+import { fontSize, space } from '../theme/tokens.js';
 import { NavBadge } from './shell-session.js';
 
 export type NavLocation = { readonly pathname: string; readonly search: string };
@@ -32,10 +33,10 @@ export function navMenuItems(input: {
     icon: <span aria-hidden="true">{navGlyph(row.to)}</span>,
   } : {
     key: groupKey(row.to),
-    ...(row.badgeDescription === undefined ? { title: row.badge.kind === 'count' ? `${row.badge.value} 项待办` : row.label } : {}),
+    ...(row.todayBadge === undefined ? { title: row.badge.kind === 'count' ? `${row.badge.value} 项待办` : row.label } : {}),
     icon: <span aria-hidden="true">
-      {input.isCollapsed && row.badgeDescription !== undefined
-        ? <NavBadgeHint description={row.badgeDescription} style={collapsedBadgeHintStyle} />
+      {input.isCollapsed && row.todayBadge !== undefined
+        ? <NavBadgeHint description={row.todayBadge.description} style={collapsedBadgeHintStyle} />
         : null}
       {navGlyph(row.to)}
     </span>,
@@ -50,11 +51,14 @@ export function navMenuItems(input: {
 }
 
 function NavLabel({ row, isCollapsed }: { readonly row: NavRow; readonly isCollapsed: boolean }) {
-  if (row.badgeDescription !== undefined) {
+  if (row.todayBadge !== undefined) {
     if (isCollapsed) return row.label;
     return (
-      <NavBadgeHint description={row.badgeDescription} style={badgeSlotStyle}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</span>
+      <NavBadgeHint description={row.todayBadge.description} style={badgeSlotStyle}>
+        <span style={{ display: 'grid', minWidth: 0, lineHeight: 1.2 }}>
+          <span style={badgeTitleStyle}>{row.label}</span>
+          <span aria-hidden="true" style={{ ...badgeTitleStyle, fontSize: fontSize.meta, opacity: 0.84 }}>{row.todayBadge.label}</span>
+        </span>
         <span aria-hidden="true"><NavBadge mark={row.badge} compact={false} countProps={{ overflowCount: 999, title: false }} /></span>
       </NavBadgeHint>
     );
@@ -71,6 +75,7 @@ const badgeSlotStyle: CSSProperties = {
   display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) max-content', alignItems: 'center',
   gap: space[0], paddingInlineEnd: space[1],
 };
+const badgeTitleStyle: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis' };
 // 折叠菜单会隐藏图标之后的 span，提示的热区放在图标之前。
 const collapsedBadgeHintStyle: CSSProperties = { position: 'absolute', inset: 0, zIndex: 1 };
 
@@ -161,10 +166,14 @@ const sharedFilters: Partial<Record<NavPath, readonly string[]>> = {
   '/progress': ['store', 'scope'],
   '/dashboard': ['preset', 'from', 'to', 'lane'],
 };
+const otherTodayViews = new Set<string | null>(['arrivals', 'schedule']);
 
 function destinationHref({ row, destination, location }: { readonly row: NavRow; readonly destination: NavDestination; readonly location: NavLocation }): string {
   if (!location.pathname.startsWith(row.to) || !destination.to.startsWith(row.to)) return destination.to;
   const previous = new URLSearchParams(location.search);
+  if (location.pathname === '/today' && destination.to === todayArrivalsPath && !otherTodayViews.has(previous.get('view'))) {
+    return arrivalShortcutPath({ returnSearch: location.search });
+  }
   const [path, search] = destination.to.split('?');
   const next = new URLSearchParams(search);
   for (const key of sharedFilters[row.to] ?? []) {

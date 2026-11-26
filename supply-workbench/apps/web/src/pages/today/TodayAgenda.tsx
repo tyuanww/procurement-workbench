@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { Button, Card, Flex, Typography } from 'antd';
-import type { TodayResponse } from '@sw/contracts';
-import { rowStyle, TodayOrderLink, type BoardRow, type PlanRow } from '../../features/today/index.js';
+import { rowStyle, TodayReceiptLink, type BoardRow, type PlanRow, type ReceiptWork } from '../../features/today/index.js';
 import { space } from '../../theme/tokens.js';
 import { workspaceRowId } from './today-focus.js';
 
 export const PLAN_TASK_TARGET = 'today-plan-tasks';
 
-export type ReceiptWork = TodayResponse['arrivalMemos'][number];
+export type { ReceiptWork } from '../../features/today/index.js';
 
 export function arrivalWork(memos: readonly ReceiptWork[], rows: readonly BoardRow[]) {
   const byBatch = new Map(memos.filter((memo) => memo.status !== 'in_transit').map((memo) => ['batch:' + memo.batchId, memo]));
@@ -42,8 +41,5 @@ export function planTaskCards({ tasks, focus, onOpen }: {
 export function ReceiptAction({ memo, isFocused }: { readonly memo: ReceiptWork; readonly isFocused: boolean }) {
   const link = useRef<HTMLAnchorElement>(null);
   useEffect(() => { if (isFocused) link.current?.focus(); }, [isFocused]);
-  const label = [memo.line.poRaw, memo.line.nameRaw, memo.batchSeq == null ? null : '第 ' + memo.batchSeq + ' 批'].filter(Boolean).join(' · ');
-  return <TodayOrderLink order={{ lineId: memo.line.id, batchId: memo.batchId }} arrivalFocusId={memo.batchId} focusRef={link}
-    primary ariaLabel={label === '' ? undefined : `核对收货 ${label}`}>核对收货
-  </TodayOrderLink>;
+  return <TodayReceiptLink memo={memo} focusRef={link} />;
 }

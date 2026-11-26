@@ -4,6 +4,7 @@ import type { TodayPageResponse, TodoItemView } from '../../packages/contracts/s
 import { localDate } from '../../packages/domain/src/index.js';
 import type { DailyPlan, WorkItem } from '../../apps/web/src/features/today/index.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
+import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { act, button, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
 import { antdApp, batchTodo, LocationAndToday, pageBody } from './today-workspace-fixture.js';
 
@@ -11,12 +12,15 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
   emptyReads();
   installMatchMedia();
   installFetch();
-  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?view=board'));
+  const tree = element(ActorRoles, { roles: ['buyer'], children: element(LocationAndToday) });
+  const root = mount(memoryRouter(antdApp(tree), '/today?view=board'));
   const mixed = batchTodo(1);
   if (mixed.batch === null || mixed.line === null) throw new Error('缺少样例批次');
   const due = localDate('2026-11-20');
   const batch: TodoItemView = {
-    ...mixed, reasons: ['shipped_not_received', 'note_missing'], dueDate: due, waitingOn: { kind: 'internal', partyId: null },
+    ...mixed, reasons: ['shipped_not_received', 'unshipped'], dueDate: due,
+    waitingOn: { kind: 'supplier', partyId: 'sample-factory' },
+    waitingOnParty: { id: 'sample-factory', displayName: '样例工厂', rawName: null },
     reminderTarget: { kind: 'supplier', name: '样例工厂' },
     batch: { ...mixed.batch, plannedQty: 1100, status: 'partially_received', nextFollowUpAt: '2026-11-22T01:00:00.000Z',
       latestFollowUp: { id: 'last-note', text: '回查最近一次催货记录', createdAt: '2026-11-20T01:00:00.000Z' },
@@ -45,13 +49,22 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
     const facts = receipt.textContent ?? '';
     expect(receipt.closest('article')?.getAttribute('aria-label')).toBe('PO · 同名样品 · 第 1 批');
     expect(facts).toMatch(/同名样品.*到仓逾期.*第 1 批.*采购确认到仓日 2026-11-20.*收货方 上海仓.*核对收货/);
-    expect(facts).not.toMatch(/单号 PO|内部（等回单）|下次跟进|回查最近一次催货记录/);
+    expect(facts).not.toMatch(/单号 PO|样例工厂|下次跟进|回查最近一次催货记录/);
     click(button('查看详情'));
     await waitFor(() => textOf('[role="dialog"]').includes('最近跟进 · 回查最近一次催货记录'));
     const detail = textOf('[role="dialog"]');
-    expect(detail).toContain('等待方 · 内部（等回单）');
+    expect(detail).toContain('收货方 · 上海仓');
+    expect(detail).toContain('催货对象 · 样例工厂');
     expect(detail).toContain('下次跟进 · 2026-11-22');
     expect(detail).toContain('催货 · 样例工厂');
+    const drawer = document.querySelector('[role="dialog"]');
+    const receiptLink = drawer?.querySelector('a[aria-label="核对收货 PO · 同名样品 · 第 1 批"]');
+    expect(receiptLink?.getAttribute('href')).toBe(primary.getAttribute('href'));
+    expect(receiptLink?.classList.contains('ant-btn-variant-outlined')).toBe(true);
+    const ship = button('登记发货');
+    expect(ship.classList.contains('ant-btn-variant-text')).toBe(true);
+    click(ship);
+    await waitFor(() => new URLSearchParams(textOf('output')).get('draft') === 'ship');
   } finally {
     act(() => { root.unmount(); });
     resetDom();

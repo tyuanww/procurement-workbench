@@ -3,6 +3,18 @@ import type { GroupMode } from './types.js';
 
 export const todayArrivalsPath = '/today?view=arrivals';
 
+export type ArrivalTiming = 'overdue' | 'due_today';
+
+export function arrivalShortcutPath({ timing, returnSearch }: { readonly timing?: ArrivalTiming; readonly returnSearch: string }) {
+  const path = new URLSearchParams();
+  const action = new URLSearchParams(returnSearch);
+  if (action.get('view') === 'arrivals') action.delete('view');
+  for (const key of ['timing', 'focusBatch', 'actionReturn', 'drawer', 'draft']) action.delete(key);
+  if (timing !== undefined) path.set('timing', timing);
+  if (action.size > 0) path.set('actionReturn', action.toString());
+  return path.size === 0 ? todayArrivalsPath : todayArrivalsPath + '&' + path;
+}
+
 /** 工作台和排期共享抽屉导航。 */
 export type TodayView = 'action' | 'schedule';
 

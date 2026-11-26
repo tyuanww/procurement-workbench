@@ -89,6 +89,7 @@ describe('壳标记', () => {
     const collapsed = render(true);
     const badge = expanded.match(/<sup[^>]+class="[^"]*ant-badge-count[^>]*>(.*?)<\/sup>/)?.[1];
     expect(badge?.replace(/<[^>]+>/g, '')).toBe(shown);
+    expect(expanded).toContain(`>${range}需关注</span>`);
     for (const html of [expanded, collapsed]) {
       expect(html).toContain(`hidden="">${range}需关注 ${count} 项</span>`);
       expect(html).toContain('>今日事项<');

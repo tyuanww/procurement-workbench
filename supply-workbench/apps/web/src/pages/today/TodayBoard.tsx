@@ -5,8 +5,8 @@ import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
 import {
-  ArrivalMemos, TodayDrawer, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf,
-  type ActionDetail, type BoardRow, type GroupMode, type OpenForm, type PlanLoad, type QuickAction, type TodayBoard,
+  ArrivalMemos, TodayDrawer, arrivalShortcutPath, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf,
+  type ActionDetail, type ArrivalTiming, type BoardRow, type GroupMode, type OpenForm, type PlanLoad, type QuickAction, type ReceiptWork, type TodayBoard,
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { ActionPageControls } from './ActionControls.js';
@@ -15,7 +15,7 @@ import { PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendin
 import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
 import { arrivalWork, planTaskCards } from './TodayAgenda.js';
-import { arrivalShortcutPath, TodayAgendaShortcuts, TodayLinks, useAgendaJump, type ArrivalTiming } from './TodayLinks.js';
+import { TodayAgendaShortcuts, TodayLinks, useAgendaJump } from './TodayLinks.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
 import type { WorkspaceInbox } from './action-query.js';
@@ -110,16 +110,21 @@ function TodayReady(props: TodayScreenProps): ReactNode {
   const view = todayViewOf(props.board.group);
   if (props.arrivalsView !== undefined) return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
   const isSchedule = view === 'schedule';
+  const receipts = workspaceReceipts(props);
   return (
     <section className={isSchedule ? undefined : 'today-workspace-screen'} style={screenStyle()}>
       <style>{todayMotionCss()}</style>
       <PageHeader title={isSchedule ? '今日排期' : '个人工作台'} />
-      {isSchedule ? <SchedulePane {...props} /> : <ActionPane {...props} />}
-      <PageDrawers {...props} />
+      {isSchedule ? <SchedulePane {...props} /> : <ActionPane {...props} receipts={receipts} />}
+      <PageDrawers {...props} receipt={props.drawerId === null ? undefined : receipts.get(props.drawerId)} />
       <ShortcutHelp isOpen={props.isHelpOpen} isNavigationOnly={isSchedule || props.canRecord === false} onClose={props.onCloseHelp ?? noop} />
       <div role="status" style={helpStyle()}>{props.notice}</div>
     </section>
   );
+}
+
+function workspaceReceipts({ board, arrivalMemos }: Pick<TodayScreenProps, 'board' | 'arrivalMemos'>) {
+  return arrivalWork(arrivalMemos ?? [], board.body.kind === 'groups' ? board.body.rows : []);
 }
 
 function ShortcutHelp({ isOpen, isNavigationOnly, onClose }: { readonly isOpen: boolean; readonly isNavigationOnly: boolean; readonly onClose: () => void }) {
@@ -145,8 +150,8 @@ function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['
   </section>;
 }
 
-function ActionPane(props: TodayScreenProps): ReactNode {
-  const { board, actionPage: page, workspace } = props;
+function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<string, ReceiptWork> }): ReactNode {
+  const { actionPage: page, workspace, receipts } = props;
   const summary = actionSummary(props);
   const inbox = workspace?.inbox ?? 'today';
   const { navigation, jump } = useBoardNavigation(props, inbox);
@@ -156,7 +161,6 @@ function ActionPane(props: TodayScreenProps): ReactNode {
     canFocus: page?.isSettled !== false,
     onChanged: props.onPendingBatchChanged,
   });
-  const receipts = arrivalWork(summary.arrivals, board.body.kind === 'groups' ? board.body.rows : []);
   const display = actionDisplay(props);
   return <>
     <TodayLinks page={page} asOf={props.asOf}
@@ -202,13 +206,12 @@ function boardFocusId({ pendingFocusId, arrivalFocusId, search }: TodayScreenPro
   return params.get('drawer') ?? params.get('focusId');
 }
 
-function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, arrivalMemos, onRetryPlan, board, actionPage }: TodayScreenProps) {
+function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFocusId, onRetryPlan, board, actionPage }: TodayScreenProps) {
   const canShowInternal = isInternalWorkVisible ?? !isActionFiltered({ board, page: actionPage });
   return {
     tasks: canShowInternal && myPlan?.kind === 'ready' ? myPlan.rows : [],
     pendingRows: canShowInternal ? pendingBatch ?? [] : [],
     pendingFocusId: pendingFocusId ?? null,
-    arrivals: arrivalMemos ?? [],
     onRetryPlan: onRetryPlan ?? noop,
   };
 }
@@ -250,7 +253,7 @@ function SchedulePane(props: TodayScreenProps): ReactNode {
   );
 }
 
-function PageDrawers(props: TodayScreenProps): ReactNode {
+function PageDrawers(props: TodayScreenProps & { readonly receipt: ReceiptWork | undefined }): ReactNode {
   const taskId = taskIdOf(props.drawerId);
   return (
     <>
@@ -259,6 +262,7 @@ function PageDrawers(props: TodayScreenProps): ReactNode {
         detail={props.drawerId === null ? undefined : props.detailOf?.(props.drawerId)}
         batchSeq={props.drawerId === null ? undefined : props.batchSeqOf?.(props.drawerId)}
         fulfillment={props.drawerId === null ? undefined : props.fulfillmentOf?.(props.drawerId)}
+        receipt={props.receipt}
         onQuick={(kind) => { if (props.drawerId !== null) props.onQuick({ id: props.drawerId, kind }); }}
         isOpen={props.drawerId !== null && taskId === null}
         draft={props.draft}

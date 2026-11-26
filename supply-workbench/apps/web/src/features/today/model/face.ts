@@ -12,13 +12,18 @@ export function faceOf(item: BoardItem): RowFace {
     productName: missingGlyph(item.productName),
     ...(item.isUnassigned === true ? { isUnassigned: true } : {}),
     date: item.dueDate === null ? MISSING : item.dueDate,
-    waiting: item.waitingKind === 'internal' && item.reasons.includes('note_missing') ? `${item.waitingName}（等回单）` : item.waitingName,
+    ...waitingOf(item),
     ...quantitiesOf(item),
     ...(item.latestFollowUp === undefined ? {} : { latestFollowUp: item.latestFollowUp }),
     ...(item.latestPromise === undefined ? {} : { latestPromise: item.latestPromise }),
     ...(item.nextFollowUpAt === undefined ? {} : { nextFollowUpAt: item.nextFollowUpAt }),
     ...(item.nextFollowUpTarget === undefined ? {} : { nextFollowUpTarget: item.nextFollowUpTarget }),
   };
+}
+
+function waitingOf(item: BoardItem): Pick<RowFace, 'waiting' | 'waitingKind'> {
+  const waiting = item.waitingKind === 'internal' && item.reasons.includes('note_missing') ? `${item.waitingName}（等回单）` : item.waitingName;
+  return { waiting, ...(item.waitingKind === undefined ? {} : { waitingKind: item.waitingKind }) };
 }
 
 function quantitiesOf(item: BoardItem): Pick<RowFace, 'remaining' | 'inTransit'> {

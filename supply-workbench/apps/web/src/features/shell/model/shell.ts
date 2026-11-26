@@ -32,7 +32,7 @@ export type NavRow = {
   readonly label: string;
   readonly matchPaths: readonly string[];
   readonly badge: BadgeMark;
-  readonly badgeDescription?: string;
+  readonly todayBadge?: { readonly label: string; readonly description: string };
   readonly destinations?: NavRoute['destinations'];
 };
 
@@ -153,13 +153,17 @@ function navRow(input: {
   const label = to === '/imports' && !can({ roles: input.roles }, 'master.review') ? '导入中心' : input.entry.label;
   const destinations = input.entry.destinations?.filter((destination) => allows({ gate: destination.gate ?? input.entry.gate, roles: input.roles }));
   const badge = badgeOf(input) ?? NO_BADGE;
+  const todayBadge = to === '/today' && badge.kind === 'count' ? todayBadgeText(todayScope(input), badge.value) : undefined;
   return {
     to, label, matchPaths, badge,
-    ...(to === '/today' && badge.kind === 'count'
-      ? { badgeDescription: `${todayScope(input) === 'all' ? '全范围' : '本人'}需关注 ${badge.value} 项` }
-      : {}),
+    ...(todayBadge === undefined ? {} : { todayBadge }),
     ...(destinations === undefined || destinations.length < 2 ? {} : { destinations }),
   };
+}
+
+function todayBadgeText(scope: ReturnType<typeof todayScope>, count: number) {
+  const label = scope === 'all' ? '全范围需关注' : '本人需关注';
+  return { label, description: `${label} ${count} 项` };
 }
 
 function allows(input: { readonly gate: PageGate; readonly roles: readonly Role[] }): boolean {

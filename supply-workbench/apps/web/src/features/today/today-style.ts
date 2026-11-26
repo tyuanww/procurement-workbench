@@ -25,10 +25,12 @@ export function todayMotionCss(): string {
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
     .today-kanban-lane[data-active="false"] { display: none; }
-    .today-lane-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${tiny}px; }
-    .today-lane-links > .ant-btn { min-block-size: 44px; block-size: auto; padding-inline: ${tiny}px; gap: ${tiny}px; font-size: ${fontSize.meta}px; white-space: normal; }
+    .today-lane-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${tiny}px; margin-block-end: ${small}px; }
+    .today-lane-links > .ant-btn { min-block-size: 44px; block-size: auto; padding-inline: ${tiny}px; gap: ${tiny}px; font-size: ${fontSize.meta}px; }
+    .today-lane-name { overflow: hidden; text-overflow: ellipsis; }
+    .today-lane-count { flex: none; font-variant-numeric: tabular-nums; }
     .today-lane-links > .ant-btn[aria-pressed="true"] { background: ${brand[100]}; color: ${brand[800]}; border-color: ${brand[600]}; }
-    .today-lane-heading { position: absolute; inline-size: 1px; block-size: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+    .today-kanban-lane .today-lane-heading { display: none; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
     ${todayRowCss()}
     ${todayWorkspaceCss()}
@@ -39,7 +41,7 @@ export function todayMotionCss(): string {
       .today-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .today-kanban-lane[data-active="false"] { display: flex; }
       .today-lane-links { display: none; }
-      .today-lane-heading { position: static; inline-size: auto; block-size: auto; clip-path: none; overflow: visible; white-space: normal; }
+      .today-kanban-lane .today-lane-heading { display: flex; }
     }
     @media (any-pointer: coarse) {
       .today-touch .ant-btn, .today-touch .ant-select, .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a {

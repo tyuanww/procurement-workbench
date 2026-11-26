@@ -2,25 +2,12 @@ import { Button, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import type { TodayPaging, TodayResponse } from '@sw/contracts';
-import { todayArrivalsPath } from '../../features/today/index.js';
 import type { ActionPageControls } from './ActionControls.js';
 import { focusSection } from './today-focus.js';
 import { PENDING_BATCH_TARGET } from './PendingBatches.js';
 import type { WorkspaceInbox } from './action-query.js';
 import { PLAN_TASK_TARGET } from './TodayAgenda.js';
 import type { MyPlan } from './use-today-plan.js';
-
-export type ArrivalTiming = 'overdue' | 'due_today';
-
-export function arrivalShortcutPath({ timing, returnSearch }: { readonly timing?: ArrivalTiming; readonly returnSearch: string }) {
-  const path = new URLSearchParams();
-  const action = new URLSearchParams(returnSearch);
-  if (action.get('view') === 'arrivals') action.delete('view');
-  for (const key of ['timing', 'focusBatch', 'actionReturn', 'drawer', 'draft']) action.delete(key);
-  if (timing !== undefined) path.set('timing', timing);
-  if (action.size > 0) path.set('actionReturn', action.toString());
-  return path.size === 0 ? todayArrivalsPath : todayArrivalsPath + '&' + path;
-}
 
 const inboxes: readonly { readonly key: WorkspaceInbox; readonly label: string; readonly unit: string }[] = [
   { key: 'today', label: '今天要办', unit: ' 项' },
