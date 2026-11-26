@@ -138,7 +138,7 @@ function inDialog(target: EventTarget | null): boolean {
 }
 
 function isControl({ target, key }: KeyPress): boolean {
-  const control = closest(target, 'button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [role="menu"], [tabindex="0"], .today-calendar');
+  const control = closest(target, 'button, a[href], [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="option"], [role="menu"], [tabindex="0"]:not([role="tabpanel"]), .today-calendar');
   if (control === null) return false;
   const rowId = workspaceRowOf(control);
   const isRowControl = control === target && rowId !== null && control.id === workspaceRowId(rowId);

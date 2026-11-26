@@ -24,7 +24,7 @@ export type ActionPageControls = {
   readonly onFactory: (id: string) => void;
   readonly onCopyChase: (scope: ChaseScope) => void;
   readonly onConfirmCopy?: () => void;
-  readonly onCancelCopy?: () => void;
+  readonly onCancelCopyPreview?: () => void;
   readonly onRetry: () => void;
 };
 
@@ -77,34 +77,28 @@ export function ActionPagination({ page }: { readonly page: ActionPageControls }
   );
 }
 
-export function ActionResult({ page, asOf }: { readonly page: ActionPageControls; readonly asOf?: string | undefined }) {
-  const message = actionResultMessage(page, asOf);
+export function ActionResult({ page, calendarCount }: { readonly page: ActionPageControls; readonly calendarCount?: number | null }) {
+  const message = actionResultMessage(page, calendarCount);
   if (message === '') return null;
   return <Typography.Text role="status" type="secondary">{message}</Typography.Text>;
 }
 
-function actionResultMessage(page: ActionPageControls, asOf: string | undefined): string {
+function actionResultMessage(page: ActionPageControls, calendarCount: number | null | undefined): string {
   if (page.isLoading) return '正在更新待办…';
   if (page.loadError !== '') return '工作台待办更新失败';
   const { paging } = page;
   const hasPages = paging.total > paging.pageSize;
-  const day = resultDay(page, asOf);
   const pageLabel = hasPages ? ` · 第 ${paging.page} 页` : '';
-  if (day !== undefined) return calendarResultMessage(page, day) + pageLabel;
+  if (calendarCount !== undefined) return calendarResultMessage(page, { count: calendarCount, pageLabel });
   if (!page.isFiltered && !hasPages) return '';
   const unit = page.sort.kind === 'bulk' ? `批未发 · 按${page.sort.unit}比较` : resultUnit(page);
   return `${page.isFiltered ? '匹配' : '共'} ${paging.total} ${unit}${pageLabel}`;
 }
 
-function calendarResultMessage(page: ActionPageControls, day: string): string {
-  const unit = page.inbox === 'scheduled' ? '批' : '项';
-  return `${day} · ${page.isFiltered ? '匹配 ' : ''}${page.paging.total} ${unit}`;
-}
-
-function resultDay(page: ActionPageControls, asOf: string | undefined): string | undefined {
-  if (page.calendar === undefined) return undefined;
-  const day = page.calendar === 'today' ? asOf : page.calendar;
-  return page.inbox === 'today' && day === asOf ? undefined : day;
+function calendarResultMessage(page: ActionPageControls, { count, pageLabel }: { readonly count: number | null; readonly pageLabel: string }): string {
+  if (!page.isSettled) return '正在更新待办…';
+  if (count === null) return '正在统计待办…';
+  return `${page.isFiltered ? '匹配 ' : ''}${count} ${page.inbox === 'scheduled' ? '批' : '项'}${pageLabel}`;
 }
 
 function resultUnit(page: ActionPageControls): string {

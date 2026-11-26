@@ -3,8 +3,90 @@ import { expect, it } from 'vitest';
 import type { TodoItemView } from '../../packages/contracts/src/index.js';
 import { localDate } from '../../packages/domain/src/index.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
-import { act, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf } from './party-preview-dom.js';
+import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
 import { antdApp, batchTodo, LocationAndToday, pageBody } from './today-workspace-fixture.js';
+
+it('今日事项的一级标签用键盘切换，面板对应选中标签，回到行动板时恢复原筛选', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?view=board&reasons=overdue'));
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: 'reasons=overdue', status: 200, body: { ...pageBody(1), items: [batchTodo(1)] } });
+    });
+    const [actions, schedule] = document.querySelectorAll<HTMLElement>('[role="tablist"][aria-label="今日事项视图"] [role="tab"]');
+    if (actions === undefined || schedule === undefined) throw new Error('没有今日事项的两个一级标签');
+    expect(actions.textContent).toContain('行动板');
+    expect(schedule.textContent).toContain('今日排期');
+    expect(actions.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[role="tabpanel"][aria-hidden="false"]')?.getAttribute('aria-labelledby')).toBe(actions.id);
+    expect(document.querySelector('[role="tabpanel"][aria-hidden="false"] #today-chase')).not.toBeNull();
+    act(() => { actions.focus(); });
+    act(() => { actions.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true })); });
+    expect(document.activeElement).toBe(schedule);
+    expect(actions.getAttribute('aria-selected')).toBe('true');
+    act(() => { schedule.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true })); });
+    const params = new URLSearchParams(textOf('output'));
+    expect(params.get('group')).toBe('schedule');
+    expect(params.get('workspaceReturn')).toBe('view=board&reasons=overdue');
+    expect(schedule.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[role="tabpanel"][aria-hidden="false"]')?.getAttribute('aria-labelledby')).toBe(schedule.id);
+    expect(document.querySelector('#today-chase')).toBeNull();
+    click(actions);
+    expect(textOf('output')).toBe('view=board&reasons=overdue');
+    expect(actions.getAttribute('aria-selected')).toBe('true');
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
+it('点卡片选中对应批次，j 和 k 在当前面板切换，Enter 与标题打开各自的详情', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today'));
+  const current = () => textOf('.today-work-card[data-current="true"]');
+  const press = (key: string) => act(() => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  });
+  const opened = () => new URLSearchParams(textOf('output')).get('drawer');
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: '/api/v1/today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batchTodo(2)] } });
+    });
+    expect(document.querySelector('.today-work-card[data-current="true"]')).toBeNull();
+    const second = document.getElementById('today-row-batch:batch-2');
+    const secondFacts = second?.querySelector<HTMLElement>('.today-row-facts');
+    if (secondFacts === undefined || secondFacts === null) throw new Error('没有第 2 批事实');
+    click(secondFacts);
+    expect(current()).toContain('第 2 批');
+    expect(opened()).toBeNull();
+    expect(document.activeElement).toBe(second);
+    press('j');
+    expect(current()).toContain('第 1 批');
+    expect(document.activeElement?.id).toBe('today-row-batch:batch-1');
+    press('k');
+    expect(current()).toContain('第 2 批');
+    expect(document.activeElement).toBe(second);
+    press('Enter');
+    await waitFor(() => opened() === 'batch:batch-2');
+    expect(textOf('[role="dialog"]')).toContain('第 2 批');
+    press('Escape');
+    await waitFor(() => opened() === null);
+    click(button('查看详情 PO · 同名样品 · 第 1 批'));
+    await waitFor(() => opened() === 'batch:batch-1');
+    expect(textOf('[role="dialog"]')).toContain('第 1 批');
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
 
 it('原位切换列表与看板，进出日历保留清单分页、筛选和键盘焦点', async () => {
   emptyReads();

@@ -6,8 +6,9 @@ import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwrigh
 
 const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
 const batch = 'hz09-batch-501';
-const filterName = '筛选待办';
-const chaseName = '按工厂复制催单';
+const filterName = '筛选';
+const filterTrigger = /^筛选(?:（\d+）)?$/u;
+const chaseName = '按工厂复制';
 
 export function seedChaseSample(): void {
   seedDemoFixture(sample);
@@ -49,9 +50,9 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.getByRole('button', { name: chaseName, exact: true }).click();
   const factoryDialog = page.getByRole('dialog', { name: chaseName, exact: true });
   const copiedBeforePreview = await clipboardText(page);
-  const filteredCopy = factoryDialog.getByRole('button', { name: /复制当前范围催单/ });
+  const filteredCopy = factoryDialog.getByRole('button', { name: /^预览筛选汇总/ });
   await filteredCopy.click();
-  const preview = page.getByRole('dialog', { name: '预览跨厂催货汇总' });
+  const preview = page.getByRole('dialog', { name: '预览内部催货汇总' });
   await preview.getByText(/当前筛选.*2 家工厂.*501 批/).waitFor();
   await factoryDialog.waitFor({ state: 'hidden' });
   assert.equal(await clipboardText(page), copiedBeforePreview);
@@ -66,14 +67,13 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.ok(allText.startsWith('【内部催货汇总 · 2 家工厂】'));
   assert.deepEqual(purchaseOrders(allText), sampleOrders(501));
   assert.ok(allText.includes('合成催货甲厂') && allText.includes('合成催货乙厂'));
-  const factoryCopy = factoryDialog.getByRole('button', { name: '复制该工厂筛选催单', exact: true });
-  assert.equal(await factoryCopy.isEnabled(), false);
+  assert.equal(await factoryDialog.getByRole('button', { name: '复制催单', exact: true }).isEnabled(), false);
   await factoryDialog.getByRole('radio', { name: '合成催货乙厂 · 1 批', exact: true }).waitFor();
   const factoryOption = { name: '合成催货甲厂 · 500 批', exact: true };
   await factoryDialog.getByRole('radio', factoryOption).click();
   await page.waitForURL((url) => url.searchParams.get('chaseFactory') === 'hz09-factory-a' && url.searchParams.get('page') === '11');
   await factoryDialog.getByRole('radio', { ...factoryOption, checked: true }).waitFor();
-  await factoryCopy.click();
+  await factoryDialog.getByRole('button', { name: '复制该厂 500 批', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
   const factoryText = await clipboardText(page);
   assert.deepEqual(purchaseOrders(factoryText), sampleOrders(501).filter((po) => po !== 'HZ09-0250'));
@@ -97,17 +97,18 @@ export async function checkChaseToday({ page, origin, out }: {
   assert.match(sorted[1] ?? '', /HZ09-0001/);
   assert.equal(await order('HZ09-0002').count(), 0);
   const clearFilters = page.getByRole('button', { name: '清除筛选', exact: true });
-  await clearFilters.evaluate((clear, label) => {
-    const open = globalThis.document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  await clearFilters.evaluate((clear) => {
+    const open = globalThis.document.querySelector<HTMLButtonElement>('.today-toolbar-filter');
     if (!(clear instanceof HTMLButtonElement) || open === null) throw new Error('缺少清除筛选或打开筛选的按钮');
     // Reopen before React Router renders the URL change.
     clear.click();
     open.click();
-  }, filterName);
+  });
   await clearFilters.waitFor({ state: 'hidden' });
   await page.waitForURL(({ searchParams }) => !['reasons', 'sort', 'unit', 'work'].some((key) => searchParams.has(key)));
   const clearedFilterUrl = page.url();
   const filters = page.getByRole('dialog', { name: filterName, exact: true });
+  await filters.getByRole('button', { name: '显示选项', exact: true }).click();
   await filters.getByText('批次按紧急度', { exact: true }).waitFor();
   await filters.getByRole('button', { name: '取消', exact: true }).click();
   await filters.waitFor({ state: 'hidden' });
@@ -122,9 +123,10 @@ export async function checkChaseToday({ page, origin, out }: {
   await tools.and(page.locator(':focus')).waitFor();
   await tools.click();
   await page.getByRole('menuitem', { name: filterName, exact: true }).click();
+  await filters.getByRole('button', { name: '显示选项', exact: true }).click();
   await filters.getByText('批次按紧急度', { exact: true }).waitFor();
-  await filters.getByRole('button', { name: /^要催货/ }).click();
-  await filters.getByRole('button', { name: /^要催货/, pressed: true }).waitFor();
+  await filters.getByRole('radio', { name: /^要催货/ }).click();
+  await filters.getByRole('radio', { name: /^要催货/, checked: true }).waitFor();
   assert.equal(page.url(), clearedFilterUrl);
   await filters.getByRole('button', { name: '应用筛选', exact: true }).click();
   await page.waitForURL(({ searchParams }) => searchParams.get('work') === 'factory_chase' && !searchParams.has('sort'));
@@ -188,7 +190,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.getByRole('status').filter({ hasText: '已复制 499 条催单' }).waitFor();
   const after = purchaseOrders(await clipboardText(page));
   assert.deepEqual(after, sampleOrders(501).filter((po) => po !== 'HZ09-0501' && po !== 'HZ09-0002'));
-  await copyChaseSummary(page, factoryDialog.getByRole('button', { name: /复制全部可催/ }));
+  await copyChaseSummary(page, factoryDialog.getByRole('button', { name: /^预览今日汇总/ }));
   await page.getByRole('status').filter({ hasText: '已复制 500 条催单' }).waitFor();
   assert.deepEqual(purchaseOrders(await clipboardText(page)), sampleOrders(501).filter((po) => po !== 'HZ09-0501'));
   await preview.waitFor({ state: 'hidden' });
@@ -201,24 +203,26 @@ export async function checkChaseToday({ page, origin, out }: {
 
 async function copyChaseSummary(page: Page, button: Locator): Promise<void> {
   await button.click();
-  await page.getByRole('dialog', { name: '预览跨厂催货汇总' }).getByRole('button', { name: '复制内部汇总' }).click();
+  await page.getByRole('dialog', { name: '预览内部催货汇总' }).getByRole('button', { name: '复制内部汇总' }).click();
 }
 
 async function checkActionViewSwitch(page: Page): Promise<void> {
   const view = page.getByRole('radiogroup', { name: '工作台视图' });
   const list = view.getByRole('radio', { name: '列表', exact: true });
   const kanban = view.getByRole('radio', { name: '看板', exact: true });
-  const filters = page.getByRole('button', { name: filterName, exact: true });
+  const filters = page.getByRole('button', { name: filterTrigger });
   const dialog = page.getByRole('dialog', { name: filterName, exact: true });
   const groups = dialog.getByRole('radiogroup', { name: '清单分组' });
+  const displayOptions = dialog.getByRole('button', { name: '显示选项', exact: true });
   assert.equal(await view.getByRole('radio').count(), 3);
   assert.equal(await list.isChecked(), true);
   await filters.click();
+  await displayOptions.click();
   assert.equal(await groups.getByRole('radio', { name: '等待方', exact: true }).isChecked(), true);
   const initialUrl = page.url();
-  const stillUnshipped = dialog.getByRole('button', { name: /^仍待发/ });
+  const stillUnshipped = dialog.getByRole('checkbox', { name: /^仍待发/ });
   await stillUnshipped.click();
-  await dialog.getByRole('button', { name: /^仍待发/, pressed: false }).waitFor();
+  await dialog.getByRole('checkbox', { name: /^仍待发/, checked: false }).waitFor();
   assert.equal(page.url(), initialUrl);
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
@@ -226,7 +230,8 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   assert.equal(page.url(), initialUrl);
 
   await filters.click();
-  await dialog.getByRole('button', { name: /^仍待发/, pressed: true }).waitFor();
+  await dialog.getByRole('checkbox', { name: /^仍待发/, checked: true }).waitFor();
+  await displayOptions.click();
   const reasonGroup = groups.getByRole('radio', { name: '原因', exact: true });
   await reasonGroup.press('Space');
   await groups.getByRole('radio', { name: '原因', exact: true, checked: true }).waitFor({ state: 'attached' });
@@ -240,6 +245,7 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
     { name: '日期', group: 'date' },
   ]) {
     await filters.click();
+    await displayOptions.click();
     const option = groups.getByRole('radio', { name, exact: true });
     const before = page.url();
     await option.press('Space');
@@ -258,7 +264,8 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   assert.equal(await page.evaluate(() => window.history.length), historyEntries);
   await page.getByRole('region', { name: '跟进供应商', exact: true }).getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
   await filters.click();
-  await dialog.getByRole('button', { name: '应用筛选', exact: true }).and(page.locator(':focus')).waitFor();
+  await dialog.getByRole('radio', { name: '全部', exact: true }).and(page.locator(':focus')).waitFor();
+  await displayOptions.click();
   assert.equal(await groups.count(), 0);
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'hidden' });
@@ -266,12 +273,13 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('page') === '11');
   await list.and(page.locator(':focus')).waitFor({ state: 'attached' });
   await filters.click();
+  await displayOptions.click();
   await groups.getByRole('radio', { name: '日期', exact: true, checked: true }).waitFor({ state: 'attached' });
 
   const before = page.url();
-  await dialog.getByRole('button', { name: /^要催货/ }).click();
-  await dialog.getByRole('button', { name: /^仍待发/, pressed: true }).waitFor();
-  await dialog.getByRole('button', { name: /^未发逾期/ }).click();
+  await dialog.getByRole('radio', { name: /^要催货/ }).click();
+  await dialog.getByRole('checkbox', { name: /^仍待发/, checked: true }).waitFor();
+  await dialog.getByRole('checkbox', { name: /^未发逾期/ }).click();
   await groups.getByRole('radio', { name: '原因', exact: true }).press('Space');
   await dialog.getByRole('combobox', { name: '排序', exact: true }).click();
   await page.getByRole('option', { name: '大批优先 · 同单位列表', exact: true }).click();
@@ -434,9 +442,9 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
 }) {
   await page.goto(new URL('/today', origin).href);
   const scheduled = page.getByRole('menuitem', { name: /^已约跟进\s*1/ });
-  const filters = page.getByRole('button', { name: filterName, exact: true });
+  const filters = page.getByRole('button', { name: filterTrigger });
   const dialog = page.getByRole('dialog', { name: filterName, exact: true });
-  const due = dialog.getByRole('button', { name: '到时跟进 1', exact: true });
+  const due = dialog.getByRole('checkbox', { name: '到时跟进 1', exact: true });
   await page.getByRole('button', { name: /切换工作范围$/u }).click();
   await scheduled.click();
   await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled' && !url.searchParams.has('unit'));
@@ -459,7 +467,7 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
   await page.reload();
   await dueTime.waitFor();
   await filters.click();
-  await dialog.getByRole('button', { name: '到时跟进 1', exact: true, pressed: true }).waitFor();
+  await dialog.getByRole('checkbox', { name: '到时跟进 1', exact: true, checked: true }).waitFor();
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'hidden' });
 

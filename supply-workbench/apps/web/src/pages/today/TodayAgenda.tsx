@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Button, Card, Flex, Typography } from 'antd';
-import { rowStyle, TodayReceiptLink, type BoardRow, type PlanRow, type ReceiptWork } from '../../features/today/index.js';
+import { TodayReceiptLink, type BoardRow, type PlanRow, type ReceiptWork } from '../../features/today/index.js';
 import { space } from '../../theme/tokens.js';
 import { restoreWorkspaceLinkFocus, workspaceRowId } from './today-focus.js';
 
@@ -25,7 +25,7 @@ export function planTaskCards({ tasks, focus, onOpen }: {
   readonly onOpen: (id: string) => void;
 }) {
   return tasks.map((task, index) => <li key={task.id} {...(index === 0 ? { id: PLAN_TASK_TARGET, className: 'today-jump-target', tabIndex: -1 } : {})}>
-    <article><Card className="today-row today-work-card" size="small" style={rowStyle({ isFocused: focus === task.id, isFading: false })}>
+    <article><Card className="today-row today-work-card" size="small" data-current={focus === task.id || undefined}>
       <Flex className="today-touch today-plan-summary" vertical align="start" gap={space[0]}>
         <Flex vertical align="start" gap={space[0]}>
           <Typography.Text type="secondary">排期任务</Typography.Text>

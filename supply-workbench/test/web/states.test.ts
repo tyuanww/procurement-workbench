@@ -41,11 +41,9 @@ describe('加载、错误和空态', () => {
 });
 
 describe('动效', () => {
-  it('今日淡出 180 毫秒，减少动态效果时关掉', () => {
+  it('今日淡出与当前项高亮只在允许动效时过渡', () => {
     const css = todayMotionCss();
-    expect(css).toContain('opacity 180ms');
-    expect(css).toContain('prefers-reduced-motion: reduce');
-    expect(css).toMatch(/transition:\s*none/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{\s*\.today-row\s*\{[^}]*opacity 180ms[^}]*background-color 150ms/);
   });
 });
 

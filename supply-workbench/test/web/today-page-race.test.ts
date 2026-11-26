@@ -104,7 +104,7 @@ it('未发与在途数量待核时，详情仍列出已核实的实收数量', (
 });
 
 function keyboardRow(): string | null {
-  const row = [...document.querySelectorAll<HTMLElement>('.today-row')].find((item) => item.style.outlineStyle === 'solid');
+  const row = document.querySelector('.today-work-card[data-current="true"]');
   return row?.querySelector('button[aria-label^="查看详情"]')?.getAttribute('aria-label') ?? null;
 }
 
@@ -127,9 +127,13 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
       fulfill({ urlPart: '/api/v1/today', status: 200, body: result([...factories, internal]) });
     });
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
-    const filter = button('筛选待办');
+    const filter = button('筛选');
     click(filter);
-    click(button('要催货2批'));
+    const all = filterChoice('radio', '全部');
+    await waitFor(() => document.activeElement === all);
+    expect(all.checked).toBe(true);
+    click(filterChoice('radio', '要催货 2 批'));
+    expect(all.checked).toBe(false);
     expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
     click(button('应用筛选'));
@@ -137,12 +141,11 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     expect(document.querySelectorAll('.today-row')).toHaveLength(2);
     expect(textOf('#today-chase')).toContain('匹配 2 批待催货');
     expect(textOf('#today-chase')).not.toContain('当前筛选 · 要催货');
+    expect(button('筛选（1）')).toBe(filter);
     await waitFor(() => document.activeElement?.id === 'today-chase');
 
     click(filter);
-    const internalOption = [...document.querySelectorAll('[role="dialog"] button')].find((option) => /内部等回单\s*1\s*批/u.test(option.textContent ?? ''));
-    if (!(internalOption instanceof HTMLButtonElement)) throw new Error('没有内部等回单筛选');
-    click(internalOption);
+    click(filterChoice('radio', '内部等回单 1 批'));
     click(button('应用筛选'));
     await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
@@ -174,29 +177,38 @@ it('到时跟进只有一个筛选入口且保留其他已选原因', async () =
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
       fulfill({ urlPart: 'reasons=overdue', status: 200, body: page });
     });
-    click(button('筛选待办'));
-    const due = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button[aria-pressed]')].filter((tag) => tag.textContent === '到时跟进 1');
-    expect(due).toHaveLength(1);
+    click(button('筛选（1）'));
+    const due = filterChoice('checkbox', '到时跟进 1');
     expect(document.querySelector('.today-toolbar-filter')?.getAttribute('aria-expanded')).toBe('true');
     expect(textOf('#today-chase')).not.toContain('到时跟进 1 批');
-    const option = due[0];
-    if (option === undefined) throw new Error('没有到时跟进筛选');
-    click(option);
+    click(due);
     expect(new URLSearchParams(textOf('output')).get('reasons')).toBe('overdue');
     click(button('取消'));
     expect(new URLSearchParams(textOf('output')).get('reasons')).toBe('overdue');
-    click(button('筛选待办'));
-    expect(button('到时跟进1').getAttribute('aria-pressed')).toBe('false');
-    click(button('到时跟进1'));
+    click(button('筛选（1）'));
+    const reopened = filterChoice('checkbox', '到时跟进 1');
+    expect(reopened.checked).toBe(false);
+    click(reopened);
     click(button('应用筛选'));
     const reasons = new URLSearchParams(textOf('output')).get('reasons');
     expect(reasons?.split(',').sort()).toEqual(['follow_up_due', 'overdue']);
+    expect(button('筛选（2）')).toBeDefined();
   } finally {
     act(() => { root.unmount(); });
     resetDom();
     emptyReads();
   }
 });
+
+function filterChoice(type: 'radio' | 'checkbox', label: string): HTMLInputElement {
+  const choices = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')]
+    .filter((option) => option.textContent === label)
+    .flatMap((option) => [...option.querySelectorAll<HTMLInputElement>(`input[type="${type}"]`)]);
+  expect(choices).toHaveLength(1);
+  const [choice] = choices;
+  if (choice === undefined) throw new Error(`没有筛选条件 ${label}`);
+  return choice;
+}
 
 async function openOldLink({ target, isPresent }: { readonly target: string; readonly isPresent: boolean }) {
   emptyReads();

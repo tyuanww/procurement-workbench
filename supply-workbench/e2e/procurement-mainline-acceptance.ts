@@ -96,9 +96,8 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await page.screenshot({ path: join(out, 'procurement-schedule.png'), animations: 'disabled' });
   await checkScheduleWindow(page, origin, out);
   await page.goto(new URL('/today', origin).href);
-  const scheduleTab = page.getByRole('main').getByRole('radiogroup', { name: '今日事项视图', exact: true })
-    .getByRole('radio', { name: '今日排期', exact: true });
-  await scheduleTab.press('Space');
+  const scheduleTab = page.getByRole('main').getByRole('tab', { name: '今日排期', exact: true });
+  await scheduleTab.press('Enter');
   await page.waitForURL((url) => url.pathname === '/today' && url.searchParams.get('group') === 'schedule');
   await page.getByRole('button', { name: '下单', exact: true }).filter({ hasText: finishedPo }).press('Enter');
   const task = page.getByRole('dialog');

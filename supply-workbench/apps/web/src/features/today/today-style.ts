@@ -10,17 +10,8 @@ export function screenStyle(): CSSProperties {
   return { display: 'flex', flexDirection: 'column', gap: `var(--today-workspace-gap, ${regular}px)`, background: bg.page };
 }
 
-export function rowStyle(input: { readonly isFocused: boolean; readonly isFading: boolean }): CSSProperties {
-  return {
-    outline: input.isFocused ? `2px solid ${brand[600]}` : 'none',
-    outlineOffset: input.isFocused ? 2 : undefined,
-    opacity: input.isFading ? 0 : 1,
-  };
-}
-
 export function todayMotionCss(): string {
   return `
-    .today-row { transition: opacity 180ms ease-out; overflow-wrap: anywhere; }
     .today-action-list { list-style: none; margin: 0; padding: 0; }
     .today-priority-list { display: flex; flex-direction: column; gap: ${small}px; }
     .today-kanban { display: grid; grid-template-columns: minmax(0, 1fr); gap: ${regular}px; align-items: start; }
@@ -36,6 +27,7 @@ export function todayMotionCss(): string {
     ${todayRowCss()}
     ${todayWorkspaceCss}
     ${workspaceAssistantCss}
+    ${todayRowInteractionCss}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
     #today-chase { container: today-action / inline-size; }
@@ -55,9 +47,23 @@ export function todayMotionCss(): string {
       }
       .today-touch .ant-tag-checkable, .today-touch .ant-segmented-item-label, .today-touch > a { display: inline-flex; align-items: center; justify-content: center; }
     }
-    @media (prefers-reduced-motion: reduce) { .today-row { transition: none; } }
   `;
 }
+
+const todayRowInteractionCss = `
+    .today-row { overflow-wrap: anywhere; }
+    .today-row[data-fading="true"] { opacity: 0; }
+    .today-work-card[data-current="true"] { background-color: color-mix(in srgb, ${brand[100]} 40%, ${bg.surface}); }
+    .today-action-list > [id^="today-row-"]:focus-visible {
+      outline: 2px solid ${brand[600]}; outline-offset: -2px; border-radius: ${radiusCard}px;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .today-row { transition: opacity 180ms ease-out, background-color 150ms ease-out; }
+    }
+    @media (forced-colors: active) {
+      .today-work-card[data-current="true"] { outline: 1px solid Highlight; outline-offset: -1px; }
+    }
+  `;
 
 const todayWorkspaceCss = `
     .today-workspace-screen {
@@ -65,14 +71,15 @@ const todayWorkspaceCss = `
       inline-size: 100%;
     }
     .today-workspace-intro { display: grid; gap: ${small}px; }
-    .today-section-switch { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: ${small}px; border-block-end: 1px solid ${border}; }
+    .today-section-switch { row-gap: var(--today-workspace-gap, ${regular}px); }
+    .today-section-header { display: flex; align-items: center; flex-wrap: wrap; gap: 0 ${small}px; border-block-end: 1px solid ${border}; }
+    .today-section-switch .today-section-header > .today-section-tablist::before { content: none; }
     .today-section-switch .procurement-cutoff { font-size: ${fontSize.meta}px; }
-    .today-section-switch .ant-segmented { background: transparent; padding: 0; }
-    .today-section-switch .ant-segmented-group { gap: ${regular}px; }
-    .today-section-switch .ant-segmented-thumb { display: none; }
-    .today-section-switch .ant-segmented-item { border-radius: 0; border-block-end: 2px solid transparent; }
-    .today-section-switch .ant-segmented-item-selected { background: transparent; box-shadow: none; border-color: ${brand[600]}; color: ${brand[800]}; font-weight: 600; }
-    .today-section-switch .ant-segmented-item-label { display: grid; place-items: center; min-block-size: 40px; padding-inline: 0; }
+    .today-section-tab [role="tab"] { display: grid; place-items: center; min-block-size: 44px; padding-inline: ${small}px; }
+    .today-section-tab [role="tab"][aria-selected="true"] { color: ${brand[800]}; font-weight: 600; }
+    .today-section-tab [role="tab"]:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -3px; }
+    .today-section-switch .today-section-indicator { block-size: 0; border-block-end: 3px solid ${brand[600]}; }
+    .today-section-panel[aria-hidden="false"] { display: flex; flex-direction: column; gap: var(--today-workspace-gap, ${regular}px); }
     .today-action-summary { --metric-padding: ${medium}px ${regular}px; }
     .today-action-summary .ant-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .today-action-summary .ant-btn, .today-action-summary .ant-card { border-radius: ${radiusCard}px; min-block-size: 92px; }
@@ -144,6 +151,14 @@ const todayWorkspaceCss = `
       .today-toolbar .today-workspace-views .ant-segmented-item-label { display: grid; place-items: center; min-block-size: 44px; padding-inline: 2px; }
     }
 
+    @container today-workspace (max-width: 22rem) {
+      .today-procurement-summary { --metric-padding: ${tiny}px ${small}px; }
+      .today-procurement-summary .ant-btn, .today-procurement-summary .ant-card { min-block-size: 48px; }
+      .today-procurement-summary .ant-btn > span, .today-procurement-summary .ant-card-body {
+        display: grid; grid-template-columns: minmax(0, 1fr) fit-content(50%); align-items: center; gap: ${tiny}px;
+      }
+      .today-procurement-summary .ant-btn > span > span:first-child::after { display: none; }
+    }
   `;
 
 export function reasonStyle(): CSSProperties {

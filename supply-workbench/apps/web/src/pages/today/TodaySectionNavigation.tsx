@@ -1,18 +1,30 @@
+import { useId, type ReactNode } from 'react';
 import { useInRouterContext, useNavigate } from 'react-router';
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
+import { ContentTabs } from '../../shared/ui/view-switch.js';
 import type { TodayView } from '../../features/today/index.js';
-import { ViewSwitch } from '../../shared/ui/view-switch.js';
 
-const sections: { readonly value: TodayView; readonly label: string }[] = [{ value: 'action', label: '行动板' }, { value: 'schedule', label: '今日排期' }];
+const sections = [
+  { key: 'action', label: '行动板' },
+  { key: 'schedule', label: '今日排期' },
+] satisfies readonly { readonly key: TodayView; readonly label: string }[];
 
-export function TodaySectionNavigation(props: { readonly view: TodayView; readonly search: string }) {
-  return useInRouterContext() ? <TodaySectionSwitch {...props} /> : null;
+export function TodaySectionNavigation(props: { readonly view: TodayView; readonly search: string; readonly children: ReactNode }) {
+  return useInRouterContext() ? <TodaySectionTabs {...props} /> : props.children;
 }
 
-function TodaySectionSwitch({ view, search }: Parameters<typeof TodaySectionNavigation>[0]) {
+function TodaySectionTabs({ view, search, children }: Parameters<typeof TodaySectionNavigation>[0]) {
+  const id = useId();
   const navigate = useNavigate();
-  return <div className="today-section-switch today-touch">
-    <ViewSwitch<TodayView> aria-label="今日事项视图" value={view} options={sections} onChange={(next) => {
+  return <ContentTabs id={id} aria-label="今日事项视图" className="today-section-switch" activeKey={view} animated={false} tabBarGutter={16}
+    classNames={{ header: 'today-section-tablist', item: 'today-section-tab', indicator: 'today-section-indicator', content: 'today-section-panel' }}
+    styles={{ header: { flex: '1 1 9.5rem', minInlineSize: 'min(100%, 9.5rem)', margin: 0 }, item: { padding: 0 } }}
+    items={sections.map((section) => ({ ...section, forceRender: true, children: section.key === view ? children : undefined }))}
+    renderTabBar={(props, DefaultTabBar) => <div className="today-section-header">
+      <DefaultTabBar {...props} />
+      <ProcurementCutoff />
+    </div>}
+    onChange={(next) => {
       const current = new URLSearchParams(search);
       if (next === 'action') {
         const back = new URLSearchParams(current.get('workspaceReturn') ?? '');
@@ -23,7 +35,5 @@ function TodaySectionSwitch({ view, search }: Parameters<typeof TodaySectionNavi
       for (const key of ['drawer', 'draft']) current.delete(key);
       if (current.size > 0) target.set('workspaceReturn', current.toString());
       void navigate('/today?' + target);
-    }} />
-    <ProcurementCutoff />
-  </div>;
+    }} />;
 }

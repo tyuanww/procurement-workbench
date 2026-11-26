@@ -1,5 +1,5 @@
-import { AppstoreOutlined, CalendarOutlined, UnorderedListOutlined } from '@ant-design/icons';
-import { Button, Calendar, Card, ConfigProvider, DatePicker, Flex, Radio, Select, Typography, type CalendarProps, type ThemeConfig } from 'antd';
+import { AppstoreOutlined, CalendarOutlined, LeftOutlined, RightOutlined, UnorderedListOutlined } from '@ant-design/icons';
+import { Button, Calendar, Card, ConfigProvider, DatePicker, Flex, Typography, type ThemeConfig } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { useEffect, useId, useRef, useState, type ComponentRef, type KeyboardEvent } from 'react';
@@ -32,48 +32,45 @@ const calendarTheme: ThemeConfig = {
   components: { Calendar: { colorTextDisabled: text.tertiary, miniContentHeight: 188 } },
 };
 
-type CalendarMode = NonNullable<CalendarProps<Dayjs>['mode']>;
-type CalendarPanel = { readonly day: Dayjs; readonly mode: CalendarMode };
 type CalendarCountOf = (date: string) => string | undefined;
+
+export type CalendarTodayAdditions = { readonly day: string; readonly count: number | undefined; readonly isPartial: boolean };
 
 type WorkspaceCalendarProps = {
   readonly calendar: TodayPaging['calendar'];
   readonly date: string;
   readonly inbox: WorkspaceInbox;
   readonly onDay: (date: string) => void;
-  readonly todayAdditions: { readonly day: string; readonly count: number | undefined; readonly isPartial: boolean } | undefined;
+  readonly todayAdditions: CalendarTodayAdditions | undefined;
 };
 
 export function WorkspaceCalendar({ date, inbox, onDay, ...countsInput }: WorkspaceCalendarProps) {
   const selected = dayjs(date).locale('zh-cn');
-  const { panel, browse } = useCalendarPanel({ selected, inbox });
+  const { month, browse } = useCalendarMonth({ selected, inbox });
   const { countOf, calendarMonth, hasSchedulePreview } = calendarCounts({ ...countsInput, inbox });
-  const chooseDay = (selected: Dayjs) => onDay(dateKey(selected));
+  const chooseDay = (day: Dayjs) => onDay(dateKey(day));
   return <Card size="small" className="today-calendar" role="region" aria-label="工作台日历">
     <style>{workspaceCalendarCss}</style>
-    <Flex className="today-calendar-tools" gap="small" align="center" wrap>
+    <div className="today-calendar-mobile">
       <CalendarDatePicker selected={selected} onDay={chooseDay} countOf={countOf} calendarMonth={calendarMonth} />
-      <div className="today-calendar-desktop">
-        <CalendarHeader value={panel.day} mode={panel.mode} onBrowse={browse} />
-      </div>
+    </div>
+    <div className="today-calendar-desktop">
+      <CalendarGrid month={month} selected={selected} onDay={chooseDay} onBrowse={browse} countOf={countOf} />
+    </div>
+    <Flex className="today-calendar-notes" gap="small" align="center" wrap>
       {countsInput.todayAdditions?.isPartial === true ? <CalendarNote>今日项数暂不含排期</CalendarNote> : null}
       <div className="today-calendar-desktop">
-        <CalendarMonthNote panel={panel} calendarMonth={calendarMonth} hasSchedulePreview={hasSchedulePreview} />
+        <CalendarMonthNote month={month} calendarMonth={calendarMonth} hasSchedulePreview={hasSchedulePreview} />
       </div>
     </Flex>
-    <div className="today-calendar-desktop">
-      <CalendarGrid panel={panel} selected={selected} onDay={chooseDay} onBrowse={browse} countOf={countOf} />
-    </div>
   </Card>;
 }
 
-function useCalendarPanel({ selected, inbox }: { readonly selected: Dayjs; readonly inbox: WorkspaceInbox }) {
+function useCalendarMonth({ selected, inbox }: { readonly selected: Dayjs; readonly inbox: WorkspaceInbox }) {
   const date = dateKey(selected);
-  const [panel, setPanel] = useState<CalendarPanel & { readonly date: string; readonly inbox: WorkspaceInbox }>(
-    { date, inbox, day: selected, mode: 'month' },
-  );
-  if (panel.date !== date || panel.inbox !== inbox) setPanel({ date, inbox, day: selected, mode: 'month' });
-  return { panel, browse: (day: Dayjs, mode: CalendarMode) => setPanel({ date, inbox, day, mode }) };
+  const [panel, setPanel] = useState({ date, inbox, month: selected.startOf('month') });
+  if (panel.date !== date || panel.inbox !== inbox) setPanel({ date, inbox, month: selected.startOf('month') });
+  return { month: panel.month, browse: (month: Dayjs) => setPanel({ date, inbox, month: month.startOf('month') }) };
 }
 
 function calendarCounts({ calendar, inbox, todayAdditions }: Pick<WorkspaceCalendarProps, 'calendar' | 'inbox' | 'todayAdditions'>) {
@@ -111,40 +108,39 @@ function CalendarDatePicker({ selected, onDay, countOf, calendarMonth }: {
   </Flex>;
 }
 
-function CalendarGrid({ panel, selected, onDay, onBrowse, countOf }: {
-  readonly panel: CalendarPanel;
+function CalendarGrid({ month, selected, onDay, onBrowse, countOf }: {
+  readonly month: Dayjs;
   readonly selected: Dayjs;
   readonly onDay: (day: Dayjs) => void;
-  readonly onBrowse: (day: Dayjs, mode: CalendarMode) => void;
+  readonly onBrowse: (month: Dayjs) => void;
   readonly countOf: CalendarCountOf;
 }) {
-  const month = panel.day.format('YYYY-MM');
+  const monthKey = month.format('YYYY-MM');
   const selection = dateKey(selected);
   const grid = useRef<ComponentRef<typeof Calendar>>(null);
-  const shouldFocusDay = useRef(false);
+  const pickedDate = useRef<string | null>(null);
   const [focus, setFocus] = useState<{ readonly month: string; readonly selection: string; readonly date: string }>();
-  const tabDate = focus?.month === month && focus.selection === selection ? focus.date
-    : dateKey(panel.day.isSame(selected, 'month') ? selected : panel.day.startOf('month'));
+  const tabDate = focus?.month === monthKey && focus.selection === selection ? focus.date
+    : dateKey(month.isSame(selected, 'month') ? selected : month);
   useEffect(() => {
-    if (panel.mode !== 'month' || !shouldFocusDay.current) return;
-    shouldFocusDay.current = false;
-    grid.current?.nativeElement.querySelector<HTMLButtonElement>(`[data-calendar-date="${tabDate}"]`)?.focus();
-  }, [panel.mode, tabDate]);
+    if (pickedDate.current !== selection) return;
+    pickedDate.current = null;
+    grid.current?.nativeElement.querySelector<HTMLButtonElement>(`[data-calendar-date="${selection}"]`)?.focus({ preventScroll: true });
+  }, [selection]);
   return <ConfigProvider theme={calendarTheme}>
-    <Calendar ref={grid} value={panel.day} mode={panel.mode} fullscreen={false} headerRender={() => null}
+    <Calendar ref={grid} value={month} fullscreen={false}
+      headerRender={({ value, onChange }) => <CalendarHeader month={value} onBrowse={onChange} />}
       styles={{ body: { paddingBlock: space[0] }, item: { paddingBlock: 0 } }}
       onSelect={(day, { source }) => {
-        if (source === 'date') onDay(day);
-        else if (source === 'month') {
-          shouldFocusDay.current = true;
-          onBrowse(day, 'month');
+        if (source === 'customize') onBrowse(day);
+        if (source === 'date') {
+          const date = dateKey(day);
+          if (date !== selection && document.activeElement?.getAttribute('data-calendar-date') === date) pickedDate.current = date;
+          onDay(day);
         }
       }}
-      fullCellRender={(current, { type }) => type === 'date'
-        ? <CalendarDay day={current} count={countOf(dateKey(current))} selected={selection} tabDate={tabDate}
-          onFocus={(date) => setFocus({ month, selection, date })} />
-        : <Button type="text" size="small" className="today-calendar-day" aria-label={current.format('YYYY年M月')}
-          aria-pressed={current.isSame(selected, 'month')}>{current.format('M月')}</Button>} />
+      fullCellRender={(current) => <CalendarDay day={current} count={countOf(dateKey(current))} selected={selection} tabDate={tabDate}
+        onFocus={(date) => setFocus({ month: monthKey, selection, date })} />} />
   </ConfigProvider>;
 }
 
@@ -165,13 +161,12 @@ function CalendarDay({ day, count, selected, tabDate, onFocus }: {
   </Button>;
 }
 
-function CalendarMonthNote({ panel, calendarMonth, hasSchedulePreview }: {
-  readonly panel: CalendarPanel;
+function CalendarMonthNote({ month, calendarMonth, hasSchedulePreview }: {
+  readonly month: Dayjs;
   readonly calendarMonth: string | undefined;
   readonly hasSchedulePreview: boolean;
 }) {
-  if (panel.mode !== 'month') return null;
-  if (calendarMonth !== undefined && panel.day.format('YYYY-MM') !== calendarMonth) return <CalendarNote>选择日期后查看该月数量</CalendarNote>;
+  if (calendarMonth !== undefined && month.format('YYYY-MM') !== calendarMonth) return <CalendarNote>选择日期后查看该月数量</CalendarNote>;
   return hasSchedulePreview ? <CalendarNote>待办按项计，未来日期的已约跟进按批计</CalendarNote> : null;
 }
 
@@ -179,28 +174,18 @@ function CalendarNote({ children }: { readonly children: string }) {
   return <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{children}</Typography.Text>;
 }
 
-const calendarMonths = Array.from({ length: 12 }, (_, month) => ({ value: month, label: `${month + 1}月` }));
-
-function CalendarHeader({ value, mode, onBrowse }: {
-  readonly value: Dayjs;
-  readonly mode: CalendarMode;
-  readonly onBrowse: (day: Dayjs, mode: CalendarMode) => void;
+function CalendarHeader({ month, onBrowse }: {
+  readonly month: Dayjs;
+  readonly onBrowse: (month: Dayjs) => void;
 }) {
-  const year = value.year();
-  const years = Array.from({ length: 20 }, (_, index) => {
-    const choice = year - 10 + index;
-    return { value: choice, label: `${choice}年` };
-  });
-  return <Flex className="today-touch" wrap gap="small" align="center">
-    <Select size="small" aria-label="日历年份" value={year} options={years} virtual={false}
-      onChange={(next) => onBrowse(value.year(next), mode)} />
-    {mode === 'year' ? null : <Select size="small" aria-label="日历月份" value={value.month()} options={calendarMonths} virtual={false}
-      onChange={(next) => onBrowse(value.month(next), mode)} />}
-    <Radio.Group size="small" aria-label="日历显示方式" value={mode}
-      onChange={(event) => onBrowse(value, event.target.value === 'year' ? 'year' : 'month')}>
-      <Radio.Button value="month">月</Radio.Button>
-      <Radio.Button value="year">年</Radio.Button>
-    </Radio.Group>
+  return <Flex className="today-calendar-heading" wrap gap="small" align="center" justify="space-between">
+    <Typography.Title level={2}>工作日历</Typography.Title>
+    <Flex className="today-calendar-months today-touch" align="center" gap="small">
+      <Button size="small" aria-label="上月" icon={<LeftOutlined aria-hidden />} onClick={() => onBrowse(month.subtract(1, 'month'))} />
+      <DatePicker size="small" picker="month" aria-label="选择日历月份" format="YYYY年M月" value={month} allowClear={false}
+        className="today-calendar-month-input" onChange={(next) => { if (next !== null) onBrowse(next); }} />
+      <Button size="small" aria-label="下月" icon={<RightOutlined aria-hidden />} onClick={() => onBrowse(month.add(1, 'month'))} />
+    </Flex>
   </Flex>;
 }
 

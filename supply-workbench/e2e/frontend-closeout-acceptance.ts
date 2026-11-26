@@ -108,17 +108,17 @@ async function checkActionBoard(page: Page): Promise<void> {
   await taskDetail.waitFor({ state: 'hidden' });
   const views = board.getByRole('radiogroup', { name: '工作台视图', exact: true });
   await views.getByRole('radio', { name: '日历', exact: true }).press('Space');
-  const workDate = board.getByRole('textbox', { name: '选择工作日期', exact: true });
-  assert.match(await workDate.inputValue(), /^\d{4}-\d{2}-\d{2}$/u);
+  const selectedDay = board.getByRole('region', { name: '工作台日历' }).getByRole('button', { pressed: true });
+  assert.match(await selectedDay.getAttribute('aria-label') ?? '', /\d{4}年\d+月\d+日/u);
   await checkCalendarBesideResults(page);
   await pending.waitFor();
   await task.waitFor();
   await views.getByRole('radio', { name: '列表', exact: true }).press('Space');
   assert.equal(await board.getByRole('article', { name: /^UI-DEMO-005/ }).count(), 0);
-  const chase = board.getByRole('button', { name: '按工厂复制催单', exact: true });
+  const chase = board.getByRole('button', { name: '按工厂复制', exact: true });
   await chase.click();
-  const factoryDialog = page.getByRole('dialog', { name: '按工厂复制催单', exact: true });
-  assert.equal(await factoryDialog.getByRole('button', { name: /^复制全部可催/ }).isEnabled(), true);
+  const factoryDialog = page.getByRole('dialog', { name: '按工厂复制', exact: true });
+  assert.equal(await factoryDialog.getByRole('button', { name: /^预览内部汇总/ }).isEnabled(), true);
   await page.keyboard.press('Escape');
   await factoryDialog.waitFor({ state: 'hidden' });
   await chase.and(page.locator(':focus')).waitFor();
@@ -131,7 +131,7 @@ async function measureTodayLayout(page: Page) {
       return bounds === undefined ? undefined : { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width };
     };
     return {
-      tabs: edges('[aria-label="今日事项视图"]'), cutoff: edges('.procurement-cutoff'),
+      tabs: edges('.today-section-switch .ant-tabs-nav-list'), cutoff: edges('.procurement-cutoff'),
       results: edges('.today-workspace-results'), shortcuts: edges('.today-action-shortcuts'),
       row: edges('.today-workspace-results :is(.today-work-card, .today-task-row)'),
     };
@@ -197,6 +197,18 @@ async function checkCalendarBesideResults(page: Page): Promise<void> {
   assert.ok(calendar !== null && results !== null);
   assert.ok(calendar.x + calendar.width < results.x, '宽屏月历与所选日期的待办并排');
   assert.equal(calendar.y, results.y);
+  assert.equal(calendar.y + calendar.height, results.y + results.height);
+  const resultTitle = page.locator('.today-calendar-results').getByRole('heading', { level: 2 });
+  const originalDate = await resultTitle.innerText();
+  const originalUrl = page.url();
+  const month = page.getByRole('textbox', { name: '选择日历月份' });
+  const originalMonth = await month.inputValue();
+  await page.getByRole('button', { name: '下月', exact: true }).click();
+  assert.notEqual(await month.inputValue(), originalMonth);
+  assert.equal(await resultTitle.innerText(), originalDate);
+  assert.equal(page.url(), originalUrl);
+  await page.getByRole('button', { name: '上月', exact: true }).click();
+  assert.equal(await month.inputValue(), originalMonth);
 }
 
 async function checkArrivals(page: Page): Promise<void> {
@@ -207,9 +219,8 @@ async function checkArrivals(page: Page): Promise<void> {
 
 async function checkDailySchedule(page: Page): Promise<void> {
   await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
-  const scheduleTab = page.getByRole('main').getByRole('radiogroup', { name: '今日事项视图', exact: true })
-    .getByRole('radio', { name: '今日排期', exact: true });
-  await scheduleTab.press('Space');
+  const scheduleTab = page.getByRole('main').getByRole('tab', { name: '今日排期', exact: true });
+  await scheduleTab.press('Enter');
   await page.waitForURL((url) => url.pathname === '/today' && url.searchParams.get('group') === 'schedule');
   const task = page.getByRole('button', { name: /确认今日出货/ });
   await task.waitFor();

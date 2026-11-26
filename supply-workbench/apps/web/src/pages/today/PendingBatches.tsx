@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { rowStyle, TodayOrderLink } from '../../features/today/index.js';
+import { TodayOrderLink } from '../../features/today/index.js';
 import { Button, Card, Flex, Pagination, Typography } from 'antd';
 import { HintBatchResultSchema, type TodayResponse } from '@sw/contracts';
 import { useCanWrite } from '../../shared/actor.js';
@@ -69,7 +69,7 @@ export function pendingBatchCards(view: PendingBatchView, focus: string | null) 
     const id = pendingBatchRowId(row.orderLineId);
     return (
       <li key={id} className="today-jump-target" {...(index === 0 ? jumpTarget : {})}>
-        <article><Card className="today-row today-work-card today-batch-card" size="small" style={rowStyle({ isFocused: focus === id, isFading: false })}>
+        <article><Card className="today-row today-work-card today-batch-card" size="small" data-current={focus === id || undefined}>
           <PendingBatchItem row={row} view={view} />
         </Card></article>
       </li>

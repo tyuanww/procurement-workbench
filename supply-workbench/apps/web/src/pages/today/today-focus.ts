@@ -13,7 +13,8 @@ export function workspaceRowId(id: string): string {
 
 export function workspaceRowOf(target: EventTarget | null): string | null {
   if (typeof Element === 'undefined' || !(target instanceof Element)) return null;
-  return rowIdOf(target.closest(ROW_SELECTOR));
+  const row = target.closest(ROW_SELECTOR) ?? target.closest('.today-work-card')?.querySelector(ROW_SELECTOR);
+  return rowIdOf(row ?? null);
 }
 
 export function workspaceKeyboardRows(): readonly { readonly id: string }[] {

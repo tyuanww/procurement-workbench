@@ -82,8 +82,9 @@ export function TodayScreen(props: TodayScreenProps): ReactNode {
   if (props.arrivalsView === undefined) return <section className="today-workspace-screen" style={screenStyle()}>
     <style>{todayMotionCss()}</style>
     <PageHeader title={view === 'schedule' ? '今日排期' : '个人工作台'} />
-    <TodaySectionNavigation view={view} search={props.search ?? ''} />
-    <WorkspaceBody {...props} />
+    <TodaySectionNavigation view={view} search={props.search ?? ''}>
+      <WorkspaceBody {...props} />
+    </TodaySectionNavigation>
   </section>;
   if (!props.isReady || props.loadError !== '') return <section style={screenStyle()}>
     <PageHeader title="在途待收" />
@@ -248,11 +249,13 @@ function actionDisplay({ workspace, actionPage, asOf, myPlan }: TodayScreenProps
   const calendar = actionPage?.paging.calendar;
   const selectedDate = actionPage?.calendar;
   const date = selectedDate === 'today' ? asOf : selectedDate ?? asOf;
+  const todayAdditions = workspace.view === 'calendar' && workspace.inbox === 'today' ? calendarAdditions({ actionPage, asOf, myPlan }) : undefined;
   return {
     viewControls: <WorkspaceViewControls view={workspace.view} onView={workspace.onView} />,
     calendar: workspace.view === 'calendar' && date !== undefined
       ? <WorkspaceCalendar calendar={calendar} date={date} inbox={workspace.inbox} onDay={workspace.onDay}
-        todayAdditions={workspace.inbox === 'today' ? calendarAdditions({ actionPage, asOf, myPlan }) : undefined} /> : undefined,
+        todayAdditions={todayAdditions} /> : undefined,
+    calendarTodayAdditions: todayAdditions,
   };
 }
 

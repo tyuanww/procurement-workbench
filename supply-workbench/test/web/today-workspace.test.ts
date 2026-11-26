@@ -96,9 +96,11 @@ it('工作台不显示混合总数，日历日期计数保留本人排期和待�
     });
     expect(document.querySelector('.today-workspace-heading h2')?.getAttribute('aria-label')).toBe('我的行动清单');
     expect(textOf('[aria-label="工作台日历"]')).not.toContain('51项');
+    expect(textOf('[aria-label="2026-11-21 星期六 待办"] [role="status"]')).toBe('正在统计待办…');
     await act(() => { fulfill({ urlPart: '/api/v1/plan/daily', status: 200, body: daily }); });
     expect(document.querySelector('.today-workspace-heading h2')?.getAttribute('aria-label')).toBe('我的行动清单');
     expect(textOf('[aria-label="工作台日历"]')).toContain('53项');
+    expect(textOf('[aria-label="2026-11-21 星期六 待办"] [role="status"]')).toBe('53 项 · 第 2 页');
     expect(textOf('#today-chase')).not.toContain('首批待建样品');
     expect(textOf('#today-chase')).not.toContain('本人里程碑');
     click(button('待建批次1行'));
@@ -134,39 +136,45 @@ it('浏览年月保留当前结果，选择日期才切换待办结果或已约�
       fulfill({ urlPart: 'calendar=today', status: 200, body: today });
     });
     await act(() => { fulfill({ urlPart: '/api/v1/plan/daily', status: 200, body: daily }); });
-    const input = calendarControl<HTMLInputElement>('[aria-label="选择工作日期"]');
-    chooseCalendarOption('日历月份', '12月');
+    const input = calendarControl<HTMLInputElement>('[aria-label="选择日历月份"]');
+    expect(input.value).toBe('2026年11月');
+    click(button('下月'));
+    expect(input.value).toBe('2026年12月');
     expect(calendarCell('2026-12-21').getAttribute('aria-pressed')).toBe('false');
+    expect(calendarCell('2026-12-21').textContent).toBe('21');
     expect(textOf('[aria-label="工作台日历"]')).toContain('选择日期后查看该月数量');
-    click(calendarControl('[aria-label="日历显示方式"] input[value="year"]'));
-    chooseCalendarOption('日历年份', '2027年');
-    click(button('2027年3月'));
-    expect(document.activeElement).toBe(calendarCell('2027-03-01'));
-    expect(input.value).toBe(date);
-    expect(textOf('output')).toBe('view=calendar');
-    expect(textOf('#today-chase')).toContain('同名样品');
-    chooseCalendarOption('日历年份', '2026年');
-    chooseCalendarOption('日历月份', '11月');
+    await chooseCalendarMonth(input, '2027-03');
+    expect(input.value).toBe('2027年3月');
+    expect(calendarCell('2027-03-01').tabIndex).toBe(0);
+    const todayResults = '[aria-label="2026-11-21 星期六 待办"]';
+    expect(textOf(`${todayResults} h2`)).toBe('2026-11-21 星期六');
+    expect(textOf(todayResults)).toContain('同名样品');
+    expect(textOf(`${todayResults} [role="status"]`)).toBe('1 项');
+    await chooseCalendarMonth(input, '2026-12');
+    click(button('上月'));
+    expect(input.value).toBe('2026年11月');
     expect(calendarCell(date).getAttribute('aria-pressed')).toBe('true');
     act(() => { calendarCell(date).focus(); });
     act(() => { calendarCell(date).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
     expect(document.activeElement).toBe(calendarCell(yesterday));
     expect(textOf('output')).toBe('view=calendar');
     click(calendarCell(yesterday));
+    expect(document.activeElement).toBe(calendarCell(yesterday));
+    expect(textOf('[aria-label="2026-11-20 星期五 待办"] [role="status"]')).toBe('正在更新待办…');
     await act(() => { fulfill({ urlPart: 'calendar=2026-11-20', status: 200, body: past }); });
     expect(textOf('#today-chase')).toContain('这天没有待办');
+    expect(textOf('[aria-label="2026-11-20 星期五 待办"] [role="status"]')).toBe('0 项');
     click(button('回到业务日'));
     expect(new URLSearchParams(textOf('output')).has('date')).toBe(false);
     await act(() => { fulfill({ urlPart: 'calendar=today', status: 200, body: today }); });
     expect(calendarCell(date).textContent).toContain('1项');
     expect(calendarCell(tomorrow).textContent).toContain('1批');
-    expect(document.querySelector('[role="combobox"][aria-label="日历年份"]')).not.toBeNull();
-    expect(document.querySelector('[role="combobox"][aria-label="日历月份"]')).not.toBeNull();
     click(calendarCell(tomorrow));
     const params = new URLSearchParams(textOf('output'));
     expect(params.get('inbox')).toBe('scheduled');
     expect(params.get('date')).toBe(tomorrow);
     await act(() => { fulfill({ urlPart: 'inbox=scheduled&calendar=2026-11-22', status: 200, body: { ...today, paging: { ...today.paging, calendar: { date: tomorrow, days: [{ date: tomorrow, count: 1 }] } } } }); });
+    expect(textOf('[aria-label="2026-11-22 星期日 已约跟进"] [role="status"]')).toBe('1 批');
     button('回到业务日');
     click(calendarCell(date));
     const returned = new URLSearchParams(textOf('output'));
@@ -219,12 +227,13 @@ function calendarCell(date: string): HTMLElement {
   return calendarControl(`[data-calendar-date="${date}"]`);
 }
 
-function chooseCalendarOption(label: string, choice: string) {
-  const control = calendarControl(`[role="combobox"][aria-label="${label}"]`);
-  act(() => { control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
-  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent === choice);
-  if (option === undefined) throw new Error(`没有日历选项 ${choice}`);
-  click(option);
+async function chooseCalendarMonth(input: HTMLInputElement, month: string) {
+  act(() => { input.focus(); });
+  click(input);
+  await waitFor(() => document.querySelector('[aria-label="Choose a year"]') !== null);
+  click(button('Choose a year'));
+  click(calendarControl(`td[title="${month.slice(0, 4)}"]`));
+  click(calendarControl(`td[title="${month}"]`));
 }
 
 function calendarControl<T extends HTMLElement>(selector: string): T {

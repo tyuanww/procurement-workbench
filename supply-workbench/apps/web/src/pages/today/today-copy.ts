@@ -7,6 +7,8 @@ import { actionChaseSearch, type ActionQuery, type ChaseScope } from './action-q
 
 const COPY_SUCCESS_KEY = 'today-chase-copy';
 
+type CopyOperation = 'preview' | 'copy';
+
 export type ChasePreview = {
   readonly factories: readonly (TodayFactory & { readonly count: number })[];
   readonly count: number;
@@ -21,14 +23,14 @@ export function useChaseCopy({ query, buyerName }: { readonly query: ActionQuery
 
   function onCopyChase(scope: ChaseScope): void {
     message.destroy(COPY_SUCCESS_KEY);
-    void request.run(async (signal) => {
+    const summaryScope = scope.kind === 'all' || scope.kind === 'filtered' ? scope.kind : null;
+    void request.run(summaryScope === null ? 'copy' : 'preview', async (signal) => {
       const rows = await fetchTodayChase(actionChaseSearch(query, scope), signal);
       if (signal.aborted) return;
       const text = nudgeOf({ chase: rows, buyerName });
       if (text === '') return '当前条件没有可复制的催单。';
-      const preview = previewOf({ rows, scope, text });
-      if (preview !== null) {
-        setCopyPreview(preview);
+      if (summaryScope !== null) {
+        setCopyPreview(previewOf({ rows, scope: summaryScope, text }));
         return;
       }
       await navigator.clipboard.writeText(text);
@@ -39,65 +41,78 @@ export function useChaseCopy({ query, buyerName }: { readonly query: ActionQuery
 
   function onConfirmCopy(): void {
     if (copyPreview === null) return;
-    void request.run(async (signal) => {
+    void request.run('copy', async (signal) => {
       const title = `【内部催货汇总 · ${copyPreview.factories.length} 家工厂】`;
       await navigator.clipboard.writeText(title + '\n\n' + copyPreview.text);
-      if (!signal.aborted) showCopySuccess({ message, copied: copyPreview.count });
-    }, () => setCopyPreview(null));
+      if (!signal.aborted) {
+        setCopyPreview(null);
+        showCopySuccess({ message, copied: copyPreview.count });
+      }
+    });
   }
 
-  return { isCopying: request.isCopying, copyNotice: request.notice, copyPreview, onCopyChase, onConfirmCopy, onCancelCopy: () => setCopyPreview(null) };
+  function onCancelCopyPreview(): void {
+    request.cancelPreview();
+    setCopyPreview(null);
+  }
+
+  return { isCopying: request.isCopying, copyNotice: request.notice, copyPreview, onCopyChase, onConfirmCopy, onCancelCopyPreview };
 }
 
 function useCopyRequest(path: string, clearPreview: (value: null) => void) {
   const [isCopying, setCopying] = useState(false);
   const [notice, setNotice] = useState('');
-  const active = useRef<AbortController | null>(null);
+  const active = useRef<{ readonly kind: CopyOperation; readonly controller: AbortController } | null>(null);
 
   useEffect(() => {
     setNotice('');
     setCopying(false);
     clearPreview(null);
     return () => {
-      active.current?.abort();
+      active.current?.controller.abort();
       active.current = null;
     };
   }, [path, clearPreview]);
 
-  async function run(operation: (signal: AbortSignal) => Promise<string | void>, finish?: () => void): Promise<void> {
+  function cancelPreview(): void {
+    if (active.current?.kind === 'copy') return;
+    active.current?.controller.abort();
+    active.current = null;
+    setCopying(false);
+    setNotice('');
+  }
+
+  async function run(kind: CopyOperation, operation: (signal: AbortSignal) => Promise<string | void>): Promise<void> {
     if (active.current !== null) return;
-    const pending = new AbortController();
+    const pending = { kind, controller: new AbortController() };
+    const { signal } = pending.controller;
     active.current = pending;
     setCopying(true);
     setNotice('');
     try {
-      const notice = await operation(pending.signal);
-      if (notice !== undefined && !pending.signal.aborted) setNotice(notice);
-    } catch {
-      if (!pending.signal.aborted) setNotice('复制催单失败，请重试。');
-    } finally {
+      const notice = await operation(signal);
+      if (notice !== undefined && !signal.aborted) setNotice(notice);
+    } catch { if (!signal.aborted) setNotice('复制催单失败，请重试。'); } finally {
       if (active.current === pending) {
         active.current = null;
         setCopying(false);
-        finish?.();
       }
     }
   }
 
-  return { isCopying, notice, run };
+  return { isCopying, notice, run, cancelPreview };
 }
 
 function previewOf({ rows, scope, text }: {
   readonly rows: readonly { readonly factory: TodayFactory }[];
-  readonly scope: ChaseScope;
+  readonly scope: ChasePreview['scope'];
   readonly text: string;
-}): ChasePreview | null {
-  if (scope.kind !== 'all' && scope.kind !== 'filtered') return null;
+}): ChasePreview {
   const factories = new Map<string, TodayFactory & { readonly count: number }>();
   for (const { factory } of rows) {
     factories.set(factory.id, { ...factory, count: (factories.get(factory.id)?.count ?? 0) + 1 });
   }
-  return factories.size > 1 ? { factories: [...factories.values()], count: rows.length, text, scope: scope.kind } : null;
+  return { factories: [...factories.values()], count: rows.length, text, scope };
 }
 
 function showCopySuccess({ message, copied }: { readonly message: ReturnType<typeof App.useApp>['message']; readonly copied: number }): void {

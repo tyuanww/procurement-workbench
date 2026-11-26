@@ -35,4 +35,4 @@ export { confirmedDateBody, formErrors, noteDraft, openDraft, type NoteRef, type
 export { toBoardItem } from './card.js';
 export { localFollowUpTime } from './follow-up-time.js';
 export { saveTodayNote } from './save-today-note.js';
-export { helpStyle, rowStyle, screenStyle, todayMotionCss } from './today-style.js';
+export { helpStyle, screenStyle, todayMotionCss } from './today-style.js';

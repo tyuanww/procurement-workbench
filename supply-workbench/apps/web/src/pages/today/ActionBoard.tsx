@@ -1,6 +1,7 @@
-import { Alert, Button, Empty, Flex, Spin, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Spin, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { ACTION_LANES, type ActionDetail, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { fontSize } from '../../theme/tokens.js';
@@ -9,7 +10,8 @@ import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodayGroup } from './TodayGroup.js';
 import { TodayRow, type CopyAction } from './TodayRow.js';
-import { isPriorityBatchSelection } from './action-query.js';
+import type { CalendarTodayAdditions } from './WorkspaceViews.js';
+import { isPriorityBatchSelection, selectedCalendarDay } from './action-query.js';
 import { workspaceRowId } from './today-focus.js';
 
 type BatchSequence = (rowId: string) => number | undefined;
@@ -20,6 +22,7 @@ export type ActionBoardProps = ActionToolbarProps & {
   readonly receiptOf?: ((rowId: string) => ReceiptWork | undefined) | undefined;
   readonly arrivalFocusId?: string | null | undefined;
   readonly asOf?: string | undefined;
+  readonly calendarTodayAdditions?: CalendarTodayAdditions | undefined;
   readonly detailOf?: (id: string) => ActionDetail | undefined;
   readonly internalCards?: readonly ReactNode[] | undefined;
   readonly internalPagination?: ReactNode;
@@ -42,12 +45,12 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
       <div className="today-actions-layout">
         <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
           <ActionToolbar {...props} />
-          <div className={calendar === undefined ? undefined : 'today-workspace-calendar-layout'}>
+          {calendar === undefined ? <div className="today-action-results-body">
+            {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+          </div> : <div className="today-workspace-calendar-layout">
             {calendar}
-            <div className={calendar === undefined ? 'today-action-results-body' : 'today-workspace-results'}>
-              {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
-            </div>
-          </div>
+            <CalendarResults {...props} />
+          </div>}
         </Flex>
         {shortcuts}
       </div>
@@ -55,10 +58,30 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
   );
 }
 
+function CalendarResults(props: ActionBoardProps) {
+  const { page, asOf } = props;
+  const day = selectedCalendarDay(page?.calendar, asOf) ?? asOf;
+  const label = day === undefined ? undefined : `${day} ${dayjs(day).locale('zh-cn').format('dddd')}`;
+  return <Card size="small" className="today-workspace-results today-calendar-results" role="region"
+    aria-label={label === undefined ? '当日结果' : `${label} ${page?.inbox === 'scheduled' ? '已约跟进' : '待办'}`}>
+    <Flex className="today-calendar-heading today-calendar-result-heading" align="center" gap="small" wrap>
+      {day === undefined ? null : <Typography.Title className="today-calendar-desktop" level={2}><time dateTime={day}>{label}</time></Typography.Title>}
+      {page === undefined ? null : <ActionResult page={page} calendarCount={calendarResultTotal(props, page.paging.total)} />}
+    </Flex>
+    {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
+  </Card>;
+}
+
+function calendarResultTotal(props: ActionBoardProps, total: number): number | null {
+  const additions = isBusinessDay(props) ? props.calendarTodayAdditions : undefined;
+  if (additions === undefined) return total;
+  return additions.count === undefined ? null : total + additions.count;
+}
+
 function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageControls }) {
   const { page } = props;
   return <>
-    {page.isFiltered && page.calendar === undefined ? null : <ActionResult page={page} asOf={props.asOf} />}
+    {props.calendar === undefined && !page.isFiltered ? <ActionResult page={page} /> : null}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
     <Spin spinning={page.isLoading}>
       <div aria-busy={page.isLoading} inert={!page.isSettled}>
