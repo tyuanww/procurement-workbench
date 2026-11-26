@@ -72,15 +72,8 @@ const todayWorkspaceCss = `
       inline-size: 100%;
     }
     .today-workspace-intro { display: grid; gap: ${small}px; }
-    .today-section-switch { row-gap: var(--today-workspace-gap, ${regular}px); }
-    .today-section-header { display: flex; align-items: center; flex-wrap: wrap; gap: 0 ${small}px; border-block-end: 1px solid ${border}; }
-    .today-section-switch .today-section-header > .today-section-tablist::before { content: none; }
-    .today-section-switch .procurement-cutoff { font-size: ${fontSize.meta}px; }
-    .today-section-tab [role="tab"] { display: grid; place-items: center; min-block-size: 44px; padding-inline: ${small}px; }
-    .today-section-tab [role="tab"][aria-selected="true"] { color: ${brand[800]}; font-weight: 600; }
-    .today-section-tab [role="tab"]:focus-visible { outline: 2px solid ${brand[600]}; outline-offset: -3px; }
-    .today-section-switch .today-section-indicator { block-size: 0; border-block-end: 3px solid ${brand[600]}; }
-    .today-section-panel[aria-hidden="false"] { display: flex; flex-direction: column; gap: var(--today-workspace-gap, ${regular}px); }
+    .today-section-switch { --section-tabs-gap: var(--today-workspace-gap, ${regular}px); }
+    .today-section-switch .section-tabs-panel[aria-hidden="false"] { display: flex; flex-direction: column; gap: var(--section-tabs-gap); }
     .today-action-summary { --metric-padding: ${medium}px ${regular}px; --metric-height: 92px; }
     .today-action-summary .ant-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .today-metric-column { display: flex; min-inline-size: 0; }
@@ -164,6 +157,9 @@ const todayWorkspaceCss = `
     }
     @media (max-width: 22rem) {
       .today-workspace-screen { --today-workspace-gap: ${medium}px; }
+    }
+    @media (max-width: 36rem) {
+      .today-section-switch .section-tabs-extra { flex-basis: 100%; text-align: end; padding-block-end: ${tiny}px; }
     }
     @container today-action (max-width: 26rem) {
       .today-action-main > .today-touch:not(.today-toolbar), .today-action-view-inset { padding-block: 0; }

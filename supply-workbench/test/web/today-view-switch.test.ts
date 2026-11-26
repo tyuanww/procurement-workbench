@@ -16,18 +16,30 @@ it('今日事项的一级标签用键盘切换，面板对应选中标签，回�
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
       fulfill({ urlPart: 'reasons=overdue', status: 200, body: { ...pageBody(1), items: [batchTodo(1)] } });
     });
-    const [actions, schedule] = document.querySelectorAll<HTMLElement>('[role="tablist"][aria-label="今日事项视图"] [role="tab"]');
-    if (actions === undefined || schedule === undefined) throw new Error('没有今日事项的两个一级标签');
+    const [actions, arrivals, schedule] = document.querySelectorAll<HTMLElement>('[role="tablist"][aria-label="今日事项视图"] [role="tab"]');
+    if (actions === undefined || arrivals === undefined || schedule === undefined) throw new Error('没有今日事项的三个一级标签');
     expect(actions.textContent).toContain('行动板');
+    expect(arrivals.textContent).toContain('在途待收');
     expect(schedule.textContent).toContain('今日排期');
     expect(actions.getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('[role="tabpanel"][aria-hidden="false"]')?.getAttribute('aria-labelledby')).toBe(actions.id);
     expect(document.querySelector('[role="tabpanel"][aria-hidden="false"] #today-chase')).not.toBeNull();
     act(() => { actions.focus(); });
-    act(() => { actions.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true })); });
-    expect(document.activeElement).toBe(schedule);
+    const press = (tab: HTMLElement, key: string) => act(() => {
+      tab.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true }));
+    });
+    press(actions, 'ArrowRight');
+    expect(document.activeElement).toBe(arrivals);
     expect(actions.getAttribute('aria-selected')).toBe('true');
-    act(() => { schedule.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true })); });
+    press(arrivals, 'Enter');
+    const arrivalParams = new URLSearchParams(textOf('output'));
+    expect(arrivalParams.get('view')).toBe('arrivals');
+    expect(arrivalParams.get('actionReturn')).toBe('view=board&reasons=overdue');
+    expect(arrivals.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[role="tabpanel"][aria-hidden="false"]')?.getAttribute('aria-labelledby')).toBe(arrivals.id);
+    press(arrivals, 'ArrowRight');
+    expect(document.activeElement).toBe(schedule);
+    press(schedule, 'Enter');
     const params = new URLSearchParams(textOf('output'));
     expect(params.get('group')).toBe('schedule');
     expect(params.get('workspaceReturn')).toBe('view=board&reasons=overdue');
@@ -37,6 +49,34 @@ it('今日事项的一级标签用键盘切换，面板对应选中标签，回�
     click(actions);
     expect(textOf('output')).toBe('view=board&reasons=overdue');
     expect(actions.getAttribute('aria-selected')).toBe('true');
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
+it.each([
+  ['group=schedule&workspaceReturn=view%3Dboard%26reasons%3Doverdue', 'view=board&reasons=overdue'],
+  ['group=supplier', ''],
+])('旧待收链接的行动板恢复有效筛选或打开默认入口', async (actionReturn, expected) => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const params = new URLSearchParams({ view: 'arrivals', timing: 'overdue', actionReturn });
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?' + params));
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: '/api/v1/today?', status: 200, body: pageBody(0) });
+    });
+    const action = [...document.querySelectorAll<HTMLElement>('[aria-label="今日事项视图"] [role="tab"]')]
+      .find((tab) => tab.textContent === '行动板');
+    if (action === undefined) throw new Error('没有行动板页签');
+    click(action);
+    await act(() => { fulfill({ urlPart: '/api/v1/today?', status: 200, body: pageBody(0) }); });
+    expect(textOf('output')).toBe(expected);
+    expect(action.getAttribute('aria-selected')).toBe('true');
   } finally {
     act(() => { root.unmount(); });
     resetDom();

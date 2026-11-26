@@ -66,7 +66,8 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
 
 function todayBreadcrumb(params: URLSearchParams): readonly string[] {
   const view = params.get('view');
-  return view !== 'arrivals' && (view === 'schedule' || isPlanGroupMode(readGroup(params.toString()))) ? ['今日排期'] : [];
+  if (view === 'arrivals') return ['在途待收'];
+  return view === 'schedule' || isPlanGroupMode(readGroup(params.toString())) ? ['今日排期'] : ['个人工作台'];
 }
 
 export const NAV_ROUTES: readonly NavRoute[] = PAGE_MANIFEST.flatMap((entry) =>

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import type { Page, Response } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { sidebarLink } from './sidebar.ts';
 
 const workspace = '/today';
 const lineId = 'hz09-line-1';
@@ -20,9 +19,9 @@ export async function checkPersonalWorkspace(input: {
   const buyerMain = buyer.getByRole('main');
   const peerMain = peer.getByRole('main');
   const menu = buyer.locator('aside');
-  const workspaceLink = await sidebarLink(menu, '今日事项', '个人工作台');
+  const workspaceLink = menu.getByRole('link', { name: '今日事项', exact: true });
   assert.equal(await workspaceLink.count(), 1);
-  assert.equal(await menu.getByRole('link', { name: '行动板', exact: true }).count(), 0);
+  assert.equal(await menu.getByRole('link', { name: /^(行动板|个人工作台|在途待收|今日排期)$/u }).count(), 0);
   await workspaceLink.click();
   await buyer.waitForURL((url) => url.pathname === workspace);
   await buyerMain.getByRole('heading', { name: '个人工作台', exact: true }).waitFor({ state: 'attached' });

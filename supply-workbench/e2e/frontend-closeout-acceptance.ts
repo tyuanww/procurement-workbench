@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { sidebarEntries, sidebarLink } from './sidebar.ts';
+import { sidebarEntries } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
@@ -11,6 +12,14 @@ const calendarMonthInput = 'input[aria-label="选择日历月份"]';
 export async function checkFrontendCloseout({ page, origin, out }: {
   readonly page: Page; readonly origin: URL; readonly out: string;
 }) {
+  await page.route('**/api/v1/today?scope=all', async (route) => {
+    const response = await route.fetch();
+    assert.ok(response.ok());
+    const payload: { readonly items: readonly { readonly severity: number }[] } = await response.json();
+    const urgent = payload.items.find(({ severity }) => severity >= 2);
+    assert.ok(urgent);
+    await route.fulfill({ response, json: { ...payload, truncated: false, items: Array.from({ length: 1000 }, () => urgent) } });
+  }, { times: 1 });
   await page.setViewportSize({ width: 1288, height: 911 });
   await page.goto(new URL('/lines', origin).href);
   await page.getByRole('row').filter({ has: page.getByRole('cell') }).first().waitFor();
@@ -57,7 +66,14 @@ async function checkSaveFollowUpView(page: Page): Promise<void> {
 }
 
 async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
-  const entryCount = await sidebarEntries(page.locator('aside')).count();
+  const expanded = page.locator('aside');
+  const entryCount = await sidebarEntries(expanded).count();
+  const attention = page.getByRole('tooltip').filter({ hasText: '全范围需关注 1000 项' });
+  const todayLink = expanded.getByRole('link', { name: '今日事项', exact: true });
+  await todayLink.getByText('999+', { exact: true }).hover();
+  await attention.waitFor();
+  await page.keyboard.press('Escape');
+  await attention.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: '收起侧栏', exact: true }).click();
   const sidebar = page.locator('.ant-layout-sider-collapsed');
   await sidebar.waitFor();
@@ -74,9 +90,32 @@ async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
     });
   }, entryCount + 1);
   await page.screenshot({ path: join(out, 'closeout-collapsed-sidebar.png'), animations: 'disabled' });
+  await checkCollapsedTodayBadge(page, sidebar, attention);
   await toggle.click();
   await sidebar.waitFor({ state: 'hidden' });
   return entryCount;
+}
+
+async function checkCollapsedTodayBadge(page: Page, sidebar: Locator, attention: Locator): Promise<void> {
+  const tooltip = page.getByRole('tooltip');
+  const today = sidebar.getByRole('menuitem', { name: '今日事项', exact: true });
+  await today.hover();
+  await attention.waitFor();
+  assert.equal(await tooltip.count(), 1);
+  await page.keyboard.press('Escape');
+  await attention.waitFor({ state: 'hidden' });
+  const original = page.url();
+  const [newTab] = await Promise.all([page.context().waitForEvent('page'), today.click({ modifiers: ['ControlOrMeta'] })]);
+  await newTab.waitForURL(new URL('/today', original).href);
+  assert.equal(page.url(), original);
+  await newTab.close();
+  await page.mouse.move(200, 200);
+  await page.keyboard.press('Tab');
+  await today.focus();
+  await attention.waitFor();
+  assert.equal(await tooltip.count(), 1);
+  await page.keyboard.press('Escape');
+  await attention.waitFor({ state: 'hidden' });
 }
 
 async function checkActionBoard(page: Page): Promise<void> {
@@ -310,13 +349,42 @@ async function checkCalendarBesideResults(page: Page): Promise<void> {
 }
 
 async function checkArrivals(page: Page): Promise<void> {
-  await (await sidebarLink(page.locator('aside'), '今日事项', '在途待收')).click();
+  await page.setViewportSize({ width: 320, height: 780 });
+  const tabs = page.getByRole('tablist', { name: '今日事项视图' });
+  assert.deepEqual(await tabs.getByRole('tab').allTextContents(), ['行动板', '在途待收', '今日排期']);
+  const arrivals = tabs.getByRole('tab', { name: /在途待收$/u });
+  await arrivals.click();
+  await arrivals.and(page.locator('[aria-selected="true"]')).waitFor();
   await page.getByRole('heading', { name: '待收批次', exact: true }).waitFor();
-  await page.getByText('UI-DEMO-004', { exact: false }).first().waitFor();
+  const cutoff = page.getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u);
+  const dateBox = await cutoff.boundingBox();
+  assert.ok(dateBox && dateBox.x >= 0 && dateBox.x + dateBox.width <= 320);
+  for (const tab of await tabs.getByRole('tab').all()) {
+    const box = await tab.boundingBox();
+    assert.ok(box && box.x >= 0 && box.x + box.width <= 320 && box.height >= 44 && box.y + box.height <= dateBox.y);
+  }
+  await checkFilteredArrivalReturn(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+async function checkFilteredArrivalReturn(page: Page): Promise<void> {
+  const actionReturn = 'view=board&reasons=overdue';
+  const arrivalQuery = new URLSearchParams({ view: 'arrivals', timing: 'due_today', actionReturn });
+  await page.goto(new URL('/today?' + arrivalQuery, page.url()).href);
+  await page.getByRole('heading', { name: '今日应到', level: 1, exact: true }).waitFor();
+  const batch = page.getByRole('link', { name: /查看批次 UI-DEMO-004/u });
+  await batch.click();
+  await page.waitForURL((url) => url.pathname === '/lines/ui-demo-line-arrival' && url.searchParams.get('focusBatch') === 'ui-demo-batch-arrival');
+  await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
+  await page.waitForURL(({ searchParams }) => searchParams.get('timing') === 'due_today' && searchParams.get('actionReturn') === actionReturn);
+  await page.getByRole('tab', { name: /在途待收$/u, selected: true }).waitFor();
+  await batch.and(page.locator(':focus')).waitFor();
+  await page.getByRole('tab', { name: /行动板$/u }).click();
+  await page.waitForURL((url) => url.search === '?' + actionReturn);
+  await page.getByRole('tab', { name: /行动板$/u, selected: true }).waitFor();
 }
 
 async function checkDailySchedule(page: Page): Promise<void> {
-  await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   const scheduleTab = page.getByRole('main').getByRole('tab', { name: '今日排期', exact: true });
   await scheduleTab.press('Enter');
   await page.waitForURL((url) => url.pathname === '/today' && url.searchParams.get('group') === 'schedule');
