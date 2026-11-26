@@ -1,16 +1,41 @@
+// @vitest-environment happy-dom
 import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ActionForm, openDraft, type OpenForm, type Target } from '../../apps/web/src/features/today/TodayForms.js';
-import { TodayScreen, type TodayScreenProps } from '../../apps/web/src/pages/today/TodayBoard.js';
-import type { BoardRow, TodayBoard } from '../../apps/web/src/features/today/index.js';
 import { readTodaySession, validTodaySession, writeTodaySession, type TodaySession } from '../../apps/web/src/pages/today/today-session.js';
+import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
+import { act, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
+import { antdApp, batchTodo, LocationAndToday, pageBody } from './today-workspace-fixture.js';
 
-const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url));
+const requireWeb = createRequire(resolve('apps/web/package.json'));
 
 describe('今日抽屉状态写进 URL', () => {
-  it('排期视图打开行动抽屉时仍能看到那一行', () => {
-    const name = drawerProduct(scheduleDrawerProps());
-    expect(name).toBe('缺日期产品');
+  it('排期视图的批次深链打开原批次抽屉，仍能看到该批次的品名', async () => {
+    const batch = batchTodo(1);
+    if (batch.line === null) throw new Error('缺少样例订单行');
+    const item = { ...batch, line: { ...batch.line, nameRaw: '缺日期产品' } };
+    const params = new URLSearchParams({ group: 'schedule', drawer: item.id });
+    emptyReads();
+    installMatchMedia();
+    installFetch();
+    const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?' + params));
+    try {
+      await act(async () => {
+        fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+        fulfill({ urlPart: 'focusId=' + encodeURIComponent(item.id), status: 200, body: { ...pageBody(1), items: [item] } });
+      });
+      const drawer = '.today-action-drawer [role="dialog"]';
+      await waitFor(() => document.querySelector(drawer) !== null);
+      const titleId = document.querySelector(drawer)?.getAttribute('aria-labelledby');
+      expect(document.getElementById(titleId ?? '')?.textContent).toBe('缺日期产品');
+      expect(textOf('[role="tab"][aria-selected="true"]')).toBe('今日排期');
+      expect(textOf('output')).toBe(params.toString());
+    } finally {
+      act(() => { root.unmount(); });
+      resetDom();
+      emptyReads();
+    }
   });
 
   it('点开抽屉后 URL 带 drawer 和 draft，原有筛选不丢', () => {
@@ -63,79 +88,6 @@ describe('今日抽屉状态写进 URL', () => {
     expect(writeTodaySession({ search: '?reasons=overdue', session: after })).toBe('reasons=overdue&drawer=todo-1');
   });
 });
-
-function scheduleDrawerProps(): TodayScreenProps {
-  const noop = () => undefined;
-  const row: BoardRow = { id: 'todo-missing', face: { reason: '缺确认日期', overdue: '—', overdueTone: 'quiet', orderNo: 'PO-todo-missing', productName: '缺日期产品', date: '—' }, actions: [] };
-  const actionBoard: TodayBoard = { group: 'waiting', chips: [], body: { kind: 'groups', groups: [], rows: [row] } };
-  const board: TodayBoard = { group: 'schedule', chips: [], body: { kind: 'empty', text: '今天没有需要处理的事。' } };
-  return {
-    board,
-    actionBoard,
-    focus: null,
-    fading: null,
-    drawerId: 'todo-missing',
-    draft: null,
-    hadDate: false,
-    lane: 'finished',
-    isSaving: false,
-    notice: '',
-    saveError: '',
-    isHelpOpen: false,
-    isReady: true,
-    loadError: '',
-    onGroup: noop,
-    onOpen: noop,
-    onQuick: noop,
-    onCopy: noop,
-    onCloseDrawer: noop,
-    onDraft: noop,
-    onSubmit: noop,
-    onRetry: noop,
-    onBack: noop,
-  };
-}
-
-function drawerProduct(props: TodayScreenProps): string | null {
-  let name: string | null = null;
-  const report = console.error;
-  console.error = () => undefined;
-  try {
-    walk(TodayScreen(props), (productName) => { name = productName; });
-  } finally {
-    console.error = report;
-  }
-  return name;
-}
-
-function walk(node: unknown, save: (name: string) => void): void {
-  if (Array.isArray(node)) {
-    node.forEach((child) => walk(child, save));
-    return;
-  }
-  if (!isElement(node)) return;
-  const productName = productOf(node.props);
-  if (productName !== null) save(productName);
-  if (typeof node.type === 'function') {
-    try {
-      walk(node.type(node.props), save);
-    } catch {
-      return;
-    }
-  }
-  walk(node.props.children, save);
-}
-
-function productOf(props: unknown): string | null {
-  if (!isRecord(props) || props.isOpen !== true || !isRecord(props.row)) return null;
-  const face = props.row.face;
-  if (!isRecord(face) || typeof face.productName !== 'string') return null;
-  return face.productName;
-}
-
-function isElement(value: unknown): value is { readonly type: unknown; readonly props: { readonly children?: unknown } } {
-  return isRecord(value) && 'type' in value && isRecord(value.props);
-}
 
 function draftFor(session: TodaySession): OpenForm | null {
   if (session.drawerId === null || session.draftKind === null) return null;

@@ -264,7 +264,7 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   assert.equal(await page.evaluate(() => window.history.length), historyEntries);
   await page.getByRole('region', { name: '跟进供应商', exact: true }).getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
   await filters.click();
-  await dialog.getByRole('radio', { name: '全部', exact: true }).and(page.locator(':focus')).waitFor();
+  await dialog.getByRole('radiogroup', { name: '待办类型' }).getByRole('radio', { checked: true }).and(page.locator(':focus')).waitFor();
   await displayOptions.click();
   assert.equal(await groups.count(), 0);
   await page.keyboard.press('Escape');
