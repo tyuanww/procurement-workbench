@@ -84,7 +84,6 @@ function scheduleDrawerProps(): TodayScreenProps {
     isHelpOpen: false,
     isReady: true,
     loadError: '',
-    onToggleReason: noop,
     onGroup: noop,
     onOpen: noop,
     onQuick: noop,

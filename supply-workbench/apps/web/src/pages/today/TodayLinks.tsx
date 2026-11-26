@@ -1,5 +1,5 @@
 import { Button, Typography } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { Link } from 'react-router';
 import type { TodayPaging, TodayResponse } from '@sw/contracts';
 import type { ActionPageControls } from './ActionControls.js';
@@ -25,30 +25,40 @@ type TodayLinksProps = {
 };
 
 export function TodayLinks(props: TodayLinksProps) {
-  const { page, myPlan, inbox, asOf } = props;
+  const { page, myPlan, inbox, onInbox } = props;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
   const isPlanUnavailable = myPlan?.kind === 'error';
   const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable });
+  const heading = useRef<HTMLElement>(null);
+  const shouldFocusHeading = useRef(false);
+  const calendar = page?.calendar;
+  useEffect(() => {
+    if (!shouldFocusHeading.current) return;
+    shouldFocusHeading.current = false;
+    heading.current?.focus({ preventScroll: true });
+  }, [inbox, calendar]);
+  const selectScope = (scope: WorkspaceInbox) => {
+    shouldFocusHeading.current = true;
+    onInbox(scope);
+  };
   return <div className="today-workspace-intro">
     <div className="today-workspace-heading">
-      <ActiveScope inbox={inbox} count={counts[inbox]} hasSharedReviews={hasSharedReviews(page)} />
-      {asOf === undefined ? null : <Typography.Text type="secondary" className="today-business-date">
-        业务日 <time dateTime={asOf}>{asOf}</time>
-      </Typography.Text>}
+      <ActiveScope heading={heading} inbox={inbox} count={counts[inbox]} hasSharedReviews={hasSharedReviews(page)} />
+      <ScopeSwitch {...props} onInbox={selectScope} counts={counts} canRetry={isPlanUnavailable} />
     </div>
-    <ScopeSwitch {...props} counts={counts} canRetry={isPlanUnavailable} />
     {inbox === 'today' && isPlanUnavailable && counts.today !== undefined
       ? <Typography.Text type="secondary">已加载 · 排期未读</Typography.Text> : null}
     <ReviewScopeNote page={page} />
   </div>;
 }
 
-function ActiveScope({ inbox, count, hasSharedReviews: hasReviews }: {
+function ActiveScope({ heading, inbox, count, hasSharedReviews: hasReviews }: {
+  readonly heading: Ref<HTMLElement>;
   readonly inbox: WorkspaceInbox; readonly count: number | undefined; readonly hasSharedReviews: boolean;
 }) {
   const active = inboxes.find(({ key }) => key === inbox);
   if (active === undefined) return null;
-  return <Typography.Title level={2}>
+  return <Typography.Title level={2} ref={heading} tabIndex={-1}>
     {scopeLabel(active, hasReviews)} <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}
     {inbox === 'unassigned' ? null : <small className="today-mine-scope">本人范围</small>}
   </Typography.Title>;

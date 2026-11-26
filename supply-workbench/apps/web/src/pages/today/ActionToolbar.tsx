@@ -1,20 +1,29 @@
-import { Button, Card, Flex, Tag, Typography } from 'antd';
+import { Button, Flex, Modal, Typography } from 'antd';
 import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import type { TodayWorkFilter } from '@sw/contracts';
+import { useRef, useState, type ReactNode, type Ref } from 'react';
 import type { GroupMode, ReasonChip, TodayBoard } from '../../features/today/index.js';
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { ActionControls, ActionResult, BatchLinks, ChaseControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
+import { actionDialogStyles, actionDialogTarget, ActionResult, SortControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
+import type { WorkspaceFilterSelection } from './action-query.js';
+import { ChaseCopyDialog } from './ChaseCopyDialog.js';
+import { focusSection } from './today-focus.js';
 import { TodayGrouping } from './TodayGroup.js';
+
+type CloseAndJump = (jump: () => void) => void;
 
 export type ActionToolbarProps = {
   readonly board: TodayBoard;
   readonly page: ActionPageControls | undefined;
   readonly viewControls?: ReactNode;
-  readonly utilityLinks?: ReactNode;
+  readonly utilityLinks?: ((onJump: CloseAndJump) => ReactNode) | undefined;
   readonly calendar?: ReactNode;
-  readonly onToggleReason: (code: string) => void;
-  readonly onGroup: (group: GroupMode) => void;
+  readonly onApplyFilters?: (selection: WorkspaceFilterSelection) => void;
 };
+
+type ToolbarDialog =
+  | { readonly kind: 'filter'; readonly draft: WorkspaceFilterSelection }
+  | { readonly kind: 'chase' };
 
 const LIST_GROUPS: readonly { readonly id: GroupMode; readonly label: string }[] = [
   { id: 'priority', label: '不分组' },
@@ -25,37 +34,109 @@ const LIST_GROUPS: readonly { readonly id: GroupMode; readonly label: string }[]
 
 export function ActionToolbar(props: ActionToolbarProps) {
   const { board, page, viewControls } = props;
-  const [panel, setPanel] = useState<'filter' | 'chase' | null>(null);
-  const filterId = useId();
-  const chaseId = useId();
+  const [dialog, setDialog] = useState<ToolbarDialog | null>(null);
   const filterButton = useRef<HTMLButtonElement>(null);
   const selection = appliedFilterLabels(board.chips, page);
   const chasePage = page?.inbox === 'today' ? page : undefined;
-  const isFilterOpen = panel === 'filter';
-  const isChaseOpen = panel === 'chase';
-  return (
-    <>
-      <Flex className="today-touch today-toolbar" align="center" gap="small" wrap>
-        <Flex className="today-toolbar-main" align="center" gap="small" wrap>
-          {viewControls}
-          <Flex className="today-toolbar-buttons" gap="small">
-            <Button className="today-toolbar-filter" ref={filterButton} icon={<FilterOutlined aria-hidden />} aria-expanded={isFilterOpen}
-              aria-controls={filterId} onClick={() => setPanel(isFilterOpen ? null : 'filter')}>筛选</Button>
-            {chasePage === undefined ? null : <Button className="today-toolbar-chase" icon={<CopyOutlined aria-hidden />}
-              aria-expanded={isChaseOpen} aria-controls={chaseId} onClick={() => setPanel(isChaseOpen ? null : 'chase')}>按工厂催单</Button>}
-          </Flex>
-        </Flex>
-        <ProcurementCutoff />
+  const draft = dialog?.kind === 'filter' ? dialog.draft : null;
+  const isChaseOpen = dialog?.kind === 'chase';
+  const close = () => setDialog(null);
+
+  return <>
+    <ToolbarActions viewControls={viewControls} filterButton={filterButton} isFilterOpen={draft !== null}
+      chasePage={chasePage} isChaseOpen={isChaseOpen} onFilter={() => setDialog({ kind: 'filter', draft: filterDraft(board, page) })}
+      onChase={() => {
+        chasePage?.onCancelCopy?.();
+        setDialog({ kind: 'chase' });
+      }} />
+    <WorkspaceFilterDialog {...props} draft={draft} onClose={close} onChange={(next) => setDialog({ kind: 'filter', draft: next })} />
+    {chasePage === undefined ? null : <ChaseCopyDialog page={chasePage} open={isChaseOpen} onClose={close} />}
+    <AppliedFilters page={page} selection={selection} onClear={() => filterButton.current?.focus({ preventScroll: true })} />
+    {!isChaseOpen && page?.copyNotice ? <Typography.Text role="status">{page.copyNotice}</Typography.Text> : null}
+  </>;
+}
+
+function ToolbarActions(props: Pick<ActionToolbarProps, 'viewControls'> & {
+  readonly filterButton: Ref<HTMLButtonElement>;
+  readonly chasePage: ActionPageControls | undefined;
+  readonly isFilterOpen: boolean;
+  readonly isChaseOpen: boolean;
+  readonly onFilter: () => void;
+  readonly onChase: () => void;
+}) {
+  return <Flex className="today-touch today-toolbar" align="center" gap="small" wrap>
+    <Flex className="today-toolbar-main" align="center" gap="small" wrap>
+      {props.viewControls}
+      <Flex className="today-toolbar-buttons" gap="small" wrap>
+        <Button className="today-toolbar-filter" ref={props.filterButton} icon={<FilterOutlined aria-hidden />}
+          aria-label="筛选待办" aria-haspopup="dialog" aria-expanded={props.isFilterOpen} onClick={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            props.onFilter();
+          }}><ToolbarLabel full="筛选待办" short="筛选" /></Button>
+        {props.chasePage === undefined ? null : <Button className="today-toolbar-chase" icon={<CopyOutlined aria-hidden />}
+          aria-label="按工厂复制催单" aria-haspopup="dialog" aria-expanded={props.isChaseOpen} onClick={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            props.onChase();
+          }}><ToolbarLabel full="按工厂复制催单" short="复制催单" /></Button>}
       </Flex>
-      <div id={filterId} hidden={!isFilterOpen}>
-        {isFilterOpen ? <ActionOptions {...props} /> : null}
-      </div>
-      {chasePage === undefined ? null : <div id={chaseId} hidden={!isChaseOpen}>
-        {isChaseOpen ? <Card size="small" className="today-copy-panel" role="region" aria-label="工厂催单"><ChaseControls page={chasePage} /></Card> : null}
-      </div>}
-      <AppliedFilters page={page} selection={selection} onClear={() => filterButton.current?.focus({ preventScroll: true })} />
-    </>
-  );
+    </Flex>
+    <ProcurementCutoff />
+  </Flex>;
+}
+
+function ToolbarLabel({ full, short }: { readonly full: string; readonly short: string }) {
+  return <span aria-hidden="true">
+    <span className="today-toolbar-label-full">{full}</span>
+    <span className="today-toolbar-label-short">{short}</span>
+  </span>;
+}
+
+function WorkspaceFilterDialog({ draft, onClose, onChange, onApplyFilters, ...props }: ActionToolbarProps & {
+  readonly draft: WorkspaceFilterSelection | null;
+  readonly onClose: () => void;
+  readonly onChange: (selection: WorkspaceFilterSelection) => void;
+}) {
+  const applyButton = useRef<HTMLButtonElement>(null);
+  const [afterClose, setAfterClose] = useState<(() => void) | null>(null);
+  const closeAndJump: CloseAndJump = (jump) => {
+    setAfterClose(() => jump);
+    onClose();
+  };
+
+  function apply() {
+    if (draft === null) return;
+    onApplyFilters?.(draft);
+    const work = draft.work;
+    if (work !== props.page?.work && (work === 'factory_chase' || work === 'internal_note')) {
+      closeAndJump(() => focusSection('today-chase'));
+    } else {
+      onClose();
+    }
+  }
+
+  return <Modal title="筛选待办" open={draft !== null} centered
+    closable={{ 'aria-label': '关闭筛选待办' }} destroyOnHidden mask={{ closable: false }} styles={actionDialogStyles}
+    focusable={{ trap: true, focusTriggerAfterClose: afterClose === null }} onCancel={onClose}
+    afterOpenChange={(open) => { if (open) applyButton.current?.focus({ preventScroll: true }); }}
+    afterClose={() => {
+      setAfterClose(null);
+      afterClose?.();
+    }}
+    footer={<Flex justify="end" gap="small" wrap>
+      <Button style={actionDialogTarget} onClick={onClose}>取消</Button>
+      <Button type="primary" ref={applyButton} style={actionDialogTarget} onClick={apply}>应用筛选</Button>
+    </Flex>}>
+    {draft === null ? null : <ActionOptions {...props} draft={draft} onJump={closeAndJump} onChange={onChange} />}
+  </Modal>;
+}
+
+function filterDraft(board: TodayBoard, page: ActionPageControls | undefined): WorkspaceFilterSelection {
+  return {
+    reasons: page?.reasons ?? board.chips.filter((chip) => chip.isSelected).map((chip) => chip.code),
+    work: page?.work,
+    sort: page?.sort ?? { kind: 'urgency' },
+    group: undefined,
+  };
 }
 
 function appliedFilterLabels(chips: readonly ReasonChip[], page: ActionPageControls | undefined): readonly string[] {
@@ -81,38 +162,89 @@ function AppliedFilters({ page, selection, onClear }: {
   </Flex>;
 }
 
-function ActionOptions({ board, page, onGroup, onToggleReason, calendar, utilityLinks }: ActionToolbarProps) {
-  const canGroupList = calendar === undefined && board.group !== 'kanban' && page?.sort.kind !== 'bulk';
-  return <Card size="small">
-    <Flex vertical gap="small">
-      <ActionControls page={page} utilityLinks={utilityLinks} />
-      {canGroupList ? <Flex className="today-touch" align="center" gap="small" wrap>
-        <Typography.Text>清单分组</Typography.Text>
-        <TodayGrouping label="清单分组" modes={LIST_GROUPS} group={board.group} onGroup={onGroup} />
-      </Flex> : null}
-      <search className="today-touch" aria-label="工作台筛选">
-        <ReasonChips chips={board.chips} onToggle={onToggleReason} />
-      </search>
-      {page?.inbox === 'today' ? <WorkOptions page={page} /> : null}
-    </Flex>
-  </Card>;
-}
+type FilterOptionsProps = Pick<ActionToolbarProps, 'board' | 'page' | 'calendar' | 'utilityLinks'> & {
+  readonly draft: WorkspaceFilterSelection;
+  readonly onChange: (selection: WorkspaceFilterSelection) => void;
+};
 
-function WorkOptions({ page }: { readonly page: ActionPageControls }) {
-  const isAllUnshipped = page.work === 'all_unshipped';
-  return <Flex className="today-touch" align="center" gap="small" wrap>
-    {isAllUnshipped ? null : <BatchLinks page={page} />}
-    <Button size="small" aria-pressed={isAllUnshipped}
-      onClick={() => page.onWork(isAllUnshipped ? undefined : 'all_unshipped')}>{workFilterLabels.all_unshipped}</Button>
+function ActionOptions({ board, page, calendar, utilityLinks, draft, onJump, onChange }: FilterOptionsProps & {
+  readonly onJump: CloseAndJump;
+}) {
+  const shortcuts = utilityLinks?.(onJump);
+  return <Flex className="today-touch" vertical gap="middle">
+    <Typography.Text type="secondary">选好条件后，工作台只显示匹配的待办。</Typography.Text>
+    {page?.inbox === 'today' ? <WorkOptions page={page} work={draft.work} onWork={(work) => onChange({ ...draft, work })} /> : null}
+    <ReasonOptions chips={board.chips} selected={draft.reasons} onToggle={(code) => onChange({
+      ...draft,
+      reasons: draft.reasons.includes(code) ? draft.reasons.filter((reason) => reason !== code) : [...draft.reasons, code],
+    })} />
+    <DisplayOptions board={board} page={page} calendar={calendar} draft={draft} onChange={onChange} />
+    {shortcuts == null ? null : <Flex vertical gap="small">
+      <Typography.Text strong>跳到待办</Typography.Text>
+      <Flex role="group" aria-label="跳到待办" gap="small" wrap>{shortcuts}</Flex>
+    </Flex>}
   </Flex>;
 }
 
-function ReasonChips(props: { readonly chips: readonly ReasonChip[]; readonly onToggle: (code: string) => void }): ReactNode {
-  return (
+function DisplayOptions({ board, page, calendar, draft, onChange }: Omit<FilterOptionsProps, 'utilityLinks'>) {
+  const canGroupList = calendar === undefined && board.group !== 'kanban' && draft.sort.kind !== 'bulk';
+  const canSort = page !== undefined && page.inbox !== 'scheduled';
+  if (!canSort && !canGroupList) return null;
+  return <Flex role="group" aria-label="显示方式" vertical gap="small">
+    <Typography.Text strong>显示方式</Typography.Text>
+    {canSort ? <SortControls sort={draft.sort} units={page.paging.units} onSort={(sort) => onChange({ ...draft, sort })} /> : null}
+    {canGroupList ? <Flex align="center" gap="small" wrap>
+      <Typography.Text>清单分组</Typography.Text>
+      <TodayGrouping label="清单分组" modes={LIST_GROUPS} group={draft.group ?? board.group} onGroup={(group) => onChange({ ...draft, group })} />
+    </Flex> : null}
+  </Flex>;
+}
+
+function WorkOptions({ page, work, onWork }: {
+  readonly page: ActionPageControls;
+  readonly work: TodayWorkFilter | undefined;
+  readonly onWork: (work: TodayWorkFilter | undefined) => void;
+}) {
+  const scopes: readonly { readonly key: TodayWorkFilter; readonly count: number | undefined }[] = [
+    { key: 'factory_chase', count: page.paging.chaseCounts?.all },
+    { key: 'internal_note', count: page.paging.internalNoteCount },
+  ];
+  return <Flex role="group" aria-label="待办类型" vertical gap="small">
+    <Typography.Text strong>待办类型</Typography.Text>
     <Flex align="center" gap="small" wrap>
-      {props.chips.map((chip) => (
-        <Tag.CheckableTag key={chip.code} checked={chip.isSelected} onChange={() => props.onToggle(chip.code)}>{chip.label} {chip.count}</Tag.CheckableTag>
+      {scopes.filter(({ key, count }) => (count ?? 0) > 0 || work === key || page.work === key).map(({ key, count }) => (
+        <FilterOption key={key} selected={work === key} onClick={() => onWork(work === key ? undefined : key)}>
+          {workFilterLabels[key]}{count === undefined ? '' : ` ${count} 批`}
+        </FilterOption>
       ))}
+      <FilterOption selected={work === 'all_unshipped'} onClick={() => onWork(work === 'all_unshipped' ? undefined : 'all_unshipped')}>
+        {workFilterLabels.all_unshipped}
+      </FilterOption>
     </Flex>
-  );
+  </Flex>;
+}
+
+function ReasonOptions({ chips, selected, onToggle }: {
+  readonly chips: readonly ReasonChip[];
+  readonly selected: readonly string[];
+  readonly onToggle: (code: string) => void;
+}) {
+  if (chips.length === 0) return null;
+  return <Flex role="group" aria-label="待办原因" vertical gap="small">
+    <Typography.Text strong>待办原因</Typography.Text>
+    <Flex align="center" gap="small" wrap>
+      {chips.map((chip) => <FilterOption key={chip.code} selected={selected.includes(chip.code)} onClick={() => onToggle(chip.code)}>
+        {chip.label} {chip.count}
+      </FilterOption>)}
+    </Flex>
+  </Flex>;
+}
+
+function FilterOption({ selected, onClick, children }: {
+  readonly selected: boolean;
+  readonly onClick: () => void;
+  readonly children: ReactNode;
+}) {
+  return <Button size="small" aria-pressed={selected} style={actionDialogTarget}
+    color={selected ? 'primary' : 'default'} variant={selected ? 'filled' : 'outlined'} onClick={onClick}>{children}</Button>;
 }

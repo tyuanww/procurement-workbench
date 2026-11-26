@@ -77,6 +77,15 @@ async function checkActionBoard(page: Page): Promise<void> {
   const board = page.getByRole('region', { name: '工作台待办' });
   await board.getByRole('article', { name: /^UI-DEMO-001/ }).waitFor();
   await board.getByRole('article', { name: /^UI-DEMO-002/ }).waitFor();
+  await page.getByRole('heading', { name: '个人工作台', level: 1, exact: true }).waitFor();
+  await page.getByRole('heading', { name: /^今天要办\s*\d+\s*项\s*本人范围/u, level: 2 }).waitFor();
+  const scopes = page.getByRole('navigation', { name: '工作范围', exact: true });
+  await scopes.getByRole('button', { name: /^已约跟进/ }).waitFor();
+  await scopes.getByRole('button', { name: /^待分派/ }).waitFor();
+  const breadcrumb = page.getByRole('banner').getByRole('navigation', { name: '当前位置' });
+  assert.deepEqual(await breadcrumb.locator('.ant-breadcrumb-link').allTextContents(), ['今日事项', '个人工作台']);
+  assert.equal(await page.getByText(/^业务日\s+\d{4}-\d{2}-\d{2}$/u).count(), 0);
+  await board.getByText(/^\*数据截止 \d{4}-\d{2}-\d{2}$/u).waitFor();
   await checkWideWorkspace(page);
   const pending = board.getByText('UI-DEMO-003', { exact: false }).first();
   await pending.waitFor();
@@ -89,14 +98,20 @@ async function checkActionBoard(page: Page): Promise<void> {
   await taskDetail.waitFor({ state: 'hidden' });
   const views = board.getByRole('radiogroup', { name: '工作台视图', exact: true });
   await views.getByRole('radio', { name: '日历', exact: true }).press('Space');
-  await board.getByRole('textbox', { name: '选择工作日期', exact: true }).waitFor();
+  const workDate = board.getByRole('textbox', { name: '选择工作日期', exact: true });
+  assert.match(await workDate.inputValue(), /^\d{4}-\d{2}-\d{2}$/u);
   await checkCalendarBesideResults(page);
   await pending.waitFor();
   await task.waitFor();
   await views.getByRole('radio', { name: '列表', exact: true }).press('Space');
   assert.equal(await board.getByRole('article', { name: /^UI-DEMO-005/ }).count(), 0);
-  await board.getByRole('button', { name: '按工厂催单', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: /复制全部可催/ }).isEnabled(), true);
+  const chase = board.getByRole('button', { name: '按工厂复制催单', exact: true });
+  await chase.click();
+  const factoryDialog = page.getByRole('dialog', { name: '按工厂复制催单', exact: true });
+  assert.equal(await factoryDialog.getByRole('button', { name: /^复制全部可催/ }).isEnabled(), true);
+  await page.keyboard.press('Escape');
+  await factoryDialog.waitFor({ state: 'hidden' });
+  await chase.and(page.locator(':focus')).waitFor();
 }
 
 async function checkWideWorkspace(page: Page): Promise<void> {

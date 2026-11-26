@@ -5,7 +5,7 @@ import { useCanWrite } from '../../shared/actor.js';
 import {
   todayBoard, todayViewOf, withGroup, type OpenForm, type TodayBoard, type Undo,
 } from '../../features/today/index.js';
-import { actionQuery, actionReasonParams, workspaceDayParams, workspaceInboxParams, workspaceViewParams, type ActionQuery } from './action-query.js';
+import { actionQuery, workspaceDayParams, workspaceFilterParams, workspaceInboxParams, workspaceViewParams, type ActionQuery } from './action-query.js';
 import { useTodayActionPage } from './use-today-action-page.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, rowsSettled } from './today-keys.js';
@@ -40,6 +40,10 @@ function useTodayScreen(): TodayScreenProps {
     ...(arrivalsView === undefined ? {} : { isReady: today.isLoadedForQuery || today.loadError !== '', loadError: today.loadError }),
     search: route.search, actionPage, arrivalsView, workspace: workspaceControls({ route, asOf: state.asOf }), myPlan: plan.mine,
     canRecord, pendingFocusId: route.pendingFocusId, arrivalFocusId: route.arrivalFocusId, isMyPlan, isInternalWorkVisible,
+    onApplyFilters: (selection) => {
+      const params = workspaceFilterParams(route.search, selection);
+      if (params.toString() !== route.search) route.setParams(params);
+    },
   };
 }
 
@@ -195,7 +199,6 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     onCloseHelp: () => state.setHelp(false),
     isReady: state.isReady,
     loadError: state.loadError,
-    onToggleReason: (code) => setParams(actionReasonParams(search, code)),
     onGroup: (group) => setParams(new URLSearchParams(withGroup({ search, group }))),
     onOpen: (id) => { state.setDrawerId(id); state.setFocus(id); state.setDraft(null); state.setSaveError(''); },
     onQuick: ({ id, kind }) => openQuick({ id, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError }),

@@ -100,10 +100,11 @@ it('今天的范围和日历计数包含本人排期和待建首批，分页后�
     expect(textOf('[aria-label="工作台日历"]')).toContain('53项');
     expect(textOf('#today-chase')).not.toContain('首批待建样品');
     expect(textOf('#today-chase')).not.toContain('本人里程碑');
-    click(button('筛选'));
+    click(button('筛选待办'));
     const jump = document.querySelector<HTMLAnchorElement>('a[href="#today-pending-batches"]');
     if (jump === null) throw new Error('没有待建跳转');
     click(jump);
+    await waitFor(() => !new URLSearchParams(textOf('output')).has('page'));
     await act(() => { fulfill({ urlPart: 'page=1', status: 200, body: response(1) }); });
     expect(textOf('.today-workspace-heading h2')).toMatch(/今天要办\s*53\s*项/u);
     expect(document.querySelectorAll('#today-pending-batches')).toHaveLength(1);

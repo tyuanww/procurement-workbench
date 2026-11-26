@@ -67,7 +67,6 @@ function showShip(role: Role): string {
     board: shipBoard(),
     focus: null,
     fading: null,
-    onToggleReason: () => undefined,
     onGroup: () => undefined,
     onOpen: () => undefined,
     onQuick: () => undefined,

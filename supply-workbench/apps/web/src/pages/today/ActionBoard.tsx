@@ -4,7 +4,7 @@ import { CopyOutlined } from '@ant-design/icons';
 import { ACTION_LANES, type ActionDetail, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { fontSize } from '../../theme/tokens.js';
-import { ActionPagination, ActionResult, ChasePreviewDialog, type ActionPageControls } from './ActionControls.js';
+import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodayGroup } from './TodayGroup.js';
@@ -53,8 +53,6 @@ function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageContro
   const { page } = props;
   return <>
     {page.isFiltered && page.calendar === undefined ? null : <ActionResult page={page} asOf={props.asOf} />}
-    <ChasePreviewDialog page={page} />
-    {page.copyNotice === '' ? null : <Typography.Text role="status">{page.copyNotice}</Typography.Text>}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
     <Spin spinning={page.isLoading}>
       <div aria-busy={page.isLoading} inert={!page.isSettled}>

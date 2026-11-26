@@ -62,19 +62,21 @@ const todayWorkspaceCss = `
       margin-inline: auto;
     }
     .today-workspace-intro { display: grid; gap: ${small}px; }
-    .today-workspace-heading, .today-workspace-scopes { display: flex; align-items: baseline; flex-wrap: wrap; gap: ${tiny}px ${small}px; }
-    .today-workspace-heading { justify-content: space-between; }
-    .today-workspace-heading .ant-typography { margin: 0; }
+    .today-workspace-heading, .today-workspace-scopes { display: flex; align-items: safe center; flex-wrap: wrap; }
+    .today-workspace-heading { gap: ${small}px ${regular}px; }
+    .today-workspace-heading > .ant-typography { margin: 0; }
     .today-workspace-heading h2 { font-size: ${fontSize.page}px; line-height: 1.4; }
     .today-workspace-heading h2 strong { font-size: ${fontSize.metric}px; line-height: 1; }
-    .today-workspace-heading h2 small, .today-workspace-heading .today-business-date, .today-toolbar .procurement-cutoff { font-size: ${fontSize.meta}px; }
+    .today-workspace-heading h2 small, .today-toolbar .procurement-cutoff { font-size: ${fontSize.meta}px; }
     .today-workspace-heading h2 small { color: ${text.secondary}; font-weight: 500; }
     .today-workspace-heading .today-mine-scope { margin-inline-start: ${small}px; }
     .today-review-scope { display: flex; gap: ${small}px; align-items: center; flex-wrap: wrap; }
-    .today-workspace-heading h2 strong, .today-workspace-scopes strong, .today-business-date { font-variant-numeric: tabular-nums; }
+    .today-workspace-heading h2 strong, .today-workspace-scopes strong { font-variant-numeric: tabular-nums; }
+    .today-workspace-scopes { min-inline-size: 0; gap: ${tiny}px ${small}px; }
     .today-workspace-scopes > .ant-btn { gap: ${tiny}px; border-color: ${border}; padding-inline: 10px; }
     .today-toolbar { padding-block-end: ${small}px; border-block-end: 1px solid ${border}; }
     .today-toolbar-main { min-inline-size: 0; }
+    .today-toolbar-label-short { display: none; }
     .today-toolbar .today-workspace-views { box-shadow: inset 0 0 0 1px ${border}; }
     .today-priority-block { display: grid; gap: ${small}px; }
     .today-priority-block + .today-priority-block { margin-block-start: ${small}px; }
@@ -89,8 +91,7 @@ const todayWorkspaceCss = `
       }
     }
     @container today-workspace (max-width: 28rem) {
-      .today-workspace-heading { align-items: start; flex-direction: column; }
-      .today-workspace-scopes > .ant-btn { min-block-size: 44px; block-size: auto; }
+      .today-workspace-scopes > .ant-btn { min-block-size: 44px; min-inline-size: 44px; block-size: auto; }
     }
     @container today-action (max-width: 26rem) {
       .today-toolbar-main, .today-toolbar-buttons { gap: ${tiny}px; }
@@ -98,7 +99,10 @@ const todayWorkspaceCss = `
       .today-toolbar-buttons > .ant-btn .anticon, .today-workspace-views .ant-segmented-item-icon { display: none; }
       .today-toolbar .today-workspace-views .ant-segmented-item, .today-toolbar .today-workspace-views .ant-segmented-item-label { min-inline-size: 44px; }
       .today-toolbar .today-workspace-views .ant-segmented-item-label { display: grid; place-items: center; min-block-size: 44px; padding-inline: 2px; }
-      .today-copy-panel .ant-radio-wrapper { min-block-size: 44px; align-items: center; }
+    }
+    @container today-action (max-width: 20rem) {
+      .today-toolbar-label-full { display: none; }
+      .today-toolbar-label-short { display: inline; }
     }
   `;
 

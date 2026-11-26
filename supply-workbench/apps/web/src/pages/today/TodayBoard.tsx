@@ -10,7 +10,7 @@ import {
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
 import type { ActionPageControls } from './ActionControls.js';
-import { ActionBoard, isActionFiltered, type ActionLane } from './ActionBoard.js';
+import { ActionBoard, isActionFiltered, type ActionBoardProps, type ActionLane } from './ActionBoard.js';
 import { PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendingBatches } from './PendingBatches.js';
 import { ScheduleView } from './ScheduleView.js';
 import { PageHeader } from '../../shared/ui/page.js';
@@ -18,7 +18,7 @@ import { arrivalWork, planTaskCards } from './TodayAgenda.js';
 import { TodayAgendaShortcuts, TodayLinks, useAgendaJump } from './TodayLinks.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
-import type { WorkspaceInbox } from './action-query.js';
+import type { WorkspaceFilterSelection, WorkspaceInbox } from './action-query.js';
 
 const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
 const ACTION_HELP = `${NAVIGATION_HELP}，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭`;
@@ -60,7 +60,7 @@ export type TodayScreenProps = {
   readonly onCloseHelp?: () => void;
   readonly isReady: boolean;
   readonly loadError: string;
-  readonly onToggleReason: (code: string) => void;
+  readonly onApplyFilters?: (selection: WorkspaceFilterSelection) => void;
   readonly onGroup: (group: GroupMode) => void;
   readonly onOpen: (id: string) => void;
   readonly onQuick: (input: { readonly id: string; readonly kind: QuickAction['kind'] }) => void;
@@ -169,20 +169,23 @@ function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<s
     <ActionBoard {...props} {...navigation} page={page} receiptOf={(id) => receipts.get(id)}
       internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
       internalPagination={<PendingBatchPagination view={pending} />} {...display}
-      utilityLinks={<ActionDestinations inbox={inbox} pendingCount={pending.total} page={page} myPlan={props.myPlan} jump={jump} />} />
+      utilityLinks={actionDestinations({ inbox, pendingCount: pending.total, page, myPlan: props.myPlan, jump })} />
   </>;
 }
 
-function ActionDestinations({ inbox, pendingCount, page, myPlan, jump }: {
+function actionDestinations({ inbox, pendingCount, page, myPlan, jump }: {
   readonly inbox: WorkspaceInbox;
   readonly pendingCount: number;
   readonly page: ActionPageControls | undefined;
   readonly myPlan: MyPlan | undefined;
   readonly jump: (id: string) => void;
-}) {
-  if (inbox !== 'today') return null;
+}): ActionBoardProps['utilityLinks'] {
+  if (inbox !== 'today') return undefined;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
-  return <TodayAgendaShortcuts pendingCount={page?.paging.pendingCount ?? pendingCount} planCount={planCount} jump={jump} />;
+  const pendingRows = page?.paging.pendingCount ?? pendingCount;
+  if (!planCount && pendingRows === 0) return undefined;
+  return (afterClose) => <TodayAgendaShortcuts pendingCount={pendingRows} planCount={planCount}
+    jump={(id) => afterClose(() => jump(id))} />;
 }
 
 function useBoardNavigation(props: TodayScreenProps, inbox: WorkspaceInbox) {

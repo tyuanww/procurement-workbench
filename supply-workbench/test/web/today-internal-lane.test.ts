@@ -111,7 +111,7 @@ function props(overrides: Partial<TodayScreenProps>): TodayScreenProps {
     board: todayBoard({ items: [], reasons: [], group: 'kanban', buyerName: '' }),
     focus: null, fading: null, drawerId: null, draft: null, hadDate: false, lane: 'finished',
     isSaving: false, notice: '', saveError: '', isHelpOpen: false, isReady: true, loadError: '',
-    onToggleReason: noop, onGroup: noop, onOpen: noop, onQuick: noop, onCopy: noop, onCloseDrawer: noop,
+    onGroup: noop, onOpen: noop, onQuick: noop, onCopy: noop, onCloseDrawer: noop,
     onDraft: noop, onSubmit: noop, onRetry: noop, onBack: noop,
     ...overrides,
   };

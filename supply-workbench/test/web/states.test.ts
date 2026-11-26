@@ -88,7 +88,6 @@ function todayProps(override: Record<string, unknown> = {}): Record<string, unkn
     isHelpOpen: false,
     isReady: true,
     loadError: '',
-    onToggleReason: noop,
     onGroup: noop,
     onOpen: noop,
     onQuick: noop,

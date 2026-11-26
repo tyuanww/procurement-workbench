@@ -1,6 +1,6 @@
 import { TODO_REASONS, normalizeUnit, type TodoReason } from '@sw/domain';
 import { LocalDateSchema, TodayInboxSchema, TodayWorkFilterSchema, type TodayInbox, type TodaySort, type TodayWorkFilter } from '@sw/contracts';
-import { readReasons, taskIdOf, withReason } from '../../features/today/index.js';
+import { readReasons, taskIdOf, withGroup, type GroupMode } from '../../features/today/index.js';
 
 export const ACTION_PAGE_SIZE = 50;
 
@@ -15,6 +15,13 @@ export type ActionQuery = {
   readonly work: TodayWorkFilter | undefined;
   readonly inbox: WorkspaceInbox | undefined;
   readonly calendar: string | undefined;
+};
+
+export type WorkspaceFilterSelection = {
+  readonly reasons: readonly string[];
+  readonly work: TodayWorkFilter | undefined;
+  readonly sort: TodaySort;
+  readonly group: GroupMode | undefined;
 };
 
 export type ChaseScope =
@@ -102,13 +109,7 @@ export function actionPageParams(search: string, page: number): URLSearchParams 
   return params;
 }
 
-export function actionReasonParams(search: string, code: string): URLSearchParams {
-  const params = newSelection(withReason({ search, code }));
-  if (!params.has('inbox')) params.set('inbox', actionQuery(search).inbox ?? 'today');
-  return params;
-}
-
-export function actionSortParams(search: string, sort: TodaySort): URLSearchParams {
+function actionSortParams(search: string, sort: TodaySort): URLSearchParams {
   const params = newSelection(search);
   if (sort.kind === 'bulk') {
     params.set('sort', 'bulk');
@@ -119,6 +120,26 @@ export function actionSortParams(search: string, sort: TodaySort): URLSearchPara
     params.delete('unit');
   }
   return params;
+}
+
+export function workspaceFilterParams(search: string, selection: WorkspaceFilterSelection): URLSearchParams {
+  const current = actionQuery(search);
+  const reasons = TODO_REASONS.filter((reason) => selection.reasons.includes(reason));
+  const next = { ...current, reasons, work: selection.work, sort: selection.sort };
+  const hasFilterChange = actionFilters({ ...current, reasons: [...new Set(current.reasons)].sort() }).toString()
+    !== actionFilters({ ...next, reasons: [...reasons].sort() }).toString();
+  const params = hasFilterChange ? actionSortParams(search, next.sort) : new URLSearchParams(search);
+  if (hasFilterChange) {
+    const filters = actionFilters(next);
+    for (const key of ['reasons', 'work']) {
+      const value = filters.get(key);
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    }
+    params.set('inbox', current.inbox ?? 'today');
+  }
+  if (selection.group === undefined) return params;
+  return new URLSearchParams(withGroup({ search: params.toString(), group: selection.group }));
 }
 
 export function actionWorkParams(search: string, work?: TodayWorkFilter): URLSearchParams {

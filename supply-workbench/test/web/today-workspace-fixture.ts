@@ -20,8 +20,8 @@ export function batchTodo(seq: number): TodoItemView {
 
 export function antdApp(children: unknown) {
   const antd: unknown = requireWeb('antd');
-  if (typeof antd !== 'object' || antd === null || !('App' in antd)) throw new Error('没有 Ant Design App');
-  return element(antd.App, { children });
+  if (typeof antd !== 'object' || antd === null || !('App' in antd) || !('ConfigProvider' in antd)) throw new Error('没有 Ant Design App');
+  return element(antd.ConfigProvider, { theme: { token: { motion: false } }, children: element(antd.App, { children }) });
 }
 
 export function LocationAndToday() {
