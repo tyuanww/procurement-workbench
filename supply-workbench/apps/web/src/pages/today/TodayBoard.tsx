@@ -21,6 +21,7 @@ import { TodayActionSummary } from './TodayActionSummary.js';
 import { ActionAssistant } from './ActionAssistant.js';
 import { TodaySectionNavigation } from './TodaySectionNavigation.js';
 import { focusSection } from './today-focus.js';
+import type { CalendarBusinessDayPreview } from './use-calendar-business-day.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
 import type { WorkspaceFilterSelection, WorkspaceInbox } from './action-query.js';
@@ -44,6 +45,7 @@ export type TodayScreenProps = {
   readonly onPendingBatchChanged?: () => Promise<boolean>;
   readonly actionBoard?: TodayBoard;
   readonly actionPage?: ActionPageControls | undefined;
+  readonly calendarBusinessDay?: CalendarBusinessDayPreview | undefined;
   readonly batchSeqOf?: ((rowId: string) => number | undefined) | undefined;
   readonly fulfillmentOf?: ((rowId: string) => BatchFulfillment | undefined) | undefined;
   readonly detailOf?: (id: string) => ActionDetail | undefined;
@@ -246,7 +248,7 @@ function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFoc
   };
 }
 
-function actionDisplay({ workspace, actionPage, asOf, myPlan }: TodayScreenProps) {
+function actionDisplay({ workspace, actionPage, asOf, myPlan, calendarBusinessDay }: TodayScreenProps) {
   if (workspace === undefined) return {};
   const calendar = actionPage?.paging.calendar;
   const selectedDate = actionPage?.calendar;
@@ -256,7 +258,7 @@ function actionDisplay({ workspace, actionPage, asOf, myPlan }: TodayScreenProps
     viewControls: <WorkspaceViewControls view={workspace.view} onView={workspace.onView} />,
     calendar: workspace.view === 'calendar' && date !== undefined
       ? <WorkspaceCalendar calendar={calendar} date={date} inbox={workspace.inbox} onDay={workspace.onDay}
-        todayAdditions={todayAdditions} /> : undefined,
+        todayAdditions={todayAdditions} businessDay={calendarBusinessDay} /> : undefined,
     calendarTodayAdditions: todayAdditions,
   };
 }

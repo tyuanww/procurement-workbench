@@ -1,10 +1,10 @@
-import { Alert, BorderBeam, Button, Card, Empty, Flex, Typography } from 'antd';
-import { useState, type ReactNode } from 'react';
-import { CaretRightOutlined, CopyOutlined, PauseOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Empty, Flex, Typography } from 'antd';
+import type { ReactNode } from 'react';
+import { CopyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ACTION_LANES, type ActionDetail, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
-import { brand, fontSize } from '../../theme/tokens.js';
+import { fontSize } from '../../theme/tokens.js';
 import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
@@ -42,11 +42,8 @@ export type ActionBoardProps = ActionToolbarProps & {
 export function ActionBoard(props: ActionBoardProps): ReactNode {
   const { calendar, page, shortcuts } = props;
   const isList = calendar === undefined && !isKanban(props);
-  const animation = useActionListBeam(isList && (page?.inbox ?? 'today') === 'today');
-  const main = <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}
-    data-beam-paused={animation.isPaused}>
-    <ActionToolbar {...props} motionControl={animation.control} />
-    {animation.beam}
+  const main = <Flex vertical gap={isList ? undefined : 'small'} className={isList ? 'today-action-main today-workspace-results today-list-panel' : 'today-action-main'}>
+    <ActionToolbar {...props} />
     {calendar === undefined ? <div className="today-action-results-body">
       {page === undefined ? <ActionGroups {...props} /> : <PagedGroups {...props} page={page} />}
     </div> : <TodaySplit className="today-workspace-calendar-layout" defaultPrimary={46} label="调整工作日历与当日待办宽度"
@@ -56,21 +53,6 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
     <TodaySplit className="today-actions-layout" defaultPrimary={76}
       label="调整行动清单与事项助手宽度" primary={main} secondary={shortcuts} />
   </section>;
-}
-
-function useActionListBeam(enabled: boolean) {
-  const [isPaused, setPaused] = useState(false);
-  if (!enabled) return {};
-  const action = isPaused ? '播放清单流光' : '暂停清单流光';
-  return {
-    isPaused,
-    control: <Button className="today-list-beam-control" type="text"
-      icon={isPaused ? <CaretRightOutlined aria-hidden /> : <PauseOutlined aria-hidden />}
-      aria-label={action} title={action} onClick={() => setPaused((isCurrentlyPaused) => !isCurrentlyPaused)} />,
-    beam: <BorderBeam className="today-list-beam" color={brand[600]} duration={4.8} outset={0}>
-      <div className="today-list-beam-host" aria-hidden="true" />
-    </BorderBeam>,
-  };
 }
 
 function CalendarResults(props: ActionBoardProps) {

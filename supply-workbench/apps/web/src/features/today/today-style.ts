@@ -119,12 +119,12 @@ const todayWorkspaceCss = `
     .today-action-main { border: 1px solid transparent; }
     .today-action-shortcuts { display: grid; }
     .today-action-shortcuts .ant-btn { text-align: start; justify-content: flex-start; block-size: auto; white-space: normal; }
-    .today-list-panel { position: relative; align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
-    .today-list-beam-host, .today-toolbar .today-list-beam-control { display: none; }
+    .today-list-panel { align-self: stretch; background: ${bg.surface}; border: 1px solid ${border}; border-radius: ${radiusCard}px; }
+    .today-batch-card, .today-batch-card > .ant-card-body { position: relative; }
+    .today-batch-card > .ant-card-body { border-radius: inherit; }
+    .today-row-beam-host { display: none; }
     @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-      .today-list-beam-host { display: block; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
-      .today-toolbar .today-list-beam-control { display: inline-flex; }
-      .today-list-panel[data-beam-paused="true"] .today-list-beam::before { animation-play-state: paused; }
+      .today-action-list > li:focus-within .today-row-beam-host { display: block; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
     }
     .today-list-panel .today-priority-list { gap: 0; }
     .today-list-panel .today-work-card { border-radius: 0; background: transparent; }

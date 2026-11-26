@@ -6,6 +6,7 @@ import {
   todayBoard, todayViewOf, withGroup, type OpenForm, type TodayBoard, type Undo,
 } from '../../features/today/index.js';
 import { actionQuery, CALENDAR_RETURN, selectedCalendarDay, workspaceCalendarParams, workspaceFilterParams, workspaceInboxParams, workspaceViewParams, type ActionQuery } from './action-query.js';
+import { useCalendarBusinessDay } from './use-calendar-business-day.js';
 import { useTodayActionPage } from './use-today-action-page.js';
 import { applyNextToday, useTodayData, type TodayLoad } from './today-load.js';
 import { focusForRows, rowsSettled } from './today-keys.js';
@@ -33,13 +34,15 @@ function useTodayScreen(): TodayScreenProps {
   const board = boardOf({ state, group, reasons: query.reasons, sort: query.sort });
   const actionBoard = isPlanMode ? boardOf({ state, group: 'waiting', reasons: query.reasons, sort: query.sort }) : board;
   const plan = useTodayPlan({ group, ownerId: state.buyerId, isMine: isMyPlan, shouldLoad: arrivalsView === undefined });
+  const calendarBusinessDay = useCalendarBusinessDay({ search: route.search, query,
+    current: today.isLoadedForQuery ? today.data : null, myPlan: plan.mine });
   const isInternalWorkVisible = showPlanRows({ query, asOf: state.asOf });
   const { actionPage, closeSession, canRecord } = useScreenSession({ state, today, route, board, actionBoard, plan, isInternalWorkVisible });
   useUndoMessage({ undo: state.undo, onRestore: () => { void restoreTodayWrite(state); } });
   return {
     ...screenProps({ state, board, actionBoard, plan, route, closeSession }),
     ...(arrivalsView === undefined ? {} : { isReady: today.isLoadedForQuery || today.loadError !== '', loadError: today.loadError }),
-    search: route.search, actionPage, arrivalsView, workspace: workspaceControls({ route, asOf: state.asOf }), myPlan: plan.mine,
+    search: route.search, actionPage, arrivalsView, calendarBusinessDay, workspace: workspaceControls({ route, asOf: state.asOf }), myPlan: plan.mine,
     canRecord, pendingFocusId: route.pendingFocusId, arrivalFocusId: route.arrivalFocusId, isMyPlan, isInternalWorkVisible,
     onOpenArrivals: (path) => { void navigate(path); },
     onApplyFilters: (selection) => {

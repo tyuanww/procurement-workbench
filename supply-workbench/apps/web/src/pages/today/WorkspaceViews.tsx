@@ -7,6 +7,7 @@ import type { TodayPaging } from '@sw/contracts';
 import { ViewSwitch } from '../../shared/ui/view-switch.js';
 import { fontSize, space, statusColor } from '../../theme/tokens.js';
 import type { WorkspaceInbox, WorkspaceView } from './action-query.js';
+import type { CalendarBusinessDayPreview } from './use-calendar-business-day.js';
 import { workspaceCalendarCss } from './workspace-calendar-style.js';
 
 const options = [
@@ -48,6 +49,7 @@ type WorkspaceCalendarProps = {
   readonly inbox: WorkspaceInbox;
   readonly onDay: (date: string) => void;
   readonly todayAdditions: CalendarTodayAdditions | undefined;
+  readonly businessDay: CalendarBusinessDayPreview | undefined;
 };
 
 export function WorkspaceCalendar({ date, inbox, onDay, ...countsInput }: WorkspaceCalendarProps) {
@@ -64,7 +66,9 @@ export function WorkspaceCalendar({ date, inbox, onDay, ...countsInput }: Worksp
       <CalendarGrid month={month} selected={selected} onDay={chooseDay} onBrowse={browse}
         noticeOf={noticeOf} monthNotices={monthNotices} calendarMonth={calendarMonth} hasSchedulePreview={hasSchedulePreview} />
     </div>
-    {countsInput.todayAdditions?.isPartial === true ? <CalendarNote>今日项数暂不含排期</CalendarNote> : null}
+    {countsInput.todayAdditions?.isPartial === true || countsInput.businessDay?.notice?.isPartial === true
+      ? <CalendarNote>今日项数暂不含排期</CalendarNote> : null}
+    {countsInput.businessDay?.hasError === true ? <CalendarNote>业务日待办数量暂未更新</CalendarNote> : null}
   </Card>;
 }
 
@@ -75,8 +79,8 @@ function useCalendarMonth({ selected, inbox }: { readonly selected: Dayjs; reado
   return { month: panel.month, browse: (month: Dayjs) => setPanel({ date, inbox, month: month.startOf('month') }) };
 }
 
-function calendarNotices({ calendar, inbox, todayAdditions }: Pick<WorkspaceCalendarProps, 'calendar' | 'inbox' | 'todayAdditions'>) {
-  const counts = new Map<string, number>(calendar?.days.map(({ date, count }) => [date, count]));
+function calendarNotices({ calendar, inbox, todayAdditions, businessDay }: Pick<WorkspaceCalendarProps, 'calendar' | 'inbox' | 'todayAdditions' | 'businessDay'>) {
+  const counts = new Map<string, number>(calendarDays({ calendar, inbox })?.map(({ date, count }) => [date, count]));
   if (todayAdditions !== undefined) addToday({ counts, ...todayAdditions });
   const scheduledDays = inbox === 'today' ? calendar?.scheduledDays : undefined;
   const calendarMonth = calendar?.date.slice(0, 7);
@@ -85,9 +89,26 @@ function calendarNotices({ calendar, inbox, todayAdditions }: Pick<WorkspaceCale
   for (const { date, count } of scheduledDays ?? []) {
     notices.set(date, { kind: 'scheduled', count });
   }
+  mergeBusinessDay(notices, { calendarMonth, businessDay });
   const noticeOf: CalendarNoticeOf = (key) => notices.get(key);
   const monthNotices = monthSummary(notices, calendarMonth);
   return { noticeOf, monthNotices, calendarMonth, hasSchedulePreview: scheduledDays !== undefined };
+}
+
+function calendarDays({ calendar, inbox }: Pick<WorkspaceCalendarProps, 'calendar' | 'inbox'>) {
+  // The previous inbox can still be visible while the new selection is loading.
+  if (calendar === undefined) return undefined;
+  return inbox === 'scheduled' ? calendar.scheduledDays ?? calendar.days : calendar.days;
+}
+
+function mergeBusinessDay(notices: Map<string, CalendarNotice>, { calendarMonth, businessDay }: {
+  readonly calendarMonth: string | undefined;
+  readonly businessDay: CalendarBusinessDayPreview | undefined;
+}) {
+  const notice = businessDay?.notice;
+  if (notice !== undefined && notice.count > 0 && notice.day.slice(0, 7) === calendarMonth) {
+    notices.set(notice.day, { kind: 'todo', count: notice.count });
+  }
 }
 
 function monthSummary(notices: ReadonlyMap<string, CalendarNotice>, calendarMonth: string | undefined) {

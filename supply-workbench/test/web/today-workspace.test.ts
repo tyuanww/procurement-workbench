@@ -128,7 +128,7 @@ it('浏览年月保留当前结果，选择日期才切换待办结果或已约�
   const yesterday = localDate('2026-11-20');
   const base = pageBody(1);
   const daily: DailyPlan = { date, asOf: date, total: 0, overdueCount: 0, items: [], byOwner: [], bySupplier: [], byFactory: [] };
-  const today = { ...base, items: [batchTodo(1)], paging: { ...base.paging, calendar: { date, days: [{ date, count: 1 }], scheduledDays: [{ date: tomorrow, count: 1 }] } } };
+  const today = { ...base, items: [batchTodo(1)], paging: { ...base.paging, pendingCount: 0, calendar: { date, days: [{ date, count: 1 }], scheduledDays: [{ date: tomorrow, count: 1 }] } } };
   const past = { ...today, items: [], paging: { ...today.paging, total: 0, calendar: { ...today.paging.calendar, date: yesterday } } };
   try {
     await act(() => {
@@ -175,6 +175,8 @@ it('浏览年月保留当前结果，选择日期才切换待办结果或已约�
     expect(params.get('date')).toBe(tomorrow);
     await act(() => { fulfill({ urlPart: 'inbox=scheduled&calendar=2026-11-22', status: 200, body: { ...today, paging: { ...today.paging, calendar: { date: tomorrow, days: [{ date: tomorrow, count: 1 }] } } } }); });
     expect(textOf('[aria-label="2026-11-22 星期日 已约跟进"] [role="status"]')).toBe('1 批');
+    expect(calendarCell(date).textContent).toContain('待办 1项');
+    expect(calendarCell(tomorrow).textContent).toContain('已约跟进 1批');
     button('回到业务日');
     click(calendarCell(date));
     const returned = new URLSearchParams(textOf('output'));
@@ -205,8 +207,15 @@ it('直接打开已约跟进后可以查看业务日预约，自动预约返回�
         fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
         fulfill({ urlPart: 'inbox=scheduled&calendar=2026-11-22', status: 200, body: { ...base, paging: { ...base.paging, calendar: { date: tomorrow, days: [{ date: tomorrow, count: 1 }] } } } });
       });
-      if (isAutomatic) click(button('回到业务日'));
-      else {
+      if (isAutomatic) {
+        await act(() => {
+          fulfill({ urlPart: 'work=factory_chase&scope=mine', status: 200,
+            body: { ...base, paging: { ...base.paging, calendar: { date, days: [{ date, count: 4 }] } } } });
+        });
+        expect(calendarCell(date).textContent).toContain('待办 4项');
+        expect(calendarCell(tomorrow).textContent).toContain('已约跟进 1批');
+        click(button('回到业务日'));
+      } else {
         expect(textOf('#today-chase')).not.toContain('回到业务日');
         click(calendarCell(date));
       }

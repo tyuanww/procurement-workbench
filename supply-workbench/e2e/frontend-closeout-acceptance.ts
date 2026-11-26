@@ -137,25 +137,24 @@ async function checkActionBoard(page: Page): Promise<void> {
 }
 
 async function checkActionListMotion(page: Page) {
-  const beam = page.locator('.today-list-panel .today-list-beam');
-  const playState = () => beam.evaluate((element) => getComputedStyle(element, '::before').animationPlayState);
+  const selectedRow = page.locator('.today-batch-card').filter({ hasText: 'UI-DEMO-002' });
+  await selectedRow.locator('.today-row-layout').click({ position: { x: 8, y: 8 } });
+  const beam = selectedRow.locator('.today-row-beam');
   await beam.waitFor();
   const animation = await beam.evaluate((element) => {
     const style = getComputedStyle(element, '::before');
     return [style.animationDuration, style.animationIterationCount];
   });
   assert.deepEqual(animation, ['4.8s', 'infinite']);
-  assert.equal(await page.locator('.today-work-card .ant-border-beam, .today-metric-card .ant-border-beam').count(), 0);
-  await page.getByRole('button', { name: '暂停清单流光' }).press('Enter');
-  assert.equal(await playState(), 'paused');
-  await page.getByRole('button', { name: '播放清单流光' }).press('Enter');
-  assert.equal(await playState(), 'running');
+  assert.equal(await page.locator('.today-list-panel .ant-border-beam').count(), 1);
+  assert.equal(await page.getByRole('button', { name: /清单流光/ }).count(), 0);
 
   const divider = page.getByRole('separator', { name: '调整行动清单与事项助手宽度' });
   const list = page.locator('.today-list-panel');
   const width = () => list.evaluate((element) => element.getBoundingClientRect().width);
   const initial = await width();
   await divider.press('ArrowLeft');
+  await beam.waitFor({ state: 'hidden' });
   await page.waitForFunction((initialWidth) => {
     const panel = document.querySelector('.today-list-panel');
     return panel !== null && panel.getBoundingClientRect().width < initialWidth - 20;
@@ -183,10 +182,12 @@ async function checkActionListMotion(page: Page) {
   await page.evaluate(() => window.scrollTo(0, 0));
   await divider.dblclick({ position: { x: handle.width / 2, y: 64 } });
 
+  await selectedRow.locator('.today-row-layout').click({ position: { x: 8, y: 8 } });
+  await beam.waitFor();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   try {
     await beam.waitFor({ state: 'hidden' });
-    assert.equal(await page.getByRole('button', { name: '暂停清单流光' }).count(), 0);
+    assert.equal(await selectedRow.getAttribute('data-current'), 'true');
   } finally {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
   }
