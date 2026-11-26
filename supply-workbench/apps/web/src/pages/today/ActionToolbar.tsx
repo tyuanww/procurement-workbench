@@ -43,7 +43,7 @@ export function ActionToolbar(props: ActionToolbarProps) {
   const clearPending = useRef(false);
   const { isFiltered, inbox, copyNotice } = page ?? {};
   const preset = priorityPreset(props);
-  const selection = appliedFilterLabels(board.chips, page, preset);
+  const selection = appliedFilterLabels({ chips: board.chips, page, preset });
   const chasePage = inbox === 'today' ? page : undefined;
   const draft = dialog?.kind === 'filter' ? dialog.draft : null;
   const isChaseOpen = dialog?.kind === 'chase';
@@ -193,7 +193,9 @@ function filterDraft(board: TodayBoard, page: ActionPageControls | undefined): W
   };
 }
 
-function appliedFilterLabels(chips: readonly ReasonChip[], page: ActionPageControls | undefined, preset: PriorityPreset | null): readonly string[] {
+function appliedFilterLabels({ chips, page, preset }: {
+  readonly chips: readonly ReasonChip[]; readonly page: ActionPageControls | undefined; readonly preset: PriorityPreset | null;
+}): readonly string[] {
   if (preset?.isActive) return ['逾期或今日应到的批次'];
   const selection = chips.filter((chip) => chip.isSelected).map((chip) => chip.label);
   if (page?.work !== undefined) selection.unshift(workFilterLabels[page.work]);
