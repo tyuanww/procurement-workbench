@@ -160,10 +160,12 @@ async function checkBatchPriorityFilter(page: Page) {
 async function checkTodayLayouts(page: Page, out: string, view: 'action-board' | 'daily-schedule') {
   for (const width of todayWidths) {
     await page.setViewportSize({ width, height: 900 });
+    // The responsive shell changes navigation after the browser's resize event.
+    await page.getByRole('button', { name: '打开菜单', exact: true }).waitFor({ state: width < 768 ? 'visible' : 'hidden' });
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     const { tabs, cutoff, results, shortcuts, row } = await measureTodayLayout(page);
     assert.ok(tabs && cutoff && results && shortcuts && row);
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${width}px 页面横向溢出`);
     if (width >= 1280) {
       assert.ok(tabs.right < cutoff.left && cutoff.top < tabs.bottom && cutoff.bottom > tabs.top, '截止日期在页签行右侧');
       assert.deepEqual([results.top, results.bottom], [shortcuts.top, shortcuts.bottom], '待办与辅助区上下对齐');
