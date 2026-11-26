@@ -40,7 +40,7 @@ type TodayLinksProps = {
 
 export function TodayLinks(props: TodayLinksProps) {
   const { page, pending, myPlan, inbox, onInbox } = props;
-  const isOtherDay = page?.calendar !== undefined && page.calendar !== 'today' && page.calendar !== props.asOf;
+  const isOtherDay = isOtherWorkDay(page?.calendar, props.asOf);
   const pendingCount = page?.paging.pendingCount ?? pending;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
   const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable: myPlan?.kind === 'error' });
@@ -55,6 +55,10 @@ export function TodayLinks(props: TodayLinksProps) {
       <TodayShortcuts {...props} pendingCount={pendingCount} planCount={planCount} />
     </Flex>
   </nav>;
+}
+
+function isOtherWorkDay(date: string | undefined, businessDate: string | undefined): boolean {
+  return date !== undefined && date !== 'today' && date !== businessDate;
 }
 
 function workspaceCounts({ paging, planCount, isPlanUnavailable }: {
