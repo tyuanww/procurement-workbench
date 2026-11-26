@@ -6,6 +6,7 @@ import { sidebarEntries, sidebarLink } from './sidebar.ts';
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
 const todayWidths = [320, 390, 768, 1280, 1440, 1920] as const;
+const calendarMonthInput = 'input[aria-label="选择日历月份"]';
 
 export async function checkFrontendCloseout({ page, origin, out }: {
   readonly page: Page; readonly origin: URL; readonly out: string;
@@ -287,14 +288,20 @@ async function checkCalendarBesideResults(page: Page): Promise<void> {
   const resultTitle = page.locator('.today-calendar-results').getByRole('heading', { level: 2 });
   const originalDate = await resultTitle.innerText();
   const originalUrl = page.url();
-  const month = page.getByRole('textbox', { name: '选择日历月份' });
+  const month = page.locator(calendarMonthInput);
   const originalMonth = await month.inputValue();
   await page.getByRole('button', { name: '下月', exact: true }).click();
-  assert.notEqual(await month.inputValue(), originalMonth);
+  await page.waitForFunction(({ selector, before }) => {
+    const value = document.querySelector<HTMLInputElement>(selector)?.value;
+    return Boolean(value && value !== before);
+  }, { selector: calendarMonthInput, before: originalMonth });
   assert.equal(await resultTitle.innerText(), originalDate);
   assert.equal(page.url(), originalUrl);
   await page.getByRole('button', { name: '上月', exact: true }).click();
-  assert.equal(await month.inputValue(), originalMonth);
+  await page.waitForFunction(({ selector, expected }) =>
+    document.querySelector<HTMLInputElement>(selector)?.value === expected, { selector: calendarMonthInput, expected: originalMonth });
+  assert.equal(await resultTitle.innerText(), originalDate);
+  assert.equal(page.url(), originalUrl);
 }
 
 async function checkArrivals(page: Page): Promise<void> {
