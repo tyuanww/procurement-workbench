@@ -1,4 +1,4 @@
-import { Badge, Button, Dropdown, Menu, Tag, Typography, type MenuProps } from 'antd';
+import { Badge, Button, Dropdown, Menu, Tag, Typography, type BadgeProps, type MenuProps } from 'antd';
 import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
 import { useId, useRef, useState, type Ref } from 'react';
 import { Link } from 'react-router';
@@ -11,11 +11,15 @@ import {
 } from '../features/shell/index.js';
 import { bg, brand, space } from '../theme/tokens.js';
 
-export function NavBadge({ mark, compact }: { readonly mark: BadgeMark; readonly compact: boolean }) {
+export function NavBadge({ mark, compact, countProps }: {
+  readonly mark: BadgeMark;
+  readonly compact: boolean;
+  readonly countProps?: Pick<BadgeProps, 'overflowCount' | 'title'>;
+}) {
   switch (mark.kind) {
     case 'count':
       if (compact) return null;
-      return <Badge count={mark.value} color={brand[100]} styles={{ indicator: { color: brand[800] } }} />;
+      return <Badge {...countProps} count={mark.value} color={brand[100]} styles={{ indicator: { color: brand[800] } }} />;
     case 'missing':
       return <span style={{ color: brand[100] }}>—</span>;
     case 'none':

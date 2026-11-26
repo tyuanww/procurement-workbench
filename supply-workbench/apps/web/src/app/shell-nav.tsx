@@ -1,10 +1,10 @@
-import type { MenuProps } from 'antd';
-import type { ReactNode } from 'react';
+import { Tooltip, type MenuProps } from 'antd';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { Link, matchPath } from 'react-router';
 import type { NavPath, NavRow } from '../features/shell/index.js';
 import type { NavDestination } from '../shared/page-manifest.js';
 import { navGlyph } from '../shared/ui/nav-glyph.js';
-import { fontSize } from '../theme/tokens.js';
+import { space } from '../theme/tokens.js';
 import { NavBadge } from './shell-session.js';
 
 export type NavLocation = { readonly pathname: string; readonly search: string };
@@ -32,8 +32,13 @@ export function navMenuItems(input: {
     icon: <span aria-hidden="true">{navGlyph(row.to)}</span>,
   } : {
     key: groupKey(row.to),
-    title: row.badge.kind === 'count' ? `${row.badge.value} 项${row.to === '/today' ? '需关注事项' : '待办'}` : row.label,
-    icon: <span aria-hidden="true">{navGlyph(row.to)}</span>,
+    ...(row.badgeDescription === undefined ? { title: row.badge.kind === 'count' ? `${row.badge.value} 项待办` : row.label } : {}),
+    icon: <span aria-hidden="true">
+      {input.isCollapsed && row.badgeDescription !== undefined
+        ? <NavBadgeHint description={row.badgeDescription} style={collapsedBadgeHintStyle} />
+        : null}
+      {navGlyph(row.to)}
+    </span>,
     label: <NavLabel row={row} isCollapsed={input.isCollapsed} />,
     children: row.destinations.map((destination) => leaf({
       to: destinationHref({ row, destination, location: input.location }),
@@ -44,16 +49,81 @@ export function navMenuItems(input: {
   });
 }
 
-function NavLabel(input: { readonly row: NavRow; readonly isCollapsed: boolean }) {
+function NavLabel({ row, isCollapsed }: { readonly row: NavRow; readonly isCollapsed: boolean }) {
+  if (row.badgeDescription !== undefined) {
+    if (isCollapsed) return row.label;
+    return (
+      <NavBadgeHint description={row.badgeDescription} style={badgeSlotStyle}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</span>
+        <span aria-hidden="true"><NavBadge mark={row.badge} compact={false} countProps={{ overflowCount: 999, title: false }} /></span>
+      </NavBadgeHint>
+    );
+  }
   return (
     <span>
-      {input.row.label}{' '}
-      <span aria-hidden="true">
-        {input.row.to === '/today' && input.row.badge.kind === 'count' && !input.isCollapsed ? <span style={{ fontSize: fontSize.meta }}>需关注 </span> : null}
-        <NavBadge mark={input.row.badge} compact={input.isCollapsed} />
-      </span>
+      {row.label}{' '}
+      <span aria-hidden="true"><NavBadge mark={row.badge} compact={isCollapsed} /></span>
     </span>
   );
+}
+
+const badgeSlotStyle: CSSProperties = {
+  display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) max-content', alignItems: 'center',
+  gap: space[0], paddingInlineEnd: space[1],
+};
+// 折叠菜单会隐藏图标之后的 span，提示的热区放在图标之前。
+const collapsedBadgeHintStyle: CSSProperties = { position: 'absolute', inset: 0, zIndex: 1 };
+
+function NavBadgeHint({ description, style, children }: {
+  readonly description: string;
+  readonly style?: CSSProperties;
+  readonly children?: ReactNode;
+}) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const descriptionId = useId();
+  const [isHovered, setHovered] = useState(false);
+  const isFocused = useNavBadgeFocus({ anchor, descriptionId, dismissHover: setHovered });
+  return (
+    <Tooltip title={description} placement="top" trigger={['hover']} open={isHovered || isFocused} onOpenChange={setHovered}>
+      <span ref={anchor} style={style}>
+        {children}
+        <span id={descriptionId} hidden>{description}</span>
+      </span>
+    </Tooltip>
+  );
+}
+
+function useNavBadgeFocus({ anchor, descriptionId, dismissHover }: {
+  readonly anchor: RefObject<HTMLSpanElement | null>;
+  readonly descriptionId: string;
+  readonly dismissHover: (open: false) => void;
+}): boolean {
+  const [isFocused, setFocused] = useState(false);
+  useEffect(() => {
+    // Ant Design owns the focusable submenu title; the badge does not add a tab stop.
+    const item = anchor.current?.closest('[role="menuitem"]');
+    if (item === undefined || item === null) return;
+    const showOnFocus = () => { setFocused(item.matches(':focus-visible')); };
+    const hideOnBlur = () => { setFocused(false); };
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        dismissHover(false);
+        hideOnBlur();
+      }
+    };
+    item.setAttribute('aria-describedby', descriptionId);
+    item.addEventListener('focus', showOnFocus);
+    item.addEventListener('blur', hideOnBlur);
+    item.ownerDocument.addEventListener('keydown', dismiss);
+    if (item === item.ownerDocument.activeElement) showOnFocus();
+    return () => {
+      item.removeAttribute('aria-describedby');
+      item.removeEventListener('focus', showOnFocus);
+      item.removeEventListener('blur', hideOnBlur);
+      item.ownerDocument.removeEventListener('keydown', dismiss);
+    };
+  }, [anchor, descriptionId, dismissHover]);
+  return isFocused;
 }
 
 function NavLink(input: { readonly to: string; readonly label: string; readonly active: boolean; readonly onNavigate: () => void; readonly children: ReactNode }) {

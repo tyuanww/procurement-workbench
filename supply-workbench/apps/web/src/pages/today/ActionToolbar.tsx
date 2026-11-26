@@ -3,7 +3,7 @@ import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import type { GroupMode, ReasonChip, TodayBoard } from '../../features/today/index.js';
 import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
-import { ActionControls, BatchLinks, ChaseControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
+import { ActionControls, ActionResult, BatchLinks, ChaseControls, workFilterLabels, type ActionPageControls } from './ActionControls.js';
 import { TodayGrouping } from './TodayGroup.js';
 
 export type ActionToolbarProps = {
@@ -73,6 +73,7 @@ function AppliedFilters({ page, selection, onClear }: {
   if (selection.length === 0 && page?.isFiltered !== true) return null;
   return <Flex className="today-touch" align="center" gap="small" wrap>
     {selection.length === 0 ? null : <Typography.Text type="secondary">当前筛选 · {selection.join('、')}</Typography.Text>}
+    {page?.isFiltered === true && page.calendar === undefined ? <ActionResult page={page} /> : null}
     {page?.isFiltered !== true ? null : <Button size="small" type="link" onClick={() => {
       onClear();
       page.onWork();

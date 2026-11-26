@@ -17,7 +17,7 @@ import { PageHeader } from '../../shared/ui/page.js';
 import { arrivalWork, planTaskCards } from './TodayAgenda.js';
 import { arrivalShortcutPath, TodayAgendaShortcuts, TodayLinks, useAgendaJump, type ArrivalTiming } from './TodayLinks.js';
 import type { MyPlan } from './use-today-plan.js';
-import { WorkspaceCalendar, WorkspaceDestinations, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
+import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
 import type { WorkspaceInbox } from './action-query.js';
 
 const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
@@ -165,25 +165,20 @@ function ActionPane(props: TodayScreenProps): ReactNode {
     <ActionBoard {...props} {...navigation} page={page} receiptOf={(id) => receipts.get(id)}
       internalCards={[...planTaskCards({ tasks: summary.tasks, focus: props.focus, onOpen: props.onOpen }), ...pendingBatchCards(pending, props.focus)]}
       internalPagination={<PendingBatchPagination view={pending} />} {...display}
-      utilityLinks={<ActionDestinations inbox={inbox} pendingCount={pending.total} page={page} myPlan={props.myPlan}
-        jump={jump}>{display.utilityLinks}</ActionDestinations>} />
-    {workspace === undefined ? null : <Typography.Text type="secondary"><Link to="/today/personal?preview=1">打开合成预览</Link></Typography.Text>}
+      utilityLinks={<ActionDestinations inbox={inbox} pendingCount={pending.total} page={page} myPlan={props.myPlan} jump={jump} />} />
   </>;
 }
 
-function ActionDestinations({ inbox, pendingCount, page, myPlan, jump, children }: {
+function ActionDestinations({ inbox, pendingCount, page, myPlan, jump }: {
   readonly inbox: WorkspaceInbox;
   readonly pendingCount: number;
   readonly page: ActionPageControls | undefined;
   readonly myPlan: MyPlan | undefined;
   readonly jump: (id: string) => void;
-  readonly children: ReactNode;
 }) {
+  if (inbox !== 'today') return null;
   const planCount = myPlan?.kind === 'ready' ? myPlan.rows.length : undefined;
-  return <>
-    {children}
-    {inbox === 'today' ? <TodayAgendaShortcuts pendingCount={page?.paging.pendingCount ?? pendingCount} planCount={planCount} jump={jump} /> : null}
-  </>;
+  return <TodayAgendaShortcuts pendingCount={page?.paging.pendingCount ?? pendingCount} planCount={planCount} jump={jump} />;
 }
 
 function useBoardNavigation(props: TodayScreenProps, inbox: WorkspaceInbox) {
@@ -218,14 +213,13 @@ function actionSummary({ isInternalWorkVisible, myPlan, pendingBatch, pendingFoc
   };
 }
 
-function actionDisplay({ workspace, actionPage, asOf, search, myPlan }: TodayScreenProps) {
+function actionDisplay({ workspace, actionPage, asOf, myPlan }: TodayScreenProps) {
   if (workspace === undefined) return {};
   const calendar = actionPage?.paging.calendar;
   const selectedDate = actionPage?.calendar;
   const date = selectedDate === 'today' ? asOf : selectedDate ?? asOf;
   return {
     viewControls: <WorkspaceViewControls view={workspace.view} onView={workspace.onView} />,
-    utilityLinks: <WorkspaceDestinations search={search ?? ''} />,
     calendar: workspace.view === 'calendar' && date !== undefined
       ? <WorkspaceCalendar calendar={calendar} date={date} inbox={workspace.inbox} onDay={workspace.onDay}
         todayAdditions={workspace.inbox === 'today' ? calendarAdditions({ actionPage, asOf, myPlan }) : undefined} /> : undefined,

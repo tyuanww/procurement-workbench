@@ -14,7 +14,7 @@ it('合并同批核收与催货后再分页，所有催单复制沿用今日完�
   try {
     const { page, chase, get } = scenario;
     const result = await page('inbox=today');
-    expect(result.paging).toMatchObject({ total: 6, inboxCounts: { today: 6, scheduled: 3, unassigned: 1 }, pendingCount: 1, chaseCounts: { all: 2, filtered: 2 } });
+    expect(result.paging).toMatchObject({ total: 6, inboxCounts: { today: 6, scheduled: 3, unassigned: 1 }, unassignedReviewCount: 0, pendingCount: 1, chaseCounts: { all: 2, filtered: 2 } });
     expect(result.pendingBatch?.map(({ orderLineId }) => orderLineId)).toEqual(['inbox-line-12']);
     expect((await page('inbox=today&calendar=today')).pendingBatch).toEqual(result.pendingBatch);
     expect((await page('inbox=today&calendar=' + result.asOf)).pendingBatch).toEqual(result.pendingBatch);
@@ -80,7 +80,7 @@ it('本人已约按下次时间和业务日排列，未分派和审核另有入�
     const reviewer = await loginAs(app, 'reviewer');
     const shared = await page('inbox=unassigned&scope=all&focusId=review', reviewer);
     expect(shared.items.map(({ id }) => id)).toEqual(['batch:inbox-7', 'review']);
-    expect(shared.paging).toMatchObject({ inboxCounts: { today: 0, scheduled: 0, unassigned: 2 }, pendingCount: 0, focusInbox: 'unassigned' });
+    expect(shared.paging).toMatchObject({ inboxCounts: { today: 0, scheduled: 0, unassigned: 2 }, unassignedReviewCount: 1, pendingCount: 0, focusInbox: 'unassigned' });
 
     clock.set(MIXED_REMINDER);
     expect((await page('inbox=scheduled')).items.map(({ id }) => id)).toEqual(['batch:inbox-14']);

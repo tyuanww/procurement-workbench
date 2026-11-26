@@ -112,6 +112,7 @@ function LineBody({ detail, events, lineId, setMessage, onReload }: { readonly d
 function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly detail: OrderLineDetail; readonly canRecord: boolean }) {
   const { params, setParams } = useLineDetailSearchParams();
   const search = params.toString();
+  const focusedBatch = params.get('focus') === 'buyer' ? null : params.get('focusBatch');
   return (
     <section aria-label="批次">
       <Flex align="center" justify="space-between" gap={space[2]} wrap style={{ marginBlock: space[2] }}>
@@ -121,7 +122,7 @@ function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly deta
       {detail.batches.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" /> : (
         <Flex component="ul" role="list" vertical gap={space[2]} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
           {detail.batches.map((batch) => (
-            <BatchDetail {...reload} key={batch.id} batch={batch} focused={params.get('focusBatch') === batch.id} canRecord={canRecord}
+            <BatchDetail {...reload} key={batch.id} batch={batch} focused={focusedBatch === batch.id} canRecord={canRecord}
               hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
                 search, setParams, drawer, batchId: batch.id, ...(reportId === undefined ? {} : { reportId }),
               })} />

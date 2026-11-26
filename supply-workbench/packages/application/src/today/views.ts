@@ -131,6 +131,8 @@ export type TodayPaging = {
   readonly chaseItemIds?: readonly string[];
   /** 三个工作范围各自分页和筛选前的办件数。同一批次可有今天核收和已约跟进。 */
   readonly inboxCounts?: Readonly<Record<TodayInbox, number>>;
+  /** 未分派范围内的共享主数据审核数，独立于当前筛选、日期和页码。 */
+  readonly unassignedReviewCount?: number;
   /** 本人待建首批的订单行数，独立于统一分页的办件。 */
   readonly pendingCount?: number;
   readonly calendar?: TodayCalendar;

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
-import { bg, border, brand, controlBorder, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
+import { bg, border, brand, fontSize, space, statusColor, text, topBar } from '../../theme/tokens.js';
 import type { RowFace } from './model/types.js';
-import { todayBatchCardCss } from './today-row-style.js';
+import { todayRowCss } from './today-row-style.js';
 
 const [tiny, small, , regular] = space;
 
@@ -26,12 +26,11 @@ export function todayMotionCss(): string {
     .today-kanban-lane { min-inline-size: 0; display: flex; flex-direction: column; gap: ${small}px; }
     .today-kanban-lane[data-active="false"] { display: none; }
     .today-lane-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${tiny}px; }
-    .today-lane-links > .ant-btn { min-block-size: 44px; block-size: auto; padding-inline: ${tiny}px; gap: ${tiny}px; font-size: ${fontSize.meta}px; }
+    .today-lane-links > .ant-btn { min-block-size: 44px; block-size: auto; padding-inline: ${tiny}px; gap: ${tiny}px; font-size: ${fontSize.meta}px; white-space: normal; }
     .today-lane-links > .ant-btn[aria-pressed="true"] { background: ${brand[100]}; color: ${brand[800]}; border-color: ${brand[600]}; }
     .today-lane-heading { position: absolute; inline-size: 1px; block-size: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
     .today-grouped-row { border-bottom: 1px solid ${statusColor.neutral.border}; padding-block: ${small}px; }
-    ${todayCardCss()}
-    ${todayBatchCardCss()}
+    ${todayRowCss()}
     ${todayWorkspaceCss()}
     .today-jump-target { scroll-margin-block-start: ${topBar + regular}px; }
     .today-touch .ant-select { max-inline-size: 100%; }
@@ -64,6 +63,8 @@ function todayWorkspaceCss(): string {
     .today-workspace-heading h2 strong { font-size: ${fontSize.metric}px; line-height: 1; }
     .today-workspace-heading h2 small, .today-workspace-heading .today-business-date, .today-toolbar .procurement-cutoff { font-size: ${fontSize.meta}px; }
     .today-workspace-heading h2 small { color: ${text.secondary}; font-weight: 500; }
+    .today-workspace-heading .today-mine-scope { margin-inline-start: ${small}px; }
+    .today-review-scope { display: flex; gap: ${small}px; align-items: center; flex-wrap: wrap; }
     .today-workspace-heading h2 strong, .today-workspace-scopes strong, .today-business-date { font-variant-numeric: tabular-nums; }
     .today-workspace-scopes > .ant-btn { gap: ${tiny}px; border-color: ${border}; padding-inline: 10px; }
     .today-toolbar { padding-block-end: ${small}px; border-block-end: 1px solid ${border}; }
@@ -85,55 +86,6 @@ function todayWorkspaceCss(): string {
       .today-toolbar .today-workspace-views .ant-segmented-item-label { display: grid; place-items: center; min-block-size: 44px; padding-inline: 2px; }
       .today-copy-panel .ant-radio-wrapper { min-block-size: 44px; align-items: center; }
     }
-  `;
-}
-
-function todayCardCss(): string {
-  return `
-    .today-work-card { container: today-card / inline-size; }
-    .today-row-layout { display: grid; gap: ${small}px; }
-    .today-row-facts, .today-row-follow-up { display: grid; gap: ${tiny}px; min-inline-size: 0; }
-    .today-row-facts .today-row-title { margin: 0; font-size: ${fontSize.section}px; line-height: 1.4; }
-    .today-row-line {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0 ${space[2]}px;
-      min-inline-size: 0;
-    }
-    .today-row-line:empty, .today-row-follow-up:has(> :only-child:empty) { display: none; }
-    .today-row-identifiers, .today-row-follow-up { font-size: ${fontSize.table}px; }
-    .today-row-line .ant-tag { margin-inline-end: 0; }
-    .today-row-quantities { font-variant-numeric: tabular-nums; font-weight: 600; }
-    .today-row-follow-up { border-block-start: 1px solid ${border}; padding-block-start: ${tiny}px; }
-    .today-row-actions { min-inline-size: 0; }
-    ${todayPrimaryActionCss()}
-    @container today-card (min-width: 44rem) {
-      .today-row-layout { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-      .today-row-actions {
-        display: grid;
-        grid-template-columns: repeat(2, 7.75rem) 4.75rem 4.25rem;
-      }
-      .today-row-actions > * { grid-row: 1; }
-      .today-row-actions > .today-action-copy { grid-column: 2; }
-      .today-row-actions > .today-action-detail, .today-pending-actions > a:not(.ant-btn-primary) { grid-column: 3; }
-      .today-row-actions > .today-action-more { grid-column: 4; }
-      .today-row-actions > .ant-btn-primary { grid-column: 1; }
-      .today-pending-actions > a:not(.ant-btn-primary) { text-align: center; }
-      .today-row-follow-up { grid-column: 1 / -1; }
-    }
-  `;
-}
-
-function todayPrimaryActionCss(): string {
-  const primary = '.today-row .today-row-actions > .ant-btn.ant-btn-primary:not(:disabled, .ant-btn-disabled)';
-  return `
-    ${primary} { background: ${bg.surface}; color: ${text.primary}; border-color: ${controlBorder}; }
-    @media (hover: hover) {
-      ${primary}:hover { background: ${statusColor.neutral.bg}; color: ${text.primary}; border-color: ${text.tertiary}; }
-    }
-    ${primary}:active { background: ${statusColor.neutral.border}; color: ${text.primary}; border-color: ${text.secondary}; }
-    ${primary}:focus-visible { outline-color: ${text.primary}; }
   `;
 }
 

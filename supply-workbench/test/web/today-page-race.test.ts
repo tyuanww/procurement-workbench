@@ -131,14 +131,14 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     click(button('要催货2批'));
     await act(() => { fulfill({ urlPart: 'work=factory_chase', status: 200, body: result(factories) }); });
     expect(document.querySelectorAll('.today-row')).toHaveLength(2);
-    expect(textOf('#today-chase')).toContain('共 2 批待催货');
+    expect(textOf('#today-chase')).toContain('匹配 2 批待催货');
     expect(textOf('#today-chase')).toContain('当前筛选 · 要催货');
     expect(document.activeElement?.id).toBe('today-chase');
 
     click(button('内部等回单1批'));
     await act(() => { fulfill({ urlPart: 'work=internal_note', status: 200, body: result([internal]) }); });
     expect(textOf('.today-row')).toContain('等待方 · 内部（等回单）');
-    expect(textOf('#today-chase')).toContain('共 1 批等回单');
+    expect(textOf('#today-chase')).toContain('匹配 1 批等回单');
     expect(textOf('#today-chase')).toContain('当前筛选 · 内部等回单');
     click(filter);
     click(button('清除筛选'));
@@ -146,6 +146,36 @@ it('要催货与内部等回单各显示对应批次并保留回到全部待办�
     expect(document.querySelectorAll('.today-row')).toHaveLength(3);
     expect(new URLSearchParams(textOf('output')).get('work')).toBeNull();
     expect(document.activeElement?.getAttribute('aria-expanded')).toBe('false');
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
+it('到时跟进只有一个筛选入口且保留其他已选原因', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?reasons=overdue'));
+  const fixture = pageBody(1);
+  const page = { ...fixture, items: [batchTodo(1)], paging: { ...fixture.paging,
+    reasonCounts: { ...fixture.paging.reasonCounts, overdue: 1, follow_up_due: 1 }, followUpCounts: { due: 1, scheduled: 0 } } };
+  try {
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: 'reasons=overdue', status: 200, body: page });
+    });
+    click(button('筛选'));
+    const due = [...document.querySelectorAll<HTMLElement>('.ant-tag-checkable')].filter((tag) => tag.textContent === '到时跟进 1');
+    expect(due).toHaveLength(1);
+    expect(document.querySelector('.today-toolbar-filter')?.getAttribute('aria-expanded')).toBe('true');
+    expect(textOf('#today-chase')).not.toContain('到时跟进 1 批');
+    const option = due[0];
+    if (option === undefined) throw new Error('没有到时跟进筛选');
+    click(option);
+    const reasons = new URLSearchParams(textOf('output')).get('reasons');
+    expect(reasons?.split(',').sort()).toEqual(['follow_up_due', 'overdue']);
   } finally {
     act(() => { root.unmount(); });
     resetDom();

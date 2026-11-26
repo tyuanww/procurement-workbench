@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { NAV_ROUTES } from '../../apps/web/src/app/page-manifest.js';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import type { Role } from '../../packages/domain/src/index.js';
 import { Shell } from '../../apps/web/src/app/Shell.js';
 import { ShellSider, ShellTop } from '../../apps/web/src/app/shell-frame.js';
 import { shellView, type NavRow, type ShellView } from '../../apps/web/src/features/shell/index.js';
@@ -68,6 +69,31 @@ describe('壳标记', () => {
     const html = inRouter(h(ShellSider, { chrome: sider(false), nav: rows, onToggle: () => undefined }));
     expect(anchor(html, '/lines')).toContain('跟进中心');
     expect(anchor(html, '/progress')).toContain('管理店铺');
+  });
+
+  it.each([
+    { roles: ['buyer'] satisfies Role[], count: 7, shown: '7', range: '本人' },
+    { roles: ['admin'] satisfies Role[], count: 12, shown: '12', range: '全范围' },
+    { roles: ['buyer', 'lead'] satisfies Role[], count: 123, shown: '123', range: '全范围' },
+    { roles: ['manager'] satisfies Role[], count: 1000, shown: '999+', range: '全范围' },
+  ])('今日事项展开时显示 $shown，收起时仍保留 $range 计数说明', ({ roles, count, shown, range }) => {
+    const nav = shellView({
+      user: { name: '测试用户', roles },
+      queue: { kind: 'unknown' },
+      today: { kind: 'complete', severities: Array.from({ length: count }, () => 2) },
+      procurementDate: null,
+      navRoutes: NAV_ROUTES,
+    }).nav;
+    const render = (isCollapsed: boolean) => inRouter(h(ShellSider, { chrome: sider(isCollapsed), nav, onToggle: () => undefined }));
+    const expanded = render(false);
+    const collapsed = render(true);
+    const badge = expanded.match(/<sup[^>]+class="[^"]*ant-badge-count[^>]*>(.*?)<\/sup>/)?.[1];
+    expect(badge?.replace(/<[^>]+>/g, '')).toBe(shown);
+    for (const html of [expanded, collapsed]) {
+      expect(html).toContain(`hidden="">${range}需关注 ${count} 项</span>`);
+      expect(html).toContain('>今日事项<');
+    }
+    expect(collapsed).not.toContain('ant-badge-count');
   });
 
   it.each([

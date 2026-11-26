@@ -31,14 +31,14 @@ export async function checkChaseToday({ page, origin, out }: {
   const sampleRows = page.locator('.today-row').filter({ has: page.getByRole('button', { name: /^查看详情 HZ09-\d{4}/ }) });
   const order = (po: string) => sampleRows.filter({ has: page.getByRole('button', { name: `查看详情 ${po}`, exact: false }) });
   await order('HZ09-0001').waitFor();
-  for (const lane of ['跟进发货', '核对收货', '内部待办']) {
+  for (const lane of ['跟进供应商', '核对收货', '内部待办']) {
     await page.getByRole('region', { name: lane, exact: true }).waitFor();
   }
   assert.equal(await sampleRows.count(), 50);
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*批未发.*第\s*1\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批未发.*第\s*1\s*页/ }).waitFor();
   await page.getByTitle('下一页', { exact: true }).click();
   await page.waitForURL((url) => url.searchParams.get('page') === '2');
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*批未发.*第\s*2\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批未发.*第\s*2\s*页/ }).waitFor();
   await page.goto(new URL('/today?group=waiting&reasons=unshipped&page=11', origin).href);
   await order('HZ09-0501').waitFor();
   assert.equal(await sampleRows.count(), 1);
@@ -95,7 +95,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.getByRole('button', { name: '清除筛选', exact: true }).click();
   await page.getByRole('button', { name: '筛选', exact: true }).click();
   await page.getByRole('main').getByRole('button', { name: /要催货/ }).click();
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*批待催货/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批待催货/ }).waitFor();
   assert.ok(await page.getByRole('region', { name: '工作台待办' }).evaluate((list) => list === document.activeElement));
   assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
   await page.goto(bulk);
@@ -185,7 +185,7 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
 
   await kanban.press('Space');
   await page.waitForURL((url) => url.searchParams.get('view') === 'board' && url.searchParams.get('reasons') === 'unshipped' && url.searchParams.get('page') === '11');
-  await page.getByRole('region', { name: '跟进发货', exact: true }).getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
+  await page.getByRole('region', { name: '跟进供应商', exact: true }).getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
   await groups.waitFor({ state: 'hidden' });
   await list.press('Space');
   await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('page') === '11');
@@ -339,7 +339,7 @@ async function checkFollowUpReminder({ page, origin, row, out }: {
   await page.goto(new URL('/today', origin).href);
   const scheduled = scopes.getByRole('button', { name: /^已约跟进\s*1/ });
   const filters = page.getByRole('button', { name: '筛选', exact: true });
-  const due = page.getByRole('button', { name: '到时跟进 1 批', exact: true });
+  const due = page.getByText('到时跟进 1', { exact: true });
   await scheduled.click();
   await page.waitForURL((url) => url.searchParams.get('inbox') === 'scheduled' && !url.searchParams.has('unit'));
   await row.getByText('下次跟进 · 2099-01-11 10:00', { exact: true }).waitFor();
@@ -470,7 +470,7 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
   }
 
   await page.reload();
-  await page.getByRole('status').filter({ hasText: /共\s*501\s*批未发.*第\s*11\s*页/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批未发.*第\s*11\s*页/ }).waitFor();
   await detail.waitFor();
   assert.equal(page.url(), listUrl.href);
   assert.equal(await dialog.isVisible(), false);

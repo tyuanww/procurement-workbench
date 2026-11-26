@@ -1,5 +1,5 @@
 import type { useSearchParams } from 'react-router';
-import { actionFactoryParams, actionFollowUpParams, actionPageParams, actionSortParams, actionWorkParams, type ActionQuery } from './action-query.js';
+import { actionFactoryParams, actionPageParams, actionSortParams, actionWorkParams, type ActionQuery } from './action-query.js';
 import type { ActionPageControls } from './ActionControls.js';
 import { useChaseCopy } from './today-copy.js';
 import type { useTodayData } from './today-load.js';
@@ -19,7 +19,6 @@ export function useTodayActionPage({ query, search, setParams, today, isSettled 
     factoryId: new URLSearchParams(search).get('chaseFactory'),
     isFiltered: query.work !== undefined || query.reasons.length > 0 || query.sort.kind === 'bulk',
     onFactory: (id) => setParams(actionFactoryParams(search, id)),
-    onFollowUp: (reason) => setParams(actionFollowUpParams(search, reason)),
     onPage: (page) => {
       const params = actionPageParams(search, page);
       params.delete('focusId');

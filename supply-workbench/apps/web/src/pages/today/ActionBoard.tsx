@@ -1,7 +1,8 @@
 import { Alert, Button, Empty, Flex, Spin, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
-import { ACTION_LANES, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
+import { ACTION_LANES, type ActionDetail, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
+import { useCanWrite } from '../../shared/actor.js';
 import { fontSize } from '../../theme/tokens.js';
 import { ActionPagination, ActionResult, ChasePreviewDialog, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
@@ -17,6 +18,8 @@ export type ActionBoardProps = ActionToolbarProps & {
   readonly batchSeqOf?: BatchSequence | undefined;
   readonly receiptOf?: ((rowId: string) => ReceiptWork | undefined) | undefined;
   readonly arrivalFocusId?: string | null | undefined;
+  readonly asOf?: string | undefined;
+  readonly detailOf?: (id: string) => ActionDetail | undefined;
   readonly internalCards?: readonly ReactNode[] | undefined;
   readonly internalPagination?: ReactNode;
   readonly boardFocusId?: string | null;
@@ -45,7 +48,7 @@ export function ActionBoard(props: ActionBoardProps): ReactNode {
 function PagedGroups(props: ActionBoardProps & { readonly page: ActionPageControls }) {
   const { page } = props;
   return <>
-    <ActionResult page={page} />
+    {page.isFiltered && page.calendar === undefined ? null : <ActionResult page={page} asOf={props.asOf} />}
     <ChasePreviewDialog page={page} />
     {page.copyNotice === '' ? null : <Typography.Text role="status">{page.copyNotice}</Typography.Text>}
     {page.loadError === '' ? null : <Alert type="error" title={page.loadError} action={<Button size="small" onClick={page.onRetry}>重试</Button>} />}
@@ -74,14 +77,18 @@ function ActionGroups(props: ActionBoardProps): ReactNode {
 }
 
 function PriorityActions(props: ActionBoardProps & { readonly rows: readonly BoardRow[] }) {
-  const { page, rows, receiptOf, internalCards } = props;
-  const canPrioritize = page?.inbox === 'today' && page.calendar === undefined && !isActionFiltered(props);
+  const { rows, receiptOf, internalCards } = props;
+  const canPrioritize = isBusinessDay(props) && !isActionFiltered(props);
   const overdue = canPrioritize ? rows.filter((row) => receiptOf?.(row.id)?.status === 'overdue') : [];
   if (overdue.length === 0) return <>
     <ActionRows {...props} isPriorityList headingLevel={2} extras={internalCards} />
     {props.internalPagination}
   </>;
   return <PriorityGroups {...props} overdue={overdue} />;
+}
+
+function isBusinessDay({ page, asOf }: Pick<ActionBoardProps, 'page' | 'asOf'>): boolean {
+  return page?.inbox === 'today' && (page.calendar === undefined || page.calendar === 'today' || page.calendar === asOf);
 }
 
 function PriorityGroups(props: ActionBoardProps & { readonly rows: readonly BoardRow[]; readonly overdue: readonly BoardRow[] }) {
@@ -175,7 +182,7 @@ function batchCopy(page: ActionBoardProps['page'], id: string): CopyAction | nul
   return { label: '复制本批催单', disabled: page.isCopying, run: () => page.onCopyChase({ kind: 'batch', id }) };
 }
 
-type ActionRowsProps = Pick<ActionBoardProps, 'board' | 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'receiptOf' | 'arrivalFocusId' | 'onOpen' | 'onQuick'> & {
+type ActionRowsProps = Pick<ActionBoardProps, 'board' | 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'receiptOf' | 'arrivalFocusId' | 'detailOf' | 'onOpen' | 'onQuick'> & {
   readonly group: BoardGroup;
 };
 
@@ -196,6 +203,7 @@ function ActionRows(props: Omit<ActionRowsProps, 'group'> & {
   readonly extras?: readonly ReactNode[] | undefined;
 }): ReactNode {
   const List = props.isPriorityList ? 'ol' : 'ul';
+  const assignmentDetail = useCanWrite('lines.write') && props.page?.inbox === 'unassigned' ? props.detailOf : undefined;
   const shouldShowReminder = props.board.chips.some((chip) => chip.code === 'follow_up_due' && chip.isSelected);
   return (
     <List role="list" className={props.isPriorityList ? 'today-action-list today-priority-list' : 'today-action-list'}>
@@ -203,6 +211,7 @@ function ActionRows(props: Omit<ActionRowsProps, 'group'> & {
         <li key={row.id} id={workspaceRowId(row.id)} className="today-jump-target" tabIndex={-1}>
           <TodayRow row={row} isCard={props.isPriorityList} headingLevel={props.headingLevel} isFocused={props.focus === row.id} isFading={props.fading === row.id}
             batchSeq={props.batchSeqOf?.(row.id)} receipt={props.receiptOf?.(row.id)} arrivalFocusId={props.arrivalFocusId}
+            assignmentOrder={assignmentOrder(row, assignmentDetail)} isFactoryChase={props.page?.work === 'factory_chase'}
             copy={batchCopy(props.page, row.id)} isScheduled={props.page?.inbox === 'scheduled'} showReminder={shouldShowReminder}
             onOpen={() => props.onOpen(row.id)} onQuick={(kind) => props.onQuick({ id: row.id, kind })} />
         </li>
@@ -210,4 +219,10 @@ function ActionRows(props: Omit<ActionRowsProps, 'group'> & {
       {props.extras}
     </List>
   );
+}
+
+function assignmentOrder(row: BoardRow, detailOf: ActionBoardProps['detailOf']) {
+  if (row.face.isUnassigned !== true) return undefined;
+  const detail = detailOf?.(row.id);
+  return detail?.kind === 'order' ? detail.order : undefined;
 }

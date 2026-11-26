@@ -121,8 +121,9 @@ function pageScope({ read, input, timeZone }: { readonly read: TodayRead; readon
   }
   const inboxes = readInboxes(read);
   const { today, scheduled, unassigned } = inboxes.rows;
-  const extras: Pick<TodayPaging, 'inboxCounts' | 'pendingCount' | 'focusInbox' | 'focusDay' | 'focusWork'> = {
+  const extras: Pick<TodayPaging, 'inboxCounts' | 'unassignedReviewCount' | 'pendingCount' | 'focusInbox' | 'focusDay' | 'focusWork'> = {
     inboxCounts: { today: today.length, scheduled: scheduled.length, unassigned: unassigned.length },
+    unassignedReviewCount: unassigned.filter((item) => item.subject === 'review').length,
     ...(read.pending === undefined ? {} : { pendingCount: read.pending.length }),
     ...inboxFocus({ current: inbox, inboxes, focusId: input.focusId, asOf: read.asOf, timeZone }),
   };

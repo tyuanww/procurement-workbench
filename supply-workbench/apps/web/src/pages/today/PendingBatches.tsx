@@ -111,9 +111,10 @@ function PendingBatchItem({ row, view }: {
   }, [shouldFocus]);
   const canCreate = row.action === 'create' && onCreate !== undefined;
   const actions = (
-    <Flex className="today-touch today-row-actions today-pending-actions" align="center" gap={space[0]} wrap>
+    <Flex className="today-touch today-row-actions" align="center" gap={space[0]} wrap>
       {canCreate ? (
-        <Button type="primary" size="small" loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
+        <Button className="today-action-primary" color="default" variant="outlined"
+          loading={posting === row.orderLineId} disabled={posting !== null} onClick={() => { void onCreate(row.orderLineId); }}>
           生成首批次
         </Button>
       ) : null}

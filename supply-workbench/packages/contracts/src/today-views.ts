@@ -128,6 +128,7 @@ export const TodayPageResponseSchema: z.ZodType<TodayPageResponse> = todayRespon
     internalNoteCount: optional(z.int().nonnegative()),
     chaseItemIds: optional(z.array(z.string())),
     inboxCounts: optional(strictObject({ today: z.int().nonnegative(), scheduled: z.int().nonnegative(), unassigned: z.int().nonnegative() })),
+    unassignedReviewCount: optional(z.int().nonnegative()),
     pendingCount: optional(z.int().nonnegative()),
     calendar: optional(todayCalendar),
     focusInbox: optional(TodayInboxSchema),

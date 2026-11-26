@@ -1,7 +1,7 @@
-import { Button, Card, Dropdown, Flex, Typography } from 'antd';
+import { Button, Card, Dropdown, Flex, Typography, type ButtonProps } from 'antd';
 import { CopyOutlined, DownOutlined } from '@ant-design/icons';
-import { useRef, useState, type ReactNode } from 'react';
-import { actionIcon, rowStyle, type BoardRow, type QuickAction, type RowFace } from '../../features/today/index.js';
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { actionIcon, rowStyle, TodayOrderLink, type BoardRow, type QuickAction, type RowFace, type TodayOrderRef } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { formatDateTime } from '../../shared/ui/format.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
@@ -20,6 +20,8 @@ type RowProps = {
   readonly receipt: ReceiptWork | undefined;
   readonly arrivalFocusId: string | null | undefined;
   readonly copy: CopyAction | null;
+  readonly isFactoryChase?: boolean;
+  readonly assignmentOrder?: TodayOrderRef | undefined;
   readonly isScheduled: boolean;
   readonly showReminder?: boolean;
   readonly onOpen: () => void;
@@ -28,6 +30,7 @@ type RowProps = {
 
 type PrimaryAction =
   | { readonly kind: 'receipt'; readonly memo: ReceiptWork }
+  | { readonly kind: 'assign'; readonly order: TodayOrderRef }
   | { readonly kind: 'quick'; readonly action: QuickAction }
   | { readonly kind: 'copy'; readonly action: CopyAction }
   | { readonly kind: 'detail' };
@@ -56,12 +59,12 @@ export function TodayRow(props: RowProps): ReactNode {
     : <div className="today-row today-work-card today-batch-card today-grouped-row" role="group" aria-label={card.identity} style={style}>{content}</div>;
 }
 
-function presentRow({ row, batchSeq, receipt, copy, isScheduled }: RowProps, actions: readonly QuickAction[]): CardPresentation {
+function presentRow({ row, batchSeq, receipt, copy, isScheduled, assignmentOrder }: RowProps, actions: readonly QuickAction[]): CardPresentation {
   const { face } = row;
   const orderNo = face.orderNo === '—' ? undefined : face.orderNo;
   const productName = face.productName === '—' ? undefined : face.productName;
   const batch = batchSeq === undefined ? undefined : `第 ${batchSeq} 批`;
-  const primary = choosePrimary({ actions, receipt, copy, isScheduled });
+  const primary = choosePrimary({ actions, receipt, copy, isScheduled, assignmentOrder });
   return {
     title: productName ?? '品名待补充',
     batch,
@@ -72,8 +75,11 @@ function presentRow({ row, batchSeq, receipt, copy, isScheduled }: RowProps, act
   };
 }
 
-function choosePrimary({ actions, receipt, copy, isScheduled }: Pick<RowProps, 'receipt' | 'copy' | 'isScheduled'> & { readonly actions: readonly QuickAction[] }): PrimaryAction {
+function choosePrimary({ actions, receipt, copy, isScheduled, assignmentOrder }: Pick<RowProps, 'receipt' | 'copy' | 'isScheduled' | 'assignmentOrder'> & {
+  readonly actions: readonly QuickAction[];
+}): PrimaryAction {
   if (receipt !== undefined) return { kind: 'receipt', memo: receipt };
+  if (assignmentOrder !== undefined) return { kind: 'assign', order: assignmentOrder };
   const quick = preferredAction({ actions, hasCopy: copy !== null, isScheduled });
   if (quick !== undefined) return { kind: 'quick', action: quick };
   return copy === null ? { kind: 'detail' } : { kind: 'copy', action: copy };
@@ -147,17 +153,33 @@ function NextFollowUp({ face }: { readonly face: RowFace }) {
   </div>;
 }
 
-function RowActions({ card, copy, arrivalFocusId, onOpen, onQuick }: Pick<RowProps, 'copy' | 'arrivalFocusId' | 'onOpen' | 'onQuick'> & { readonly card: CardPresentation }) {
+const mainButton = { className: 'today-action-primary', color: 'default', variant: 'outlined' } satisfies ButtonProps;
+const secondaryButton = { type: 'text' } satisfies ButtonProps;
+
+function RowActions({ card, row, copy, isFactoryChase, onOpen, ...work }: Pick<RowProps,
+  'row' | 'copy' | 'arrivalFocusId' | 'isFactoryChase' | 'assignmentOrder' | 'onOpen' | 'onQuick'> & { readonly card: CardPresentation }) {
   const { primary, identity } = card;
+  const copyAction = primary.kind === 'copy' ? primary.action : isFactoryChase === true ? copy : null;
   return <Flex className="today-touch today-row-actions" align="center" gap={space[0]} wrap>
-    {primary.kind === 'receipt' ? <ReceiptAction memo={primary.memo} isFocused={arrivalFocusId === primary.memo.batchId} /> : null}
-    {primary.kind === 'quick' ? <Button type="primary" icon={actionIcon(primary.action.kind)} onClick={() => onQuick(primary.action.kind)}>{primary.action.label}</Button> : null}
-    {primary.kind === 'copy' ? <Button className="today-action-copy" type="primary" icon={<CopyOutlined aria-hidden />}
-      disabled={primary.action.disabled} onClick={primary.action.run}>{primary.action.label}</Button> : null}
-    <Button className="today-action-detail" type={primary.kind === 'detail' ? 'primary' : 'text'}
+    <RowWorkAction {...work} primary={primary} rowId={row.id} />
+    {copyAction === null ? null : <Button {...(primary.kind === 'copy' ? mainButton : secondaryButton)} icon={<CopyOutlined aria-hidden />}
+      disabled={copyAction.disabled} onClick={copyAction.run}>{copyAction.label}</Button>}
+    <Button {...(primary.kind === 'detail' ? mainButton : secondaryButton)}
       onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button>
-    <RowMenu actions={card.overflow} copy={primary.kind === 'copy' ? null : copy} identity={identity} onQuick={onQuick} />
+    <RowMenu actions={card.overflow} copy={copyAction === null ? copy : null} identity={identity} onQuick={work.onQuick} />
   </Flex>;
+}
+
+function RowWorkAction({ primary, rowId, arrivalFocusId, assignmentOrder, onQuick }: Pick<RowProps,
+  'arrivalFocusId' | 'assignmentOrder' | 'onQuick'> & { readonly primary: PrimaryAction; readonly rowId: string }) {
+  if (primary.kind === 'receipt') return <>
+    <ReceiptAction memo={primary.memo} isFocused={arrivalFocusId === primary.memo.batchId} />
+    {assignmentOrder === undefined ? null : <TodayOrderLink order={assignmentOrder} focusOwner returnRowId={rowId}>分配采购负责人</TodayOrderLink>}
+  </>;
+  if (primary.kind === 'assign') return <TodayOrderLink order={primary.order} primary focusOwner returnRowId={rowId}>分配采购负责人</TodayOrderLink>;
+  if (primary.kind === 'quick') return <Button {...mainButton} icon={actionIcon(primary.action.kind)}
+    onClick={() => onQuick(primary.action.kind)}>{primary.action.label}</Button>;
+  return null;
 }
 
 function preferredAction({ actions, hasCopy, isScheduled }: {
@@ -170,17 +192,33 @@ function preferredAction({ actions, hasCopy, isScheduled }: {
   return !hasCopy || first?.kind === 'date' ? first : undefined;
 }
 
-function RowMenu({ actions, copy, identity, onQuick }: {
+type RowMenuProps = Pick<RowProps, 'copy' | 'onQuick'> & {
   readonly actions: readonly QuickAction[];
-  readonly copy: CopyAction | null;
   readonly identity: string;
-  readonly onQuick: (kind: QuickAction['kind']) => void;
-}) {
+};
+
+function RowMenu({ actions, copy, identity, onQuick }: RowMenuProps) {
   const trigger = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
   const [isOpen, setOpen] = useState(false);
+  function changeOpen(open: boolean) {
+    // Ant Design keeps the menu mounted during its exit animation.
+    const menu = document.getElementById(menuId);
+    if (menu !== null) menu.inert = !open;
+    setOpen(open);
+  }
+  function closeAndRestoreFocus() {
+    changeOpen(false);
+    trigger.current?.focus({ preventScroll: true });
+  }
+  function closeOnEscape(event: KeyboardEvent<HTMLElement>) {
+    if (!isOpen || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeAndRestoreFocus();
+  }
   function run(action: () => void) {
-    setOpen(false);
-    trigger.current?.focus();
+    closeAndRestoreFocus();
     action();
   }
   const items = actions.map((action) => ({
@@ -192,8 +230,10 @@ function RowMenu({ actions, copy, identity, onQuick }: {
     onClick: () => run(copy.run),
   }, ...items];
   if (entries.length === 0) return null;
-  return <Dropdown trigger={['click']} autoFocus open={isOpen} onOpenChange={setOpen} menu={{ items: entries }}>
+  return <Dropdown trigger={['click']} autoFocus open={isOpen} onOpenChange={changeOpen}
+    menu={{ id: menuId, items: entries, onKeyDown: closeOnEscape }}>
     <Button ref={trigger} className="today-action-more" type="text" aria-haspopup="menu" aria-expanded={isOpen}
+      aria-controls={isOpen ? menuId : undefined} onKeyDown={closeOnEscape}
       aria-label={`更多操作 ${identity}`} icon={<DownOutlined aria-hidden />} iconPlacement="end">更多</Button>
   </Dropdown>;
 }

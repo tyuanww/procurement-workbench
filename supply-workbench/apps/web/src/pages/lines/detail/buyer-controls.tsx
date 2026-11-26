@@ -1,12 +1,13 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Alert, Button, Select, Space, Typography } from 'antd';
 import { OrderLineDetailSchema, type OrderLineDetail, type MeResponse } from '@sw/contracts';
 import { can } from '@sw/domain';
+import { useSearchParams } from 'react-router';
 import { useCanWrite } from '../../../shared/actor.js';
 import { ApiError, apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLineOwners } from '../../../shared/api/catalog.js';
 import { read } from '../../../shared/api/reads.js';
-import { space } from '../../../theme/tokens.js';
+import { space, topBar } from '../../../theme/tokens.js';
 
 type Owner = NonNullable<OrderLineDetail['line']['buyer']>;
 type OwnerUndo = NonNullable<OrderLineDetail['ownerUndo']>;
@@ -16,10 +17,18 @@ type Props = { readonly detail: OrderLineDetail; readonly onSaved: (detail: Orde
 
 export function BuyerControls({ detail, onSaved }: Props) {
   const canWrite = useCanWrite('lines.write');
+  const [params] = useSearchParams();
+  const shouldFocus = params.get('focus') === 'buyer';
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!shouldFocus || section.current === null) return;
+    section.current.focus({ preventScroll: true });
+    section.current.scrollIntoView({ block: 'start' });
+  }, [shouldFocus]);
   const buyerName = detail.pendingBuyerName === undefined
     ? detail.line.buyer?.name ?? '未分配'
     : `${detail.pendingBuyerName}（待处理）`;
-  return <section aria-label="订单负责人" style={{ marginTop: space[3] }}>
+  return <section ref={section} tabIndex={-1} aria-label="订单负责人" style={{ marginTop: space[3], scrollMarginBlockStart: topBar + space[2] }}>
     <Typography.Paragraph>当前负责人 {buyerName}</Typography.Paragraph>
     {canWrite && detail.line.cancelledAt === null ? <BuyerEditor detail={detail} onSaved={onSaved} /> : null}
   </section>;

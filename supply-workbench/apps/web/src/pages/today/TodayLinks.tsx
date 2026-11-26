@@ -1,5 +1,6 @@
 import { Button, Typography } from 'antd';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import type { TodayPaging, TodayResponse } from '@sw/contracts';
 import { todayArrivalsPath } from '../../features/today/index.js';
 import type { ActionPageControls } from './ActionControls.js';
@@ -43,7 +44,7 @@ export function TodayLinks(props: TodayLinksProps) {
   const counts = workspaceCounts({ paging: page?.paging, planCount, isPlanUnavailable });
   return <div className="today-workspace-intro">
     <div className="today-workspace-heading">
-      <ActiveScope inbox={inbox} count={counts[inbox]} />
+      <ActiveScope inbox={inbox} count={counts[inbox]} hasSharedReviews={hasSharedReviews(page)} />
       {asOf === undefined ? null : <Typography.Text type="secondary" className="today-business-date">
         业务日 <time dateTime={asOf}>{asOf}</time>
       </Typography.Text>}
@@ -55,11 +56,14 @@ export function TodayLinks(props: TodayLinksProps) {
   </div>;
 }
 
-function ActiveScope({ inbox, count }: { readonly inbox: WorkspaceInbox; readonly count: number | undefined }) {
+function ActiveScope({ inbox, count, hasSharedReviews: hasReviews }: {
+  readonly inbox: WorkspaceInbox; readonly count: number | undefined; readonly hasSharedReviews: boolean;
+}) {
   const active = inboxes.find(({ key }) => key === inbox);
   if (active === undefined) return null;
   return <Typography.Title level={2}>
-    {active.label} <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}
+    {scopeLabel(active, hasReviews)} <strong>{count ?? '—'}</strong>{count === undefined ? null : <small>{active.unit}</small>}
+    {inbox === 'unassigned' ? null : <small className="today-mine-scope">本人范围</small>}
   </Typography.Title>;
 }
 
@@ -69,12 +73,20 @@ function ScopeSwitch({ inbox, onInbox, onRetryPlan, page, asOf, counts, canRetry
 }) {
   const canReturn = inbox === 'today' && isOtherWorkDay(page?.calendar, asOf);
   return <nav className="today-workspace-scopes today-touch" aria-label="工作范围">
-    {inboxes.filter(({ key }) => key !== inbox).map(({ key, label, unit }) => (
-      <Button key={key} onClick={() => onInbox(key)}>{label} <strong>{counts[key] ?? '—'}</strong>{counts[key] === undefined ? null : unit}</Button>
+    {inboxes.filter(({ key }) => key !== inbox).map((scope) => (
+      <Button key={scope.key} onClick={() => onInbox(scope.key)}>{scopeLabel(scope, hasSharedReviews(page))} <strong>{counts[scope.key] ?? '—'}</strong>{counts[scope.key] === undefined ? null : scope.unit}</Button>
     ))}
     {canReturn ? <Button onClick={() => onInbox('today')}>回到业务日</Button> : null}
     {canRetry ? <Button onClick={onRetryPlan}>重试排期</Button> : null}
   </nav>;
+}
+
+function scopeLabel(scope: (typeof inboxes)[number], hasReviews: boolean): string {
+  return scope.key === 'unassigned' && hasReviews ? '待分派与审核' : scope.label;
+}
+
+function hasSharedReviews(page: ActionPageControls | undefined): boolean {
+  return (page?.paging.unassignedReviewCount ?? 0) > 0;
 }
 
 function isOtherWorkDay(date: string | undefined, businessDate: string | undefined): boolean {
@@ -95,8 +107,17 @@ function workspaceCounts({ paging, planCount, isPlanUnavailable }: {
 }
 
 function ReviewScopeNote({ page }: { readonly page: ActionPageControls | undefined }) {
-  if (page?.inbox !== 'unassigned' || page.paging.reasonCounts.review_pending === 0) return null;
-  return <Typography.Text type="secondary">含共享主数据待审核</Typography.Text>;
+  if (page?.inbox !== 'unassigned') return null;
+  const reviewCount = page.paging.unassignedReviewCount;
+  const total = page.paging.inboxCounts?.unassigned;
+  if (reviewCount === undefined || total === undefined) {
+    return page.paging.reasonCounts.review_pending > 0 ? <Typography.Text type="secondary">含共享主数据待审核</Typography.Text> : null;
+  }
+  if (reviewCount === 0) return null;
+  return <div className="today-review-scope today-touch">
+    <Typography.Text type="secondary">待分派 {total - reviewCount} 项</Typography.Text>
+    <Link to="/master">共享主数据审核 {reviewCount} 项</Link>
+  </div>;
 }
 
 export function TodayAgendaShortcuts({ pendingCount, planCount, jump }: {

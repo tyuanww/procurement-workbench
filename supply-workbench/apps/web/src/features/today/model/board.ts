@@ -11,7 +11,7 @@ import type { BoardGroup, BoardItem, BoardRow, GroupMode, ReasonChip, ReasonCoun
 const EMPTY_TEXT = '今天没有需要处理的事。下一步：去跟进中心看看。';
 
 export const ACTION_LANES = [
-  { key: 'shipment', name: '跟进发货' },
+  { key: 'shipment', name: '跟进供应商' },
   { key: 'receipt', name: '核对收货' },
   { key: 'internal', name: '内部待办' },
 ] as const;

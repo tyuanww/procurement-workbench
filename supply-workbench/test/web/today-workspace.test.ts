@@ -35,7 +35,7 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
     expect(document.querySelectorAll('.today-row')).toHaveLength(1);
     const receipt = document.querySelector('[aria-label="核对收货"] .today-row');
     if (receipt === null) throw new Error('没有核收卡片');
-    const primary = receipt.querySelector('.ant-btn-primary');
+    const primary = receipt.querySelector('.today-action-primary');
     if (primary === null) throw new Error('没有核收主操作');
     expect(receipt.textContent).toContain('未发 800 件');
     expect(receipt.textContent).toContain('在途待收 300 件');
@@ -104,7 +104,7 @@ it('今天的范围和日历计数包含本人排期和待建首批，分页后�
   }
 });
 
-it('日历提前显示未来预约，空日期可从今天入口返回业务日', async () => {
+it('浏览年月保留当前结果，选择日期才切换待办结果或已约跟进', async () => {
   emptyReads();
   installMatchMedia();
   installFetch();
@@ -122,6 +122,24 @@ it('日历提前显示未来预约，空日期可从今天入口返回业务日'
       fulfill({ urlPart: 'calendar=today', status: 200, body: today });
     });
     await act(() => { fulfill({ urlPart: '/api/v1/plan/daily', status: 200, body: daily }); });
+    const input = calendarControl<HTMLInputElement>('[aria-label="选择工作日期"]');
+    chooseCalendarOption('日历月份', '12月');
+    expect(calendarCell('2026-12-21').getAttribute('aria-pressed')).toBe('false');
+    expect(textOf('[aria-label="工作台日历"]')).toContain('选择日期后查看该月数量');
+    click(calendarControl('[aria-label="日历显示方式"] input[value="year"]'));
+    chooseCalendarOption('日历年份', '2027年');
+    click(button('2027年3月'));
+    expect(document.activeElement).toBe(calendarCell('2027-03-01'));
+    expect(input.value).toBe(date);
+    expect(textOf('output')).toBe('view=calendar');
+    expect(textOf('#today-chase')).toContain('同名样品');
+    chooseCalendarOption('日历年份', '2026年');
+    chooseCalendarOption('日历月份', '11月');
+    expect(calendarCell(date).getAttribute('aria-pressed')).toBe('true');
+    act(() => { calendarCell(date).focus(); });
+    act(() => { calendarCell(date).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+    expect(document.activeElement).toBe(calendarCell(yesterday));
+    expect(textOf('output')).toBe('view=calendar');
     click(calendarCell(yesterday));
     await act(() => { fulfill({ urlPart: 'calendar=2026-11-20', status: 200, body: past }); });
     expect(textOf('#today-chase')).toContain('这天没有待办');
@@ -144,9 +162,21 @@ it('日历提前显示未来预约，空日期可从今天入口返回业务日'
 });
 
 function calendarCell(date: string): HTMLElement {
-  const cell = document.querySelector<HTMLElement>(`[aria-label="工作台日历"] td[title="${date}"]`);
-  if (cell === null) throw new Error('没有显示该日');
-  return cell;
+  return calendarControl(`[data-calendar-date="${date}"]`);
+}
+
+function chooseCalendarOption(label: string, choice: string) {
+  const control = calendarControl(`[role="combobox"][aria-label="${label}"]`);
+  act(() => { control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent === choice);
+  if (option === undefined) throw new Error(`没有日历选项 ${choice}`);
+  click(option);
+}
+
+function calendarControl<T extends HTMLElement>(selector: string): T {
+  const control = document.querySelector<T>(selector);
+  if (control === null) throw new Error(`没有日历控件 ${selector}`);
+  return control;
 }
 
 function planTask(ownerUserId: string, title: string): WorkItem {

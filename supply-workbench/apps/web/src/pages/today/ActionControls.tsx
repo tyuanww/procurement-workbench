@@ -3,7 +3,6 @@ import { CopyOutlined } from '@ant-design/icons';
 import type { TodayPaging, TodaySort, TodayWorkFilter } from '@sw/contracts';
 import { useId, type ReactNode } from 'react';
 import type { ChaseScope, WorkspaceInbox } from './action-query.js';
-import type { FollowUpFilter } from './action-query.js';
 import { focusSection } from './today-focus.js';
 import type { ChasePreview } from './today-copy.js';
 
@@ -25,7 +24,6 @@ export type ActionPageControls = {
   readonly onSort: (sort: TodaySort) => void;
   readonly onWork: (work?: TodayWorkFilter) => void;
   readonly onFactory: (id: string) => void;
-  readonly onFollowUp: (reason: FollowUpFilter) => void;
   readonly onCopyChase: (scope: ChaseScope) => void;
   readonly onConfirmCopy?: () => void;
   readonly onCancelCopy?: () => void;
@@ -151,25 +149,39 @@ export function ActionPagination({ page }: { readonly page: ActionPageControls }
   );
 }
 
-export function ActionResult({ page }: { readonly page: ActionPageControls }) {
-  const message = actionResultMessage(page);
+export function ActionResult({ page, asOf }: { readonly page: ActionPageControls; readonly asOf?: string | undefined }) {
+  const message = actionResultMessage(page, asOf);
   if (message === '') return null;
   return <Typography.Text role="status" type="secondary">{message}</Typography.Text>;
 }
 
-function actionResultMessage(page: ActionPageControls): string {
+function actionResultMessage(page: ActionPageControls, asOf: string | undefined): string {
   if (page.isLoading) return '正在更新待办…';
   if (page.loadError !== '') return '工作台待办更新失败';
   const { paging } = page;
   const hasPages = paging.total > paging.pageSize;
+  const day = resultDay(page, asOf);
+  const pageLabel = hasPages ? ` · 第 ${paging.page} 页` : '';
+  if (day !== undefined) return calendarResultMessage(page, day) + pageLabel;
   if (!page.isFiltered && !hasPages) return '';
   const unit = page.sort.kind === 'bulk' ? `批未发 · 按${page.sort.unit}比较` : resultUnit(page);
-  return `共 ${paging.total} ${unit}${hasPages ? ` · 第 ${paging.page} 页` : ''}`;
+  return `${page.isFiltered ? '匹配' : '共'} ${paging.total} ${unit}${pageLabel}`;
+}
+
+function calendarResultMessage(page: ActionPageControls, day: string): string {
+  const unit = page.inbox === 'scheduled' ? '批' : '项';
+  return `${day} · ${page.isFiltered ? '匹配 ' : ''}${page.paging.total} ${unit}`;
+}
+
+function resultDay(page: ActionPageControls, asOf: string | undefined): string | undefined {
+  if (page.calendar === undefined) return undefined;
+  const day = page.calendar === 'today' ? asOf : page.calendar;
+  return page.inbox === 'today' && day === asOf ? undefined : day;
 }
 
 function resultUnit(page: ActionPageControls): string {
   if (page.work !== undefined) return WORK_RESULT_UNITS[page.work];
-  return page.inbox === 'scheduled' ? '批已约跟进' : '项批次与跟进待办';
+  return page.inbox === 'scheduled' ? '批已约跟进' : page.isFiltered ? '项' : '项批次与跟进待办';
 }
 
 const WORK_RESULT_UNITS: Record<TodayWorkFilter, string> = { factory_chase: '批待催货', internal_note: '批等回单', all_unshipped: '批未发' };
@@ -185,7 +197,6 @@ export function BatchLinks({ page }: { readonly page: ActionPageControls }) {
     { key: 'factory_chase', count: page.paging.chaseCounts?.all },
     { key: 'internal_note', count: page.paging.internalNoteCount },
   ];
-  const due = page.paging.followUpCounts?.due ?? 0;
   return <>
     {scopes.filter(({ key, count }) => count !== undefined && (count > 0 || page.work === key)).map(({ key, count }) => (
       <Button key={key} size="small" aria-pressed={page.work === key} onClick={() => {
@@ -193,9 +204,5 @@ export function BatchLinks({ page }: { readonly page: ActionPageControls }) {
         focusSection('today-chase');
       }}>{workFilterLabels[key]} {count} 批</Button>
     ))}
-    {due === 0 ? null : <Button size="small" onClick={() => {
-      page.onFollowUp('follow_up_due');
-      focusSection('today-chase');
-    }}>到时跟进 {due} 批</Button>}
   </>;
 }
