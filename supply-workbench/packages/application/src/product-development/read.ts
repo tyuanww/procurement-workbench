@@ -10,7 +10,8 @@ import type { ProductDevelopmentView } from './views.js';
 
 export function makeProductDevelopmentRead({ queries, clock }: { readonly queries: DevelopmentQueries; readonly clock: Clock }) {
   return {
-    list: (store: DevelopmentScope, actor: Actor) => list({ store, actor, queries, clock }),
+    list: (input: { readonly store: DevelopmentScope; readonly includeReceiptDates: boolean }, actor: Actor) =>
+      list({ ...input, actor, queries, clock }),
     orders: async (input: Parameters<DevelopmentQueries['orders']>[0], actor: Actor) => {
       authorize(actor, 'plan.read');
       await requireStoreManagement({ store: input.store, actor, queries });
@@ -24,8 +25,9 @@ export function makeProductDevelopmentRead({ queries, clock }: { readonly querie
   };
 }
 
-async function list({ actor, store, queries, clock }: {
+async function list({ actor, store, queries, clock, includeReceiptDates }: {
   readonly actor: Actor; readonly store: DevelopmentScope; readonly queries: DevelopmentQueries; readonly clock: Clock;
+  readonly includeReceiptDates: boolean;
 }): Promise<ProductDevelopmentView> {
   authorize(actor, 'plan.read');
   const businessDate = clock.today();
@@ -34,15 +36,16 @@ async function list({ actor, store, queries, clock }: {
   const canSeeUsers = canCreateProject || projects.some((project) => canManageDevelopment(project, actor));
   const [replies, batches, users] = await Promise.all([
     queries.replies(nodes.map((node) => node.id)),
-    queries.batches([...new Set(nodes.flatMap((node) => node.formalLink === null ? [] : [node.formalLink.procurementLineId]))]),
+    queries.batches([...new Set(nodes.flatMap((node) => node.formalLink === null ? [] : [node.formalLink.procurementLineId]))], includeReceiptDates),
     canSeeUsers ? queries.users() : [],
   ]);
   const byNode = groupBy(replies, (reply) => reply.nodeId);
   const byProject = groupBy(nodes, (node) => node.projectId);
   return {
     businessDate, canCreateProject, users,
-    projects: projects.map((project) => ({
+    projects: projects.map(({ progressVersion, ...project }) => ({
       ...project,
+      ...(project.progress === undefined ? {} : { progressVersion }),
       canManage: canManageDevelopment(project, actor),
       nodes: (byProject.get(project.id) ?? []).map((node) => {
         const replyHistory = byNode.get(node.id) ?? [];

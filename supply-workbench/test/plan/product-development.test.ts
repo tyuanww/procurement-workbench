@@ -1,23 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { composePlan } from '../../apps/server/src/composition/plan.js';
-import { composeProductDevelopment } from '../../apps/server/src/composition/product-development.js';
-import { composeReporting } from '../../apps/server/src/composition/reporting.js';
-import { buildHttpApp } from '../../apps/server/src/http/app.js';
-import { registerPlanRoutes } from '../../apps/server/src/http/plan/routes.js';
-import { registerProductDevelopmentRoutes } from '../../apps/server/src/http/product-development/routes.js';
-import { registerReportingRoutes } from '../../apps/server/src/http/reporting/routes.js';
-import { devAuth } from '../../packages/auth/src/index.js';
 import { ManagementMeetingSchema } from '../../packages/contracts/src/management-meeting.js';
 import { ProductDevelopmentSchema } from '../../packages/contracts/src/product-development.js';
-import { localDate } from '../../packages/domain/src/values/local-date.js';
-import { createDb, migrate, seed, userDirectory } from '../../packages/persistence/src/index.js';
-
-const product = '0199f0a0-0000-7000-8000-000000000004';
-const buyer = '0199f0a0-0000-7000-8000-000000000002';
-const otherBuyer = '0199f0a0-0000-7000-8000-000000000003';
-const manager = '0199f0a0-0000-7000-8000-000000000005';
-const root = '/api/v1/product-development';
+import { buyer, manager, otherBuyer, product, root, setup } from './product-development-fixture.js';
 
 it('用同一未下单节点流转项目要求和采购回复，保护写入范围并拦住重放', async () => {
   const fixture = await setup();
@@ -65,37 +50,6 @@ it('用同一未下单节点流转项目要求和采购回复，保护写入范�
   }
 });
 
-async function setup() {
-  const handle = await createDb({ driver: 'pglite' });
-  await migrate(handle.exec);
-  await seed(handle.exec);
-  const accessCode = 'cg09-test-code';
-  const clock = { today: () => localDate('2026-11-19'), now: () => '2026-11-19T00:00:00.000Z' };
-  const input = { db: handle.db, timeZone: 'Asia/Shanghai', clock };
-  const app = await buildHttpApp({
-    auth: devAuth({ directory: userDirectory(handle.db), accessCode, secret: 'test-secret-product-development-only' }),
-    register(server) {
-      registerPlanRoutes(server, composePlan(input));
-      registerProductDevelopmentRoutes(server, composeProductDevelopment(input));
-      registerReportingRoutes(server, composeReporting({ ...input, secret: 'test-secret-reporting-only' }));
-    },
-  });
-  return {
-    app,
-    exec: handle.exec,
-    async login(userId: string) {
-      const response = await app.inject({ method: 'POST', url: '/api/v1/auth/dev/login', payload: { userId, accessCode } });
-      const cookie = response.headers['set-cookie'];
-      if (typeof cookie !== 'string') throw new Error('测试账号登录失败');
-      return { cookie: cookie.split(';')[0] ?? '' };
-    },
-    async close() {
-      await app.close();
-      await handle.close();
-    },
-  };
-}
-
 it('只可关联同店且自身单行有 OA 的成品，交付到厂读取指定子件', async () => {
   const fixture = await setup();
   try {
@@ -127,11 +81,31 @@ it('只可关联同店且自身单行有 OA 的成品，交付到厂读取指定
     expect((await create('links', valid)).statusCode).toBe(200);
     expect((await create('links', valid)).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url: `${root}/replies`, payload: { ...reply, id: randomUUID() }, headers: buyerHeaders })).statusCode).toBe(409);
-    const after = await app.inject({ method: 'GET', url: `${root}?store=dafuyan`, headers: buyerHeaders });
+    const at = "'2026-11-19T00:00:00Z'";
+    const evidence = '{"kind":"received","disposition":"normal","unit":"件","evidence":"签收凭据","reviewReason":null}';
+    await fixture.exec(`
+      insert into parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse)
+      values ('development-receiver', ${at}, ${at}, '合成工厂', false, true, false);
+      insert into delivery_batches (id, created_at, updated_at, order_line_id, seq, planned_qty, planned_unit, receiver_party_id, date_buyer_confirmed, status, status_changed_at, origin)
+      values ('development-batch', ${at}, ${at}, 'material-dafuyan', 1, 100, '件', 'development-receiver', '2026-11-25', 'confirmed', ${at}, 'manual');
+      insert into receipts (id, created_at, updated_at, batch_id, qty, received_on, fulfillment, category, source, created_by, voided_at, voided_by, void_reason)
+      values ('receipt-second', ${at}, ${at}, 'development-batch', 15, '2026-11-25', '${evidence}', 'packaging', 'workbench', '${buyer}', null, null, null),
+        ('receipt-first', ${at}, ${at}, 'development-batch', 20, '2026-11-24', '${evidence}', 'packaging', 'workbench', '${buyer}', null, null, null),
+        ('receipt-same-day', ${at}, ${at}, 'development-batch', 5, '2026-11-24', '${evidence}', 'packaging', 'workbench', '${buyer}', null, null, null),
+        ('receipt-voided', ${at}, ${at}, 'development-batch', 5, '2026-11-23', '${evidence}', 'packaging', 'workbench', '${buyer}', ${at}, '${buyer}', '测试作废'),
+        ('receipt-pending', ${at}, ${at}, 'development-batch', 5, '2026-11-26', null, 'packaging', 'workbench', '${buyer}', null, null, null);
+    `);
+    const original = await app.inject({ method: 'GET', url: `${root}?store=dafuyan`, headers: buyerHeaders });
+    expect(original.statusCode, original.body).toBe(200);
+    expect(ProductDevelopmentSchema.parse(original.json()).projects[0]?.nodes[0]?.batches[0]).not.toHaveProperty('receiptDates');
+    const after = await app.inject({ method: 'GET', url: `${root}?store=dafuyan&includeReceiptDates=1`, headers: buyerHeaders });
+    expect(after.statusCode, after.body).toBe(200);
     const development = ProductDevelopmentSchema.parse(after.json());
     expect(development.projects[0]?.nodes).toMatchObject([{ canReply: false, replies: [{ id: reply.id }], formalLink: {
       oaRef: 'XPKA(CN)9971', orderLineId: valid.orderLineId, procurementLineId: valid.procurementLineId,
-    } }]);
+    }, batches: [{ buyerConfirmedOn: '2026-11-25', plannedQty: 100, status: 'confirmed', receiptDates: ['2026-11-24', '2026-11-25'],
+      fulfillment: { verifiedReceivedQty: 40 },
+    }] }]);
     const history = await app.inject({ method: 'GET', url: `/api/v1/plan/work-items/${nodeId}`, headers });
     expect(history.json().events).toHaveLength(3);
   } finally {

@@ -13,7 +13,7 @@ import {
 } from '../../apps/web/src/features/shell/index.js';
 
 const HIDDEN = ['/home', '/master', '/settings', '/dashboard', '/reports'];
-const NAV_LABELS = '首页,今日事项,管理店铺,跟进中心,管理看板,产品档案,导入与审核';
+const NAV_LABELS = '首页,今日事项,计划与新品,跟进中心,管理看板,产品档案,导入与审核';
 
 function counts(values: readonly [number, number, number, number]): QueueFacts {
   const [aliases, codes, links, multiName] = values;

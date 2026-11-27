@@ -86,6 +86,7 @@ const WEEK_LENGTH = 7;
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const;
 const OPEN_STATUSES: readonly WorkItemStatus[] = ['planned', 'in_progress', 'blocked'];
 export function scheduleWindow(query: { readonly scale: ScheduleScale; readonly anchor: LocalDate }): ScheduleWindow {
+  if (query.scale === 'day') return { from: query.anchor, to: query.anchor };
   if (query.scale === 'week') {
     const from = weekStart(query.anchor);
     return { from, to: addDays(from, WEEK_LENGTH - 1) };
@@ -104,7 +105,8 @@ export function shiftScheduleWindow(input: {
 }
 
 export function scheduleWindowLabel(input: { readonly window: ScheduleWindow; readonly today: LocalDate }): string {
-  return `${shortDate(input.window.from, input.today)} 至 ${shortDate(input.window.to, input.today)}`;
+  const from = shortDate(input.window.from, input.today);
+  return input.window.from === input.window.to ? from : `${from} 至 ${shortDate(input.window.to, input.today)}`;
 }
 
 export function scheduleDays(input: { readonly window: ScheduleWindow; readonly today: LocalDate; readonly scale: ScheduleScale }): readonly ScheduleDay[] {
@@ -202,9 +204,17 @@ export function todayPercent(input: { readonly window: ScheduleWindow; readonly 
 }
 
 export function scheduleBarOf(item: Pick<WorkItem, 'plannedStart' | 'plannedEnd' | 'status' | 'overdueDays'>, window: ScheduleWindow): TimelineBar {
+  return {
+    ...scheduleIntervalGeometry({ from: item.plannedStart, to: item.plannedEnd }, window),
+    tone: workItemStatusTone(item.status),
+    label: overdueText(item) ?? workItemStatusLabel(item.status),
+  };
+}
+
+export function scheduleIntervalGeometry(interval: ScheduleWindow, window: ScheduleWindow): Omit<TimelineBar, 'tone' | 'label'> {
   const total = diffDays(window.to, window.from) + 1;
-  const startOffset = diffDays(item.plannedStart, window.from);
-  const endOffset = diffDays(item.plannedEnd, window.from);
+  const startOffset = diffDays(interval.from, window.from);
+  const endOffset = diffDays(interval.to, window.from);
   const start = Math.max(0, startOffset);
   const end = Math.min(total - 1, endOffset);
   return {
@@ -212,8 +222,6 @@ export function scheduleBarOf(item: Pick<WorkItem, 'plannedStart' | 'plannedEnd'
     widthPercent: ((end - start + 1) / total) * 100,
     isCutStart: startOffset < 0,
     isCutEnd: endOffset > total - 1,
-    tone: workItemStatusTone(item.status),
-    label: overdueText(item) ?? workItemStatusLabel(item.status),
   };
 }
 

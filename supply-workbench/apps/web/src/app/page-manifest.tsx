@@ -2,6 +2,7 @@ import { ProductOriginReturn } from '../pages/products/product-journey.js';
 import { settingsSection, settingsSectionLabels } from '../pages/settings/settings-section.js';
 import { productSection, productSectionLabels } from '../pages/products/product-section.js';
 import type { ReactNode } from 'react';
+import { currentProgressPath, isScheduleRiskAddress, planningLabels, planningScope, planningSectionOf, progressViewOf, type PlanningEntry } from '../features/progress/index.js';
 import { SETTINGS_PATH, type NavPath, type NavRoute, type PageGate } from '../shared/page-manifest.js';
 import { DashboardPage } from '../pages/dashboard/DashboardPage.js';
 import { DirectorHomePage } from '../pages/director-home/DirectorHomePage.js';
@@ -46,10 +47,10 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/home', nav: { label: '首页' }, gate: 'oversight', element: <DirectorHomePage /> },
   { path: '/today', nav: { label: '今日事项' }, gate: 'always', breadcrumb: todayBreadcrumb, element: <TodayPage /> },
   { path: '/today/personal', nav: null, gate: 'always', menuParent: '/today', element: <PersonalWorkspacePage /> },
-  { path: '/progress', nav: { label: '管理店铺' }, gate: 'always', element: <ProgressPage /> },
-  { path: '/progress/current', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="current" /> },
-  { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="schedule" /> },
-  { path: '/progress/development', nav: null, gate: 'always', menuParent: '/progress', element: <ProgressPage view="development" /> },
+  { path: '/progress', nav: { label: '计划与新品' }, gate: 'always', breadcrumb: progressBreadcrumb, element: <ProgressPage /> },
+  { path: currentProgressPath, nav: null, gate: 'always', menuParent: '/progress', breadcrumb: '当前进度', element: <ProgressPage view="current" /> },
+  { path: '/progress/schedule', nav: null, gate: 'always', menuParent: '/progress', breadcrumb: (params) => params.get('lens') === 'risk' ? [] : [planningBreadcrumb(params, 'orders')], element: <ProgressPage view="schedule" /> },
+  { path: '/progress/development', nav: null, gate: 'always', menuParent: '/progress', breadcrumb: (params) => [planningBreadcrumb(params, 'development')], element: <ProgressPage view="development" /> },
   { path: '/lines', nav: { label: '跟进中心' }, gate: 'always', element: <LineListPage /> },
   { path: '/lines/:id', nav: null, breadcrumb: '订单行详情', element: <ProductOriginReturn><LineDetailPage /></ProductOriginReturn> },
   { path: '/dashboard', nav: { label: '管理看板' }, gate: 'oversight', element: <DashboardPage /> },
@@ -64,6 +65,17 @@ export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
   { path: '/master', nav: null, gate: 'review', menuParent: '/imports', element: <ProductOriginReturn><MasterPage /></ProductOriginReturn> },
   { path: SETTINGS_PATH, nav: null, breadcrumb: (params) => ['系统设置', settingsSectionLabels[settingsSection(params).activeKey]], gate: 'admin', element: <SettingsPage /> },
 ];
+
+function progressBreadcrumb(params: URLSearchParams): readonly string[] {
+  const view = progressViewOf(params.get('view'));
+  if (view === 'current') return ['当前进度'];
+  if (isScheduleRiskAddress('/progress', params.toString())) return [];
+  return [planningBreadcrumb(params, view === 'development' ? 'development' : 'orders')];
+}
+
+function planningBreadcrumb(params: URLSearchParams, entry: PlanningEntry): string {
+  return planningLabels[planningSectionOf(planningScope(params, entry))];
+}
 
 function todayBreadcrumb(params: URLSearchParams): readonly string[] {
   const view = params.get('view');

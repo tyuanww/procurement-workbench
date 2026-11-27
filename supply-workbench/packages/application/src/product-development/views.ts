@@ -1,15 +1,23 @@
-import type { EntityId, LocalDate, OrderLineId, WorkItem } from '@sw/domain';
+import type { DevelopmentFollowUpInput, DevelopmentProgressDraft, DevelopmentProgressUpdate, EntityId, LocalDate, OrderLineId, WorkItem } from '@sw/domain';
 import type {
   DevelopmentBatch, DevelopmentNode, DevelopmentNodeRow, DevelopmentProject, DevelopmentProjectRow, DevelopmentReply, DevelopmentUsers,
 } from '../ports/product-development.js';
 
-export type CreateDevelopmentProject = Pick<DevelopmentProject, 'id' | 'store' | 'title' | 'productLeadUserId'>;
+export type CreateDevelopmentProject = Pick<DevelopmentProject, 'id' | 'store' | 'title' | 'productLeadUserId'> & {
+  readonly progress?: DevelopmentProgressDraft;
+};
+export type UpdateDevelopmentProjectProgress = {
+  readonly projectId: EntityId;
+  readonly expectedVersion: number;
+  readonly progress: DevelopmentProgressUpdate;
+};
 export type CreateDevelopmentNode = Pick<DevelopmentNode, 'id' | 'projectId' | 'destination' | 'buyerUserId'> &
   Pick<WorkItem, 'title' | 'ownerUserId' | 'plannedStart' | 'plannedEnd'>;
 export type UpdateDevelopmentNode = Pick<CreateDevelopmentNode, 'projectId' | 'ownerUserId' | 'buyerUserId' | 'plannedStart' | 'plannedEnd'> & {
   readonly nodeId: EntityId;
   readonly expectedVersion: number;
   readonly status: WorkItem['status'];
+  readonly followUp?: DevelopmentFollowUpInput;
 };
 export type ReplyToDevelopmentNode = Pick<DevelopmentReply, 'id' | 'nodeId' | 'promisedOn' | 'evidence'> & {
   readonly projectId: EntityId;
@@ -29,7 +37,8 @@ export type DevelopmentNodeView = DevelopmentNodeRow & {
   readonly batches: readonly DevelopmentBatch[];
 };
 
-export type DevelopmentProjectView = DevelopmentProjectRow & {
+export type DevelopmentProjectView = Omit<DevelopmentProjectRow, 'progressVersion'> & {
+  readonly progressVersion?: number;
   readonly canManage: boolean;
   readonly nodes: readonly DevelopmentNodeView[];
 };

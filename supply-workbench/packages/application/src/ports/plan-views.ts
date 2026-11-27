@@ -11,6 +11,8 @@ import type {
 import type { ProcurementStore } from '../../../domain/src/procurement-store.js';
 import type { EntityId } from '../../../domain/src/values/ids.js';
 import type { LocalDate } from '../../../domain/src/values/local-date.js';
+import type { BatchFulfillment } from '../../../domain/src/batch/fulfillment.js';
+import type { BatchStatus } from '../../../domain/src/vocabulary/index.js';
 import type { ListResult, PageQuery } from '../shared/page.js';
 
 export type WorkItemLineRefView = {
@@ -129,6 +131,37 @@ export type ScheduleView = {
   readonly total: number;
   readonly items: readonly WorkItemView[];
   readonly dependencyConflicts: WorkItemDependencyConflicts;
+  readonly deliveryBatches?: readonly DeliveryScheduleBatch[];
+  readonly deliveryTasks?: readonly DeliveryScheduleTask[];
+};
+
+type DeliveryScheduleParty = { readonly id: string; readonly name: string | null };
+
+export type DeliveryScheduleBatch = {
+  readonly id: string;
+  readonly seq: number;
+  readonly orderLineId: string;
+  readonly orderName: string | null;
+  readonly poRaw: string | null;
+  readonly itemCode: string | null;
+  readonly oaRef: string | null;
+  readonly buyer: DeliveryScheduleParty | null;
+  readonly supplier: DeliveryScheduleParty | null;
+  readonly factory: DeliveryScheduleParty | null;
+  readonly confirmed: LocalDate | null;
+  readonly firstConfirmed: LocalDate | null;
+  readonly supplierPromised: LocalDate | null;
+  readonly required: LocalDate | null;
+  readonly receiptDates: readonly LocalDate[];
+  readonly plannedQty: number;
+  readonly status: BatchStatus;
+  readonly fulfillment: Pick<BatchFulfillment, 'unit' | 'receivedQty' | 'unshippedQty' | 'reviewCount'>;
+};
+
+export type DeliveryScheduleTask = {
+  readonly task: WorkItemView;
+  readonly dependencies: readonly WorkItemPredecessor[];
+  readonly conflicts: readonly WorkItemPredecessor[];
 };
 
 export type DailyPlanQuery = {
@@ -139,6 +172,8 @@ export type DailyPlanQuery = {
 };
 
 export type SchedulePlanQuery = {
+  readonly includeClosed?: boolean;
+  readonly includeDelivery?: boolean;
   readonly store?: ProcurementStore;
   readonly from: LocalDate;
   readonly to: LocalDate;

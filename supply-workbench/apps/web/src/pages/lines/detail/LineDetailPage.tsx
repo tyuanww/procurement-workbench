@@ -16,7 +16,7 @@ import { FulfillmentRecords, FulfillmentSummary } from './fulfillment.js';
 import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../features/plan/index.js';
 import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
-import { lineDetailBack, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
+import { lineDetailBack, orderScheduleAddress, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
 
 const MISSING_PO = '无单号';
 
@@ -31,7 +31,7 @@ export function LineDetailPage() {
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
   const todayBatch = params.get('backToToday') === 'arrivals' ? params.get('focusBatch') : null;
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), state, lineId: id, todayBatch })} />;
+  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), schedule: params.get('backToSchedule'), state, lineId: id, todayBatch })} />;
 }
 
 function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {
@@ -136,15 +136,11 @@ function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly deta
 function ProcurementScheduleEvidence({ detail, params }: { readonly detail: OrderLineDetail; readonly params: URLSearchParams }) {
   const schedule = detail.procurementSchedule;
   if (schedule === undefined) return null;
-  const href = new URLSearchParams(params.get('backToProgress') ?? '');
-  href.set('view', 'schedule');
-  href.set('scheduleLine', detail.line.id);
-  const store = params.get('store');
-  if (store !== null) href.set('store', store);
+  const href = orderScheduleAddress({ params, lineId: detail.line.id });
   return <section aria-label="采购排期日期">
     <Typography.Title level={2}>采购排期日期</Typography.Title>
     <ProcurementDateEvidence schedule={schedule} batches={detail.batches} />
-    <Link to={`/progress?${href.toString()}`}>查看总排期</Link>
+    <Link to={href}>查看订单与任务排期</Link>
   </section>;
 }
 

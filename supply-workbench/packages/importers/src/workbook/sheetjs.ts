@@ -2,44 +2,46 @@ import * as XLSX from 'xlsx';
 import type { WorkBook, WorkSheet } from 'xlsx';
 import type { WorkbookLike } from '../../../application/src/ports/workbook-reader.js';
 import { buildSheet, cellKey, type CellDraft, type MergeRange } from './sheet.js';
-import { readXmlWorkbook } from './xml-workbook.js';
 import { decodeXml } from './zip-xml.js';
 
-export function readSheetJs(bytes: Uint8Array, fileName: string): WorkbookLike {
-  const book: WorkBook = XLSX.read(bytes, { type: 'array', cellFormula: true, cellDates: false });
-  const xml = readXmlWorkbook(bytes, fileName);
+export function readSheetJs({ bytes, xml, captureCalendarDates }: {
+  readonly bytes: Uint8Array; readonly xml: WorkbookLike; readonly captureCalendarDates: boolean;
+}): WorkbookLike {
+  const book: WorkBook = XLSX.read(bytes, { type: 'array', cellFormula: true, cellDates: false, cellNF: captureCalendarDates });
   return {
     source: xml.source,
     date1904: book.Workbook?.WBProps?.date1904 === true,
-    sheets: book.SheetNames.map((name, index) => sheetOf({ book, name, index, images: xml.sheets[index]?.images })),
+    sheets: book.SheetNames.map((name, index) => sheetOf({ book, name, index, xml: xml.sheets[index], captureCalendarDates })),
   };
 }
 
-function sheetOf(input: { readonly book: WorkBook; readonly name: string; readonly index: number; readonly images: WorkbookLike['sheets'][number]['images'] }): ReturnType<typeof buildSheet> {
+function sheetOf(input: { readonly book: WorkBook; readonly name: string; readonly index: number; readonly xml: WorkbookLike['sheets'][number] | undefined; readonly captureCalendarDates: boolean }): ReturnType<typeof buildSheet> {
   const sheet = input.book.Sheets[input.name];
   if (sheet === undefined) throw new Error('Excel 文件打不开');
+  const { hiddenRows, images } = input.xml ?? {};
   return buildSheet({
     name: input.name,
-    hidden: input.book.Workbook?.Sheets?.[input.index]?.Hidden === 1,
-    cells: cellsOf(sheet),
+    hidden: (input.book.Workbook?.Sheets?.[input.index]?.Hidden ?? 0) > 0,
+    ...(hiddenRows === undefined ? {} : { hiddenRows }),
+    cells: cellsOf(sheet, input.captureCalendarDates),
     merges: mergesOf(sheet),
-    ...(input.images === undefined ? {} : { images: input.images }),
+    ...(images === undefined ? {} : { images }),
   });
 }
 
-function cellsOf(sheet: WorkSheet): Map<string, CellDraft> {
+function cellsOf(sheet: WorkSheet, captureCalendarDates: boolean): Map<string, CellDraft> {
   const cells = new Map<string, CellDraft>();
   for (const key of Object.keys(sheet)) {
     if (key.startsWith('!')) continue;
     const cell = sheet[key];
     if (!isCell(cell)) continue;
     const address = XLSX.utils.decode_cell(key);
-    cells.set(cellKey(address.r + 1, address.c + 1), draftOf(cell));
+    cells.set(cellKey(address.r + 1, address.c + 1), draftOf(cell, captureCalendarDates));
   }
   return cells;
 }
 
-function draftOf(cell: Record<string, unknown>): CellDraft {
+function draftOf(cell: Record<string, unknown>, captureCalendarDates: boolean): CellDraft {
   const kind = kindOf(cell.t);
   const formula = typeof cell.f === 'string' ? cell.f : undefined;
   const text = textOf(kind, cell.v);
@@ -48,10 +50,26 @@ function draftOf(cell: Record<string, unknown>): CellDraft {
     kind,
     value: storedValue(cell.v),
     text,
-    ...(kind === 'number' && typeof cell.w === 'string' && cell.w !== text ? { displayText: cell.w } : {}),
+    ...numericMetadata({ kind, cell, text, captureCalendarDates }),
     ...(formula === undefined ? {} : { formula }),
     ...(richText === undefined ? {} : { richText }),
   };
+}
+
+function numericMetadata({ kind, cell, text, captureCalendarDates }: {
+  readonly kind: CellDraft['kind']; readonly cell: Record<string, unknown>; readonly text: string; readonly captureCalendarDates: boolean;
+}): Pick<CellDraft, 'displayText' | 'calendarDateFormatted'> {
+  if (kind !== 'number') return {};
+  return {
+    ...(typeof cell.w === 'string' && cell.w !== text ? { displayText: cell.w } : {}),
+    ...(captureCalendarDates && isCalendarDateFormat(cell.z) ? { calendarDateFormatted: true } : {}),
+  };
+}
+
+function isCalendarDateFormat(format: unknown): boolean {
+  if (typeof format !== 'string' || XLSX.SSF.is_date(format) !== true) return false;
+  const tokens = format.split(';')[0]?.replace(/"(?:[^"]|"")*"|(?:\\|_|\*).|\[[^\]]*\]/gu, '') ?? '';
+  return /[yd]/iu.test(tokens);
 }
 
 function richTextOf(xml: unknown): string | undefined {

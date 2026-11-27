@@ -76,6 +76,14 @@ it('总排期按周、按月返回相交项，空区间返回空', async () => {
   expect(month.total).toBe(3);
   expect(month.items.map((item) => item.title)).toEqual(['本周', '下周', '月底']);
 
+  const finished = await task({ title: '完成齐料', end: localDate('2026-11-12') });
+  await plan.changeStatus({ workItemId: finished.workItemId, status: 'in_progress' }, BUYER);
+  await plan.changeStatus({ workItemId: finished.workItemId, status: 'done' }, BUYER);
+  const range = { from: localDate('2026-11-01'), to: localDate('2026-11-30') };
+  expect((await plan.schedule(range, BUYER)).total).toBe(3);
+  expect((await plan.schedule({ ...range, includeClosed: true }, BUYER)).items).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: finished.workItemId, status: 'done' }),
+  ]));
   const empty = await plan.schedule({ from: localDate('2026-12-01'), to: localDate('2026-12-31') }, BUYER);
   expect(empty).toMatchObject({ total: 0, items: [] });
 });

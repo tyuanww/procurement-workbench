@@ -48,12 +48,13 @@ const warehouse = '0199f0a0-0000-7000-8000-000000000010';
 const queuePath = '/api/v1/master/review-queue/counts';
 const loginPath = '/api/v1/auth/dev/login';
 const logoutPath = '/api/v1/auth/logout';
+const todayPath = '/api/v1/today';
 const searchLabel = '搜索单号、品名、供应商';
 const headless = process.env.ACCEPT_HEADLESS !== '0';
 const browser = await chromium.launch({ headless, channel });
 type Role = keyof typeof users;
 type BrowserElement = Element;
-type ResponseRecord = { readonly role: Role; readonly session: number; readonly path: string; readonly status: number; readonly signedIn: boolean };
+type ResponseRecord = { readonly role: Role; readonly session: number; readonly path: string; readonly status: number; readonly signedIn: boolean; readonly startedWithSession?: true };
 type ExpectedFailure = Pick<ResponseRecord, 'role' | 'path' | 'status'>;
 type AcceptanceResult = {
   readonly platform: typeof process.platform;
@@ -98,7 +99,7 @@ async function procurementAcceptance(): Promise<void> {
   await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
   const directorMenu = manager.locator('aside');
   const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
-  const today = directorMenu.getByRole('link', { name: '今日事项', exact: true });
+  const today = sidebarGroup(directorMenu, '今日事项');
   const todayBox = await today.boundingBox();
   assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);
@@ -167,15 +168,16 @@ async function procurementAcceptance(): Promise<void> {
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
   await buyer.goto(new URL('/progress?view=development&store=dafuyan', origin).href);
   const progress = buyer.locator('aside');
-  const development = await sidebarLink(progress, '管理店铺', '新品开发进度');
-  assert.equal(await development.getAttribute('aria-current'), 'page');
+  const development = await sidebarLink(progress, '计划与新品', '新品开发');
+  await development.and(progress.locator('[aria-current="page"]')).waitFor();
   await progress.getByRole('link', { name: '当前进度', exact: true }).press('Enter');
   await buyer.waitForURL(new URL('/progress/current?store=dafuyan', origin).href);
   const main = buyer.getByRole('main');
-  assert.equal(await main.getByRole('tab').count(), 0);
   const heading = main.getByRole('heading', { name: '当前进度', level: 1, exact: true });
+  await heading.waitFor({ state: 'attached' });
+  assert.equal(await main.getByRole('tab').count(), 0, '当前进度加载完成后应使用独立页面');
   assert.equal(await heading.evaluate((node) => getComputedStyle(node).clipPath), 'inset(50%)');
-  assert.equal(await (await sidebarLink(progress, '管理店铺', '总排期')).getAttribute('href'), '/progress/schedule?store=dafuyan');
+  assert.equal(await (await sidebarLink(progress, '计划与新品', '订单与任务排期')).getAttribute('href'), '/progress/schedule?store=dafuyan');
 
   const stuckUrl = new URL('/dashboard?preset=custom&from=2025-01-01&to=2025-02-28&lane=finished', origin);
   await manager.goto(stuckUrl.href);
@@ -210,8 +212,14 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await supplierDetails.waitFor({ state: 'hidden' });
   await (await sidebarLink(sidebar, '管理看板', '采购负荷')).click();
   await manager.getByRole('heading', { name: '采购负荷', level: 1, exact: true }).waitFor();
-  await (await sidebarLink(sidebar, '管理看板', '项目进度')).click();
-  await manager.getByRole('heading', { name: '项目进度', level: 1, exact: true }).waitFor();
+  const risk = await sidebarLink(sidebar, '管理看板', '排期任务进度');
+  await risk.click();
+  await manager.getByRole('heading', { name: '排期任务进度', level: 1, exact: true }).waitFor();
+  await risk.and(sidebar.locator('[aria-current="page"]')).waitFor();
+  assertDashboardPeriod(manager, stuckUrl);
+  await (await sidebarLink(sidebar, '管理看板', '采购负荷')).click();
+  await manager.getByRole('heading', { name: '采购负荷', level: 1, exact: true }).waitFor();
+  assertDashboardPeriod(manager, stuckUrl);
   await manager.setViewportSize({ width: 320, height: 780 });
   await manager.goto(stuckUrl.href);
   await stuckTrigger.waitFor();
@@ -226,6 +234,11 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], focusedStuckBatch: true, phoneWidth: 320 };
 }
 
+function assertDashboardPeriod(page: Page, expected: URL): void {
+  const current = new URL(page.url());
+  for (const key of ['preset', 'from', 'to', 'lane']) assert.equal(current.searchParams.get(key), expected.searchParams.get(key));
+}
+
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {
   const signedOutSessionReads = new Set<number>();
   const pending = [...expectedFailures];
@@ -238,6 +251,7 @@ function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord
       pending.splice(match, 1);
       return false;
     }
+    if (response.path === todayPath && response.status === 401 && response.startedWithSession === true) return false;
     if (response.path !== '/api/v1/me' || response.status !== 401 || signedOutSessionReads.has(response.session)) return true;
     signedOutSessionReads.add(response.session);
     return false;
@@ -253,12 +267,20 @@ async function open(role: Role, path: string, landing = path) {
   const devtools = await context.newCDPSession(page);
   let signedIn = false;
   const session = ++nextSession;
-  devtools.on('Network.responseReceived', ({ response }) => {
+  const signedInTodayReads = new Set<string>();
+  devtools.on('Network.requestWillBeSent', ({ requestId, request }) => {
+    const url = new URL(request.url);
+    if (signedIn && url.origin === origin.origin && url.pathname === todayPath && request.method === 'GET') signedInTodayReads.add(requestId);
+  });
+  devtools.on('Network.loadingFailed', ({ requestId }) => { signedInTodayReads.delete(requestId); });
+  devtools.on('Network.responseReceived', ({ requestId, response }) => {
     const url = new URL(response.url);
     if (url.origin !== origin.origin) return;
     if (url.pathname === loginPath && response.status === 200) signedIn = true;
     if (url.pathname === logoutPath && response.status === 204) signedIn = false;
-    result.network.push({ role, session, path: url.pathname, status: response.status, signedIn });
+    const startedWithSession = signedInTodayReads.delete(requestId);
+    result.network.push({ role, session, path: url.pathname, status: response.status, signedIn,
+      ...(startedWithSession ? { startedWithSession } : {}) });
   });
   devtools.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {
     result.exceptions.push({ role, text: exceptionDetails.text });

@@ -20,17 +20,19 @@ export function pagesFor(input: { readonly total: number; readonly pageSize: num
   return Array.from({ length: count }, (_unused, index) => index + 1);
 }
 
-export async function loadProgressLines(scope: { readonly store: ProcurementStore; readonly isMine: boolean }): Promise<readonly OrderLineRow[]> {
+type ProgressLinesScope = { readonly store: ProcurementStore; readonly isMine: boolean; readonly signal?: AbortSignal };
+
+export async function loadProgressLines(scope: ProgressLinesScope): Promise<readonly OrderLineRow[]> {
   const first = await readLinePage(1, scope);
   const pages = pagesFor({ total: first.page.total, pageSize: PROGRESS_PAGE_SIZE });
   const rest = await Promise.all(pages.slice(1).map((page) => readLinePage(page, scope)));
   return [...first.items, ...rest.flatMap((listed) => listed.items)];
 }
 
-function readLinePage(page: number, { store, isMine }: { readonly store: ProcurementStore; readonly isMine: boolean }) {
+function readLinePage(page: number, { store, isMine, signal }: ProgressLinesScope) {
   const params = new URLSearchParams({ lane: 'finished', store, page: String(page), pageSize: String(PROGRESS_PAGE_SIZE) });
   if (isMine) params.set('buyer', 'me');
-  return read({ name: 'lines', query: params.toString() });
+  return read({ name: 'lines', query: params.toString(), ...(signal === undefined ? {} : { signal }) });
 }
 
 export async function loadProgress(

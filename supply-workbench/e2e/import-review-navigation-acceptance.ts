@@ -7,7 +7,9 @@ const GROUP_LABEL = '导入与审核';
 const IMPORT_LABEL = '导入中心';
 const MASTER_LABEL = '别名审核';
 const HISTORY_PATH = '/imports?template=po-master-v1&status=committed';
-const EMPTY_SCHEDULE = '/progress?view=schedule&from=2030-01-01';
+const EMPTY_SCHEDULE = '/progress?view=schedule&scale=month&from=2030-01-01';
+const SCHEDULE_EMPTY_TEXT = '当前店铺和日期内暂无排期。可切换店铺或日期。';
+const SCHEDULE_IMPORT_LINK = '去导入排期里程碑';
 const WORKBOOK = 'po-master-procurement.xlsx';
 const SETTINGS_LABEL = '系统设置';
 const SEARCH_LABEL = '搜索单号、品名、供应商';
@@ -59,7 +61,7 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   await heading.waitFor();
   assert.equal(await page.locator('aside a[href="/settings"]').count(), 0);
 
-  await page.getByRole('complementary').getByRole('link', { name: '今日事项', exact: true }).click();
+  await (await sidebarLink(page.getByRole('complementary'), '今日事项', '行动板')).click();
   await page.waitForURL(new URL('/today', origin).href);
   await trigger.press('Enter');
   await settings.waitFor();
@@ -81,7 +83,7 @@ async function checkAdminSettings(page: Page, origin: URL): Promise<void> {
   assert.equal(await entries.count(), ADMIN_NAV_ENTRIES);
   await entries.first().getByRole('link', { name: '首页', exact: true }).waitFor();
   assert.equal(await drawer.locator('a[href="/settings"]').count(), 0);
-  await drawer.getByRole('link', { name: '今日事项', exact: true }).click();
+  await (await sidebarLink(drawer, '今日事项', '行动板')).click();
   await drawer.waitFor({ state: 'hidden' });
   await trigger.click();
   await settings.click();
@@ -216,7 +218,7 @@ async function checkBuyerNavigation(page: Page, origin: URL): Promise<string> {
   await checkProcurementCutoff(page, historyFilters.getByText(/^\*数据截止/u), historyFilters.getByLabel('筛选批次状态'));
   await checkKeyboardFilePicker(page);
 
-  await checkEmptySchedule(page, origin, true);
+  await checkScheduleEmptyAndRetry(page, origin);
   await page.goto(new URL(HISTORY_PATH, origin).href);
   const historyLink = page.getByRole('link', { name: WORKBOOK, exact: true });
   await historyLink.waitFor();
@@ -332,7 +334,7 @@ async function checkLegacyBatch(page: Page, legacyBatch: string, origin: URL, si
 async function checkWithoutImportAccess(page: Page, origin: URL, legacyBatch: string): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
   await checkEmptySchedule(page, origin, false);
-  await checkProcurementCutoff(page, page.getByText(/^\*数据截止/u), page.getByRole('combobox', { name: '店铺', exact: true }));
+  await checkProcurementCutoff(page, page.getByText(/^\*数据截止/u), page.getByRole('tab', { name: '订单与任务排期', exact: true }));
   assert.equal(await page.locator('aside a[href="/imports"], aside a[href="/master"]').count(), 0);
 
   const batchPath = new URL(legacyBatch, origin).pathname;
@@ -345,19 +347,51 @@ async function checkWithoutImportAccess(page: Page, origin: URL, legacyBatch: st
   }
 }
 
-async function checkProcurementCutoff(page: Page, cutoff: Locator, filter: Locator) {
+async function checkProcurementCutoff(page: Page, cutoff: Locator, anchor: Locator) {
   await cutoff.getByText(/^\d{4}-\d{2}-\d{2}$/u).waitFor();
   const banner = page.getByRole('banner');
   assert.equal(await banner.getByText(/采购订单总表|数据截止/u).count(), 0);
   assert.equal(await banner.locator('a[href="/imports"]').count(), 0);
-  const [date, control] = await Promise.all([cutoff.boundingBox(), filter.boundingBox()]);
+  const [date, control] = await Promise.all([cutoff.boundingBox(), anchor.boundingBox()]);
   assert.ok(date && control && date.x >= control.x + control.width);
-  assert.ok(date.y < control.y + control.height && control.y < date.y + date.height, '截止日期和筛选控件在同一行');
+  assert.ok(date.y < control.y + control.height && control.y < date.y + date.height, '截止日期与所在栏的控件在同一行');
 }
 
 async function checkEmptySchedule(page: Page, origin: URL, canReadImports: boolean): Promise<void> {
   await page.goto(new URL(EMPTY_SCHEDULE, origin).href);
-  await page.getByText('所选期间没有排期任务。', { exact: true }).waitFor();
-  const link = page.getByRole('link', { name: '去导入排期里程碑', exact: true });
-  assert.equal(await link.count(), canReadImports ? 1 : 0);
+  const results = page.getByRole('region', { name: '排期结果', exact: true });
+  await results.getByText(SCHEDULE_EMPTY_TEXT, { exact: true }).waitFor();
+  const link = results.getByRole('link', { name: SCHEDULE_IMPORT_LINK, exact: true });
+  if (canReadImports) {
+    await link.waitFor();
+    assert.equal(await link.getAttribute('href'), '/imports');
+  } else {
+    assert.equal(await page.getByRole('link', { name: SCHEDULE_IMPORT_LINK, exact: true }).count(), 0);
+  }
+}
+
+async function checkScheduleEmptyAndRetry(page: Page, origin: URL): Promise<void> {
+  await checkEmptySchedule(page, origin, true);
+  const results = page.getByRole('region', { name: '排期结果', exact: true });
+  const importLink = page.getByRole('link', { name: SCHEDULE_IMPORT_LINK, exact: true });
+  await page.goto(new URL(EMPTY_SCHEDULE + '&status=done', origin).href);
+  const clearStatus = results.getByRole('button', { name: '清除状态筛选', exact: true });
+  await clearStatus.waitFor();
+  assert.equal(await importLink.count(), 0);
+  await clearStatus.click();
+  await importLink.waitFor();
+  assert.equal(new URL(page.url()).searchParams.has('status'), false);
+
+  await page.route('**/api/v1/plan/schedule?*', (route) => route.abort('failed'), { times: 1 });
+  await page.goto(new URL(EMPTY_SCHEDULE, origin).href);
+  await results.getByText('订单与任务排期读取失败', { exact: true }).waitFor();
+  assert.equal(await results.getByText(SCHEDULE_EMPTY_TEXT, { exact: true }).count(), 0);
+  assert.equal(await importLink.count(), 0);
+  await results.getByRole('button', { name: '重试', exact: true }).click();
+  await importLink.waitFor();
+
+  await page.goto(new URL('/progress/schedule?from=2030-01-01&planDisplay=list&planSearch=HZ09-0001', origin).href);
+  const carriedBatch = results.getByRole('button', { name: /HZ09-0001/u });
+  await carriedBatch.locator('time[datetime="2025-01-01"]').waitFor();
+  assert.equal(await importLink.count(), 0);
 }

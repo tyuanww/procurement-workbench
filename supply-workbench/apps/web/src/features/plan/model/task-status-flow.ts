@@ -12,6 +12,8 @@ export type StatusFlow =
   | { readonly kind: 'refreshing'; readonly from: WorkItemStatus; readonly to: WorkItemStatus }
   | { readonly kind: 'failed'; readonly from: WorkItemStatus; readonly to: WorkItemStatus; readonly message: string };
 
+export const idleStatusFlow: StatusFlow = { kind: 'idle', success: null };
+
 export type StatusPost = {
   readonly request: number;
   readonly to: WorkItemStatus;
@@ -25,11 +27,10 @@ export type StatusMachine = {
   succeed(request: number): void;
   fail(request: number, message: string): void;
   shown(status: WorkItemStatus): void;
-  reset(): void;
 };
 
 export function createStatusMachine(): StatusMachine {
-  let flow: StatusFlow = { kind: 'idle', success: null };
+  let flow: StatusFlow = idleStatusFlow;
   let seq = 0;
   return {
     flow: () => flow,
@@ -40,7 +41,7 @@ export function createStatusMachine(): StatusMachine {
     },
     cancel() {
       if (flow.kind !== 'confirming') return;
-      flow = { kind: 'idle', success: null };
+      flow = idleStatusFlow;
     },
     commit() {
       if (flow.kind !== 'confirming') return null;
@@ -60,9 +61,6 @@ export function createStatusMachine(): StatusMachine {
     shown(status) {
       if (flow.kind !== 'refreshing' || status !== flow.to) return;
       flow = { kind: 'idle', success: { from: flow.from, to: flow.to } };
-    },
-    reset() {
-      flow = { kind: 'idle', success: null };
     },
   };
 }

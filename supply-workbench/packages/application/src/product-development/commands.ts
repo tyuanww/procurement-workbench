@@ -1,4 +1,5 @@
-import { isFactoryDevelopmentDestination, type EntityId, type WorkItem, type WorkItemEvent } from '@sw/domain';
+import { isFactoryDevelopmentDestination, type DevelopmentFollowUp, type DevelopmentFollowUpInput, type DevelopmentProgressDate,
+  type DevelopmentProgressDraft, type DevelopmentProgressSource, type EntityId, type WorkItem, type WorkItemEvent } from '@sw/domain';
 import { assertWorkItemTransition, newWorkItemEvent, workItemSnapshot } from '../plan/index.js';
 import type { Clock } from '../ports/clock.js';
 import type { IdGenerator } from '../ports/id-generator.js';
@@ -8,7 +9,7 @@ import { auditOf } from '../shared/audit.js';
 import { authorize } from '../shared/authorize.js';
 import { ForbiddenError, NotFoundError, StateConflictError, ValidationFailedError } from '../shared/errors.js';
 import { canLeadDevelopment, isDevelopmentBuyer, requireDevelopmentManagement, requireDevelopmentUser } from './access.js';
-import type { CreateDevelopmentNode, CreateDevelopmentProject, LinkDevelopmentNode, ReplyToDevelopmentNode, UpdateDevelopmentNode } from './views.js';
+import type { CreateDevelopmentNode, CreateDevelopmentProject, LinkDevelopmentNode, ReplyToDevelopmentNode, UpdateDevelopmentNode, UpdateDevelopmentProjectProgress } from './views.js';
 import { canReplyToDevelopment, developmentReplyDate } from './state.js';
 
 type Dependencies = { readonly uow: DevelopmentUnitOfWork; readonly clock: Clock; readonly ids: IdGenerator };
@@ -19,6 +20,7 @@ export function makeProductDevelopment(deps: Dependencies) {
     command({ tx, actor, at: deps.clock.now(), ids: deps.ids }));
   return {
     createProject: (input: CreateDevelopmentProject, actor: Actor) => run(actor, (ctx) => createProject(input, ctx)),
+    updateProjectProgress: (input: UpdateDevelopmentProjectProgress, actor: Actor) => run(actor, (ctx) => updateProjectProgress(input, ctx)),
     createNode: (input: CreateDevelopmentNode, actor: Actor) => run(actor, (ctx) => createNode(input, ctx)),
     updateNode: (input: UpdateDevelopmentNode, actor: Actor) => run(actor, (ctx) => updateNode(input, ctx)),
     reply: (input: ReplyToDevelopmentNode, actor: Actor) => run(actor, (ctx) => reply(input, ctx)),
@@ -29,15 +31,52 @@ export function makeProductDevelopment(deps: Dependencies) {
 async function createProject(input: CreateDevelopmentProject, { tx, actor, at }: Context) {
   authorize(actor, 'products.maintain');
   await requireDevelopmentUser(tx.users, { id: input.productLeadUserId, accepts: canLeadDevelopment, roleLabel: '产品协作' });
-  const project = { ...input, createdBy: actor.id, createdAt: at };
+  const project = { ...input, createdBy: actor.id, createdAt: at, progressVersion: 0 };
   if (await tx.development.insertProject(project)) {
     await tx.audit.record(auditOf({ action: 'product_development.create', subject: project, ctx: { actor, at, entity: '新品项目' } }));
   } else {
     const existing = await tx.development.lockProject(input.id);
     if (existing.createdBy !== actor.id || existing.store !== input.store ||
-        existing.title !== input.title || existing.productLeadUserId !== input.productLeadUserId) conflict();
+        existing.title !== input.title || existing.productLeadUserId !== input.productLeadUserId || !sameProgress(existing.progress, input.progress)) conflict();
   }
   return { id: project.id };
+}
+
+function sameProgress(current: DevelopmentProgressDraft | undefined, input: DevelopmentProgressDraft | undefined): boolean {
+  if (current === undefined || input === undefined) return current === input;
+  const sameDate = (a: DevelopmentProgressDate | undefined, b: DevelopmentProgressDate | undefined) => a?.raw === b?.raw && a?.date === b?.date;
+  return current.confirmedStage === input.confirmedStage && current.currentNote === input.currentNote && current.contacts === input.contacts &&
+    sameDate(current.requirement, input.requirement) && sameDate(current.forecast, input.forecast) && sameSource(current.source, input.source);
+}
+
+function sameSource(a: DevelopmentProgressSource | undefined, b: DevelopmentProgressSource | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.fileName === b.fileName && a.sheet === b.sheet && a.row === b.row && a.cells.length === b.cells.length &&
+    a.cells.every(({ address, label, raw, display, formula }, i) => {
+      const cell = b.cells[i];
+      return cell?.address === address && cell.label === label && cell.raw === raw && cell.display === display && cell.formula === formula;
+    });
+}
+
+async function updateProjectProgress(input: UpdateDevelopmentProjectProgress, { tx, actor, at }: Context) {
+  const project = await tx.development.lockProject(input.projectId);
+  requireDevelopmentManagement(project, actor);
+  if (project.progressVersion !== input.expectedVersion) throw new StateConflictError('新品项目进展已更新，请刷新后重试');
+  const source = project.progress?.source;
+  const { followUp: incoming, ...reviewed } = input.progress;
+  const followUp = nextFollowUp({ input: incoming, previous: project.progress?.followUp }, { actor, at });
+  const progress = { ...reviewed, ...(source === undefined ? {} : { source }), ...(followUp === undefined ? {} : { followUp }) };
+  const next = { id: project.id, progress, progressVersion: project.progressVersion + 1 };
+  await tx.development.updateProjectProgress(next);
+  await tx.audit.record(auditOf({ action: 'product_development.update_progress', subject: next,
+    ctx: { actor, at, entity: '新品项目', before: { progress: project.progress ?? null, progressVersion: project.progressVersion }, after: next } }));
+  return { id: project.id };
+}
+
+function nextFollowUp({ input, previous }: {
+  readonly input: DevelopmentFollowUpInput | undefined; readonly previous: DevelopmentFollowUp | undefined;
+}, { actor, at }: Pick<Context, 'actor' | 'at'>) {
+  return input === undefined ? previous : { ...input, updatedBy: actor.id, updatedAt: at };
 }
 
 async function createNode(input: CreateDevelopmentNode, ctx: Context) {
@@ -86,9 +125,17 @@ async function updateNode(input: UpdateDevelopmentNode, ctx: Context) {
     status: input.status, version: item.version + 1, updatedAt: at,
   };
   if (!await tx.workItems.saveConditional(next, item.version)) conflict();
-  await tx.development.updateNode({ ...node, buyerUserId: input.buyerUserId });
+  const followUp = nextFollowUp({ input: input.followUp, previous: node.followUp }, { actor, at });
+  const nextNode = {
+    ...node, buyerUserId: input.buyerUserId,
+    ...(followUp === undefined ? {} : { followUp }),
+  };
+  await tx.development.updateNode(nextNode);
   await recordPlanChanges({ ctx, current: item, next });
-  await tx.audit.record(auditOf({ action: 'product_development.update', subject: next, ctx: { actor, at, entity: '新品节点', before: { ...item, buyerUserId: node.buyerUserId }, after: { ...next, buyerUserId: input.buyerUserId } } }));
+  await tx.audit.record(auditOf({ action: 'product_development.update', subject: next, ctx: { actor, at, entity: '新品节点',
+    before: { ...item, buyerUserId: node.buyerUserId, followUp: node.followUp ?? null },
+    after: { ...next, buyerUserId: nextNode.buyerUserId, followUp: nextNode.followUp ?? null },
+  } }));
   return { id: node.id };
 }
 

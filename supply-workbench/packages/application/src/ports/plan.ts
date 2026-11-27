@@ -3,7 +3,8 @@ import type { DeliveryBatch } from '../../../domain/src/entities/orders.js';
 import type { DependencyKind, WorkItem, WorkItemDependency, WorkItemEvent, WorkItemSubjectType } from '../../../domain/src/entities/work-items.js';
 import type { EntityId } from '../../../domain/src/values/ids.js';
 import type { UnitOfWork, UnitOfWorkStores } from './unit-of-work.js';
-import type { DailyPlanQuery, IncomingWorkItemDependency, SchedulePlanQuery, WorkItemDetailView, WorkItemListQuery, WorkItemListResult, WorkItemView } from './plan-views.js';
+import type { LocalDate } from '../../../domain/src/values/local-date.js';
+import type { DailyPlanQuery, DeliveryScheduleBatch, IncomingWorkItemDependency, SchedulePlanQuery, WorkItemDetailView, WorkItemListQuery, WorkItemListResult, WorkItemView } from './plan-views.js';
 
 export type WorkItemSubjectKey = {
   readonly subjectType: WorkItemSubjectType;
@@ -50,7 +51,9 @@ export type PlanUnitOfWork = UnitOfWork<PlanStores>;
 /** 每日计划、总排期、列表和详情读模型。规则（逾期、分组、过滤）在 application 层。 */
 export interface PlanQueries {
   dailyItems(query: Pick<DailyPlanQuery, 'date'>): Promise<readonly WorkItemView[]>;
-  scheduleItems(query: Pick<SchedulePlanQuery, 'from' | 'to' | 'store'>): Promise<readonly WorkItemView[]>;
+  scheduleItems(query: Pick<SchedulePlanQuery, 'from' | 'to' | 'store' | 'includeClosed'>): Promise<readonly WorkItemView[]>;
+  deliverySchedule(query: Pick<SchedulePlanQuery, 'from' | 'to' | 'store'> & { readonly today: LocalDate }): Promise<readonly DeliveryScheduleBatch[]>;
+  deliveryTasks(batchIds: readonly string[]): Promise<readonly WorkItemView[]>;
   incomingDependencies(workItemIds: readonly string[]): Promise<readonly IncomingWorkItemDependency[]>;
   projectItems(query: Pick<SchedulePlanQuery, 'from' | 'to'>): Promise<readonly WorkItemView[]>;
   listItems(query: WorkItemListQuery): Promise<WorkItemListResult>;

@@ -1,5 +1,48 @@
+import type { EntityId } from './values/ids.js';
+import type { LocalDate } from './values/local-date.js';
+
 export const PRODUCT_DEVELOPMENT_STORES = ['dafuyan', 'yiling'] as const;
 export type ProductDevelopmentStore = (typeof PRODUCT_DEVELOPMENT_STORES)[number];
+
+export const DEVELOPMENT_PROJECT_STAGES = ['development', 'ordered', 'received'] as const;
+export type DevelopmentProjectStage = (typeof DEVELOPMENT_PROJECT_STAGES)[number];
+
+export type DevelopmentProgressDate = { readonly raw: string; readonly date?: LocalDate };
+
+export type DevelopmentProgressSource = {
+  readonly fileName: string;
+  readonly sheet: string;
+  readonly row: number;
+  readonly cells: readonly {
+    readonly address: string; readonly label: string; readonly raw: string; readonly display?: string; readonly formula?: string;
+  }[];
+};
+
+export type DevelopmentProgressFacts = {
+  readonly confirmedStage: DevelopmentProjectStage | null;
+  readonly currentNote?: string;
+  readonly requirement?: DevelopmentProgressDate;
+  readonly forecast?: DevelopmentProgressDate;
+  readonly contacts?: string;
+};
+
+export type DevelopmentWaiting =
+  | { readonly kind: 'unknown' }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'waiting'; readonly party?: string; readonly deliverable?: string };
+
+export type DevelopmentFollowUpInput = {
+  readonly nextAction?: string;
+  readonly managementDecision?: string;
+  readonly waiting: DevelopmentWaiting;
+  readonly reviewOn?: LocalDate;
+};
+
+export type DevelopmentFollowUp = DevelopmentFollowUpInput & { readonly updatedBy: EntityId; readonly updatedAt: string };
+
+export type DevelopmentProgressDraft = DevelopmentProgressFacts & { readonly source?: DevelopmentProgressSource };
+export type DevelopmentProgressUpdate = DevelopmentProgressFacts & { readonly followUp?: DevelopmentFollowUpInput };
+export type DevelopmentProgress = DevelopmentProgressDraft & { readonly followUp?: DevelopmentFollowUp };
 
 export const DEVELOPMENT_DESTINATIONS = [
   'pilot_material_to_factory',

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text } from 'drizzle-orm/pg-core';
+import { check, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
+import type { DevelopmentFollowUp, DevelopmentProgress } from '@sw/domain';
 import { at, id } from './columns.js';
 import { orderLines } from './orders.js';
 import { users } from './platform.js';
@@ -12,9 +13,12 @@ export const productDevelopmentProjects = pgTable('product_development_projects'
   productLeadUserId: text('product_lead_user_id').notNull().references(() => users.id),
   createdBy: text('created_by').notNull().references(() => users.id),
   createdAt: at('created_at').notNull(),
+  progress: jsonb('progress').$type<DevelopmentProgress>(),
+  progressVersion: integer('progress_version').notNull().default(0),
 }, (table) => [
   index('product_development_projects_store_idx').on(table.store),
   check('product_development_projects_store_check', sql`${table.store} in ('dafuyan', 'yiling')`),
+  check('product_development_projects_progress_check', sql`jsonb_typeof(${table.progress}) = 'object' and ${table.progressVersion} >= 0`),
 ]);
 
 export const productDevelopmentNodes = pgTable('product_development_nodes', {
@@ -25,9 +29,11 @@ export const productDevelopmentNodes = pgTable('product_development_nodes', {
   orderLineId: text('order_line_id').references(() => orderLines.id),
   procurementLineId: text('procurement_line_id').references(() => orderLines.id),
   oaRef: text('oa_ref'),
+  followUp: jsonb('follow_up').$type<DevelopmentFollowUp>(),
 }, (table) => [
   index('product_development_nodes_project_idx').on(table.projectId),
   check('product_development_nodes_destination_check', sql`${table.destination} in ('pilot_material_to_factory', 'packaging_to_factory', 'finished_to_warehouse', 'other')`),
+  check('product_development_nodes_follow_up_check', sql`jsonb_typeof(${table.followUp}) = 'object'`),
   check('product_development_nodes_link_check', sql`
     (${table.orderLineId} is null and ${table.procurementLineId} is null and ${table.oaRef} is null) or
     (${table.orderLineId} is not null and ${table.procurementLineId} is not null and ${table.oaRef} is not null

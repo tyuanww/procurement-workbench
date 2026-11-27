@@ -72,6 +72,32 @@ describe('壳标记', () => {
   });
 
   it.each([
+    { pathname: '/today', label: '行动板', href: '/today' },
+    { pathname: '/today?view=arrivals&group=owner', label: '在途待收', href: '/today?view=arrivals' },
+    { pathname: '/today?group=supplier', label: '今日排期', href: '/today?group=schedule' },
+    { pathname: '/today?view=schedule', label: '今日排期', href: '/today?group=schedule' },
+    { pathname: '/progress', label: '订单与任务排期', href: '/progress/schedule' },
+    { pathname: '/progress?view=development', label: '新品开发', href: '/progress/development' },
+    { pathname: '/progress/current?store=dafuyan&scope=mine', label: '当前进度', href: '/progress/current?store=dafuyan&amp;scope=mine' },
+    { pathname: '/progress/schedule?planScope=development', label: '新品开发', href: '/progress/development' },
+    { pathname: '/progress/development?planScope=all', label: '订单与任务排期', href: '/progress/schedule' },
+  ])('侧栏为 $pathname 展开分组并标记当前页签 $label', ({ pathname, label, href }) => {
+    const html = atPath({ pathname, pattern: '*', element: h(ShellSider, { chrome: sider(false), nav: buyerView().nav, onToggle: () => undefined }) });
+    const current = anchor(html, href);
+    expect(current).toContain(`aria-label="${label}"`);
+    expect(current).toContain('aria-current="page"');
+  });
+
+  it('侧栏从订单排期进入新品时保留店铺，采用新品默认周期', () => {
+    const pathname = '/progress/schedule?store=dafuyan&scale=day&from=2026-11-27&planDisplay=list&scheduleLine=synthetic-order';
+    const html = atPath({ pathname, pattern: '*', element: h(ShellSider, { chrome: sider(false), nav: buyerView().nav, onToggle: () => undefined }) });
+    const development = anchor(html, '/progress/development?store=dafuyan');
+    expect(development).toContain('aria-label="新品开发"');
+    expect(development).not.toContain('aria-current');
+    expect(development).not.toContain('scheduleLine');
+  });
+
+  it.each([
     { roles: ['buyer'] satisfies Role[], count: 7, shown: '7', range: '本人' },
     { roles: ['admin'] satisfies Role[], count: 12, shown: '12', range: '全范围' },
     { roles: ['buyer', 'lead'] satisfies Role[], count: 123, shown: '123', range: '全范围' },
@@ -140,7 +166,7 @@ describe('壳标记', () => {
 
 describe('页标题', () => {
   it('当前进度保留唯一的语义标题，标题行不占版面', () => {
-    const html = inRouter(h(ProgressPage, null));
+    const html = inRouter(h(ProgressPage, { view: 'current' }));
     expect(headingCount(html)).toBe(1);
     expect(html).toContain('shell-page');
     expect(html).toMatch(/<h1[^>]*clip-path:inset\(50%\)[^>]*>当前进度<\/h1>/);

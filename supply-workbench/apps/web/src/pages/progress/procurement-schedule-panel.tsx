@@ -1,81 +1,163 @@
-import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Select, Skeleton, Space, Typography } from 'antd';
-import { Link } from 'react-router';
-import type { OrderLineDetail, OrderLineRow, ProcurementStore } from '@sw/contracts';
+import type { ReactNode } from 'react';
+import { Alert, Button, Drawer, Skeleton, Space, Typography, theme } from 'antd';
+import { Link, useLocation, useSearchParams } from 'react-router';
+import type { BatchView, OrderLineDetail, ProcurementStore } from '@sw/contracts';
 import type { LocalDate } from '@sw/domain';
 import { BuildProcurementForm, ProcurementBatchDates, ProcurementDateEvidence, ProcurementStageList, SupplierPromiseEditor } from '../../features/plan/index.js';
+import { scheduleSource, scheduleWorkspaceBack } from '../../features/progress/index.js';
+import type { TodayOrderRef } from '../../features/today/index.js';
+import { useDetailFocusLink, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 import { useCanWrite } from '../../shared/actor.js';
-import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import { space } from '../../theme/tokens.js';
-import { loadProgressLines } from './progress-load.js';
-import { progressOrderRef, scopedLineLink } from './store-order.js';
+import { drawerWidth, space } from '../../theme/tokens.js';
+import type { WeeklyOrderDelivery } from './planning-batches.js';
+import type { PlanningLoad } from './planning-load.js';
+import { hasOutstandingDelivery, orderDeliveryActions, type BatchDependencies } from './weekly-delivery.js';
+import { orderBatchDetailFacts, BatchOverview, BatchOverviewTitle } from './procurement-batch-overview.js';
+import './procurement-batch-overview.css';
 
-type Load<T> = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly data: T } | { readonly kind: 'error'; readonly message: string };
-
+type Resource<T> = { readonly load: PlanningLoad<T>; readonly reload: () => void };
 type Selection = {
   readonly store: ProcurementStore;
-  readonly selected: string | null;
-  readonly onSelect: (id: string | null) => void;
-  readonly search: string;
+  readonly today: LocalDate;
+  readonly selected: string;
+  readonly onClose: () => void;
   readonly onTimelineChanged: () => void;
   readonly onAnchor: (date: LocalDate) => void;
+  readonly detail: Resource<OrderLineDetail>;
+  readonly selectedBatch: string | null;
+  readonly onCloseBatch: () => void;
+  readonly batchDependencies?: BatchDependencies | undefined;
+  readonly weeklyBatch?: WeeklyOrderDelivery | undefined;
 };
 
 export function ProcurementSchedulePanel(props: Selection) {
-  const [hasOpenedPicker, setOpenedPicker] = useState(false);
-  const shouldLoadLines = hasOpenedPicker || props.selected !== null;
-  const lines = useScheduleResource(() => loadProgressLines({ store: props.store, isMine: false }), { key: props.store, shouldLoad: shouldLoadLines });
-  const orders = lines.load.kind === 'ready' ? lines.load.data : [];
-  const selected = orders.find((line) => line.id === props.selected);
-  return (
-    <section aria-label="成品订单排期">
-      <Card size="small" title={<Typography.Title level={2} style={{ margin: 0 }}>成品订单排期</Typography.Title>}>
-        {lines.load.kind === 'error' ? <Alert type="error" title={lines.load.message} action={<Button size="small" onClick={lines.reload}>重试</Button>} /> : null}
-        <Select
-          aria-label="选择成品订单"
-          allowClear
-          showSearch={{ optionFilterProp: 'label' }}
-          loading={shouldLoadLines && lines.load.kind === 'loading'}
-          value={selected?.id ?? undefined}
-          placeholder="按 OA、品名或 PO 查找"
-          style={{ width: '100%', maxWidth: 680 }}
-          options={orders.map(orderOption)}
-          onOpenChange={(isOpen) => { if (isOpen) setOpenedPicker(true); }}
-          onChange={(id) => props.onSelect(id ?? null)}
-        />
-        {selected === undefined
-          ? props.selected === null || lines.load.kind !== 'ready' ? null : <Alert type="warning" title="所选订单行不在当前店铺范围" />
-          : <ProcurementScheduleDetail key={selected.id} {...props} line={selected} />}
-      </Card>
-    </section>
-  );
+  const [params] = useSearchParams();
+  if (props.selectedBatch !== null && params.get('scheduleBatchEntry') === '1') return <ProcurementBatchDrawer {...props} standalone />;
+  const loaded = props.detail.load.kind === 'ready' ? props.detail.load.data : null;
+  const hasBatch = loaded?.batches.some(({ id }) => id === props.selectedBatch);
+  const hasTask = loaded?.procurementSchedule?.items.some(({ id }) => id === params.get('procurementTask'));
+  return <Drawer title="成品订单排期" open onClose={props.onClose} size={`min(${drawerWidth}px, 100vw)`}
+    focusable={{ trap: true, focusTriggerAfterClose: false }} keyboard={!hasBatch && !hasTask}>
+    <ProcurementScheduleDetail {...props} key={props.selected} />
+    <ProcurementBatchDrawer {...props} standalone={false} />
+  </Drawer>;
 }
 
-function orderOption(line: OrderLineRow) {
-  return { value: line.id, label: [progressOrderRef(line), line.nameRaw, line.po.poRaw].filter(Boolean).join(' · ') };
-}
-
-function ProcurementScheduleDetail(props: Selection & { readonly line: OrderLineRow }) {
-  const { store, line, onTimelineChanged } = props;
-  const detail = useScheduleResource(() => read({ name: 'line', id: line.id, store }), { key: line.id });
+function ProcurementScheduleDetail({ store, detail, onTimelineChanged, onAnchor }: Selection) {
   const canWrite = useCanWrite('records.write');
+  const selection = useStageSelection();
   if (detail.load.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
   if (detail.load.kind === 'error') return <Alert type="error" showIcon title={detail.load.message} action={<Button size="small" onClick={detail.reload}>重试</Button>} />;
-  const { procurementSchedule: schedule, batches } = detail.load.data;
+  const { line, procurementSchedule: schedule, batches } = detail.load.data;
   const changed = () => { detail.reload(); onTimelineChanged(); };
   return (
     <Space orientation="vertical" size="middle" style={{ display: 'flex', marginTop: space[2] }}>
-      <Link to={scopedLineLink(line.id, { search: props.search, store })}>成品订单行详情</Link>
+      {detail.load.notice === null ? null : <Alert type="error" title={detail.load.notice} action={<Button onClick={detail.reload}>重试</Button>} />}
+      <ScheduleOrderLink order={{ lineId: line.id }} store={store} focusKey="planning-order">
+        成品订单行详情
+      </ScheduleOrderLink>
+      <Typography.Text strong>{[line.nameRaw, line.po.poRaw].filter(Boolean).join(' · ')}</Typography.Text>
       <Typography.Text>采购负责人 {line.buyer?.name ?? '未分派'}</Typography.Text>
       {schedule === undefined ? <Alert type="info" title="该订单没有可用的采购排期来源" /> : <>
         <ProcurementDateEvidence schedule={schedule} batches={batches} />
-        {schedule.items.length > 0 ? <ProcurementStageList schedule={schedule} onChanged={changed} /> : canWrite && line.origin === 'import_po_master'
-          ? <BuildProcurementForm schedule={schedule} orderLineId={line.id} store={store} onBuilt={(date) => { changed(); props.onAnchor(date); }} />
+        {schedule.items.length > 0 ? <ProcurementStageList schedule={schedule} onChanged={changed} selection={selection}
+          orderLink={(order) => <ScheduleOrderLink order={order} store={store} focusKey="planning-stage" />} /> : canWrite && line.origin === 'import_po_master'
+          ? <BuildProcurementForm schedule={schedule} orderLineId={line.id} store={store} onBuilt={(date) => { changed(); onAnchor(date); }} />
           : <Typography.Text type="secondary">尚未建立排期</Typography.Text>}
       </>}
-      <BatchDates batches={batches} onChanged={detail.reload} />
+      <BatchDates batches={batches} onChanged={changed} />
     </Space>
   );
+}
+
+function useStageSelection() {
+  const [params, setParams] = useSearchParams();
+  return {
+    id: params.get('procurementTask'),
+    open: (id: string | null) => {
+      const next = new URLSearchParams(params);
+      if (id === null) next.delete('procurementTask');
+      else {
+        next.delete('drawer');
+        next.delete('developmentNode');
+        next.set('procurementTask', id);
+      }
+      setParams(next, { preventScrollReset: true });
+    },
+  };
+}
+
+export function ScheduleOrderLink({ order, store, children = '打开订单行', focusKey, className }: {
+  readonly order: TodayOrderRef;
+  readonly store: ProcurementStore;
+  readonly children?: ReactNode;
+  readonly focusKey: string;
+  readonly className?: string;
+}) {
+  const { pathname, search, state } = useLocation();
+  const source = scheduleSource(new URLSearchParams(search), pathname);
+  const query = new URLSearchParams({ backToSchedule: source.toString(), store });
+  if (order.batchId !== undefined) query.set('focusBatch', order.batchId);
+  const focus = useDetailFocusLink(scheduleWorkspaceBack(source), `${focusKey}:${order.lineId}:${order.batchId ?? ''}`);
+  useDetailReturnFocus(true, { allowContainerFocus: true });
+  return <Link to={`/lines/${encodeURIComponent(order.lineId)}?${query}`} className={className} {...focus}
+    state={{ ...focus.state, ...(source.get('taskMode') === 'read' ? { scheduleTaskOrigin: state } : {}) }}>{children}</Link>;
+}
+
+function ProcurementBatchDrawer({ detail, selectedBatch, onCloseBatch, store, today, standalone, batchDependencies, onTimelineChanged, weeklyBatch }:
+  Selection & { readonly standalone: boolean }) {
+  const [params] = useSearchParams();
+  const { token } = theme.useToken();
+  const colors = {
+    '--batch-primary': token.colorPrimary, '--batch-primary-hover': token.colorPrimaryHover,
+    '--batch-primary-active': token.colorPrimaryActive, '--batch-on-primary': token.colorTextLightSolid,
+    '--batch-button-radius': `${token.borderRadius}px`, color: token.colorText,
+  };
+  const ready = detail.load.kind === 'ready' ? detail.load : null;
+  const batch = ready?.data.batches.find((entry) => entry.id === selectedBatch);
+  if (selectedBatch === null || (!standalone && batch === undefined)) return null;
+  const dependencies = batchDependencies?.get(selectedBatch);
+  const delivery = batchDelivery({ batch, today, dependencies, weeklyBatch });
+  return <Drawer
+    title={batch === undefined || ready === null ? '要货批次' : <BatchOverviewTitle batch={batch} line={ready.data.line} delivery={delivery} today={today} />}
+    footer={batch === undefined ? undefined : <ScheduleOrderLink order={{ lineId: batch.orderLineId, batchId: batch.id }}
+      store={store} focusKey="planning-batch" className="procurement-batch-order-link">查看订单与收货记录</ScheduleOrderLink>}
+    className="procurement-batch-drawer" styles={{
+      header: { paddingInline: space[4] }, body: { padding: space[4] },
+      footer: { padding: `${space[2]}px ${space[4]}px`, borderColor: token.colorSplit },
+    }}
+    style={colors}
+    open onClose={onCloseBatch} keyboard={!params.has('drawer')}
+    focusable={{ trap: true, focusTriggerAfterClose: !standalone }} size={`min(${drawerWidth}px, 100vw)`}>
+    <BatchDrawerBody detail={detail} batch={batch} delivery={delivery} dependencies={dependencies} onTimelineChanged={onTimelineChanged} />
+  </Drawer>;
+}
+
+function batchDelivery({ batch, today, dependencies, weeklyBatch }: {
+  readonly batch: BatchView | undefined; readonly today: LocalDate; readonly dependencies: ReturnType<BatchDependencies['get']>;
+  readonly weeklyBatch: WeeklyOrderDelivery | undefined;
+}) {
+  if (batch === undefined) return undefined;
+  return orderDeliveryActions({ facts: orderBatchDetailFacts(batch), today,
+    isOpen: batch.closedAt === null && hasOutstandingDelivery(batch),
+    hasRisk: dependencies?.some(({ conflicts }) => conflicts.length > 0) ?? false,
+    reviewCount: batch.fulfillment?.reviewCount ?? 0, supplier: weeklyBatch?.supplier ?? null,
+  });
+}
+
+function BatchDrawerBody({ detail, batch, delivery, dependencies, onTimelineChanged }:
+  Pick<Selection, 'detail' | 'onTimelineChanged'> & {
+    readonly batch: BatchView | undefined; readonly delivery: WeeklyOrderDelivery | undefined; readonly dependencies: ReturnType<BatchDependencies['get']>;
+  }) {
+  if (detail.load.kind === 'loading') return <Skeleton active paragraph={{ rows: 3 }} />;
+  if (detail.load.kind === 'error') return <Alert type="error" showIcon title={detail.load.message} action={<Button onClick={detail.reload}>重试</Button>} />;
+  if (batch === undefined) return <Alert type="warning" showIcon title="该订单中找不到要货批次" />;
+  return <>
+    {detail.load.notice === null ? null : <Alert className="procurement-batch-notice" type="error" showIcon title={detail.load.notice}
+      action={<Button onClick={detail.reload}>重试</Button>} />}
+    <BatchOverview key={batch.id} batch={batch} dependencies={dependencies} delivery={delivery}
+      onChanged={() => { detail.reload(); onTimelineChanged(); }} />
+  </>;
 }
 
 function BatchDates({ batches, onChanged }: { readonly batches: OrderLineDetail['batches']; readonly onChanged: () => void }) {
@@ -85,21 +167,4 @@ function BatchDates({ batches, onChanged }: { readonly batches: OrderLineDetail[
     <ProcurementBatchDates batch={batch} />
     <SupplierPromiseEditor key={`${batch.id}:${batch.dateSupplierPromised}`} batch={batch} onChanged={onChanged} />
   </div>)}</section>;
-}
-
-function useScheduleResource<T>(request: () => Promise<T>, { key, shouldLoad = true }: { readonly key: string; readonly shouldLoad?: boolean }) {
-  const [load, setLoad] = useState<Load<T>>({ kind: 'loading' });
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    if (!shouldLoad) return;
-    let isActive = true;
-    void request().then((data) => {
-      if (isActive) setLoad({ kind: 'ready', data });
-    }).catch((error: unknown) => {
-      const failure = readFailureOf(error);
-      if (isActive && failure !== null) setLoad({ kind: 'error', message: failureText(failure) });
-    });
-    return () => { isActive = false; };
-  }, [key, revision, shouldLoad]);
-  return { load, reload: () => setRevision((value) => value + 1) };
 }

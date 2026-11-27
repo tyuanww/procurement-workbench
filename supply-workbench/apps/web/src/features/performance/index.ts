@@ -41,3 +41,4 @@ export { EM_DASH } from './model/figures.js';
 export type { EmDash, FigureInput } from './model/figures.js';
 export { loadStuck } from './load-stuck.js';
 export { loadBuyerDrill, type BuyerDrillSelection } from './buyer-drill.js';
+export { DashboardChrome } from './DashboardChrome.js';

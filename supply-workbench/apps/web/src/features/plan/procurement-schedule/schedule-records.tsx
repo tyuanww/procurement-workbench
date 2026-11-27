@@ -4,15 +4,19 @@ import { BatchViewSchema, LocalDateSchema, WorkItemVersionResponseSchema, type B
 import { diffDays, PROCUREMENT_STAGE_LABELS } from '@sw/domain';
 import { useCanWrite } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
-import { TaskDrawer } from '../TaskDrawer.js';
+import { TaskDrawer, type TaskDrawerProps } from '../TaskDrawer.js';
 import { WorkItemStatusTag } from '../task-tag.js';
 
 type Schedule = NonNullable<OrderLineDetail['procurementSchedule']>;
 type Item = Schedule['items'][number];
 type Refresh = { readonly onChanged: () => void };
 
-export function ProcurementStageList({ schedule, onChanged }: { readonly schedule: Schedule } & Refresh) {
-  const [openId, setOpenId] = useState<string | null>(null);
+export function ProcurementStageList({ schedule, onChanged, selection, orderLink }: {
+  readonly schedule: Schedule;
+  readonly selection: { readonly id: string | null; readonly open: (id: string | null) => void };
+  readonly orderLink: NonNullable<TaskDrawerProps['orderLink']>;
+} & Refresh) {
+  const openId = schedule.items.find(({ id }) => id === selection.id)?.id ?? null;
   const canWrite = useCanWrite('records.write');
   const delivery = schedule.items.find((item) => item.stage === 'delivery');
   const basis = schedule.items.find((item) => item.basis !== null)?.basis;
@@ -24,7 +28,7 @@ export function ProcurementStageList({ schedule, onChanged }: { readonly schedul
       <ol aria-label="已建排期节点">
         {schedule.items.map((item) => <li key={`${item.id}:${item.version}`} style={{ marginBottom: 8 }}>
           <Space wrap>
-            <Button type="link" onClick={() => setOpenId(item.id)}>{PROCUREMENT_STAGE_LABELS[item.stage]}</Button>
+            <Button type="link" onClick={() => selection.open(item.id)}>{PROCUREMENT_STAGE_LABELS[item.stage]}</Button>
             <WorkItemStatusTag status={item.status} />
             <span>负责人 {item.ownerName ?? '未分派'}</span>
             {canWrite && item.status !== 'cancelled' && item.status !== 'done'
@@ -33,7 +37,7 @@ export function ProcurementStageList({ schedule, onChanged }: { readonly schedul
           </Space>
         </li>)}
       </ol>
-      <TaskDrawer workItemId={openId} isOpen={openId !== null} onClose={() => setOpenId(null)} onChanged={onChanged} />
+      <TaskDrawer workItemId={openId} isOpen={openId !== null} orderLink={orderLink} onClose={() => selection.open(null)} onChanged={onChanged} />
     </>
   );
 }
@@ -73,21 +77,29 @@ function PhaseDates({ item, onChanged }: { readonly item: Item } & Refresh) {
   );
 }
 
+export function useCanEditSupplierPromise(batch: BatchView): boolean {
+  return useCanWrite('records.write') && batch.closedAt === null && batch.cancelledAt === null;
+}
+
+export function saveSupplierPromise({ batchId, date }: { readonly batchId: BatchView['id']; readonly date: string | null }) {
+  return apiSend({
+    path: `/api/v1/batches/${encodeURIComponent(batchId)}`, method: 'PATCH',
+    body: { dateSupplierPromised: date }, schema: BatchViewSchema,
+  });
+}
+
 export function SupplierPromiseEditor({ batch, onChanged }: { readonly batch: BatchView } & Refresh) {
   const id = useId();
-  const canWrite = useCanWrite('records.write');
+  const canEdit = useCanEditSupplierPromise(batch);
   const [date, setDate] = useState<string>(batch.dateSupplierPromised ?? '');
   const [isSaving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  if (!canWrite || batch.closedAt !== null || batch.cancelledAt !== null) return null;
+  if (!canEdit) return null;
   async function save() {
     setSaving(true);
     setError('');
     try {
-      await apiSend({
-        path: `/api/v1/batches/${encodeURIComponent(batch.id)}`, method: 'PATCH',
-        body: { dateSupplierPromised: date || null }, schema: BatchViewSchema,
-      });
+      await saveSupplierPromise({ batchId: batch.id, date: date || null });
       onChanged();
     } catch (caught: unknown) {
       setError(apiErrorMessage(caught) ?? '保存失败，请重试。');

@@ -121,7 +121,7 @@ export const CAPABILITY_MANIFEST: readonly CapabilityManifestEntry[] = [
     id: 'performance',
     readPermissions: ['dashboard.read'],
     writePermissions: [],
-    routePrefixes: ['/api/v1/dashboard'],
+    routePrefixes: ['/api/v1/dashboard', '/api/v1/plan/progress'],
     webFeature: 'performance',
     navLabel: '管理看板',
     dependsOn: ['master-data'],

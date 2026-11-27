@@ -1,17 +1,26 @@
+import { zipSync } from 'fflate';
 import type { WorkbookLike, WorkbookReader } from '../../../application/src/ports/workbook-reader.js';
 import { readCsv } from './csv.js';
 import { readSheetJs } from './sheetjs.js';
 import { readXmlWorkbook } from './xml-workbook.js';
+import { unzip, type WorkbookArchiveLimits } from './zip-xml.js';
 
-export type ReadXlsxOptions = { readonly engine?: 'sheetjs' | 'xml' };
+export type ReadXlsxOptions = {
+  readonly engine?: 'sheetjs' | 'xml';
+  readonly archiveLimits?: WorkbookArchiveLimits;
+  readonly captureCalendarDates?: boolean;
+};
 
 export function readXlsx({ bytes, fileName, options = {} }: { readonly bytes: Uint8Array; readonly fileName: string; readonly options?: ReadXlsxOptions | undefined }): WorkbookLike {
-  if (options.engine === 'xml') return readXmlWorkbook(bytes, fileName);
+  const files = unzip(bytes, options.archiveLimits);
+  const xml = readXmlWorkbook({ files, fileName, limits: options.archiveLimits });
+  if (options.engine === 'xml') return xml;
   try {
-    return readSheetJs(bytes, fileName);
+    const sheetBytes = options.archiveLimits === undefined ? bytes : zipSync(Object.fromEntries(files), { level: 0 });
+    return readSheetJs({ bytes: sheetBytes, xml, captureCalendarDates: options.captureCalendarDates === true });
   } catch (error) {
-    if (options.engine === 'sheetjs') throw error;
-    return readXmlWorkbook(bytes, fileName);
+    if (options.engine === 'sheetjs' || options.archiveLimits !== undefined) throw error;
+    return xml;
   }
 }
 

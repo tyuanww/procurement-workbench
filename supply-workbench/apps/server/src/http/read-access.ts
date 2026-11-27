@@ -55,6 +55,7 @@ const DRAFT_RULES: readonly DraftRule[] = [
   { prefix: '/api/v1/owners', access: { kind: 'capability', capability: 'owner' } },
   { prefix: '/api/v1/factory-links', access: { kind: 'capability', capability: 'factory-links' } },
   { prefix: '/api/v1/product-development', access: { kind: 'capability', capability: 'product-development' } },
+  { prefix: '/api/v1/plan/progress', access: { kind: 'capability', capability: 'performance' } },
   { prefix: '/api/v1/plan', access: { kind: 'capability', capability: 'plan' } },
 ];
 

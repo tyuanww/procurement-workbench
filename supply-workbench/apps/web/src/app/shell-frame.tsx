@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
-import { groupKey, navigationSelection, navMenuItems } from './shell-nav.js';
+import { groupKey, navMenuItems, sidebarSelection } from './shell-nav.js';
 import { AccountMenu } from './shell-session.js';
 
 export const searchTrackPx = 280;
@@ -155,12 +155,11 @@ function ShellMenu(input: {
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const active = navigationSelection(input.rows, location);
-  const selected = active?.destination?.to ?? active?.row.to;
-  const group = active?.row.destinations === undefined ? undefined : groupKey(active.row.to);
+  const { selected, group } = sidebarSelection(input.rows, location);
+  const isTabGroup = group === groupKey('/today') || group === groupKey('/progress');
   return (
     <Menu
-      key={group ?? 'main'}
+      key={isTabGroup && input.isCollapsed ? `${group}:collapsed` : group ?? 'main'}
       theme="dark"
       mode="inline"
       inlineCollapsed={input.isCollapsed}

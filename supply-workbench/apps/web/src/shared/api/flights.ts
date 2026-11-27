@@ -14,6 +14,11 @@ export type Shared<T> = {
 };
 
 const controllers = new Set<AbortController>();
+let readLifetime = new AbortController();
+
+export function readLifetimeSignal(): AbortSignal {
+  return readLifetime.signal;
+}
 
 export function joinFlight<T>(input: {
   readonly table: Map<string, Shared<T>>;
@@ -32,6 +37,8 @@ export function joinFlight<T>(input: {
 }
 
 export function abortFlights(): void {
+  readLifetime.abort(new ReadCancelled());
+  readLifetime = new AbortController();
   for (const controller of controllers) controller.abort();
   controllers.clear();
 }

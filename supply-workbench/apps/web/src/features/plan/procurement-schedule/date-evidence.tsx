@@ -92,16 +92,20 @@ function recordedReceiptDays(batch: BatchView) {
 
 export function ProcurementBatchDates({ batch }: { readonly batch: BatchView }) {
   const receipts = recordedReceiptDays(batch);
-  const history = batch.dateChanges.filter((change) => change.field === 'dateSupplierPromised');
   return (
     <>
       <Typography.Paragraph>
         供应商承诺日 {batch.dateSupplierPromised ?? '缺项'} · 采购确认到货日 {batch.dateBuyerConfirmed ?? '缺项'} · 实际收货日 {receipts.length > 0 ? receipts.join('、') : '未有已确认记录'}
       </Typography.Paragraph>
-      {history.length === 0 ? null : <Collapse items={[{
-        key: 'promises', label: '供应商承诺变更',
-        children: history.map((change) => <div key={change.id}>{change.oldValue ?? '缺项'} → {change.newValue ?? '缺项'} · {formatDateTime(change.changedAt) ?? change.changedAt}{change.reason === null ? '' : ` · ${change.reason}`}</div>),
-      }]} />}
+      <SupplierPromiseHistory batch={batch} />
     </>
   );
+}
+
+export function SupplierPromiseHistory({ batch }: { readonly batch: BatchView }) {
+  const history = batch.dateChanges.filter((change) => change.field === 'dateSupplierPromised');
+  return history.length === 0 ? null : <Collapse items={[{
+    key: 'promises', label: '供应商承诺变更',
+    children: history.map((change) => <div key={change.id}>{change.oldValue ?? '缺项'} → {change.newValue ?? '缺项'} · {formatDateTime(change.changedAt) ?? change.changedAt}{change.reason === null ? '' : ` · ${change.reason}`}</div>),
+  }]} />;
 }

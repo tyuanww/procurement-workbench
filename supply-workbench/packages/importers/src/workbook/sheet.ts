@@ -9,6 +9,7 @@ export type ImageAnchor = NonNullable<SheetLike['images']>[number];
 export function buildSheet(input: {
   readonly name: string;
   readonly hidden: boolean;
+  readonly hiddenRows?: ReadonlySet<number>;
   readonly cells: ReadonlyMap<string, CellDraft>;
   readonly merges: readonly MergeRange[];
   readonly images?: readonly ImageAnchor[];
@@ -16,6 +17,7 @@ export function buildSheet(input: {
   return {
     name: input.name,
     hidden: input.hidden,
+    ...(input.hiddenRows === undefined ? {} : { hiddenRows: input.hiddenRows }),
     ...dimensions(input.cells, input.merges),
     merges: input.merges,
     ...(input.images === undefined ? {} : { images: input.images }),

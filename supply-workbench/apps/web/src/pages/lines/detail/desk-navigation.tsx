@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
+import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
+import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday } from '../../../features/follow-up/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 
@@ -9,15 +11,48 @@ export function LineDetailLink(props: { readonly href: string; readonly search: 
   return <Link to={props.href} state={{ lineDeskSearch: props.search }}>{props.children}</Link>;
 }
 
-export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } | { readonly todayPendingId: string } | { readonly todayArrivalId: string } };
+type PlanningReturnState = NonNullable<ReturnType<typeof detailReturnState>> & { readonly scheduleTaskOrigin?: unknown };
+export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string }
+  | { readonly todayPendingId: string } | { readonly todayArrivalId: string } | PlanningReturnState };
 
-export function lineDetailBack(input: { readonly progress: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
-  if (input.progress !== null) return { to: `/progress?${new URLSearchParams(input.progress).toString()}`, label: '返回管理店铺' };
+export function lineDetailBack(input: { readonly progress: string | null; readonly schedule?: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
+  if (input.progress !== null) return legacyProgressBack(input.progress, input.state);
   const today = todayBack(input.state, input.todayBatch);
   if (today !== null) return today;
   if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
   const to = lineDeskAddress(input.state);
-  return to === null ? null : { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
+  if (to !== null) return { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
+  return typeof input.schedule === 'string' ? scheduleBack(new URLSearchParams(input.schedule), input.state) : null;
+}
+
+function legacyProgressBack(search: string, state: unknown): DetailBack {
+  const params = new URLSearchParams(search);
+  const view = params.get('view');
+  if (view === 'schedule' || (view !== 'current' && params.has('scheduleLine'))) return scheduleBack(params, state);
+  return { to: params.size === 0 ? currentProgressPath : `${currentProgressPath}?${params}`, label: '返回当前进度' };
+}
+
+function scheduleBack(params: URLSearchParams, state: unknown): DetailBack {
+  const address = scheduleWorkspaceBack(params);
+  const mode = params.get('planEntry');
+  const isDevelopment = mode === 'development' || (mode === 'alias' && params.get('view') === 'development');
+  const label = planningLabels[planningSectionOf(planningScope(params, isDevelopment ? 'development' : 'orders'))];
+  const origin = detailReturnState(state, address);
+  const scheduleTaskOrigin = typeof state === 'object' && state !== null && 'scheduleTaskOrigin' in state ? state.scheduleTaskOrigin : undefined;
+  return {
+    to: address, label: `返回${label}`,
+    ...(origin === undefined ? {} : { state: { ...origin, ...(scheduleTaskOrigin === undefined ? {} : { scheduleTaskOrigin }) } }),
+  };
+}
+
+export function orderScheduleAddress({ params, lineId }: { readonly params: URLSearchParams; readonly lineId: string }): string {
+  const schedule = new URLSearchParams(params.get('backToSchedule') ?? params.get('backToProgress') ?? '');
+  const store = params.get('store');
+  if (store !== null) schedule.set('store', store);
+  for (const key of ['view', 'lens', 'scheduleReturn', 'planEntry', 'planScope', 'planSelected', 'drawer', 'taskMode', 'taskParent', 'riskReturn', 'scheduleBatch',
+    'scheduleBatchEntry', 'procurementTask', 'developmentProject', 'developmentNode', 'developmentNodeProject']) schedule.delete(key);
+  schedule.set('scheduleLine', lineId);
+  return `${schedulePath}?${schedule}`;
 }
 
 function todayBack(state: unknown, batchId: string | null | undefined): DetailBack | null {

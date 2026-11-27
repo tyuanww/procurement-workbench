@@ -19,7 +19,7 @@ import {
   type PlanWorkItem,
 } from './catalog.js';
 import { readFailureOf, type ReadFailure } from './failure.js';
-import { abortFlights, joinFlight, type Shared } from './flights.js';
+import { abortFlights, joinFlight, readLifetimeSignal, type Shared } from './flights.js';
 import {
   emptySlots,
   generationOf,
@@ -52,7 +52,7 @@ type LineRead = { readonly name: 'line'; readonly id: string; readonly store?: P
 
 type TodayRead = { readonly scope: TodayScope; readonly includePending?: boolean; readonly signal?: AbortSignal };
 
-type ScheduleRead = { readonly name: 'planSchedule'; readonly from: string; readonly to: string; readonly store?: ProcurementStore; readonly signal?: AbortSignal };
+type ScheduleRead = Parameters<typeof planSchedulePath>[0] & { readonly name: 'planSchedule'; readonly signal?: AbortSignal };
 
 type ReadBody =
   | MeResponse
@@ -194,7 +194,9 @@ async function readHeld<T>(input: {
   readonly load: (signal: AbortSignal) => Promise<T>;
   readonly store: (value: T) => void;
 }): Promise<T> {
+  const lifetime = readLifetimeSignal();
   for (;;) {
+    lifetime.throwIfAborted();
     const stored = input.peek();
     if (stored !== null) return stored;
     const generation = input.currentGeneration();
