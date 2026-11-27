@@ -105,6 +105,7 @@ async function checkCollapsedTodayBadge(page: Page, sidebar: Locator, attention:
   await page.keyboard.press('Escape');
   await attention.waitFor({ state: 'hidden' });
   const original = page.url();
+  await page.mouse.move(200, 200);
   await today.hover();
   const action = page.getByRole('link', { name: '行动板', exact: true });
   const [newTab] = await Promise.all([page.context().waitForEvent('page'), action.click({ modifiers: ['ControlOrMeta'] })]);
