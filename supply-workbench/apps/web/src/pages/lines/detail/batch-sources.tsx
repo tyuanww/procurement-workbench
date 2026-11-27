@@ -1,4 +1,4 @@
-import { Collapse, Descriptions, Typography } from 'antd';
+import { Collapse, Descriptions, Grid, Typography } from 'antd';
 import type { OrderLineDetail } from '@sw/contracts';
 import { Link } from 'react-router';
 import { useCan } from '../../../shared/actor.js';
@@ -139,10 +139,12 @@ function EvidenceGroup({ title, rows, canReadImport, empty }: {
   readonly canReadImport: boolean;
   readonly empty: string;
 }) {
+  const isCompact = Grid.useBreakpoint().xs === true;
   return <section aria-label={title} style={{ overflowWrap: 'anywhere' }}>
     <Typography.Title level={4}>{title}</Typography.Title>
     {rows.length === 0 ? <Typography.Text type="secondary">{empty}</Typography.Text> : rows.map((row) => (
       <Descriptions key={JSON.stringify([row.importBatchId, row.sheetName, row.rowNo])} size="small" column={1}
+        layout={isCompact ? 'vertical' : 'horizontal'} styles={{ title: { whiteSpace: 'normal' } }}
         title={<SourceLocation row={row} canReadImport={canReadImport} />}
         items={row.fields.map(([label, raw]) => ({ key: label, label, children: raw === null || raw.trim() === '' ? '原表未填' : raw }))}
       />
