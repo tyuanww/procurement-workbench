@@ -25,7 +25,7 @@ import { developmentAudience, scopedDevelopment } from './planning-audience.js';
 import { DevelopmentWorkspace } from './product-development-view.js';
 import { tasksByBatch, weeklyDelivery, weeklyDeliveryFilterOptions, type WeeklyDeliveryBucket } from './weekly-delivery.js';
 import { WeeklyDeliverySummary } from './weekly-delivery-summary.js';
-import { PlanningResults } from './planning-results.js';
+import { PlanningResults, type PlanningResultState } from './planning-results.js';
 import './planning-workspace.css';
 
 type Navigation = ReturnType<typeof usePlanningNavigation>;
@@ -183,7 +183,7 @@ function PlanningWorkspaceBody(props: WorkspaceBody): ReactNode {
       display={planningDisplay(nav.params)} isWeekly={props.isWeekly} weeklyBucket={bucket}
       weeklySummary={weekly === null ? null : <WeeklyDeliverySummary delivery={weekly} bucket={bucket}
         onBucket={(next) => nav.write('weeklyBucket', next)} />}
-      isLoading={loadingPlan(props)} onClearStatus={() => write({ ...query, filters: { ...query.filters, status: null } })}
+      resultState={planningResultState(props)} onClearStatus={() => write({ ...query, filters: { ...query.filters, status: null } })}
       onDisplay={(value) => nav.write('planDisplay', value === 'gantt' ? null : value)}
       onOpen={nav.open} onOpenOrder={nav.openOrder} selectedRow={nav.params.get('planSelected')}
       orderPage={planningOrderPage(nav.params.get('planOrderPage'))}
@@ -264,10 +264,12 @@ function planningDevelopmentPanels({ nav, scope, development, resources: { devel
   return <>{scope === 'all' ? <DevelopmentManagement {...props} showPriority={false} /> : null}<DevelopmentActions {...props} /></>;
 }
 
-function loadingPlan({ scope, resources: { schedule, developmentStore, developmentLoad, ordersLoad }, keyword }: WorkspaceBody): boolean {
-  return schedule.load.kind === 'loading'
-    || scope !== 'orders' && developmentStore !== null && developmentLoad.load.kind === 'loading'
-    || keyword !== '' && ordersLoad.load.kind === 'loading';
+function planningResultState({ scope, resources: { schedule, developmentStore, developmentLoad, ordersLoad }, keyword }: WorkspaceBody): PlanningResultState {
+  const loads: PlanningLoad<unknown>[] = [schedule.load];
+  if (scope !== 'orders' && developmentStore !== null) loads.push(developmentLoad.load);
+  if (keyword !== '') loads.push(ordersLoad.load);
+  if (loads.some((load) => load.kind === 'loading')) return 'loading';
+  return loads.some((load) => load.kind === 'error' || (load.kind === 'ready' && load.notice !== null)) ? 'failed' : 'ready';
 }
 
 function PlanningNotices({ scope, schedule, developmentLoad, developmentStore, ordersLoad, keyword }:

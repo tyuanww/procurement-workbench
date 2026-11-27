@@ -14,6 +14,8 @@ import type { PlanningDisplay, PlanningGroup, PlanningSource } from './planning-
 import { PlanningTimeline } from './progress-timeline.js';
 import type { WeeklyDeliveryBucket } from './weekly-delivery.js';
 
+export type PlanningResultState = 'loading' | 'failed' | 'ready';
+
 type Results = {
   readonly display: PlanningDisplay;
   readonly isWeekly: boolean;
@@ -25,7 +27,7 @@ type Results = {
   readonly lookup: readonly OrderLineRow[];
   readonly orderDetail: OrderLineDetail | null;
   readonly clear: () => void;
-  readonly isLoading: boolean;
+  readonly resultState: PlanningResultState;
   readonly onClearStatus: () => void;
   readonly onDisplay: (display: PlanningDisplay) => void;
   readonly onOpen: (source: PlanningSource, triggerId: string) => void;
@@ -41,31 +43,40 @@ type Results = {
 };
 
 export function PlanningResults(props: Results) {
-  const { display, groups, window, today, query, keyword, lookup, orderDetail, clear, isLoading, onDisplay, onOpen, onOpenOrder, selectedRow, toolbar, errors, managementLink } = props;
-  const isPhone = useShellViewport().band === 'phone';
-  const titleId = useId();
+  const { groups, keyword, lookup, orderDetail, resultState, onOpenOrder, selectedRow, toolbar, errors, managementLink } = props;
   const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
   const shouldShowBatchFirst = hasUnambiguousWeeklyBatch({ groups, rows: lookup, keyword });
   const orderMatches = <PlanningOrderMatches rows={lookup} onOpen={onOpenOrder} selectedRow={selectedRow} detail={orderDetail} page={props.orderPage} onPage={props.onOrderPage} />;
-  const view = isPhone ? null : <ViewSwitch<PlanningDisplay> aria-label="结果视图" value={display}
-    options={[{ value: 'gantt', label: '甘特图' }, { value: 'list', label: '列表' }]} onChange={onDisplay} />;
-  return <section className="planning-results" aria-label="排期结果" aria-busy={isLoading}>
+  const resultCount = resultState === 'loading' ? '正在读取'
+    : resultState === 'failed' && total === 0 ? '读取失败' : `${total} 条排期`;
+  return <section className="planning-results" aria-label="排期结果" aria-busy={resultState === 'loading'}>
     {props.weeklySummary}
-    {toolbar({ resultCount: isLoading ? '正在读取' : `${total} 条排期`, managementLink })}
+    {toolbar({ resultCount, managementLink })}
     {errors}
     {shouldShowBatchFirst ? null : orderMatches}
-    <article aria-labelledby={titleId}>
-      <Card className="planning-record-card" extra={view} classNames={{ header: 'planning-record-header', body: 'planning-record-body' }}
-        title={<Typography.Title id={titleId} level={2}>任务、里程碑及批次</Typography.Title>}>
-        {total === 0
-          ? isLoading ? <Skeleton active paragraph={{ rows: 4 }} style={{ padding: space[2] }} />
-            : <PlanningEmpty {...{ keyword, lookup, clear, query }} onClearStatus={props.onClearStatus} weeklyBucket={props.weeklyBucket} />
-          : <PlanningTimeline key={props.weeklyBucket ?? 'all'} groups={groups} window={window} today={today} scale={query.scale}
-            onOpen={onOpen} selectedRow={selectedRow} isList={isPhone || display === 'list'} compactWeek={props.isWeekly} />}
-      </Card>
-    </article>
+    <PlanningRecordCard {...props} hasRows={total > 0} />
     {shouldShowBatchFirst ? orderMatches : null}
   </section>;
+}
+
+function PlanningRecordCard(props: Pick<Results, 'display' | 'groups' | 'window' | 'today' | 'query' | 'keyword' | 'lookup' | 'clear' |
+  'resultState' | 'onDisplay' | 'onOpen' | 'selectedRow' | 'weeklyBucket' | 'onClearStatus' | 'isWeekly'> & { readonly hasRows: boolean }) {
+  const { display, groups, window, today, query, keyword, lookup, clear, resultState, onDisplay, onOpen, selectedRow, weeklyBucket } = props;
+  const isPhone = useShellViewport().band === 'phone';
+  const titleId = useId();
+  if (resultState === 'failed' && !props.hasRows) return null;
+  const view = isPhone ? null : <ViewSwitch<PlanningDisplay> aria-label="结果视图" value={display}
+    options={[{ value: 'gantt', label: '甘特图' }, { value: 'list', label: '列表' }]} onChange={onDisplay} />;
+  return <article aria-labelledby={titleId}>
+    <Card className="planning-record-card" extra={view} classNames={{ header: 'planning-record-header', body: 'planning-record-body' }}
+      title={<Typography.Title id={titleId} level={2}>任务、里程碑及批次</Typography.Title>}>
+      {props.hasRows
+        ? <PlanningTimeline key={weeklyBucket ?? 'all'} groups={groups} window={window} today={today} scale={query.scale}
+          onOpen={onOpen} selectedRow={selectedRow} isList={isPhone || display === 'list'} compactWeek={props.isWeekly} />
+        : resultState === 'loading' ? <Skeleton active paragraph={{ rows: 4 }} style={{ padding: space[2] }} />
+          : <PlanningEmpty {...{ keyword, lookup, clear, query, weeklyBucket }} onClearStatus={props.onClearStatus} />}
+    </Card>
+  </article>;
 }
 
 function PlanningEmpty({ keyword, lookup, clear, query, onClearStatus, weeklyBucket }: Pick<Results, 'keyword' | 'lookup' | 'clear' | 'query' | 'onClearStatus' | 'weeklyBucket'>) {
