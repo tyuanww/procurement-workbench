@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
+import { checkFollowUpOrderQuery } from './follow-up-order-query-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkAccountLogout, checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
@@ -159,6 +160,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
     expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
   });
+  result.checks.followUpOrderQuery = await checkFollowUpOrderQuery({ page: buyer, origin, out, po: componentPo, warehouse });
   result.checks.accountLogout = await checkAccountLogout(buyer, origin, (path) => {
     expectedFailures.push({ role: 'buyer', path, status: 503 });
   });

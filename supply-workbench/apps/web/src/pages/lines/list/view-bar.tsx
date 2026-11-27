@@ -1,7 +1,7 @@
 import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
-import { deskAddress, exportAddress, lineTableLayout, renderedLineColumns, type LineDeskView } from '../../../features/follow-up/index.js';
+import { deskAddress, exportAddress, lineTableLayout, readDesk, renderedLineColumns, type LineDeskView } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { bg, radiusCard, space } from '../../../theme/tokens.js';
@@ -73,9 +73,8 @@ export function toggleColumn(input: { readonly search: string; readonly hiddenKe
 }
 
 export function filterSignature(search: string): string {
-  const params = deskAddress(search);
-  for (const key of NON_FILTER_PARAMS) params.delete(key);
-  if (params.get('lane') === 'finished') params.delete('lane');
+  const params = new URLSearchParams(saveAddress(search));
+  if (params.get('lane') === 'all') params.delete('lane');
   const pairs: string[] = [];
   for (const [key, value] of params) pairs.push(`${key}=${value}`);
   return pairs.sort().join('&');
@@ -117,7 +116,7 @@ export function clearFiltersAddress(search: string): URLSearchParams {
 export function saveAddress(query: string): string {
   const params = deskAddress(query);
   for (const key of NON_FILTER_PARAMS) params.delete(key);
-  if (!params.has('lane')) params.set('lane', 'finished');
+  params.set('lane', readDesk(query).lane);
   return params.toString();
 }
 
