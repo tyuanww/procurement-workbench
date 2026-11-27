@@ -48,12 +48,13 @@ const warehouse = '0199f0a0-0000-7000-8000-000000000010';
 const queuePath = '/api/v1/master/review-queue/counts';
 const loginPath = '/api/v1/auth/dev/login';
 const logoutPath = '/api/v1/auth/logout';
+const todayPath = '/api/v1/today';
 const searchLabel = '搜索单号、品名、供应商';
 const headless = process.env.ACCEPT_HEADLESS !== '0';
 const browser = await chromium.launch({ headless, channel });
 type Role = keyof typeof users;
 type BrowserElement = Element;
-type ResponseRecord = { readonly role: Role; readonly session: number; readonly path: string; readonly status: number; readonly signedIn: boolean };
+type ResponseRecord = { readonly role: Role; readonly session: number; readonly path: string; readonly status: number; readonly signedIn: boolean; readonly startedWithSession?: true };
 type ExpectedFailure = Pick<ResponseRecord, 'role' | 'path' | 'status'>;
 type AcceptanceResult = {
   readonly platform: typeof process.platform;
@@ -250,6 +251,7 @@ function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord
       pending.splice(match, 1);
       return false;
     }
+    if (response.path === todayPath && response.status === 401 && response.startedWithSession === true) return false;
     if (response.path !== '/api/v1/me' || response.status !== 401 || signedOutSessionReads.has(response.session)) return true;
     signedOutSessionReads.add(response.session);
     return false;
@@ -265,12 +267,20 @@ async function open(role: Role, path: string, landing = path) {
   const devtools = await context.newCDPSession(page);
   let signedIn = false;
   const session = ++nextSession;
-  devtools.on('Network.responseReceived', ({ response }) => {
+  const signedInTodayReads = new Set<string>();
+  devtools.on('Network.requestWillBeSent', ({ requestId, request }) => {
+    const url = new URL(request.url);
+    if (signedIn && url.origin === origin.origin && url.pathname === todayPath && request.method === 'GET') signedInTodayReads.add(requestId);
+  });
+  devtools.on('Network.loadingFailed', ({ requestId }) => { signedInTodayReads.delete(requestId); });
+  devtools.on('Network.responseReceived', ({ requestId, response }) => {
     const url = new URL(response.url);
     if (url.origin !== origin.origin) return;
     if (url.pathname === loginPath && response.status === 200) signedIn = true;
     if (url.pathname === logoutPath && response.status === 204) signedIn = false;
-    result.network.push({ role, session, path: url.pathname, status: response.status, signedIn });
+    const startedWithSession = signedInTodayReads.delete(requestId);
+    result.network.push({ role, session, path: url.pathname, status: response.status, signedIn,
+      ...(startedWithSession ? { startedWithSession } : {}) });
   });
   devtools.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {
     result.exceptions.push({ role, text: exceptionDetails.text });

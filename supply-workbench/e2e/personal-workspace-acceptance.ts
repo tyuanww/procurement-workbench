@@ -23,7 +23,7 @@ export async function checkPersonalWorkspace(input: {
   const workspaceLink = await sidebarLink(menu, '今日事项', '行动板');
   await workspaceLink.click();
   await buyer.waitForURL((url) => url.pathname === workspace);
-  assert.equal(await workspaceLink.getAttribute('aria-current'), 'page');
+  await workspaceLink.and(menu.locator('[aria-current="page"]')).waitFor();
   await buyerMain.getByRole('heading', { name: '个人工作台', exact: true }).waitFor({ state: 'attached' });
   const opening = buyerMain.getByRole('button', { name: /^查看详情 HZ09-0001/ });
   await opening.waitFor();
