@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { IssueCodeSchema, IssueSeveritySchema, LinkStatusSchema } from './enums.js';
-import { nullable, strictObject } from './shape.js';
+import { nullable, optional, strictObject } from './shape.js';
 import { LocalDateSchema } from './values.js';
 import { parsedDate, parsedNumber, parsedPo, parsedText } from './parsed-cell.js';
 
@@ -83,6 +83,7 @@ export const demandPayload = strictObject({
   qtyNet: parsedNumber,
   slots: z.array(strictObject({
     index: z.number(),
+    sourceColumns: optional(strictObject({ date: z.number().int().positive(), quantity: z.number().int().positive() })),
     date: nullable(LocalDateSchema),
     dateRaw: nullable(z.string()),
     qty: nullable(z.number()),

@@ -16,6 +16,7 @@ import { FulfillmentRecords, FulfillmentSummary } from './fulfillment.js';
 import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../features/plan/index.js';
 import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
+import { BatchSources } from './batch-sources.js';
 import { lineDetailBack, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
 
 const MISSING_PO = '无单号';
@@ -122,7 +123,7 @@ function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly deta
       {detail.batches.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" /> : (
         <Flex component="ul" role="list" vertical gap={space[2]} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
           {detail.batches.map((batch) => (
-            <BatchDetail {...reload} key={batch.id} batch={batch} focused={focusedBatch === batch.id} canRecord={canRecord}
+            <BatchDetail {...reload} key={batch.id} batch={batch} detail={detail} focused={focusedBatch === batch.id} canRecord={canRecord}
               hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
                 search, setParams, drawer, batchId: batch.id, ...(reportId === undefined ? {} : { reportId }),
               })} />
@@ -148,8 +149,9 @@ function ProcurementScheduleEvidence({ detail, params }: { readonly detail: Orde
   </section>;
 }
 
-function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen, lineId, setMessage, onReload }: Reload & {
+function BatchDetail({ batch, detail, focused, canRecord, hasProcurementSchedule, onOpen, lineId, setMessage, onReload }: Reload & {
   readonly batch: OrderLineDetail['batches'][number];
+  readonly detail: OrderLineDetail;
   readonly focused: boolean;
   readonly canRecord: boolean;
   readonly hasProcurementSchedule: boolean;
@@ -168,6 +170,7 @@ function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen
       <Card size="small" title={batchLineText(batch)}>
         <Flex vertical gap={space[2]}>
           {batch.fulfillment === undefined ? null : <FulfillmentSummary facts={batch.fulfillment} />}
+          <BatchSources detail={detail} batch={batch} />
           {canEdit && batch.fulfillment?.unit === null ? <BatchUnitCorrection batchId={batch.id} onReload={onReload} /> : null}
           {hasProcurementSchedule ? <ProcurementBatchDates batch={batch} /> : <BatchPromise batch={batch} />}
           {canEdit ? <ProcurementFollowUp lineId={lineId} batchId={batch.id} onReload={onReload} /> : null}

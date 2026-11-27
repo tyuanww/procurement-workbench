@@ -157,6 +157,8 @@ export type OrderLineDetail = {
   readonly codes: readonly ItemCodeView[];
   readonly snapshot: { readonly importBatchId: string; readonly at: string; readonly fields: Readonly<Record<string, Provenanced<unknown>>> } | null;
   readonly batches: readonly BatchView[];
+  readonly sourceFiles?: Readonly<Record<string, string>>;
+  readonly archivedShipmentSources?: readonly FactoryReportOf<'shipment'>[];
   readonly factoryReports: {
     readonly inTransit: readonly FactoryReportOf<'in_transit'>[];
     readonly shipments: readonly FactoryReportOf<'shipment'>[];

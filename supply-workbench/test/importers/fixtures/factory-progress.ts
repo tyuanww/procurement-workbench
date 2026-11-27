@@ -25,10 +25,10 @@ const schedule = sheet({ name: SHEETS.schedule.title, rows: [
   [9, '新品', firstPo, '70000001', '示例面霜', 100, 25, '待检'],
 ] });
 const demand = sheet({ name: '09月排产包材原料需求表', hidden: true, rows: [
-  [...header(SHEETS.demand), null],
-  ['到货时间', '数量'],
+  [...header(SHEETS.demand), null, '需求到位日期&数量'],
+  [null, null, null, null, null, null, null, null, null, '到货时间', '数量', '到货时间', '数量'],
   ['MATERIAL-001', firstPo, '70000001', '示例面霜'],
-  [null, null, '99000001', '示例盖子', '个', 90, 100, 20, 80],
+  [null, null, '99000001', '示例盖子', '个', 90, 100, 20, 80, '2026-09-21', 30, '2026-09-24', 50],
   header(SHEETS.demand),
 ] });
 const packagingCombo = sheet({ name: SHEETS.packagingCombo.title, rows: [

@@ -10,6 +10,7 @@ import { ownerAssignmentRepository } from '../../repositories/owner-assignments.
 import { instant } from '../../mappers/time.js';
 import { importBatches, importRows, itemCodes } from '../../schema/index.js';
 import { exceptions, followUps, orderLineSnapshots, orderLines } from '../../schema/orders.js';
+import { storedFiles } from '../../schema/platform.js';
 import { factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { isRecord, oneOf } from './guards.js';
 import { storeFilter } from '../store-progress/scope.js';
@@ -21,6 +22,7 @@ import { toRow, loadRelations, type ListWorld } from './line-row.js';
 import { comboOf, demandOf, isAssociated, scheduleOf, shipmentOf, stockOf, transitOf } from './payloads.js';
 
 const FOLLOW_UP_LIMIT = 50;
+const PURCHASE_SOURCE_FIELDS = ['po', 'nameRaw', 'barcodeRaw', 'qtyOrdered', 'firstDeliveryOn', 'shippedQtyReported', 'statusReported'];
 type Clock = { today(): LocalDate; now(): string };
 type Read = { readonly db: AppDatabase; readonly clock: Clock; readonly timeZone: string };
 
@@ -41,8 +43,9 @@ export async function lineDetail(read: Read, { lineId, store }: { readonly lineI
     scheduleOfLine(read.db, line),
     pendingBuyerNameOf({ db: read.db, lineId, buyerId: line.buyerUserId, buyers: world.users }),
   ]);
+  const evidence = await sourceEvidence(read.db, { lineId, batches, snapshot, reports });
   const storeProgress = progress?.get(lineId);
-  return { ...(pendingBuyerName === null ? {} : { pendingBuyerName }), line: { ...(storeProgress === undefined ? {} : { storeProgress }), ...toRow({ line, world, clock: read.clock, timeZone: read.timeZone }), unit: line.unit, purchaseOrderId: line.purchaseOrderId, itemId: line.itemId, cancelledAt: line.cancelledAt, cancelReason: line.cancelReason }, po: poOf(world, line.purchaseOrderId), codes, snapshot, batches, factoryReports: reports, exceptions: exceptionRows.map(exceptionView), followUps: latest(followRows), ...(procurement === undefined ? {} : { procurement }), ...(procurementSchedule === undefined ? {} : { procurementSchedule }) };
+  return { ...(pendingBuyerName === null ? {} : { pendingBuyerName }), line: { ...(storeProgress === undefined ? {} : { storeProgress }), ...toRow({ line, world, clock: read.clock, timeZone: read.timeZone }), unit: line.unit, purchaseOrderId: line.purchaseOrderId, itemId: line.itemId, cancelledAt: line.cancelledAt, cancelReason: line.cancelReason }, po: poOf(world, line.purchaseOrderId), codes, snapshot, batches, factoryReports: reports, ...evidence, exceptions: exceptionRows.map(exceptionView), followUps: latest(followRows), ...(procurement === undefined ? {} : { procurement }), ...(procurementSchedule === undefined ? {} : { procurementSchedule }) };
 }
 
 async function pendingBuyerNameOf(input: { readonly db: AppDatabase; readonly lineId: string; readonly buyerId: string | null; readonly buyers: ListWorld['users'] }): Promise<string | null> {
@@ -81,7 +84,14 @@ async function snapshotOf({ db, snapshotId, now }: { readonly db: AppDatabase; r
   const batch = (await db.select().from(importBatches).where(eq(importBatches.id, row.importBatchId)))[0];
   const importRow = (await db.select().from(importRows).where(eq(importRows.id, row.importRowId)))[0];
   const at = batch?.committedAt ?? batch?.createdAt ?? now;
-  return { importBatchId: row.importBatchId, at: instant(at), fields: fieldsOf(row.data, provenanceOf({ batch, row: importRow, at: instant(at) })) };
+  const provenance = provenanceOf({ batch, row: importRow, at: instant(at) });
+  const purchaseFields = purchaseImportFields(importRow?.parsed, provenance);
+  return { importBatchId: row.importBatchId, at: instant(at), fields: { ...fieldsOf(row.data, provenance), ...purchaseFields } };
+}
+
+function purchaseImportFields(parsed: unknown, provenance: Provenance) {
+  if (provenance.kind !== 'import' || provenance.template !== 'po-master-v1' || !isRecord(parsed)) return {};
+  return fieldsOf(Object.fromEntries(PURCHASE_SOURCE_FIELDS.map((key) => [key, parsed[key]])), provenance);
 }
 
 function provenanceOf({ batch, row, at }: { readonly batch: typeof importBatches.$inferSelect | undefined; readonly row: typeof importRows.$inferSelect | undefined; readonly at: string }): Provenance {
@@ -135,6 +145,47 @@ type LinkedFactoryTable = {
   readonly linkedOrderLineId: AnyPgColumn;
   readonly importBatchId: AnyPgColumn;
 };
+
+async function sourceEvidence(db: AppDatabase, { lineId, batches, snapshot, reports }: {
+  readonly lineId: string;
+  readonly batches: OrderLineDetail['batches'];
+  readonly snapshot: OrderLineDetail['snapshot'];
+  readonly reports: OrderLineDetail['factoryReports'];
+}) {
+  const archivedShipmentSources = await archivedShipments(db, { lineId, batches, current: reports.shipments });
+  const sourceFiles = await sourceFileNames(db, [
+    snapshot?.importBatchId,
+    ...[...reports.demand, ...reports.inTransit, ...reports.shipments, ...archivedShipmentSources].map((row) => row.importBatchId),
+  ]);
+  return { sourceFiles, archivedShipmentSources };
+}
+
+async function archivedShipments(db: AppDatabase, { lineId, batches, current }: {
+  readonly lineId: string;
+  readonly batches: OrderLineDetail['batches'];
+  readonly current: OrderLineDetail['factoryReports']['shipments'];
+}) {
+  const currentIds = new Set(current.map((row) => row.id));
+  const ids = new Set<string>();
+  for (const batch of batches) for (const shipment of batch.shipments) {
+    const id = shipment.factoryShipmentRowId;
+    if (shipment.voidedAt === null && id !== null && !currentIds.has(id)) ids.add(id);
+  }
+  if (ids.size === 0) return [];
+  const rows = await db.select().from(factoryShipmentRows).where(and(
+    eq(factoryShipmentRows.linkedOrderLineId, lineId), inArray(factoryShipmentRows.id, [...ids]),
+  ));
+  return rows.filter((row) => isAssociated(row.linkStatus)).map(shipmentOf);
+}
+
+async function sourceFileNames(db: AppDatabase, batchIds: readonly (string | undefined)[]) {
+  const ids = [...new Set(batchIds.filter((id) => id !== undefined))];
+  if (ids.length === 0) return {};
+  const files = await db.select({ id: importBatches.id, name: storedFiles.originalName }).from(importBatches)
+    .innerJoin(storedFiles, eq(storedFiles.id, importBatches.fileId))
+    .where(inArray(importBatches.id, ids));
+  return Object.fromEntries(files.map(({ id, name }) => [id, name]));
+}
 
 /** 行详情里的工厂上报同样只认活动快照，口径与列表的 activeFactoryBatchIds 一致。 */
 function linkedTo(input: { readonly lineId: string; readonly activeIds: readonly string[]; readonly table: LinkedFactoryTable }): ReturnType<typeof and> {
