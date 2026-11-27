@@ -7,14 +7,18 @@ export type ScopedStore = Exclude<ProcurementStore, 'all'>;
 // precisely the finished lines that its own worksheet row confirmed.
 export const OBSERVED_EDGES = sql`
   observed_edges as (
-    select edge.finished_id, o.material_line_id, o.import_batch_id, o.sheet_name, o.row_no,
-      case btrim(o.sheet_name)
-        when '达肤妍项目进度表' then 'dafuyan'
-        when '译龄项目进度表' then 'yiling'
+    select edge.finished_id, o.material_line_id, o.import_batch_id, o.sheet_name, o.row_no, source.brand,
+      case source.brand
+        when '达肤妍' then 'dafuyan'
+        when '译龄' then 'yiling'
       end as store
     from procurement_observations o
     join import_batches b on b.id = o.import_batch_id and b.status = 'committed' and b.template = 'po-master-v1'
     cross join lateral unnest(o.finished_line_ids) as edge(finished_id)
+    cross join lateral (
+      select case when btrim(o.sheet_name) like '%项目进度表'
+        then nullif(btrim(regexp_replace(btrim(o.sheet_name), '项目进度表$', '')), '') end as brand
+    ) source
   )
 `;
 

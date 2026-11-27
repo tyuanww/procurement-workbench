@@ -4,7 +4,8 @@ import { lineStageLabel } from '@sw/domain';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { drawerWidth, space } from '../../theme/tokens.js';
-import { dateOf, inView, matchesSearch, SIGNALS, type OwnerLoad, type Signal, type WorkFilter, type WorkRow } from './work-register.js';
+import { workSortOf, type HomeWorkLocation, type WorkSort } from './home-location.js';
+import { dateOf, inView, matchesSearch, productName, SIGNALS, type OwnerLoad, type Signal, type WorkRow } from './work-register.js';
 
 const pageSize = 8;
 
@@ -20,29 +21,27 @@ function Signals({ row }: { readonly row: WorkRow }) {
     <Tag key={signal} color={signalColor(signal)}>{SIGNALS[signal]}</Tag>)}</Flex>;
 }
 
-function productName(row: WorkRow) {
-  return row.line.nameRaw ?? row.line.itemCodeRaw ?? '品名待补';
-}
-
-function columns(open: (row: WorkRow) => void): TableColumnsType<WorkRow> {
+function columns(open: (row: WorkRow) => void, sort: WorkSort | null): TableColumnsType<WorkRow> {
+  const sortOrder = (column: WorkSort['column']) => sort?.column === column ? sort.order : null;
   return [
-    { title: '产品 / 物料', key: 'product', rowScope: 'row', sorter: (a, b) => productName(a).localeCompare(productName(b), 'zh-CN'),
+    { title: '产品 / 物料', key: 'product', rowScope: 'row', sortOrder: sortOrder('product'), sorter: (a, b) => productName(a).localeCompare(productName(b), 'zh-CN'),
       render: (_, row) => <Flex vertical align="start" gap={space[0]}>
         <Button type="link" onClick={() => open(row)} style={{ padding: 0, height: 'auto', whiteSpace: 'normal', textAlign: 'start' }}>{productName(row)}</Button>
         <Typography.Text type="secondary">{row.line.lane === 'finished' ? '成品' : '物料'} · {row.line.po.poRaw ?? '无单号'}</Typography.Text>
       </Flex> },
     { title: '关注原因', key: 'signals', render: (_, row) => <Signals row={row} /> },
-    { title: '采购负责人', key: 'owner', width: 110, sorter: (a, b) => (a.line.buyer?.name ?? '').localeCompare(b.line.buyer?.name ?? '', 'zh-CN'),
+    { title: '采购负责人', key: 'owner', width: 110, sortOrder: sortOrder('owner'), sorter: (a, b) => (a.line.buyer?.name ?? '').localeCompare(b.line.buyer?.name ?? '', 'zh-CN'),
       render: (_, row) => row.line.buyer?.name ?? '待分配' },
-    { title: '下一到货日', key: 'date', width: 124, sorter: (a, b) => dateOf(a).localeCompare(dateOf(b)),
+    { title: '下一到货日', key: 'date', width: 124, sortOrder: sortOrder('date'), sorter: (a, b) => dateOf(a).localeCompare(dateOf(b)),
       render: (_, row) => row.line.nextDue?.dateBuyerConfirmed ?? (row.line.stage === 'no_batch' ? '尚未建批' : '待确认') },
   ];
 }
 
-export function WorkDetails({ rows, owners, filter, onFilter }: {
-  readonly rows: readonly WorkRow[]; readonly owners: readonly OwnerLoad[]; readonly filter: WorkFilter;
-  readonly onFilter: (filter: WorkFilter) => void;
+export function WorkDetails({ rows, owners, location, onLocationChange }: {
+  readonly rows: readonly WorkRow[]; readonly owners: readonly OwnerLoad[]; readonly location: HomeWorkLocation;
+  readonly onLocationChange: (next: HomeWorkLocation) => void;
 }) {
+  const { filter, isSearchOpen, sort, page } = location;
   const [selected, setSelected] = useState<WorkRow>();
   const filtered = rows.filter((row) => inView(row, filter.view) && (filter.owner === undefined || row.ownerId === filter.owner)
     && (filter.signal === undefined || row.signals.includes(filter.signal)) && matchesSearch(row, filter.search));
@@ -52,11 +51,19 @@ export function WorkDetails({ rows, owners, filter, onFilter }: {
       <Flex align="baseline" gap={space[1]}>
         <span>事项跟踪明细</span><Typography.Text type="secondary" className="director-caption" role="status">{filtered.length} 件</Typography.Text>
       </Flex>
-      <WorkFilters owners={owners} filter={filter} onFilter={onFilter} />
+      <WorkFilters owners={owners} filter={filter} isSearchOpen={isSearchOpen}
+        onFilter={(next) => onLocationChange({ ...location, filter: next, page: 1 })}
+        onSearchOpen={(open) => onLocationChange(open ? { ...location, isSearchOpen: true }
+          : { ...location, isSearchOpen: false, filter: { ...filter, search: '' }, page: filter.search === '' ? page : 1 })} />
     </div>}>
-    <Table<WorkRow> size="small" rowKey={(row) => row.line.id} columns={columns(setSelected)} dataSource={filtered}
+    <Table<WorkRow> size="small" rowKey={(row) => row.line.id} columns={columns(setSelected, sort)} dataSource={filtered}
       scroll={{ x: 520, y: tableHeight }}
-      pagination={{ pageSize, hideOnSinglePage: true, showSizeChanger: false, size: 'small' }}
+      pagination={{ current: page, pageSize, hideOnSinglePage: true, showSizeChanger: false, size: 'small' }}
+      onChange={(...args) => {
+        const [pagination, , sorter, { action }] = args;
+        if (action === 'paginate') onLocationChange({ ...location, page: pagination.current ?? 1 });
+        else if (action === 'sort' && !Array.isArray(sorter)) onLocationChange({ ...location, sort: workSortOf(sorter.columnKey, sorter.order) });
+      }}
       locale={{ emptyText: '当前条件没有匹配事项' }} />
     {selected === undefined ? null : <WorkDrawer row={selected} onClose={() => setSelected(undefined)} />}
   </Card></section>;

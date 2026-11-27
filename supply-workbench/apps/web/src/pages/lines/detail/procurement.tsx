@@ -8,14 +8,14 @@ import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js'
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
+import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../../director-home/home-location.js';
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
 export function ProcurementSection({ detail }: { readonly detail: OrderLineDetail }) {
   const [params] = useSearchParams();
   const { state } = useLocation();
-  const delivery = params.get('backToDelivery');
-  const returnState = delivery === null ? undefined : detailReturnState(state, deliveryBackAddress(delivery));
+  const returnState = procurementReturnState(params, state);
   const relatedQuery = procurementDetailQuery(params);
   const procurement = detail.procurement;
   const progress = detail.line.storeProgress;
@@ -33,9 +33,16 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
   );
 }
 
+function procurementReturnState(params: URLSearchParams, state: unknown) {
+  const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
+  if (home !== null) return detailReturnState(state, home);
+  const delivery = params.get('backToDelivery');
+  return delivery === null ? undefined : detailReturnState(state, deliveryBackAddress(delivery));
+}
+
 function procurementDetailQuery(params: URLSearchParams): string {
   const related = new URLSearchParams();
-  for (const key of ['store', 'backToProgress', 'backToDelivery']) {
+  for (const key of ['store', 'backToProgress', 'backToDelivery', HOME_RISK_RETURN_PARAM]) {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }

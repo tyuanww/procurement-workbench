@@ -1,20 +1,11 @@
 import { CheckOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Progress, Row, Statistic, Typography } from 'antd';
+import { Button, Progress, Typography } from 'antd';
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { bg, border, brand, controlBorder, fontSize, radius, space, statusColor, text } from '../../theme/tokens.js';
 import { formatQuantity } from './format.js';
+import { toneColor, type MetricTone } from './metric-strip.js';
 
-export type MetricTone = 'neutral' | 'danger' | 'warning' | 'attention' | 'info' | 'success';
-
-export type MetricItem = {
-  readonly key: string;
-  readonly label: string;
-  readonly value: number | string;
-  readonly unit?: string;
-  readonly hint?: string;
-  readonly tone?: MetricTone;
-  readonly action?: { readonly isActive?: boolean; readonly select: () => void };
-};
+export { MetricStrip, type MetricItem, type MetricTone } from './metric-strip.js';
 
 export type BarSegment = {
   readonly key: string;
@@ -37,50 +28,6 @@ type BarLineProps = { readonly row: BarRow; readonly total: number; readonly sca
 
 const labeledBarCss = `.stacked-bar-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:${space[1]}px;margin-block-start:${space[1]}px}
 @container stacked-bar (min-width: 456px){.stacked-bar-values{grid-template-columns:repeat(4,minmax(0,1fr))}}`;
-
-export function MetricStrip(input: { readonly items: readonly MetricItem[]; readonly ariaLabel: string; readonly compact?: boolean }): ReactNode {
-  const isCompact = input.compact === true;
-  return (
-    <Row gutter={[isCompact ? space[1] : space[2], space[2]]} role="group" aria-label={input.ariaLabel}>
-      {input.items.map((item) => (
-        <Col key={item.key} flex={isCompact ? '1 1 0' : '1 1 min(100%, 144px)'} style={{ display: 'flex', minWidth: 0 }}>
-          <MetricCard item={item} isCompact={isCompact} />
-        </Col>
-      ))}
-    </Row>
-  );
-}
-
-function MetricCard(input: { readonly item: MetricItem; readonly isCompact: boolean }): ReactNode {
-  if (input.item.action !== undefined) return <MetricButton item={input.item} action={input.item.action} isCompact={input.isCompact} />;
-  return (
-    <Card size="small" styles={{ body: { padding: `var(--metric-padding, ${space[2]}px)` } }} style={{ width: '100%', borderTop: metricBorder(input.item) }}>
-      <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.label}</Typography.Text>
-      <Statistic value={input.item.value} suffix={input.item.unit} styles={{ content: metricValueStyle() }} />
-      {input.item.hint === undefined ? null : <Typography.Text type="secondary" style={{ fontSize: fontSize.meta }}>{input.item.hint}</Typography.Text>}
-    </Card>
-  );
-}
-
-function MetricButton({ item, action, isCompact }: { readonly item: MetricItem; readonly action: NonNullable<MetricItem['action']>; readonly isCompact: boolean }): ReactNode {
-  return (
-    <Button block aria-pressed={action.isActive} onClick={action.select} style={{
-      display: 'block', height: 'auto', whiteSpace: 'normal', textAlign: 'start', padding: `var(--metric-padding, ${isCompact ? space[1] : space[2]}px)`,
-      borderTop: metricBorder(item),
-      background: action.isActive ? brand[100] : bg.surface,
-      borderInlineColor: action.isActive ? brand[600] : border, borderBottomColor: action.isActive ? brand[600] : border,
-    }}>
-      <span style={{ display: 'grid', minWidth: 0 }}>
-        <span style={{ color: text.secondary, fontSize: fontSize.meta }}>{item.label}{action.isActive ? <> <CheckOutlined aria-hidden="true" /></> : null}</span>
-        <strong style={isCompact ? { ...metricValueStyle(), overflowWrap: 'anywhere' } : metricValueStyle()}>
-          {typeof item.value === 'number' ? formatQuantity(item.value) : item.value}
-          {isCompact ? <span style={{ fontSize: fontSize.meta }}>{item.unit}</span> : item.unit}
-        </strong>
-        {item.hint === undefined ? null : <span style={{ color: text.secondary, fontSize: fontSize.meta }}>{item.hint}</span>}
-      </span>
-    </Button>
-  );
-}
 
 export function StackedBarChart(input: {
   readonly rows: readonly BarRow[];
@@ -289,10 +236,6 @@ function tooltipOf(point: { readonly index: number; readonly value: number }, la
   return label === undefined ? String(point.value) : `${label} ${point.value}`;
 }
 
-function toneColor(tone: MetricTone | undefined): string {
-  return statusColor[tone ?? 'neutral'].text;
-}
-
 function segmentColor(segment: BarSegment): string {
   return segment.fill ?? toneColor(segment.tone);
 }
@@ -301,15 +244,6 @@ function rateTone(rate: number): string {
   if (rate >= 0.95) return statusColor.success.text;
   if (rate >= 0.8) return statusColor.warning.text;
   return statusColor.danger.text;
-}
-
-function metricBorder(item: MetricItem): string {
-  const hasAccent = item.tone !== undefined && item.tone !== 'neutral' && item.value !== 0;
-  return `2px solid ${hasAccent ? toneColor(item.tone) : border}`;
-}
-
-function metricValueStyle(): CSSProperties {
-  return { fontSize: fontSize.metric, lineHeight: 1.25, color: text.primary, fontVariantNumeric: 'tabular-nums' };
 }
 
 function barLineStyle(): CSSProperties {

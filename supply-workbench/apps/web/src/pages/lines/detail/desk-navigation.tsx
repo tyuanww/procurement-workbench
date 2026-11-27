@@ -3,6 +3,7 @@ import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-ro
 import { businessToday, deliveryBackAddress } from '../../../features/follow-up/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
+import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
   const isRouted = useInRouterContext();
@@ -12,7 +13,20 @@ export function LineDetailLink(props: { readonly href: string; readonly search: 
 
 export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } | { readonly todayPendingId: string } | { readonly todayArrivalId: string } | NonNullable<ReturnType<typeof detailReturnState>> };
 
-export function lineDetailBack(input: { readonly progress: string | null; readonly delivery?: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
+type BackSource = {
+  readonly progress: string | null; readonly delivery?: string | null; readonly home?: string | null;
+  readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null;
+};
+
+export function readLineDetailBack({ lineId, params, state }: { readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown }) {
+  const focusBatch = params.get('focusBatch');
+  return lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,
+    progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), home: params.get(HOME_RISK_RETURN_PARAM) });
+}
+
+export function lineDetailBack(input: BackSource): DetailBack | null {
+  const home = homeBack(input);
+  if (home !== null) return home;
   if (typeof input.delivery === 'string') {
     const to = deliveryBackAddress(input.delivery);
     const state = detailReturnState(input.state, to);
@@ -24,6 +38,14 @@ export function lineDetailBack(input: { readonly progress: string | null; readon
   if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
   const to = lineDeskAddress(input.state);
   return to === null ? null : { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
+}
+
+function homeBack(input: BackSource): DetailBack | null {
+  const to = homeRiskBackAddress(input.home ?? null);
+  if (to === null) return null;
+  const sourceLink = homeRiskLineFocus(input.lineId, input.focusBatch ?? null);
+  const state = detailReturnState(input.state, { detailPath: to, sourceLink });
+  return { to, label: '返回首页', ...(state === undefined ? {} : { state }) };
 }
 
 function todayBack(state: unknown, batchId: string | null | undefined): DetailBack | null {
