@@ -19,7 +19,7 @@ import {
   type PlanWorkItem,
 } from './catalog.js';
 import { readFailureOf, type ReadFailure } from './failure.js';
-import { abortFlights, joinFlight, type Shared } from './flights.js';
+import { abortFlights, joinFlight, readLifetimeSignal, type Shared } from './flights.js';
 import {
   emptySlots,
   generationOf,
@@ -194,7 +194,9 @@ async function readHeld<T>(input: {
   readonly load: (signal: AbortSignal) => Promise<T>;
   readonly store: (value: T) => void;
 }): Promise<T> {
+  const lifetime = readLifetimeSignal();
   for (;;) {
+    lifetime.throwIfAborted();
     const stored = input.peek();
     if (stored !== null) return stored;
     const generation = input.currentGeneration();

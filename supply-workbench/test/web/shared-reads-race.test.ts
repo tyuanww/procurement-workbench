@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { apiSend } from '../../apps/web/src/shared/api/client.js';
+import { apiPostEmpty, apiSend } from '../../apps/web/src/shared/api/client.js';
 import { emptyReads, listenToday, read } from '../../apps/web/src/shared/api/reads.js';
 import { loadToday } from '../../apps/web/src/pages/today/today-load.js';
 import { pagedToday } from './today-page-fixture.js';
@@ -70,6 +70,41 @@ it('更早的在途今日不能盖住写入后的新正文', async () => {
     const cached = await read({ name: 'today', scope: 'mine' });
     expect(views.at(-1)).toBe('ready:0');
     expect(cached.counts.overdue).toBe(0);
+  } finally {
+    globalThis.fetch = previous;
+    emptyReads();
+  }
+});
+
+it.each(['请求取消', '旧响应晚到'])('退出后不会重发在途的今日读取（%s）', async (outcome) => {
+  emptyReads();
+  const previous = globalThis.fetch;
+  const todayUrl = '/api/v1/today?scope=mine';
+  const logoutUrl = '/api/v1/auth/logout';
+  const seen: string[] = [];
+  let release: (() => void) | undefined;
+  globalThis.fetch = (input, options) => {
+    const path = requestUrl(input);
+    seen.push(path);
+    if (path === logoutUrl) return Promise.resolve(new Response(null, { status: 204 }));
+    if (seen.length !== 1) return Promise.resolve(json(agedToday(0)));
+    return new Promise((resolve, reject) => {
+      if (outcome === '请求取消') {
+        options?.signal?.addEventListener('abort', () => reject(new DOMException('已取消', 'AbortError')), { once: true });
+      }
+      release = () => resolve(json(agedToday(4)));
+    });
+  };
+  try {
+    const result = read({ name: 'today', scope: 'mine' }).then(
+      () => '读取完成',
+      (error: unknown) => error instanceof Error ? error.name : '读取失败',
+    );
+    await apiPostEmpty({ path: logoutUrl });
+    release?.();
+    const settled = await result;
+    expect(seen).toEqual([todayUrl, logoutUrl]);
+    expect(settled).toBe('ReadCancelled');
   } finally {
     globalThis.fetch = previous;
     emptyReads();
