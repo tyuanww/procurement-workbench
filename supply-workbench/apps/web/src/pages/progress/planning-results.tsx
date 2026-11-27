@@ -5,6 +5,7 @@ import type { LocalDate } from '@sw/domain';
 import type { ScheduleQuery, ScheduleWindow } from '../../features/progress/index.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { workItemStatusLabel } from '../../features/today/index.js';
+import { useCan } from '../../shared/actor.js';
 import { ViewSwitch } from '../../shared/ui/view-switch.js';
 import { space } from '../../theme/tokens.js';
 import type { PlanningToolbarSlots } from './planning-filters.js';
@@ -68,16 +69,28 @@ export function PlanningResults(props: Results) {
 }
 
 function PlanningEmpty({ keyword, lookup, clear, query, onClearStatus, weeklyBucket }: Pick<Results, 'keyword' | 'lookup' | 'clear' | 'query' | 'onClearStatus' | 'weeklyBucket'>) {
+  const canReadImports = useCan('imports.read');
   const { status } = query.filters;
   const hasFilters = Object.values(query.filters).some((value) => value !== null);
-  const description = status !== null ? `当前筛选下没有排期。已选状态「${workItemStatusLabel(status)}」。`
-    : weeklyBucket !== null ? '当前条件下暂无这类批次。'
-      : hasFilters ? '当前筛选下没有排期。'
-      : lookup.length > 0 ? '找到成品订单，当前日期内暂无匹配排期。'
-        : keyword !== '' ? '没有找到匹配的排期。可检查关键词或日期。'
-          : '当前店铺和日期内暂无排期。可切换店铺或日期。';
-  return <Empty className="planning-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>
-    {status !== null ? <Button onClick={onClearStatus}>清除状态筛选</Button>
-      : hasFilters || keyword !== '' && lookup.length === 0 ? <Button onClick={clear}>清空筛选</Button> : null}
-  </Empty>;
+  let description = '当前店铺和日期内暂无排期。可切换店铺或日期。';
+  let action: ReactNode = null;
+  const clearFilters = <Button onClick={clear}>清空筛选</Button>;
+  if (status !== null) {
+    description = `当前筛选下没有排期。已选状态「${workItemStatusLabel(status)}」。`;
+    action = <Button onClick={onClearStatus}>清除状态筛选</Button>;
+  } else if (weeklyBucket !== null) {
+    description = '当前条件下暂无这类批次。';
+    if (hasFilters || (keyword !== '' && lookup.length === 0)) action = clearFilters;
+  } else if (hasFilters) {
+    description = '当前筛选下没有排期。';
+    action = clearFilters;
+  } else if (lookup.length > 0) {
+    description = '找到成品订单，当前日期内暂无匹配排期。';
+  } else if (keyword !== '') {
+    description = '没有找到匹配的排期。可检查关键词或日期。';
+    action = clearFilters;
+  } else if (canReadImports) {
+    action = <Button href="/imports">去导入排期里程碑</Button>;
+  }
+  return <Empty className="planning-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>{action}</Empty>;
 }
