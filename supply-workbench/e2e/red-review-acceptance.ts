@@ -166,7 +166,7 @@ async function checkScheduleFilters(page: Page, origin: URL): Promise<void> {
   assert.equal(promptFits, true, '320px 宽度可完整读取搜索提示');
   await searchInput.fill('确认今日出货');
   await searchInput.press('Enter');
-  await results.getByRole('button', { name: /确认今日出货/u }).waitFor();
+  await results.getByRole('button', { name: /^演示排期 · 确认今日出货/u }).waitFor();
   await searchInput.press('Escape');
   await searchInput.waitFor({ state: 'hidden' });
   assert.equal(await searchTrigger.evaluate((button) => button === document.activeElement), true);
