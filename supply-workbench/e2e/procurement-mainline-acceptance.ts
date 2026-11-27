@@ -392,8 +392,7 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   await riskDrawer.waitFor({ state: 'hidden' });
   const table = page.getByRole('region', { name: '事项跟踪明细' });
   const scope = table.getByRole('combobox', { name: '事项范围' });
-  await scope.click();
-  await page.getByRole('option', { name: '交期风险', exact: true }).click();
+  await select(scope, page, '交期风险');
   const originalCount = await table.getByRole('status').innerText();
   const search = table.getByRole('textbox', { name: '搜索事项' });
   assert.equal(await search.count(), 0);
