@@ -1,0 +1,151 @@
+.procurement-batch-heading,
+.procurement-batch-overview {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.procurement-batch-drawer .ant-drawer-close {
+  align-self: flex-start;
+}
+
+.procurement-batch-number {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.procurement-batch-order-meta {
+  display: block;
+  margin-block-start: 4px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.procurement-batch-drawer .procurement-batch-notice,
+.procurement-batch-overview .procurement-batch-section-title {
+  margin-block: 0 8px;
+}
+
+.procurement-batch-unit {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.procurement-batch-quantities {
+  font-size: 12px;
+}
+
+.procurement-batch-quantities > :not(:first-child)::before {
+  content: '·';
+  margin-inline-end: 4px;
+}
+
+.procurement-batch-actions {
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-block-start: 1px solid color-mix(in srgb, currentColor 13%, transparent);
+  list-style: none;
+}
+
+.procurement-batch-actions li + li {
+  margin-block-start: 4px;
+}
+
+.procurement-batch-dates .ant-descriptions-item-label,
+.procurement-batch-promise-label {
+  flex: 0 0 10em;
+  text-align: start;
+}
+
+.procurement-batch-promise-trigger {
+  margin-inline-start: auto;
+  padding-inline: 0;
+}
+
+.procurement-batch-overview .procurement-batch-date-conflict {
+  margin-block: 4px 0;
+}
+
+.procurement-batch-records {
+  margin: 4px 0 0;
+  padding-inline-start: 18px;
+}
+
+.procurement-batch-evidence .ant-collapse-header {
+  padding-inline: 0;
+}
+
+.procurement-batch-evidence .ant-collapse-title {
+  font-weight: 600;
+}
+
+.procurement-batch-order-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 32px;
+  inline-size: fit-content;
+  margin-inline-start: auto;
+  padding: 4px 15px;
+  border-radius: var(--batch-button-radius);
+  background: var(--batch-primary);
+  color: var(--batch-on-primary);
+  text-decoration: none;
+}
+
+.procurement-batch-order-link:hover,
+.procurement-batch-order-link:focus-visible {
+  background: var(--batch-primary-hover);
+  color: var(--batch-on-primary);
+}
+
+.procurement-batch-order-link:active {
+  background: var(--batch-primary-active);
+  color: var(--batch-on-primary);
+}
+
+@media (max-width: 767px) {
+  .procurement-batch-drawer :is(.ant-drawer-close, .ant-collapse-header, .ant-picker, button),
+  .procurement-batch-order-link {
+    min-block-size: 44px;
+  }
+
+  .procurement-batch-drawer .ant-drawer-close {
+    min-inline-size: 44px;
+    margin-inline-start: -12px;
+    margin-block-start: -10px;
+  }
+
+  .procurement-batch-order-link {
+    inline-size: 100%;
+  }
+
+  .procurement-batch-overview :is(.procurement-batch-predecessor-risk, .procurement-batch-records) a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 44px;
+  }
+}
+
+@media (max-width: 389px) {
+  .procurement-batch-dates .ant-descriptions-item-label,
+  .procurement-batch-promise-label {
+    flex-basis: 9em;
+  }
+}
+
+.procurement-batch-promise-row {
+  min-block-size: 32px;
+}
+
+.procurement-batch-promise-editor {
+  margin-block: 8px;
+}
+
+.procurement-batch-promise-editor .ant-picker {
+  inline-size: 100%;
+}
+
+.procurement-batch-promise-editor .ant-form-item,
+.procurement-batch-form-error {
+  margin-block-end: 16px;
+}

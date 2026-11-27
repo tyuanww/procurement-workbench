@@ -7,7 +7,7 @@ export function canLeadDevelopment(actor: Actor): boolean {
   return can(actor, 'products.maintain') || actor.roles.includes('buyer');
 }
 
-export function canManageDevelopment(project: DevelopmentProject, actor: Actor): boolean {
+export function canManageDevelopment(project: Pick<DevelopmentProject, 'createdBy' | 'productLeadUserId'>, actor: Actor): boolean {
   return (project.createdBy === actor.id && can(actor, 'products.maintain')) ||
     (project.productLeadUserId === actor.id && canLeadDevelopment(actor)) ||
     can(actor, 'admin');

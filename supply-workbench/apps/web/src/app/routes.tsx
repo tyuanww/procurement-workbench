@@ -28,7 +28,7 @@ function SignInRequired() {
 
 function SignedInRoutes({ user }: { readonly user: SessionUser }) {
   return (
-    <ActorRoles roles={user.roles}>
+    <ActorRoles roles={user.roles} userId={user.id}>
       <Routes>
         {PAGE_MANIFEST.filter((entry) => entry.standalone).map((entry) => pageRoute(entry, user.roles))}
         <Route element={<Workbench user={user} />}>

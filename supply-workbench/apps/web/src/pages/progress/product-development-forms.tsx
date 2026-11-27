@@ -1,7 +1,7 @@
 import { Alert, Button, DatePicker, Form, Input, Select, Space } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProductDevelopment, ProductDevelopmentNode, ProductDevelopmentProject } from '@sw/contracts';
 import { DEVELOPMENT_DESTINATION_LABELS, DEVELOPMENT_DESTINATIONS, PRODUCT_DEVELOPMENT_STORES, type DevelopmentDestination, type ProductDevelopmentStore } from '@sw/domain';
 import { canSetStatus, workItemStatusLabel, type WorkItemStatus } from '../../features/today/index.js';
@@ -15,16 +15,25 @@ type Users = ProductDevelopment['users'];
 export function useDevelopmentSave(onSaved: Saved) {
   const [isSaving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const active = useRef(true);
+  const pending = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   async function save(run: () => Promise<{ readonly id: string }>) {
+    if (pending.current) return;
+    pending.current = true;
     setSaving(true);
     setError('');
     try {
       const result = await run();
-      onSaved(result.id);
+      if (active.current) onSaved(result.id);
     } catch (failure: unknown) {
-      setError(apiErrorMessage(failure) ?? '保存失败，请重试');
+      if (active.current) setError(apiErrorMessage(failure) ?? '保存失败，请重试');
     } finally {
-      setSaving(false);
+      pending.current = false;
+      if (active.current) setSaving(false);
     }
   }
   return { isSaving, error, save };
@@ -32,13 +41,15 @@ export function useDevelopmentSave(onSaved: Saved) {
 
 type ProjectFields = { readonly title: string; readonly store: ProductDevelopmentStore; readonly productLeadUserId: string };
 
-export function ProjectForm({ users, store, saved }: { readonly users: Users; readonly store: ProductDevelopmentStore | 'all'; readonly saved: Saved }): ReactNode {
+export function ProjectForm({ users, store, saved, autoFocus = true }: {
+  readonly users: Users; readonly store: ProductDevelopmentStore | 'all'; readonly saved: Saved; readonly autoFocus?: boolean;
+}): ReactNode {
   const [id] = useState(() => crypto.randomUUID());
   const form = useDevelopmentSave(saved);
   return <Form<ProjectFields> name="development-create-project" layout="vertical" initialValues={store === 'all' ? {} : { store }}
     onFinish={(fields) => void form.save(() => saveDevelopmentProject({ ...fields, id }))}>
     <Form.Item name="title" label="项目名称" rules={[{ required: true, whitespace: true }]}>
-      <Input maxLength={120} autoFocus />
+      <Input maxLength={120} autoFocus={autoFocus} />
     </Form.Item>
     <Form.Item name="store" label="所属店铺" rules={[{ required: true }]}>
       <Select options={PRODUCT_DEVELOPMENT_STORES.map((value) => ({ value, label: storeLabels[value] }))} />

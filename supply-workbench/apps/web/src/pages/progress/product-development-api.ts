@@ -1,15 +1,29 @@
 import {
   CreateDevelopmentNodeSchema, CreateDevelopmentProjectSchema, DevelopmentMaterialsSchema, DevelopmentOrdersSchema,
-  DevelopmentResultSchema, LinkDevelopmentNodeSchema, ProductDevelopmentSchema, ReplyToDevelopmentNodeSchema,
-  UpdateDevelopmentNodeSchema, type ProductDevelopmentStoreSchema,
+  DevelopmentResultSchema, DevelopmentWorkbookPreviewSchema, LinkDevelopmentNodeSchema, ProductDevelopmentSchema, ReplyToDevelopmentNodeSchema,
+  UpdateDevelopmentNodeSchema, UpdateDevelopmentProjectProgressSchema, type ProductDevelopmentStoreSchema,
 } from '@sw/contracts';
 import type { z } from 'zod';
-import { apiGetWithSignal, apiSend } from '../../shared/api/client.js';
+import { apiGetWithSignal, apiSend, apiUpload } from '../../shared/api/client.js';
 
 const root = '/api/v1/product-development';
+const developmentReaders = new Set<() => void>();
+
+export function onDevelopmentChange(reload: () => void): () => void {
+  developmentReaders.add(reload);
+  return () => { developmentReaders.delete(reload); };
+}
+
+async function writeDevelopment(input: {
+  readonly path: string; readonly method: 'POST' | 'PATCH'; readonly body: unknown;
+}): Promise<z.output<typeof DevelopmentResultSchema>> {
+  const result = await apiSend({ ...input, schema: DevelopmentResultSchema });
+  for (const refresh of developmentReaders) refresh();
+  return result;
+}
 
 export function readDevelopment(store: z.output<typeof ProductDevelopmentStoreSchema> | 'all', signal: AbortSignal) {
-  return apiGetWithSignal({ path: `${root}?store=${store}`, schema: ProductDevelopmentSchema, signal });
+  return apiGetWithSignal({ path: `${root}?store=${store}&includeReceiptDates=1`, schema: ProductDevelopmentSchema, signal });
 }
 
 export function findDevelopmentOrders({ store, search, signal }: { readonly store: string; readonly search: string; readonly signal: AbortSignal }) {
@@ -21,21 +35,31 @@ export function findDevelopmentMaterials({ store, orderLineId, signal }: { reado
 }
 
 export function saveDevelopmentProject(body: z.input<typeof CreateDevelopmentProjectSchema>) {
-  return apiSend({ path: `${root}/projects`, method: 'POST', body, schema: DevelopmentResultSchema });
+  return writeDevelopment({ path: `${root}/projects`, method: 'POST', body });
 }
 
 export function saveDevelopmentNode(body: z.input<typeof CreateDevelopmentNodeSchema>) {
-  return apiSend({ path: `${root}/nodes`, method: 'POST', body, schema: DevelopmentResultSchema });
+  return writeDevelopment({ path: `${root}/nodes`, method: 'POST', body });
 }
 
 export function updateDevelopmentNode(body: z.input<typeof UpdateDevelopmentNodeSchema>) {
-  return apiSend({ path: `${root}/nodes`, method: 'PATCH', body, schema: DevelopmentResultSchema });
+  return writeDevelopment({ path: `${root}/nodes`, method: 'PATCH', body });
 }
 
 export function saveDevelopmentReply(body: z.input<typeof ReplyToDevelopmentNodeSchema>) {
-  return apiSend({ path: `${root}/replies`, method: 'POST', body, schema: DevelopmentResultSchema });
+  return writeDevelopment({ path: `${root}/replies`, method: 'POST', body });
 }
 
 export function linkDevelopmentNode(body: z.input<typeof LinkDevelopmentNodeSchema>) {
-  return apiSend({ path: `${root}/links`, method: 'POST', body, schema: DevelopmentResultSchema });
+  return writeDevelopment({ path: `${root}/links`, method: 'POST', body });
+}
+
+export function updateDevelopmentProject(body: z.input<typeof UpdateDevelopmentProjectProgressSchema>) {
+  return writeDevelopment({ path: `${root}/projects`, method: 'PATCH', body });
+}
+
+export function previewDevelopmentWorkbook(store: z.output<typeof ProductDevelopmentStoreSchema>, file: File) {
+  const body = new FormData();
+  body.set('file', file, file.name);
+  return apiUpload({ path: `${root}/workbook/preview?store=${store}`, body, schema: DevelopmentWorkbookPreviewSchema });
 }

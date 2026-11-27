@@ -41,6 +41,9 @@ function developmentRepository(db: AppDatabase) {
       if (row === undefined) throw new NotFoundError('新品项目', id);
       return developmentProjectOf(row);
     },
+    async updateProjectProgress({ id, progress, progressVersion }: Pick<DevelopmentProject, 'id' | 'progress' | 'progressVersion'>) {
+      await db.update(productDevelopmentProjects).set({ progress: progress ?? null, progressVersion }).where(eq(productDevelopmentProjects.id, id));
+    },
     async findNode(id: string) {
       const [row] = await db.select().from(productDevelopmentNodes).where(eq(productDevelopmentNodes.id, id));
       return row === undefined ? undefined : developmentNodeOf(row);
@@ -61,8 +64,9 @@ function developmentRepository(db: AppDatabase) {
 }
 
 export function developmentProjectOf(row: typeof productDevelopmentProjects.$inferSelect): DevelopmentProject {
-  return { ...row, id: entityId(row.id), store: oneOf(PRODUCT_DEVELOPMENT_STORES, row.store), productLeadUserId: entityId(row.productLeadUserId),
-    createdBy: entityId(row.createdBy), createdAt: instant(row.createdAt) };
+  const { progress, ...project } = row;
+  return { ...project, id: entityId(row.id), store: oneOf(PRODUCT_DEVELOPMENT_STORES, row.store), productLeadUserId: entityId(row.productLeadUserId),
+    createdBy: entityId(row.createdBy), createdAt: instant(row.createdAt), ...(progress === null ? {} : { progress }) };
 }
 
 export function developmentNodeOf(row: typeof productDevelopmentNodes.$inferSelect): DevelopmentNode {
@@ -70,10 +74,11 @@ export function developmentNodeOf(row: typeof productDevelopmentNodes.$inferSele
   const formalLink = orderId === null || procurementLineId === null || oaRef === null ? null :
     { orderLineId: orderLineId(orderId), procurementLineId: orderLineId(procurementLineId), oaRef };
   return { id: entityId(row.id), projectId: entityId(row.projectId), destination: oneOf(DEVELOPMENT_DESTINATIONS, row.destination),
-    buyerUserId: entityIdOrNull(row.buyerUserId), formalLink };
+    buyerUserId: entityIdOrNull(row.buyerUserId), formalLink, ...(row.followUp === null ? {} : { followUp: row.followUp }) };
 }
 
 function nodeRow(node: DevelopmentNode): typeof productDevelopmentNodes.$inferInsert {
   return { id: node.id, projectId: node.projectId, destination: node.destination, buyerUserId: node.buyerUserId,
-    orderLineId: node.formalLink?.orderLineId ?? null, procurementLineId: node.formalLink?.procurementLineId ?? null, oaRef: node.formalLink?.oaRef ?? null };
+    orderLineId: node.formalLink?.orderLineId ?? null, procurementLineId: node.formalLink?.procurementLineId ?? null, oaRef: node.formalLink?.oaRef ?? null,
+    followUp: node.followUp ?? null };
 }

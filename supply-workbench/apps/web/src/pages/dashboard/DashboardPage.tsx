@@ -1,11 +1,12 @@
 import { Alert, Button, Empty, Flex, Result, Skeleton, Typography } from 'antd';
 import { businessDay } from '@sw/domain';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
-import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
+import { Navigate, useSearchParams } from 'react-router';
+import { failureText, readFailureOf } from '../../shared/api/reads.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import {
   buyerView,
+  DashboardChrome,
   dashboardQuery,
   dashboardSearch,
   loadDashboard,
@@ -16,13 +17,12 @@ import {
   type DashboardQuery,
   type DashboardView,
 } from '../../features/performance/index.js';
+import { scheduleRiskPath } from '../../features/progress/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { space } from '../../theme/tokens.js';
 import { BuyerPanel } from './BuyerPanel.js';
 import { BuyerLoadSummary, SupplierRateChart } from './dashboard-charts.js';
-import { ProjectProgressPanel } from './ProjectProgressPanel.js';
 import { ManagementMeetingPanel } from './ManagementMeetingPanel.js';
-import { DashboardChrome } from './DashboardChrome.js';
 import { StuckPanel } from './StuckPanel.js';
 import { SupplierPanel } from './SupplierPanel.js';
 import { SupplierTrend } from './SupplierTrend.js';
@@ -62,6 +62,7 @@ export function DashboardPage() {
   const onSearch = (patch: DashboardPatch): void => {
     setParams(dashboardSearch({ current: params.toString(), now, patch }));
   };
+  if (view === 'project') return <Navigate to={scheduleRiskPath(params)} replace />;
   return (
     <WorkbenchPage title={VIEW_LABEL[view]}>
       <Flex vertical gap={space[3]}>
@@ -70,7 +71,7 @@ export function DashboardPage() {
           <BoardBody board={stuckBoard.state} onRetry={stuckBoard.reload} keepWhileUpdating>
             {(data, isUpdating) => <StuckPanel data={data} query={query} now={now} onSearch={onSearch} isUpdating={isUpdating} />}
           </BoardBody>
-        ) : view === 'project' ? <ProjectBoard key={`${from}:${to}`} from={from} to={to} /> : (
+        ) : (
           <BoardBody board={performanceBoard.state} onRetry={performanceBoard.reload}>
             {(loaded) => <ActiveView view={view} loaded={loaded} query={query} />}
           </BoardBody>
@@ -149,14 +150,6 @@ function ActiveView(props: {
 }) {
   if (props.view === 'suppliers') return <SupplierBoard loaded={props.loaded} query={props.query} />;
   return <BuyerBoard loaded={props.loaded} />;
-}
-
-function ProjectBoard({ from, to }: Pick<DashboardQuery, 'from' | 'to'>) {
-  const load = useCallback(() => read({ name: 'planProgress', from, to }), [from, to]);
-  const board = useBoardLoad(load, true);
-  return <BoardBody board={board.state} onRetry={board.reload}>
-    {(project) => <ProjectProgressPanel project={project} onChanged={board.reload} />}
-  </BoardBody>;
 }
 
 function SupplierBoard(props: { readonly loaded: DashboardLoad; readonly query: DashboardQuery }) {

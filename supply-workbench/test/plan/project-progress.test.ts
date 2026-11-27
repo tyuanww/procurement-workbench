@@ -4,12 +4,12 @@ import { buildHttpApp } from '../../apps/server/src/http/app.js';
 import { registerPlanRoutes } from '../../apps/server/src/http/plan/routes.js';
 import { loginAs } from '../../apps/server/test/helpers/server.js';
 import { devAuth } from '../../packages/auth/src/index.js';
-import { ProjectProgressSchema } from '../../packages/contracts/src/index.js';
+import { ProjectProgressSchema, ScheduleViewSchema, WorkItemDetailSchema, WorkItemListResponseSchema } from '../../packages/contracts/src/index.js';
 import { entityId, localDate } from '../../packages/domain/src/index.js';
 import { seed, userDirectory } from '../../packages/persistence/src/index.js';
 import { BUYER, openPlanDb, seedPlanBase, TODAY, TOMORROW, wiring, YESTERDAY } from './support.js';
 
-it('项目进度汇总、到期状态和各维度使用同一周期内的任务，明细只在请求时返回', async () => {
+it('排期任务进度汇总、到期状态和分组来自同一期间，普通采购仍能访问日常排期和具体任务', async () => {
   const db = await openPlanDb();
   try {
     await seedPlanBase(db);
@@ -39,6 +39,29 @@ it('项目进度汇总、到期状态和各维度使用同一周期内的任务�
     try {
       const range = '/api/v1/plan/progress?from=2026-11-05&to=2026-11-15';
       expect((await app.inject({ url: range + '&includeItems=true' })).statusCode).toBe(401);
+      const buyerHeaders = { cookie: await loginAs(app, 'buyer') };
+      expect((await app.inject({ url: range, headers: buyerHeaders })).statusCode).toBe(403);
+      expect((await app.inject({ url: range + '&includeItems=true', headers: buyerHeaders })).statusCode).toBe(403);
+      const schedule = await app.inject({ url: '/api/v1/plan/schedule?from=2026-11-05&to=2026-11-15&includeClosed=true', headers: buyerHeaders });
+      expect(schedule.statusCode).toBe(200);
+      const overdueByItem = [
+        expect.objectContaining({ id: late.workItemId, status: 'planned', overdueDays: 1 }),
+        expect.objectContaining({ id: dueToday.workItemId, status: 'planned', overdueDays: null }),
+        expect.objectContaining({ id: blocked.workItemId, status: 'blocked', overdueDays: null }),
+        expect.objectContaining({ id: done.workItemId, status: 'done', overdueDays: null }),
+        expect.objectContaining({ id: cancelled.workItemId, status: 'cancelled', overdueDays: null }),
+      ];
+      expect(ScheduleViewSchema.parse(schedule.json()).items).toEqual(expect.arrayContaining(overdueByItem));
+      const list = await app.inject({ url: '/api/v1/plan/work-items?includeClosed=true', headers: buyerHeaders });
+      expect(list.statusCode).toBe(200);
+      expect(WorkItemListResponseSchema.parse(list.json()).items).toEqual(expect.arrayContaining(overdueByItem));
+      const openTask = await app.inject({ url: `/api/v1/plan/work-items/${late.workItemId}`, headers: buyerHeaders });
+      expect(openTask.statusCode).toBe(200);
+      expect(WorkItemDetailSchema.parse(openTask.json()).item).toMatchObject({ id: late.workItemId, title: '原料到厂', overdueDays: 1 });
+      const closedTask = await app.inject({ url: `/api/v1/plan/work-items/${done.workItemId}`, headers: buyerHeaders });
+      expect(closedTask.statusCode).toBe(200);
+      expect(WorkItemDetailSchema.parse(closedTask.json()).item).toMatchObject({ id: done.workItemId, title: '已完成验样', overdueDays: null });
+
       const cookie = await loginAs(app, 'manager');
       const headers = { cookie };
       const summaryResponse = await app.inject({ url: range, headers });
@@ -57,7 +80,7 @@ it('项目进度汇总、到期状态和各维度使用同一周期内的任务�
         late.workItemId, blocked.workItemId, done.workItemId, cancelled.workItemId, dueToday.workItemId,
       ]));
       expect(details.details?.tasks.filter((task) => task.overdue)).toMatchObject([
-        { item: { id: late.workItemId, plannedEnd: YESTERDAY, orderLine: { poRaw: 'PO-1' }, batch: { seq: 2 } } },
+        { item: { id: late.workItemId, plannedEnd: YESTERDAY, overdueDays: 1, orderLine: { poRaw: 'PO-1' }, batch: { seq: 2 } } },
       ]);
       expect(details.byOwner).toEqual(expect.arrayContaining([
         expect.objectContaining({ key: BUYER.id, total: 1, overdue: 1, itemIds: [late.workItemId] }),

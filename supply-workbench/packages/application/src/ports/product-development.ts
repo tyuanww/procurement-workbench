@@ -1,4 +1,4 @@
-import type { BatchFulfillment, DevelopmentDestination, EntityId, LocalDate, OrderLineId, ProductDevelopmentStore, WorkItem } from '@sw/domain';
+import type { BatchFulfillment, BatchStatus, DevelopmentDestination, DevelopmentFollowUp, DevelopmentProgress, EntityId, LocalDate, OrderLineId, ProductDevelopmentStore, WorkItem } from '@sw/domain';
 import type { WorkItemEvent } from '../../../domain/src/entities/work-items.js';
 import type { WorkItemEventRepository, WorkItemRepository } from './plan.js';
 import type { UnitOfWork, UnitOfWorkStores } from './unit-of-work.js';
@@ -10,6 +10,8 @@ export type DevelopmentProject = {
   readonly productLeadUserId: EntityId;
   readonly createdBy: EntityId;
   readonly createdAt: string;
+  readonly progress?: DevelopmentProgress;
+  readonly progressVersion: number;
 };
 
 export type DevelopmentOrderLink = {
@@ -24,6 +26,7 @@ export type DevelopmentNode = {
   readonly destination: DevelopmentDestination;
   readonly buyerUserId: EntityId | null;
   readonly formalLink: DevelopmentOrderLink | null;
+  readonly followUp?: DevelopmentFollowUp;
 };
 
 export type DevelopmentReply = {
@@ -48,6 +51,9 @@ export type DevelopmentBatch = {
   readonly seq: number;
   readonly supplierPromisedOn: LocalDate | null;
   readonly buyerConfirmedOn: LocalDate | null;
+  readonly receiptDates?: readonly LocalDate[];
+  readonly plannedQty?: number;
+  readonly status?: BatchStatus;
   readonly fulfillment: BatchFulfillment;
   readonly reportedShipments: readonly {
     readonly quantity: number;
@@ -73,7 +79,7 @@ export interface DevelopmentQueries {
   projects(store: DevelopmentScope): Promise<readonly DevelopmentProjectRow[]>;
   nodes(store: DevelopmentScope): Promise<readonly DevelopmentNodeRow[]>;
   replies(nodeIds: readonly EntityId[]): Promise<readonly DevelopmentReply[]>;
-  batches(lineIds: readonly OrderLineId[]): Promise<ReadonlyMap<OrderLineId, readonly DevelopmentBatch[]>>;
+  batches(lineIds: readonly OrderLineId[], includeReceiptDates: boolean): Promise<ReadonlyMap<OrderLineId, readonly DevelopmentBatch[]>>;
   orders(input: { readonly store: ProductDevelopmentStore; readonly search: string }): Promise<readonly DevelopmentOrderOption[]>;
   materials(input: { readonly store: ProductDevelopmentStore; readonly orderLineId: OrderLineId }): Promise<readonly DevelopmentMaterialOption[]>;
   users(): Promise<DevelopmentUsers>;
@@ -82,6 +88,7 @@ export interface DevelopmentQueries {
 interface DevelopmentRepository {
   insertProject(project: DevelopmentProject): Promise<boolean>;
   lockProject(id: EntityId): Promise<DevelopmentProject>;
+  updateProjectProgress(project: Pick<DevelopmentProject, 'id' | 'progress' | 'progressVersion'>): Promise<void>;
   findNode(id: EntityId): Promise<DevelopmentNode | undefined>;
   insertNode(node: DevelopmentNode): Promise<void>;
   updateNode(node: DevelopmentNode): Promise<void>;

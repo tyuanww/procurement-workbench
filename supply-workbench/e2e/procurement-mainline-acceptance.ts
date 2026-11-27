@@ -14,13 +14,17 @@ const otherStoreName = '译龄';
 type Scenario = { readonly origin: URL; readonly out: string };
 
 export async function checkStoreSchedule({ page, manager, origin, out }: Scenario & { readonly page: Page; readonly manager: Page }) {
-  await (await sidebarLink(manager.locator('aside'), '管理店铺', '当前进度')).click();
+  await manager.goto(new URL('/progress/schedule', origin).href);
+  const currentEntry = manager.locator('aside').getByRole('link', { name: '当前进度', exact: true });
+  await currentEntry.click();
+  await manager.waitForURL(new URL('/progress/current', origin).href);
+  assert.equal(await currentEntry.getAttribute('aria-current'), 'page');
   const current = manager.getByRole('region', { name: '当前进度表', exact: true });
   const finished = current.getByRole('link', { name: finishedName, exact: true });
   await select(manager.getByRole('combobox', { name: '店铺', exact: true }), manager, storeName);
   await finished.waitFor();
   const breadcrumb = manager.locator('header').getByRole('navigation', { name: '当前位置' });
-  await breadcrumb.getByText('管理店铺', { exact: true }).waitFor();
+  await breadcrumb.getByText('计划与新品', { exact: true }).waitFor();
   await breadcrumb.getByText('当前进度', { exact: true }).waitFor();
   const filters = manager.getByRole('group', { name: '当前进度筛选' });
   const oa = await filters.getByRole('combobox', { name: 'OA 需求' }).boundingBox();
@@ -45,7 +49,7 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await denominator.waitFor();
   assert.equal(new URL(manager.url()).searchParams.get('drill'), 'stage:no_batch');
   await select(stay, manager, '15+ 天');
-  await manager.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden' });
+  await manager.locator('.ant-select-dropdown:visible').last().waitFor({ state: 'hidden' });
   await filters.getByTitle('15+ 天', { exact: true }).waitFor();
   const selected = new URL(manager.url()).searchParams;
   assert.equal(selected.get('stay'), '15+');
@@ -66,9 +70,12 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   assert.equal(await finished.count(), 0);
 
   await page.goto(new URL('/progress?store=' + store, origin).href);
-  await (await sidebarLink(page.locator('aside'), '管理店铺', '总排期')).click();
-  const panel = page.getByRole('region', { name: '成品订单排期' });
-  await select(panel.getByRole('combobox', { name: '选择成品订单' }), page, new RegExp(finishedPo));
+  await page.getByRole('button', { name: '搜索排期', exact: true }).click();
+  const scheduleSearch = page.getByRole('textbox', { name: '搜索排期', exact: true });
+  await scheduleSearch.fill(finishedPo);
+  await scheduleSearch.press('Enter');
+  await page.getByRole('region', { name: '匹配成品订单' }).getByRole('button', { name: new RegExp(`^(查看|建立)排期 ${finishedName}$`, 'u') }).click();
+  const panel = page.getByRole('dialog', { name: '成品订单排期' });
   const line = panel.getByRole('link', { name: '成品订单行详情', exact: true });
   await line.waitFor();
   assert.equal(new URL(await line.getAttribute('href') ?? '', origin).searchParams.get('store'), store);
@@ -82,18 +89,34 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await panel.getByRole('button', { name: '建立排期', exact: true }).click();
   const stages = panel.getByRole('list', { name: '已建排期节点' });
   await stages.waitFor();
-  await page.getByText('月', { exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get('scale') === 'month' && url.searchParams.get('store') === store);
   await page.reload();
   await stages.waitFor();
   assert.deepEqual(await stages.getByRole('button', { name: /^(下单|齐料|生产|交付)$/ }).allTextContents(), ['下单', '齐料', '生产', '交付']);
   await panel.getByText('周期依据 ' + basis + ' · 齐料间隔 3 天 · 生产 4 天 · 交付间隔 2 天', { exact: true }).waitFor();
-  const scheduleMetrics = page.getByRole('group', { name: '总排期指标' });
-  const monthlyTotal = scheduleMetrics.locator('.ant-card').filter({ hasText: '所选月任务' });
-  await monthlyTotal.getByText('4', { exact: true }).waitFor();
-  await page.getByText(/^左端虚线表示任务在所选期间前已开始/u).waitFor();
+  await panel.getByRole('button', { name: /^关\s*闭$/ }).first().click();
+  await panel.waitFor({ state: 'hidden' });
+  await page.getByText('月', { exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get('scale') === 'month' && url.searchParams.get('store') === store);
+  const scheduleResult = page.getByRole('region', { name: '排期结果' });
+  await page.reload();
+  assert.equal(new URL(page.url()).searchParams.get('scale'), 'month');
+  assert.equal(new URL(page.url()).searchParams.get('store'), store);
+  const monthChart = scheduleResult.getByRole('region', { name: '排期甘特图' });
+  await monthChart.locator('[data-scale=month] .planning-record-link').filter({ hasText: '生产' }).first().waitFor();
   assert.equal(await page.getByText(/按负责人分组|点任务条打开|本月排期/u).count(), 0);
   await page.screenshot({ path: join(out, 'procurement-schedule.png'), animations: 'disabled' });
+  await page.getByRole('region', { name: '匹配成品订单' }).getByRole('button', { name: new RegExp(`^(查看|建立)排期 ${finishedName}$`, 'u') }).click();
+  await stages.getByRole('button', { name: '下单', exact: true }).click();
+  const stageDetail = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: '打开订单行', exact: true }) });
+  await page.waitForURL(({ searchParams }) => searchParams.has('procurementTask'));
+  const scheduleUrl = page.url();
+  const stageOrderLink = stageDetail.getByRole('link', { name: '打开订单行', exact: true });
+  const order = new URL(await stageOrderLink.getAttribute('href') ?? '', origin);
+  assert.equal(order.searchParams.get('store'), store);
+  await stageOrderLink.click();
+  await page.getByRole('link', { name: '返回订单与任务排期', exact: true }).click();
+  await page.waitForURL(scheduleUrl);
+  await stageDetail.getByText(finishedPo + ' · ' + finishedName, { exact: true }).waitFor();
   await checkScheduleWindow(page, origin, out);
   await page.goto(new URL('/today', origin).href);
   const scheduleTab = page.getByRole('main').getByRole('tab', { name: '今日排期', exact: true });
@@ -104,43 +127,44 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await task.getByText(finishedPo + ' · ' + finishedName, { exact: true }).waitFor();
   await task.getByRole('button', { name: /^关\s*闭$/ }).last().click();
   await task.waitFor({ state: 'hidden' });
-  const totalSchedule = await sidebarLink(page.locator('aside'), '管理店铺', '总排期');
-  await totalSchedule.click();
+  const planning = await sidebarLink(page.locator('aside'), '计划与新品', '订单与任务排期');
+  await planning.click();
   await page.waitForURL((url) => url.pathname === '/progress/schedule');
-  const taskContext = await checkScheduleTaskContext(page, origin);
+  await page.getByRole('tab', { name: '订单与任务排期', selected: true }).waitFor();
+  assert.equal(await planning.getAttribute('aria-current'), 'page');
+  const taskContext = await checkScheduleTaskContext({ page, manager, origin, out });
   return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true, taskContext };
 }
 
 async function checkScheduleWindow(page: Page, origin: URL, out: string) {
   await page.goto(new URL(`/progress/schedule?store=${store}&from=2026-11-23`, origin).href);
   const dateRange = page.locator('[aria-live="polite"]');
-  const tasks = page.getByRole('group', { name: '总排期指标' }).getByText('所选周任务', { exact: true });
-  const production = page.getByRole('button', { name: /^生产\s/u });
+  const gantt = page.getByRole('region', { name: '排期甘特图' });
+  const production = gantt.getByRole('button', { name: `${finishedName} · 生产 · 任务计划`, exact: false }).and(gantt.locator('.planning-interval'));
   const borderStyles = () => production.evaluate((bar) => {
-    const css = getComputedStyle(bar);
+    const css = getComputedStyle(bar, '::after');
     return [css.borderLeftStyle, css.borderRightStyle, css.borderTopStyle, css.borderBottomStyle];
   });
   await dateRange.and(page.getByText(/11-23 至 (?:2026-)?11-29$/u)).waitFor();
-  await tasks.waitFor();
+  await production.and(gantt.locator('[data-cut-start="true"]')).waitFor();
   assert.deepEqual(await borderStyles(), ['dashed', 'solid', 'solid', 'solid']);
   await page.getByRole('button', { name: '上一周', exact: true }).click();
   await dateRange.and(page.getByText(/11-16 至 (?:2026-)?11-22$/u)).waitFor();
-  await tasks.waitFor();
-  await page.getByRole('button', { name: /^下单\s/u }).waitFor();
+  await production.and(gantt.locator('[data-cut-end="true"]')).waitFor();
+  await gantt.getByRole('button', { name: `${finishedName} · 下单 ·`, exact: false }).and(gantt.locator('.weekly-gantt-point')).waitFor();
   assert.deepEqual(await borderStyles(), ['solid', 'dashed', 'solid', 'solid']);
   assert.equal(await page.getByText(/本周任务|本周排期/u).count(), 0);
   const desktop = page.viewportSize();
   assert.ok(desktop);
   await page.setViewportSize({ width: 320, height: 800 });
-  const legend = page.getByText(/^左端虚线表示任务在所选期间前已开始/u);
-  await legend.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: /^下单\s/u }).waitFor();
+  await gantt.waitFor({ state: 'hidden' });
+  await page.getByRole('region', { name: '排期结果' }).getByRole('button', { name: /下单/u }).first().waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
   await page.screenshot({ path: join(out, 'procurement-schedule-320.png'), animations: 'disabled' });
   await page.setViewportSize(desktop);
 }
 
-async function checkScheduleTaskContext(page: Page, origin: URL) {
+async function checkScheduleTaskContext({ page, manager, origin, out }: Scenario & { readonly page: Page; readonly manager: Page }) {
   const predecessor = '合成排期前置任务';
   const successor = '合成排期接续任务';
   const businessDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format();
@@ -161,6 +185,12 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
   }
 
   await page.goto(new URL('/today?group=owner', origin).href);
+  await page.getByRole('button', { name: predecessor, exact: true }).press('Enter');
+  const blocked = page.getByRole('dialog', { name: new RegExp(predecessor) });
+  await blocked.waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('drawer'), 'task:' + fromItemId);
+  await blocked.getByRole('button', { name: /^关\s*闭$/u }).last().click();
+  await blocked.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: successor, exact: true }).press('Enter');
   const drawer = page.getByRole('dialog', { name: new RegExp(successor) });
   const warning = drawer.getByText(`${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: false });
@@ -173,15 +203,67 @@ async function checkScheduleTaskContext(page: Page, origin: URL) {
     && url.searchParams.get('from') === plannedEnd && url.searchParams.get('drawer') === 'task:' + toItemId);
   await scheduleLink.waitFor({ state: 'hidden' });
   await warning.waitFor();
-  const taskBar = page.getByRole('button', { name: new RegExp('^' + successor + '\\s'), includeHidden: true });
+  const taskBar = page.getByRole('button', { name: new RegExp('^' + successor + '\\s'), includeHidden: true })
+    .and(page.locator('.planning-interval'));
   await taskBar.waitFor();
-  const dependencyHint = page.getByText(`依赖冲突 · ${predecessor}（计划完成 ${predecessorEnd}）仍阻塞`, { exact: true });
-  await dependencyHint.waitFor();
+  const warningId = await taskBar.getAttribute('aria-describedby');
+  assert.ok(warningId);
+  assert.match(await page.evaluate((id) => document.getElementById(id)?.textContent ?? '', warningId), new RegExp(predecessor, 'u'));
   await page.goBack();
   await page.waitForURL(todayUrl);
   await scheduleLink.waitFor();
   await warning.waitFor();
-  return { task: successor, predecessor, scheduleAnchor: plannedEnd, visibleInTimeline: true, restoredTodayContext: true };
+  const risk = await checkScheduleRisk({ manager, origin, out, predecessor, fromItemId, predecessorStart, plannedEnd });
+  return { task: successor, predecessor, scheduleAnchor: plannedEnd, visibleInTimeline: true, restoredTodayContext: true, risk };
+}
+
+async function checkScheduleRisk({ manager, origin, out, predecessor, fromItemId, predecessorStart, plannedEnd }: Scenario & {
+  readonly manager: Page; readonly predecessor: string; readonly fromItemId: string; readonly predecessorStart: string; readonly plannedEnd: string;
+}) {
+  const entry = new URL('/dashboard', origin);
+  entry.search = new URLSearchParams({ view: 'project', preset: 'custom', from: predecessorStart, to: plannedEnd, lane: 'material' }).toString();
+  const metrics = manager.getByRole('group', { name: '排期任务进度指标' });
+  const widths = [1440, 320] as const;
+  for (const width of widths) {
+    await manager.setViewportSize({ width, height: 900 });
+    const source = new URL(entry);
+    source.searchParams.set('view', 'buyers');
+    await manager.goto(source.href);
+    await manager.goto(entry.href);
+    await manager.waitForURL((url) => url.pathname === '/progress/schedule' && url.searchParams.get('lens') === 'risk');
+    const migrated = new URL(manager.url());
+    for (const key of ['preset', 'from', 'to', 'lane']) assert.equal(migrated.searchParams.get(key), entry.searchParams.get(key));
+    const trail = manager.getByRole('navigation', { name: '当前位置' });
+    await trail.getByText('管理看板', { exact: true }).waitFor();
+    await trail.getByText('排期任务进度', { exact: true }).waitFor();
+    await metrics.getByRole('button', { name: /^阻塞\s/u }).click();
+    const riskDrawer = manager.getByRole('dialog', { name: '阻塞任务', exact: true });
+    const riskTask = riskDrawer.getByRole('link', { name: predecessor, exact: true });
+    await riskTask.waitFor();
+    await manager.screenshot({ path: join(out, `schedule-risk-${width}.png`), animations: 'disabled' });
+    const riskQuery = new URL(manager.url()).searchParams;
+    assert.equal(riskQuery.get('lane'), 'material');
+    riskQuery.sort();
+    for (const action of ['return', 'close'] as const) {
+      await riskTask.click();
+      await manager.waitForURL((url) => url.searchParams.get('drawer') === 'task:' + fromItemId && url.searchParams.get('taskMode') === 'read');
+      const task = manager.getByRole('dialog', { name: new RegExp(predecessor) });
+      await task.getByText('状态', { exact: true }).waitFor();
+      const returnControl = action === 'close' ? task.locator('.ant-drawer-footer').getByRole('button', { name: '关闭', exact: true })
+        : task.getByRole('link', { name: '返回排期任务进度', exact: true });
+      await returnControl.click();
+      await manager.waitForURL((url) => {
+        const actual = new URLSearchParams(url.search);
+        actual.sort();
+        return url.pathname === '/progress/schedule' && actual.toString() === riskQuery.toString();
+      });
+      await riskTask.and(manager.locator(':focus')).waitFor();
+    }
+    await manager.goBack();
+    await manager.waitForURL(source.href);
+  }
+  await manager.setViewportSize({ width: 1440, height: 900 });
+  return { widths, taskId: fromItemId, sameTaskAsToday: true, selectionAndFocusRestored: true };
 }
 
 async function createScheduleTask(page: Page, origin: URL, title: string, plannedStart: string, plannedEnd: string) {
@@ -213,11 +295,11 @@ export async function checkProductDevelopment({ buyer, reviewer, buyerId, review
     plannedStart: '2026-11-19', plannedEnd: required, ownerUserId: reviewerId, buyerUserId: buyerId,
   });
   await buyer.goto(new URL('/progress?store=' + store, origin).href);
-  await (await sidebarLink(buyer.locator('aside'), '管理店铺', '新品开发进度')).click();
-  const pending = buyer.locator('.ant-card').filter({ has: buyer.getByText('采购待跟进（1）', { exact: true }) });
-  await pending.getByRole('button', { name: node, exact: true }).click();
-  const detail = buyer.getByRole('dialog', { name: node, exact: true });
-  await detail.getByText('项目要求 ' + required, { exact: true }).waitFor();
+  await buyer.getByRole('tab', { name: '新品开发', exact: true }).click();
+  await buyer.getByRole('link', { name: `打开项目 ${title}`, exact: true }).click();
+  await buyer.getByRole('region', { name: '节点看板', exact: true }).getByRole('button', { name: node, exact: true }).click();
+  const detail = buyer.getByRole('dialog', { name: new RegExp(node, 'u') });
+  await detail.getByText('项目要求日 ' + required, { exact: true }).first().waitFor();
   await detail.getByRole('button', { name: '记录采购回复', exact: true }).click();
   const reply = buyer.getByRole('dialog', { name: '记录采购回复', exact: true });
   await fillDate(reply.getByLabel('供应商承诺日期', { exact: true }), promised);
@@ -225,8 +307,8 @@ export async function checkProductDevelopment({ buyer, reviewer, buyerId, review
   await reply.getByRole('button', { name: '保存采购回复', exact: true }).click();
   await detail.getByText(evidence, { exact: true }).waitFor();
   await reviewer.goto(buyer.url());
-  const reviewDetail = reviewer.getByRole('dialog', { name: node, exact: true });
-  await reviewDetail.getByText('供应商承诺 ' + promised, { exact: true }).waitFor();
+  const reviewDetail = reviewer.getByRole('dialog', { name: new RegExp(node, 'u') });
+  await reviewDetail.getByText('供应商承诺日 ' + promised, { exact: false }).waitFor();
   await reviewDetail.getByText(evidence, { exact: true }).waitFor();
   await reviewDetail.getByRole('button', { name: '关联正式订单', exact: true }).click();
   const link = reviewer.getByRole('dialog', { name: '关联正式订单', exact: true });
@@ -506,7 +588,7 @@ async function fillDate(input: Locator, date: string) {
 }
 
 export async function checkOrderLineNote({ page, manager, origin, out }: Scenario & { readonly page: Page; readonly manager: Page }) {
-  const progress = new URL(`/progress?store=${store}&drill=stage%3Ano_batch`, origin);
+  const progress = new URL(`/progress/current?store=${store}&drill=stage%3Ano_batch`, origin);
   await page.goto(progress.href);
   const current = page.getByRole('region', { name: '当前进度表', exact: true });
   const row = current.getByRole('row').filter({ has: page.getByRole('link', { name: finishedName, exact: true }) });
@@ -540,7 +622,7 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
     orderLineId: lineId, kind: 'note', text: newNote,
   });
   await note.getByText(newNote, { exact: true }).waitFor();
-  await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
+  await page.getByRole('link', { name: '返回当前进度', exact: true }).click();
   await page.waitForURL(returnToProgress.href);
   await row.getByText(newNote, { exact: true }).waitFor();
   await product.and(page.locator('a:focus')).waitFor();
@@ -566,7 +648,7 @@ export async function checkOrderLineNote({ page, manager, origin, out }: Scenari
   await page.getByText('订单行 ' + materialId, { exact: false }).waitFor();
   await textbox.waitFor();
   assert.equal(await textbox.inputValue(), '', '切换到物料后不应带入成品订单行的草稿');
-  await page.getByRole('link', { name: '返回管理店铺', exact: true }).click();
+  await page.getByRole('link', { name: '返回当前进度', exact: true }).click();
   await page.waitForURL(returnToProgress.href);
   await page.setViewportSize({ width: 1440, height: 900 });
 

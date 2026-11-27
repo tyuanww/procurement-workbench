@@ -99,13 +99,17 @@ export function fetchPlanDaily(date: string, signal: AbortSignal): Promise<PlanD
   return fetchOwned({ path: `/api/v1/plan/daily?date=${encodeURIComponent(date)}`, schema: DailyPlanSchema, signal });
 }
 
-export function planSchedulePath(input: { readonly from: string; readonly to: string; readonly store?: ProcurementStore }): string {
+type PlanScheduleAddress = { readonly from: string; readonly to: string; readonly store?: ProcurementStore; readonly includeClosed?: boolean; readonly includeDelivery?: boolean };
+
+export function planSchedulePath(input: PlanScheduleAddress): string {
   const params = new URLSearchParams({ from: input.from, to: input.to });
   if (input.store !== undefined && input.store !== 'all') params.set('store', input.store);
+  if (input.includeClosed === true) params.set('includeClosed', 'true');
+  if (input.includeDelivery === true) params.set('includeDelivery', 'true');
   return `/api/v1/plan/schedule?${params.toString()}`;
 }
 
-export function fetchPlanSchedule(input: { readonly from: string; readonly to: string; readonly store?: ProcurementStore; readonly signal: AbortSignal }): Promise<PlanSchedule> {
+export function fetchPlanSchedule(input: PlanScheduleAddress & { readonly signal: AbortSignal }): Promise<PlanSchedule> {
   const path = planSchedulePath(input);
   return fetchOwned({ path, schema: ScheduleViewSchema, signal: input.signal });
 }

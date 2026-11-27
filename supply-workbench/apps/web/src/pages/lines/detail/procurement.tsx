@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
@@ -10,8 +10,6 @@ import { fetchLatestNotes } from '../../../shared/api/catalog.js';
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
 export function ProcurementSection({ detail }: { readonly detail: OrderLineDetail }) {
-  const [params] = useSearchParams();
-  const relatedQuery = procurementDetailQuery(params);
   const procurement = detail.procurement;
   const progress = detail.line.storeProgress;
   if (procurement === undefined && progress === undefined) return null;
@@ -21,7 +19,7 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
       {isComponent ? <ComponentFields line={detail.line} /> : null}
       <ProcurementOa progress={progress} />
       <Typography.Title level={2}>{isComponent ? '关联成品' : '关联采购事项'}</Typography.Title>
-      <RelatedProcurementLines lines={procurement?.relatedLines ?? []} query={relatedQuery} />
+      <RelatedProcurementLines lines={procurement?.relatedLines ?? []} />
       {procurement === undefined || procurement.sources.length === 0 ? null : <ProcurementSources sources={procurement.sources} />}
 
     </section>
@@ -30,7 +28,7 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
 
 function procurementDetailQuery(params: URLSearchParams): string {
   const related = new URLSearchParams();
-  for (const key of ['store', 'backToProgress']) {
+  for (const key of ['store', 'backToProgress', 'backToSchedule']) {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
@@ -45,11 +43,15 @@ function ProcurementOa({ progress }: { readonly progress: OrderLineDetail['line'
 
 type RelatedLine = NonNullable<OrderLineDetail['procurement']>['relatedLines'][number];
 
-function RelatedProcurementLines({ lines, query }: { readonly lines: readonly RelatedLine[]; readonly query: string }) {
+function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLine[] }) {
+  const [params] = useSearchParams();
+  const { state } = useLocation();
+  const query = procurementDetailQuery(params);
+  const returnState = params.has('backToSchedule') ? state : undefined;
   return (
     <ul>{lines.map((line) => (
       <li key={line.id}>
-        <Link to={`/lines/${encodeURIComponent(line.id)}${query}`}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
+        <Link to={`/lines/${encodeURIComponent(line.id)}${query}`} state={returnState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
       </li>
     ))}</ul>
   );

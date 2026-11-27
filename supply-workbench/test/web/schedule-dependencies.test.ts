@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
 import { ProgressSchedule } from '../../apps/web/src/pages/progress/progress-schedule.js';
+import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { emptyReads } from '../../apps/web/src/shared/api/reads.js';
 import { act, calls, click, element, fulfill, installFetch, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
 
@@ -30,8 +31,9 @@ it.each(['desktop', 'phone'])('总排期 %s 展示依赖冲突并打开正确的
     removeEventListener: () => undefined,
   }));
   installFetch();
-  mounted = mount(memoryRouter(element(ProgressSchedule, { store: 'all', filters: null }), '/progress?view=schedule&from=2026-11-09'));
-  await waitFor(() => calls.some((call) => call.url === '/api/v1/plan/schedule?from=2026-11-09&to=2026-11-15'));
+  const schedule = element(ProgressSchedule, { store: 'all', filters: null });
+  mounted = mount(memoryRouter(element(ActorRoles, { roles: ['buyer'], children: schedule }), '/progress?view=schedule&from=2026-11-09'));
+  await waitFor(() => calls.some((call) => call.url === '/api/v1/plan/schedule?from=2026-11-09&to=2026-11-15&includeClosed=true&includeDelivery=true'));
   await act(async () => { fulfill({ urlPart: '/api/v1/plan/schedule?', status: 200, body: {
     from: '2026-11-09', to: '2026-11-15', total: 1, items: [production],
     dependencyConflicts: { [id]: [predecessor] },

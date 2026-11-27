@@ -41,8 +41,8 @@ export function dailyWhere(date: LocalDate): SQL | undefined {
   return and(ne(workItems.subjectType, 'product_development'), inArray(workItems.status, [...openStatusList()]), lte(workItems.plannedEnd, date));
 }
 
-export function scheduleWhere(input: { readonly from: LocalDate; readonly to: LocalDate }): SQL | undefined {
-  return and(ne(workItems.subjectType, 'product_development'), inArray(workItems.status, [...openStatusList()]), lte(workItems.plannedStart, input.to), gte(workItems.plannedEnd, input.from));
+export function scheduleWhere(input: { readonly from: LocalDate; readonly to: LocalDate; readonly includeClosed?: boolean }): SQL | undefined {
+  return and(projectWhere(input), input.includeClosed === true ? undefined : inArray(workItems.status, [...openStatusList()]));
 }
 
 export function projectWhere(input: { readonly from: LocalDate; readonly to: LocalDate }): SQL | undefined {

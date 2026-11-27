@@ -12,19 +12,21 @@ const doneText = '状态已从 进行中 改为 已完成。';
 const cancelText = '状态已从 进行中 改为 已取消。';
 const conflict = { error: { code: 'STATE_CONFLICT', message: '当前状态不允许这个操作', details: { state: 'version 3 已被并发修改' } } };
 
-it('A 的成功回调在 B 的详情出现后不留下 A 的成功文案或状态', async () => {
+it('切到 B 后，加载期间隐藏 A 的详情、状态操作和提交结果', async () => {
   const drawer = await openTask({ id: 'item-a', title: '甲任务', status: 'in_progress' });
   await drawer.click('标记完成');
   expect(drawer.text()).toContain('确认把状态从 进行中 改为 已完成');
   await drawer.click('确认更改');
   expect(postBodies()).toEqual([{ url: '/api/v1/plan/work-items/item-a/status', method: 'POST', body: { status: 'done' } }]);
   await drawer.set({ workItemId: 'item-b', isOpen: true });
-  expect(drawer.text()).toContain('甲任务');
+  expect(drawer.text()).not.toContain('甲任务');
   expect(drawer.text()).not.toContain('乙任务');
+  expect(drawer.isDisabled('标记完成')).toBeNull();
+  expect(drawer.isDisabled('取消任务')).toBeNull();
   await resolvePost({ act: drawer.react.act, urlPart: '/status', body: { workItemId: 'item-a', version: 4 } });
-  expect(drawer.text()).toContain('甲任务');
-  expect(drawer.text()).toContain(doneText);
-  expect(drawer.selected()).toBe('进行中');
+  expect(drawer.text()).not.toContain('甲任务');
+  expect(drawer.text()).not.toContain(doneText);
+  expect(drawer.selected()).toBeNull();
   await resolveGet({ act: drawer.react.act, urlPart: '/work-items/item-b', body: detail({ id: 'item-b', title: '乙任务', status: 'planned' }) });
   expect(drawer.text()).toContain('乙任务');
   expect(drawer.text()).not.toContain('甲任务');
@@ -35,19 +37,54 @@ it('A 的成功回调在 B 的详情出现后不留下 A 的成功文案或状�
   await drawer.unmount();
 });
 
-it('先换上 B 再收到 A 的成功，B 不显示 A 的成功文案', async () => {
-  const drawer = await openTask({ id: 'item-a', title: '甲任务', status: 'in_progress' });
+it('A 的提交尚未完成时切到加载中的 B 再切回 A，仍只提交一次', async () => {
+  const task = { id: 'switch-a', title: '甲任务', status: 'in_progress' };
+  const drawer = await openTask(task);
+  await submit({ drawer, label: '标记完成', target: '已完成' });
+  await drawer.set({ workItemId: 'switch-b', isOpen: true });
+  await drawer.set({ workItemId: task.id, isOpen: true });
+  await resolveGet({ act: drawer.react.act, urlPart: '/work-items/switch-a', body: detail(task) });
+  await resolveGet({ act: drawer.react.act, urlPart: '/work-items/switch-b', body: detail({ id: 'switch-b', title: '乙任务', status: 'planned' }) });
+  expect(drawer.text()).toContain('甲任务');
+  expect(drawer.text()).not.toContain('乙任务');
+  expect(drawer.selected()).toBe('进行中');
+  const locked = [drawer.isDisabled('标记完成'), drawer.isDisabled('取消任务')];
+  await drawer.click('取消任务');
+  if (drawer.text().includes('确认把状态')) await drawer.click('确认更改');
+  expect(postBodies()).toEqual([{ url: '/api/v1/plan/work-items/switch-a/status', method: 'POST', body: { status: 'done' } }]);
+  expect(locked).toEqual([true, true]);
+
+  await resolvePost({ act: drawer.react.act, urlPart: '/work-items/switch-a/status', body: { workItemId: task.id, version: 4 } });
+  expect(drawer.text()).toContain(doneText);
+  expect(drawer.isDisabled('取消任务')).toBe(true);
+  await resolveGet({ act: drawer.react.act, urlPart: '/work-items/switch-a', body: detail({ ...task, status: 'done' }) });
+  expect(drawer.tag()).toBe('已完成');
+});
+
+it('A 保存成功后刷新正在显示的 B 依赖提示，B 只显示自己的状态', async () => {
+  const drawer = await openTask({ id: 'item-a', title: '甲任务', status: 'blocked' });
   await drawer.click('取消任务');
   await drawer.click('确认更改');
-  await drawer.set({ workItemId: 'item-b', isOpen: true });
-  await resolveGet({ act: drawer.react.act, urlPart: '/work-items/item-b', body: detail({ id: 'item-b', title: '乙任务', status: 'blocked' }) });
+  const task = { id: 'item-b', title: '乙任务', status: 'in_progress' };
+  const predecessor = { id: 'item-a', title: '甲任务', plannedEnd: '2026-11-16', status: 'blocked' };
+  const dependency = { id: 'dep-a-b', fromItemId: predecessor.id, toItemId: task.id, kind: 'finish_to_start', createdAt: '2026-11-17T00:00:00Z', predecessor };
+  const showTask = async (status: string) => resolveGet({ act: drawer.react.act, urlPart: '/work-items/item-b',
+    body: detail({ ...task, dependenciesIn: [{ ...dependency, predecessor: { ...predecessor, status } }] }) });
+  await drawer.set({ workItemId: task.id, isOpen: true });
+  await showTask('blocked');
+  expect(drawer.text()).toContain('甲任务（计划完成 2026-11-16）仍阻塞');
+  expect(drawer.isDisabled('取消任务')).toBe(false);
   await resolvePost({ act: drawer.react.act, urlPart: '/status', body: { workItemId: 'item-a', version: 4 } });
   expect(drawer.text()).toContain('乙任务');
-  expect(drawer.text()).not.toContain(cancelText);
+  expect(drawer.text()).not.toContain('状态已从 阻塞 改为 已取消。');
   expect(drawer.text()).not.toContain('当前状态不允许这个操作');
-  expect(drawer.selected()).toBe('阻塞');
+  expect(drawer.selected()).toBe('进行中');
+  await showTask('cancelled');
+  expect(drawer.text()).toContain('乙任务');
+  expect(drawer.text()).not.toContain('依赖冲突');
+  expect(drawer.text()).not.toContain('状态已从 阻塞 改为 已取消。');
   expect(postBodies()).toEqual([{ url: '/api/v1/plan/work-items/item-a/status', method: 'POST', body: { status: 'cancelled' } }]);
-  expect(drawer.tag()).toBe('阻塞');
+  expect(drawer.tag()).toBe('进行中');
   await drawer.unmount();
 });
 

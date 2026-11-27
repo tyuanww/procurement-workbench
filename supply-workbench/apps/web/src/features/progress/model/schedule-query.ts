@@ -1,7 +1,7 @@
 import { parseLocalDate, type LocalDate } from '@sw/domain';
 import { isWorkItemStatus, type WorkItemStatus } from '../../today/index.js';
 
-export type ScheduleScale = 'week' | 'month';
+export type ScheduleScale = 'day' | 'week' | 'month';
 
 export type ScheduleFilters = {
   readonly ownerUserId: string | null;
@@ -24,8 +24,9 @@ export function emptyScheduleFilters(): ScheduleFilters {
 
 export function readScheduleQuery(search: string, today: LocalDate): ScheduleQuery {
   const params = new URLSearchParams(search);
+  const scale = params.get('scale');
   return {
-    scale: params.get('scale') === 'month' ? 'month' : 'week',
+    scale: scale === 'day' || scale === 'month' ? scale : 'week',
     anchor: dateOf(params.get('from')) ?? today,
     filters: {
       ownerUserId: params.get('ownerUserId'),

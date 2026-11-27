@@ -98,7 +98,7 @@ async function procurementAcceptance(): Promise<void> {
   await manager.getByRole('region', { name: '新品开发进度', exact: true }).waitFor();
   const directorMenu = manager.locator('aside');
   const home = await directorMenu.getByRole('link', { name: '首页', exact: true }).boundingBox();
-  const today = directorMenu.getByRole('link', { name: '今日事项', exact: true });
+  const today = sidebarGroup(directorMenu, '今日事项');
   const todayBox = await today.boundingBox();
   assert.ok(home && todayBox && home.y < todayBox.y, '首页应在今日事项上方');
   await checkEmptyProductArchive(buyer, origin, true);
@@ -167,15 +167,16 @@ async function procurementAcceptance(): Promise<void> {
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
   await buyer.goto(new URL('/progress?view=development&store=dafuyan', origin).href);
   const progress = buyer.locator('aside');
-  const development = await sidebarLink(progress, '管理店铺', '新品开发进度');
+  const development = await sidebarLink(progress, '计划与新品', '新品开发');
   assert.equal(await development.getAttribute('aria-current'), 'page');
   await progress.getByRole('link', { name: '当前进度', exact: true }).press('Enter');
   await buyer.waitForURL(new URL('/progress/current?store=dafuyan', origin).href);
   const main = buyer.getByRole('main');
-  assert.equal(await main.getByRole('tab').count(), 0);
   const heading = main.getByRole('heading', { name: '当前进度', level: 1, exact: true });
+  await heading.waitFor({ state: 'attached' });
+  assert.equal(await main.getByRole('tab').count(), 0, '当前进度加载完成后应使用独立页面');
   assert.equal(await heading.evaluate((node) => getComputedStyle(node).clipPath), 'inset(50%)');
-  assert.equal(await (await sidebarLink(progress, '管理店铺', '总排期')).getAttribute('href'), '/progress/schedule?store=dafuyan');
+  assert.equal(await (await sidebarLink(progress, '计划与新品', '订单与任务排期')).getAttribute('href'), '/progress/schedule?store=dafuyan');
 
   const stuckUrl = new URL('/dashboard?preset=custom&from=2025-01-01&to=2025-02-28&lane=finished', origin);
   await manager.goto(stuckUrl.href);
@@ -210,8 +211,14 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await supplierDetails.waitFor({ state: 'hidden' });
   await (await sidebarLink(sidebar, '管理看板', '采购负荷')).click();
   await manager.getByRole('heading', { name: '采购负荷', level: 1, exact: true }).waitFor();
-  await (await sidebarLink(sidebar, '管理看板', '项目进度')).click();
-  await manager.getByRole('heading', { name: '项目进度', level: 1, exact: true }).waitFor();
+  const risk = await sidebarLink(sidebar, '管理看板', '排期任务进度');
+  await risk.click();
+  await manager.getByRole('heading', { name: '排期任务进度', level: 1, exact: true }).waitFor();
+  assert.equal(await risk.getAttribute('aria-current'), 'page');
+  assertDashboardPeriod(manager, stuckUrl);
+  await (await sidebarLink(sidebar, '管理看板', '采购负荷')).click();
+  await manager.getByRole('heading', { name: '采购负荷', level: 1, exact: true }).waitFor();
+  assertDashboardPeriod(manager, stuckUrl);
   await manager.setViewportSize({ width: 320, height: 780 });
   await manager.goto(stuckUrl.href);
   await stuckTrigger.waitFor();
@@ -224,6 +231,11 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await stuck.waitFor({ state: 'hidden' });
   await manager.setViewportSize({ width: 1440, height: 900 });
   return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], focusedStuckBatch: true, phoneWidth: 320 };
+}
+
+function assertDashboardPeriod(page: Page, expected: URL): void {
+  const current = new URL(page.url());
+  for (const key of ['preset', 'from', 'to', 'lane']) assert.equal(current.searchParams.get(key), expected.searchParams.get(key));
 }
 
 function unexpectedResponses(network: readonly ResponseRecord[]): ResponseRecord[] {

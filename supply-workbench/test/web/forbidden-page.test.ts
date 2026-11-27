@@ -52,8 +52,11 @@ it.each([
   ['/home', ['首页']],
   ['/today?view=arrivals', ['今日事项', '在途待收']],
   ['/today?group=owner', ['今日事项', '今日排期']],
-  ['/progress/current?store=dafuyan', ['管理店铺', '当前进度']],
-  ['/progress?view=schedule', ['管理店铺', '总排期']],
+  ['/progress/current?store=dafuyan', ['计划与新品', '当前进度']],
+  ['/progress/schedule?lens=risk&preset=custom&from=2026-11-16&to=2026-11-22', ['管理看板', '排期任务进度']],
+  ['/progress?view=schedule', ['计划与新品', '订单与任务排期']],
+  ['/progress/development?planScope=unknown', ['计划与新品', '新品开发']],
+  ['/progress?view=development&lens=risk', ['计划与新品', '新品开发']],
   ['/lines', ['跟进中心']],
   ['/lines/id', ['跟进中心', '订单行详情']],
   ['/products', ['产品档案']],
@@ -75,7 +78,8 @@ it.each([
   expect(nav).toContain(`aria-current="page">${labels.at(-1)}<`);
 });
 
-it.each(['/master?tab=owner-map', '/settings', '/reports/id', '/lines/id/unknown'])('无权或不存在的页面 %s 不显示业务路径', (path) => {
+it.each(['/master?tab=owner-map', '/settings', '/reports/id', '/lines/id/unknown', '/progress/schedule?lens=risk', '/progress?view=schedule&lens=risk', '/progress?lens=risk',
+  '/progress?view=unknown&lens=risk', '/progress?view=&lens=risk', '/progress/schedule//?lens=risk', '/progress///?view=schedule&lens=risk'])('无权或不存在的页面 %s 不显示业务路径', (path) => {
   expect(render(path, ['buyer'])).not.toContain('aria-label="当前位置"');
 });
 

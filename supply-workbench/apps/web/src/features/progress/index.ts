@@ -9,8 +9,13 @@ export {
   type ScheduleFilters, type ScheduleQuery, type ScheduleScale,
 } from './model/schedule-query.js';
 export {
-  applyScheduleFilters, scheduleBarOf, scheduleDays, scheduleKpi, scheduleOptions, scheduleWindow,
+  applyScheduleFilters, scheduleBarOf, scheduleDays, scheduleIntervalGeometry, scheduleKpi, scheduleOptions, scheduleWindow,
   scheduleWindowLabel, shiftScheduleWindow, statusOptions, timelineOf, timelineRow, todayPercent,
   type ScheduleDay, type ScheduleKpi, type ScheduleOption, type ScheduleOptions,
   type ScheduleWindow, type Timeline, type TimelineBar, type TimelineGroup, type TimelineRow,
 } from './model/schedule.js';
+export {
+  isScheduleRiskAddress, schedulePath, scheduleReturnPath, scheduleRiskEntry, scheduleRiskLabel, scheduleRiskPath,
+  scheduleRiskSource, scheduleRiskTaskPath, schedulePredecessorPath, scheduleSource, scheduleTaskParentPath, scheduleWorkspaceBack,
+} from './model/schedule-risk-query.js';
+export { currentProgressPath, planningLabels, planningScope, planningSectionOf, progressViewOf, type PlanningEntry, type PlanningScope, type ProgressView } from './model/planning-section.js';

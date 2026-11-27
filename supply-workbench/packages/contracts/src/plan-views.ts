@@ -4,6 +4,7 @@ import type {
   CreateWorkItemInput,
   DailyPlanQuery,
   DailyPlanView,
+  DeliveryScheduleBatch,
   GenerateWorkItemsInput,
   SchedulePlanQuery,
   ScheduleView,
@@ -27,6 +28,8 @@ import {
   WORK_ITEM_SUBJECT_TYPES,
 } from '../../domain/src/entities/work-items.js';
 import { z } from 'zod';
+import { BatchStatusSchema } from './enums.js';
+import { BatchFulfillmentSchema } from './fulfillment.js';
 import { ProcurementStoreSchema } from './procurement-store.js';
 import { nullable, optional, strictObject } from './shape.js';
 import { EntityIdSchema, LocalDateSchema, listResponseSchema } from './values.js';
@@ -135,12 +138,24 @@ export const DailyPlanSchema: z.ZodType<DailyPlanView> = strictObject({
   byFactory: z.array(PlanGroupViewSchema),
 });
 
+const deliveryParty = strictObject({ id: z.string(), name: nullable(z.string()) });
+const deliveryBatch = strictObject({
+  id: z.string(), seq: z.number(), orderLineId: z.string(),
+  orderName: nullable(z.string()), poRaw: nullable(z.string()), itemCode: nullable(z.string()), oaRef: nullable(z.string()),
+  buyer: nullable(deliveryParty), supplier: nullable(deliveryParty), factory: nullable(deliveryParty),
+  confirmed: nullable(LocalDateSchema), firstConfirmed: nullable(LocalDateSchema), supplierPromised: nullable(LocalDateSchema),
+  required: nullable(LocalDateSchema), receiptDates: z.array(LocalDateSchema), plannedQty: z.number(), status: BatchStatusSchema,
+  fulfillment: BatchFulfillmentSchema.pick({ unit: true, receivedQty: true, unshippedQty: true, reviewCount: true }),
+}) satisfies z.ZodType<DeliveryScheduleBatch>;
+
 export const ScheduleViewSchema: z.ZodType<ScheduleView> = strictObject({
   from: LocalDateSchema,
   to: LocalDateSchema,
   total: z.number(),
   items: z.array(WorkItemViewSchema),
   dependencyConflicts: z.record(z.string(), z.array(predecessor)),
+  deliveryBatches: optional(z.array(deliveryBatch)),
+  deliveryTasks: optional(z.array(strictObject({ task: WorkItemViewSchema, dependencies: z.array(predecessor), conflicts: z.array(predecessor) }))),
 });
 
 export const WorkItemListResponseSchema = listResponseSchema(WorkItemViewSchema);
@@ -213,7 +228,11 @@ const schedulePlanQuery = strictObject({
   factoryPartyId: optional(z.string()),
 });
 
-export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = schedulePlanQuery;
+export const SchedulePlanQuerySchema: z.ZodType<SchedulePlanQuery> = schedulePlanQuery.extend({
+  includeClosed: optional(BooleanQuerySchema), includeDelivery: optional(BooleanQuerySchema),
+});
+
+export type { DeliveryScheduleBatch, DeliveryScheduleTask } from '../../application/src/plan/views.js';
 export const ProjectProgressQuerySchema: z.ZodType<ProjectProgressQuery> = schedulePlanQuery.extend({ includeItems: optional(BooleanQuerySchema) });
 
 export const WorkItemListQuerySchema: z.ZodType<WorkItemListQuery> = strictObject({

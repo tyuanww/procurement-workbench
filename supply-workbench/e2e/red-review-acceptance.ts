@@ -125,14 +125,52 @@ async function checkLinePreviewFocus(page: Page, origin: URL): Promise<void> {
 
 async function checkScheduleFilters(page: Page, origin: URL): Promise<void> {
   await page.goto(new URL('/progress/schedule', origin).href);
-  const filters = page.getByRole('button', { name: '更多筛选', exact: true });
-  const owner = page.getByRole('combobox', { name: '负责人', exact: true });
-  await filters.waitFor();
-  assert.equal(await owner.isVisible(), false);
+  const filters = page.getByRole('group', { name: '排期筛选', exact: true });
+  await filters.getByRole('combobox', { name: '店铺', exact: true }).waitFor();
+  assert.equal(await filters.getByRole('combobox').count(), 1);
+  const more = filters.getByRole('button', { name: /^更多筛选/u });
+  const extra = page.getByRole('group', { name: '更多筛选条件', exact: true });
+  assert.equal(await more.getAttribute('aria-expanded'), 'false');
+  await more.press('Enter');
+  await extra.getByRole('combobox', { name: '负责人', exact: true }).waitFor();
+  await extra.getByRole('combobox', { name: '供应商', exact: true }).waitFor();
+  await extra.getByRole('combobox', { name: '工厂', exact: true }).waitFor();
+  await extra.getByRole('combobox', { name: '状态', exact: true }).click();
+  await page.getByRole('option', { name: '已完成', exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get('status') === 'done');
+  assert.match(await more.innerText(), /· 1/u);
+  await more.press('Enter');
+  await extra.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: '清除状态筛选 已完成', exact: true }).press('Enter');
+  await page.waitForURL((url) => !url.searchParams.has('status'));
+  assert.equal(await more.evaluate((button) => button === document.activeElement), true);
   const task = page.getByRole('button', { name: /核实逾期包材/ }).first();
   await task.waitFor();
   const position = await task.boundingBox();
   assert.ok(position !== null && position.y >= 0 && position.y < 640, '320px 宽度的首屏应看到逾期任务');
-  await filters.click();
-  await owner.waitFor();
+  const searchTrigger = page.getByRole('button', { name: '搜索排期', exact: true });
+  const searchInput = page.getByRole('textbox', { name: '搜索排期', exact: true });
+  assert.equal(await searchInput.isVisible(), false);
+  await searchTrigger.click();
+  await searchInput.waitFor();
+  assert.equal(await searchInput.evaluate((input) => input === document.activeElement), true);
+  const promptFits = await searchInput.evaluate((input: HTMLInputElement) => {
+    const style = getComputedStyle(input);
+    const context = document.createElement('canvas').getContext('2d');
+    if (context === null) return false;
+    context.font = style.font;
+    const inner = input.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+    return context.measureText(input.placeholder).width <= inner;
+  });
+  assert.equal(promptFits, true, '320px 宽度可完整读取搜索提示');
+  await searchInput.press('Escape');
+  await searchInput.waitFor({ state: 'hidden' });
+  assert.equal(await searchTrigger.evaluate((button) => button === document.activeElement), true);
+  await page.locator('.planning-period').getByText('日', { exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get('scale') === 'day');
+  const date = page.getByLabel('选择排期日期', { exact: true });
+  await date.waitFor();
+  const selected = await date.inputValue();
+  await page.getByRole('button', { name: '下一日', exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get('from') !== selected);
 }

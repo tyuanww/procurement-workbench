@@ -21,7 +21,7 @@ export function productDevelopmentQueries(db: AppDatabase): DevelopmentQueries {
     projects: (store) => projectsOf(db, store),
     nodes: (store) => nodesOf(db, store),
     replies: (nodeIds) => repliesOf(db, nodeIds),
-    batches: (lineIds) => developmentBatches(db, lineIds),
+    batches: (lineIds, includeReceiptDates) => developmentBatches(db, { lineIds, includeReceiptDates }),
     orders: (input) => developmentOrderOptions(db, input),
     materials: (input) => developmentMaterialOptions(db, input),
     users: () => developmentUsers(db),

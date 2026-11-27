@@ -1,4 +1,5 @@
 import type { LocalDate } from '../../../domain/src/values/local-date.js';
+import { annotateOverdue } from './policies/overdue.js';
 import type { SchedulePlanQuery, WorkItemView } from './views.js';
 
 export type ProjectProgressQuery = SchedulePlanQuery & { readonly includeItems?: boolean };
@@ -37,7 +38,7 @@ export function projectProgress(input: {
   readonly items: readonly WorkItemView[];
   readonly includeItems?: boolean;
 }): ProjectProgressView {
-  const tasks = input.items.map((item) => ({ item, overdue: isOverdue(item, input.today) }));
+  const tasks = annotateOverdue(input.items, input.today).map((item) => ({ item, overdue: item.overdueDays !== null }));
   const scope = { tasks, includeItems: input.includeItems === true };
   return {
     from: input.from,
@@ -79,10 +80,6 @@ function groups(input: {
     .map(([key, { label, tasks }]) => ({ key, label, ...overall(tasks),
       ...(input.includeItems ? { itemIds: tasks.map(({ item }) => item.id) } : {}) }))
     .sort((left, right) => right.overdue - left.overdue || right.total - left.total || left.key.localeCompare(right.key));
-}
-
-function isOverdue(item: WorkItemView, today: LocalDate): boolean {
-  return item.status !== 'done' && item.status !== 'cancelled' && item.plannedEnd < today;
 }
 
 function rate(done: number, total: number): number | null {

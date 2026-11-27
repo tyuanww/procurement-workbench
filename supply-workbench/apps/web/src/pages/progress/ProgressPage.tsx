@@ -1,62 +1,47 @@
-import { Select } from 'antd';
 import type { ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
-import type { ProcurementStore } from '@sw/contracts';
+import { Navigate, useLocation, useSearchParams } from 'react-router';
+import { progressViewOf, schedulePath, scheduleRiskPath, type ProgressView } from '../../features/progress/index.js';
+import { ForbiddenPage } from '../../features/shell/index.js';
+import { useCan } from '../../shared/actor.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
-import { ProductDevelopmentPanel } from './product-development-panel.js';
 import { ProgressCurrent } from './progress-current.js';
 import { ProgressSchedule } from './progress-schedule.js';
-import { progressFilterStyle } from './store-order.js';
-import { progressStoreOf, storeLabels, withProgressScope, withProgressStore } from './store-query.js';
+import { ScheduleRisk } from './schedule-risk.js';
+import { ProgressOrderScopePicker, ProgressStorePicker } from './progress-scope-pickers.js';
+import { progressStoreOf, withProgressScope, withProgressStore } from './store-query.js';
 
 export { ArrivalTag, noteBatches, pagesFor } from './progress-current.js';
 
-export type ProgressView = 'current' | 'schedule' | 'development';
+export { progressViewOf, type ProgressView } from '../../features/progress/index.js';
 
-const STORE_OPTIONS = Object.entries(storeLabels).map(([value, label]) => ({ value, label }));
-
-const viewLabels: Record<ProgressView, string> = { current: '当前进度', schedule: '总排期', development: '新品开发进度' };
-
+const viewLabels: Record<ProgressView, string> = { current: '当前进度', schedule: '订单与任务排期', development: '新品开发' };
 export function ProgressPage({ view: selectedView }: { readonly view?: ProgressView }): ReactNode {
   const [params, setParams] = useSearchParams();
+  const { pathname } = useLocation();
   const view = selectedView ?? progressViewOf(params.get('view'));
+  const canSeeRisk = useCan('dashboard.read');
+  if (view === 'schedule' && params.get('lens') === 'risk') {
+    if (!canSeeRisk) return <ForbiddenPage />;
+    return pathname === schedulePath ? <ScheduleRisk /> : <Navigate to={scheduleRiskPath(params)} replace />;
+  }
+  return <WorkbenchPage title={view === 'current' ? viewLabels[view] : '计划与新品'} browserTitle={viewLabels[view]}>
+    <ProgressContent view={view} params={params} setParams={setParams} />
+  </WorkbenchPage>;
+}
+
+function ProgressContent({ view, params, setParams }: {
+  readonly view: ProgressView;
+  readonly params: URLSearchParams;
+  readonly setParams: ReturnType<typeof useSearchParams>[1];
+}): ReactNode {
   const store = progressStoreOf(params.get('store'));
+  if (view !== 'current') return <ProgressSchedule store={store}
+    entry={view === 'schedule' ? 'orders' : 'development'} />;
+  const picker = <ProgressStorePicker value={store} onChange={(value) => setParams(withProgressStore(params.toString(), value))} />;
   const isMine = params.get('scope') === 'mine';
-  const scope = (
-    <>
-      <StorePicker view={view} store={store} onChange={(value) => setParams(withProgressStore(params.toString(), value))} />
-      {view === 'current' ? <OrderScopePicker isMine={isMine} onChange={(value) => setParams(withProgressScope(params.toString(), value === 'mine'))} /> : null}
-    </>
-  );
-  return (
-    <WorkbenchPage title={viewLabels[view]}>
-      {view === 'current' ? <ProgressCurrent store={store} isMine={isMine} filters={scope} /> : null}
-      {view === 'schedule' ? <ProgressSchedule store={store} filters={scope} /> : null}
-      {view === 'development' ? <ProductDevelopmentPanel store={store === 'unassigned' ? 'all' : store} filters={scope} /> : null}
-    </WorkbenchPage>
-  );
-}
-
-function StorePicker({ view, store, onChange }: { readonly view: ProgressView; readonly store: ProcurementStore; readonly onChange: (value: ProcurementStore) => void }) {
-  return <Select
-    aria-label="店铺"
-    value={view === 'development' && store === 'unassigned' ? 'all' : store}
-    options={view === 'development' ? STORE_OPTIONS.filter(({ value }) => value !== 'unassigned') : STORE_OPTIONS}
-    style={view === 'current' ? progressFilterStyle : { minWidth: 144 }}
-    onChange={(value) => onChange(progressStoreOf(value))}
-  />;
-}
-
-function OrderScopePicker({ isMine, onChange }: { readonly isMine: boolean; readonly onChange: (value: string) => void }) {
-  return <Select
-    aria-label="事项范围"
-    value={isMine ? 'mine' : 'all'}
-    options={[{ value: 'all', label: '全部事项' }, { value: 'mine', label: '我的事项' }]}
-    style={progressFilterStyle}
-    onChange={onChange}
-  />;
-}
-
-export function progressViewOf(value: string | null): ProgressView {
-  return value === 'schedule' || value === 'development' ? value : 'current';
+  return <ProgressCurrent store={store} isMine={isMine} filters={<>
+    {picker}
+    <ProgressOrderScopePicker value={isMine ? 'mine' : 'all'}
+      onChange={(value) => setParams(withProgressScope(params.toString(), value === 'mine'))} />
+  </>} />;
 }

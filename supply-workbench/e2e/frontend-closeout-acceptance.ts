@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { sidebarEntries } from './sidebar.ts';
+import { sidebarEntries, sidebarGroup } from './sidebar.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
@@ -69,8 +69,8 @@ async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
   const expanded = page.locator('aside');
   const entryCount = await sidebarEntries(expanded).count();
   const attention = page.getByRole('tooltip').filter({ hasText: '全范围需关注 1000 项' });
-  const todayLink = expanded.getByRole('link', { name: '今日事项', exact: true });
-  await todayLink.getByText('999+', { exact: true }).hover();
+  const todayGroup = sidebarGroup(expanded, '今日事项');
+  await todayGroup.getByText('999+', { exact: true }).hover();
   await attention.waitFor();
   await page.keyboard.press('Escape');
   await attention.waitFor({ state: 'hidden' });
@@ -98,14 +98,16 @@ async function checkCollapsedIcons(page: Page, out: string): Promise<number> {
 
 async function checkCollapsedTodayBadge(page: Page, sidebar: Locator, attention: Locator): Promise<void> {
   const tooltip = page.getByRole('tooltip');
-  const today = sidebar.getByRole('menuitem', { name: '今日事项', exact: true });
+  const today = sidebarGroup(sidebar, '今日事项');
   await today.hover();
   await attention.waitFor();
   assert.equal(await tooltip.count(), 1);
   await page.keyboard.press('Escape');
   await attention.waitFor({ state: 'hidden' });
   const original = page.url();
-  const [newTab] = await Promise.all([page.context().waitForEvent('page'), today.click({ modifiers: ['ControlOrMeta'] })]);
+  await today.hover();
+  const action = page.getByRole('link', { name: '行动板', exact: true });
+  const [newTab] = await Promise.all([page.context().waitForEvent('page'), action.click({ modifiers: ['ControlOrMeta'] })]);
   await newTab.waitForURL(new URL('/today', original).href);
   assert.equal(page.url(), original);
   await newTab.close();

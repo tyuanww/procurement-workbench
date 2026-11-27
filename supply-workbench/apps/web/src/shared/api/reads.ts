@@ -52,7 +52,7 @@ type LineRead = { readonly name: 'line'; readonly id: string; readonly store?: P
 
 type TodayRead = { readonly scope: TodayScope; readonly includePending?: boolean; readonly signal?: AbortSignal };
 
-type ScheduleRead = { readonly name: 'planSchedule'; readonly from: string; readonly to: string; readonly store?: ProcurementStore; readonly signal?: AbortSignal };
+type ScheduleRead = Parameters<typeof planSchedulePath>[0] & { readonly name: 'planSchedule'; readonly signal?: AbortSignal };
 
 type ReadBody =
   | MeResponse

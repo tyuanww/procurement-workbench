@@ -290,6 +290,7 @@ export { ProcurementStoreSchema, type ProcurementStore, type StoreProgressLine, 
 export * from './arrivals.js';
 export { BuildProcurementScheduleRequestSchema, BuildProcurementScheduleResultSchema, ProcurementCycleSchema } from './procurement-schedule.js';
 export * from './product-development.js';
+export * from './development-workbook.js';
 
 export {
   CompleteManagementDecisionSchema,

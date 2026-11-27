@@ -2,7 +2,7 @@ import { ProcurementCutoff } from '../../shared/ui/procurement-cutoff.js';
 import { Card, DatePicker, Flex, Select, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useId, type CSSProperties } from 'react';
-import { useShellViewport } from '../../features/shell/index.js';
+import { useShellViewport } from '../shell/index.js';
 import {
   DASHBOARD_LANES,
   DASHBOARD_PRESETS,
@@ -10,7 +10,7 @@ import {
   type DashboardPatch,
   type DashboardPreset,
   type DashboardQuery,
-} from '../../features/performance/index.js';
+} from './model/query.js';
 import { ViewSwitch } from '../../shared/ui/view-switch.js';
 import { space } from '../../theme/tokens.js';
 

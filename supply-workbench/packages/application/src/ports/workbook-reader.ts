@@ -3,6 +3,7 @@ export interface CellLike {
   readonly value: string | number | boolean | null;
   readonly text: string;
   readonly displayText?: string;
+  readonly calendarDateFormatted?: true;
   readonly richText?: string;
   readonly formula?: string;
   readonly mergedFrom?: { readonly row: number; readonly col: number };
@@ -11,6 +12,7 @@ export interface CellLike {
 export interface SheetLike {
   readonly name: string;
   readonly hidden: boolean;
+  readonly hiddenRows?: ReadonlySet<number>;
   readonly rowCount: number;
   readonly columnCount: number;
   cell(row: number, col: number): CellLike | null;

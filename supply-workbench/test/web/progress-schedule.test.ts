@@ -60,6 +60,21 @@ function filter(overrides: Partial<ScheduleFilters>): ScheduleFilters {
 }
 
 describe('总排期周期', () => {
+  it('日刻度保留 URL 锚点，用一个日期查询并逐日跨月翻页', () => {
+    const anchor = localDate('2026-11-30');
+    const query = readScheduleQuery('scale=day&from=2026-11-30', TODAY);
+    expect(query).toMatchObject({ scale: 'day', anchor });
+    const window = scheduleWindow(query);
+    expect(window).toEqual({ from: anchor, to: anchor });
+    expect(scheduleWindowLabel({ window, today: TODAY })).toBe('11-30');
+    expect(scheduleDays({ window, today: TODAY, scale: 'day' })).toHaveLength(1);
+    expect(shiftScheduleWindow({ scale: 'day', window, direction: -1 }))
+      .toEqual({ from: localDate('2026-11-29'), to: localDate('2026-11-29') });
+    expect(shiftScheduleWindow({ scale: 'day', window, direction: 1 }))
+      .toEqual({ from: localDate('2026-12-01'), to: localDate('2026-12-01') });
+    expect(readScheduleQuery(writeScheduleQuery({ search: '', query }), TODAY)).toEqual(query);
+  });
+
   it('周从周一开始到周日，包含今天', () => {
     expect(scheduleWindow({ scale: 'week', anchor: TODAY })).toEqual({ from: localDate('2026-11-09'), to: localDate('2026-11-15') });
     expect(scheduleWindow({ scale: 'week', anchor: localDate('2026-11-11') })).toEqual({ from: localDate('2026-11-09'), to: localDate('2026-11-15') });

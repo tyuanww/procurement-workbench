@@ -14,6 +14,7 @@ import { workItemDependencies, workItemEvents, workItems } from '../../schema/wo
 import { dailyWhere, listWhere, projectWhere, scheduleWhere, selectWorkItems } from './query.js';
 import { toWorkItemView } from './view.js';
 import { incomingDependencies, readDependencies, toIncomingDependency } from './dependency-views.js';
+import { deliverySchedule } from './delivery-schedule.js';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 50;
@@ -23,6 +24,8 @@ export function planQueries(db: AppDatabase): PlanQueries {
   return {
     dailyItems: (query) => dailyItems(db, query.date),
     scheduleItems: (query) => scheduleItems(db, query),
+    deliverySchedule: (query) => deliverySchedule(db, query),
+    deliveryTasks: (batchIds) => deliveryTasks(db, batchIds),
     incomingDependencies: (workItemIds) => incomingDependencies(db, workItemIds),
     projectItems: (query) => projectItems(db, query),
     listItems: (query) => listItems(db, query),
@@ -35,8 +38,17 @@ async function dailyItems(db: AppDatabase, date: LocalDate): Promise<readonly Wo
   return rows.map(toWorkItemView);
 }
 
-async function scheduleItems(db: AppDatabase, query: Pick<SchedulePlanQuery, 'from' | 'to' | 'store'>): Promise<readonly WorkItemView[]> {
+async function scheduleItems(db: AppDatabase, query: Pick<SchedulePlanQuery, 'from' | 'to' | 'store' | 'includeClosed'>): Promise<readonly WorkItemView[]> {
   const rows = await selectWorkItems(db, { where: and(scheduleWhere(query), storeFilter({ store: query.store, line: orderLines.id, hasMaterialScope: true })), orderBy: [asc(workItems.plannedStart), asc(workItems.title)] });
+  return rows.map(toWorkItemView);
+}
+
+async function deliveryTasks(db: AppDatabase, batchIds: readonly string[]): Promise<readonly WorkItemView[]> {
+  if (batchIds.length === 0) return [];
+  const rows = await selectWorkItems(db, {
+    where: and(eq(workItems.subjectType, 'delivery_batch'), inArray(workItems.subjectId, batchIds)),
+    orderBy: [asc(workItems.plannedStart), asc(workItems.title)],
+  });
   return rows.map(toWorkItemView);
 }
 

@@ -1,0 +1,86 @@
+.weekly-delivery-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekly-delivery-card.ant-btn {
+  position: relative;
+  display: grid;
+  justify-content: stretch;
+  align-content: start;
+  gap: 4px;
+  min-inline-size: 0;
+  min-block-size: 64px;
+  block-size: auto;
+  padding: 8px 12px;
+  border-color: var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  box-shadow: none;
+  white-space: normal;
+  text-align: start;
+}
+.weekly-delivery-card.ant-btn[aria-pressed=true] {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary-active);
+}
+.weekly-delivery-card.ant-btn:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+}
+.weekly-delivery-label { font-size: 12px; }
+.weekly-delivery-selected { position: absolute; inset-inline-end: 8px; inset-block-end: 8px; font-size: 12px; }
+.weekly-delivery-value { font-size: 20px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.weekly-delivery-unit { margin-inline-start: 4px; font-size: 12px; }
+
+.weekly-batch-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.weekly-batch-actions .ant-tag { margin-inline-end: 0; max-inline-size: 100%; white-space: normal; overflow-wrap: anywhere; }
+.planning-list-row.weekly-batch-row.ant-btn { container: weekly-batch-row / inline-size; padding-block: 8px; }
+.weekly-batch-list {
+  display: grid;
+  grid-template-areas: "identity identity" "due entry" "quantities quantities";
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+}
+.weekly-batch-identity { grid-area: identity; display: grid; gap: 2px; min-inline-size: 0; }
+.weekly-batch-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.weekly-batch-title .ant-tag { margin-inline-end: 0; white-space: normal; }
+.weekly-batch-title strong { min-inline-size: 0; }
+.weekly-batch-owner { display: none; }
+.weekly-batch-list .weekly-batch-actions { display: block; color: var(--ant-color-primary-active); font-weight: 500; }
+.weekly-batch-due { grid-area: due; display: grid; font-variant-numeric: tabular-nums; }
+.weekly-batch-quantities { grid-area: quantities; font-variant-numeric: tabular-nums; }
+.weekly-batch-notes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.weekly-batch-entry {
+  grid-area: entry;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-block-size: 44px;
+  padding-inline: 14px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: var(--ant-border-radius);
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  white-space: nowrap;
+}
+
+@container weekly-batch-row (min-width: 38rem) {
+  .weekly-batch-list {
+    grid-template-areas: "identity due entry" "identity quantities entry";
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
+    column-gap: 16px;
+    padding-block: 4px;
+  }
+  .weekly-batch-identity, .weekly-batch-due { gap: 4px; }
+  .weekly-batch-owner { display: inline; }
+  .weekly-batch-notes { grid-column: 2; grid-row: 3; }
+  .weekly-batch-entry { min-block-size: 32px; justify-self: end; }
+}
+
+@media (max-width: 479px) {
+  .weekly-delivery-card.ant-btn { padding-inline: 8px; }
+}

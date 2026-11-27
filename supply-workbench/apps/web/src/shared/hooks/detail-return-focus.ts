@@ -40,7 +40,7 @@ export function detailReturnState(state: unknown, detailPath: string) {
   return origin?.detailPath === detailPath ? { detailOrigin: origin } : undefined;
 }
 
-export function useDetailReturnFocus(isReady: boolean) {
+export function useDetailReturnFocus(isReady: boolean, { allowContainerFocus = false } = {}) {
   const { key, state } = useLocation();
   const navigation = useNavigationType();
   const restored = useRef<string | null>(null);
@@ -51,6 +51,11 @@ export function useDetailReturnFocus(isReady: boolean) {
     const target = document.getElementById(linkId(origin.sourceLink ?? origin.detailPath));
     if (target === null) return;
     restored.current = key;
-    if (document.activeElement === document.body) target.focus();
-  }, [isReady, key, state, navigation]);
+    if (canRestoreFocus(target, allowContainerFocus)) target.focus();
+  }, [allowContainerFocus, isReady, key, state, navigation]);
+}
+
+function canRestoreFocus(target: HTMLElement, allowContainerFocus: boolean): boolean {
+  const focused = document.activeElement;
+  return focused === document.body || (allowContainerFocus && focused?.contains(target) === true);
 }

@@ -1,19 +1,23 @@
 import { WorkbookUnreadableError } from '@sw/application/errors';
 import type { WorkbookLike } from '../../../application/src/ports/workbook-reader.js';
 import { buildSheet, cellKey, type CellDraft, type ImageAnchor, type MergeRange } from './sheet.js';
-import { decodeXml, unzip, xmlText, type ZipFiles } from './zip-xml.js';
+import { decodeXml, xmlText, type WorkbookArchiveLimits, type ZipFiles } from './zip-xml.js';
 
 type SheetRef = { readonly name: string; readonly hidden: boolean; readonly path: string };
 
-export function readXmlWorkbook(bytes: Uint8Array, fileName: string): WorkbookLike {
-  const files = unzip(bytes);
+export function readXmlWorkbook({ files, fileName, limits }: {
+  readonly files: ZipFiles; readonly fileName: string; readonly limits?: WorkbookArchiveLimits | undefined;
+}): WorkbookLike {
   const workbook = xmlText(files, 'xl/workbook.xml');
   if (workbook === null) throw new WorkbookUnreadableError();
   const rels = xmlText(files, 'xl/_rels/workbook.xml.rels') ?? '';
+  const refs = sheetRefs({ workbook, rels, maxSheets: limits?.sheets });
+  if (limits !== undefined) enforceSheetLimits({ files, refs, limits });
+  const strings = sharedStrings(files);
   return {
     source: { kind: 'xlsx', fileName, ...coreTimes(files) },
     date1904: /date1904="(?:1|true)"/.test(workbook),
-    sheets: sheetRefs(workbook, rels).map((sheet) => readSheet(files, sheet)),
+    sheets: refs.map((sheet) => readSheet({ files, sheet, strings })),
   };
 }
 
@@ -28,21 +32,43 @@ function coreTimes(files: ZipFiles): { readonly createdAt?: string; readonly mod
   };
 }
 
-function sheetRefs(workbook: string, rels: string): SheetRef[] {
+function sheetRefs({ workbook, rels, maxSheets }: { readonly workbook: string; readonly rels: string; readonly maxSheets: number | undefined }): SheetRef[] {
   const targets = relationshipTargets(rels);
-  return [...workbook.matchAll(/<sheet\b([^>]*)\/>/g)].map((match) => {
+  const refs: SheetRef[] = [];
+  for (const match of workbook.matchAll(/<(?:[\w.-]+:)?sheet\b([^>]*)>/gu)) {
+    if (maxSheets !== undefined && refs.length >= maxSheets) throw new WorkbookUnreadableError();
     const attrs = match[1] ?? '';
     const id = attr(attrs, 'r:id');
-    return { name: decodeXml(attr(attrs, 'name')), hidden: /state="hidden"/.test(attrs), path: resolvePath('xl/workbook.xml', targets.get(id) ?? '') };
-  });
+    refs.push({ name: decodeXml(attr(attrs, 'name')), hidden: /^(?:hidden|veryHidden)$/u.test(attr(attrs, 'state')),
+      path: resolvePath('xl/workbook.xml', targets.get(id) ?? '') });
+  }
+  return refs;
 }
 
-function readSheet(files: ZipFiles, sheet: SheetRef) {
+function enforceSheetLimits({ files, refs, limits }: {
+  readonly files: ZipFiles; readonly refs: readonly SheetRef[]; readonly limits: WorkbookArchiveLimits;
+}): void {
+  if (refs.length === 0 || !files.has('[Content_Types].xml')) throw new WorkbookUnreadableError();
+  const available = { row: limits.rows, c: limits.cells, mergeCell: limits.mergedRanges };
+  for (const { path } of refs) {
+    const xml = xmlText(files, path);
+    if (xml === null) throw new WorkbookUnreadableError();
+    for (const [, tag] of xml.matchAll(/<(?:[\w.-]+:)?(c|row|mergeCell)(?=[\s/>])/gu)) {
+      if (tag !== 'c' && tag !== 'row' && tag !== 'mergeCell') continue;
+      available[tag] -= 1;
+      if (available[tag] < 0) throw new WorkbookUnreadableError();
+    }
+  }
+}
+
+function readSheet({ files, sheet, strings }: { readonly files: ZipFiles; readonly sheet: SheetRef; readonly strings: readonly string[] }) {
   const xml = xmlText(files, sheet.path) ?? '';
-  const strings = sharedStrings(files);
+  const hiddenRows = new Set([...xml.matchAll(/<(?:[\w.-]+:)?row\b([^>]*)>/gu)].flatMap(([, attrs = '']) =>
+    /^(?:true|1)$/u.test(attr(attrs, 'hidden')) ? [Number(attr(attrs, 'r'))] : []));
   return buildSheet({
     name: sheet.name,
     hidden: sheet.hidden,
+    ...(hiddenRows.size === 0 ? {} : { hiddenRows }),
     cells: cellsOf(xml, strings),
     merges: mergesOf(xml),
     images: imagesOf(files, sheet.path),
@@ -176,8 +202,8 @@ function tag(xml: string, name: string): string | null {
 }
 
 function attr(attrs: string, name: string): string {
-  const match = attrs.match(new RegExp(`${name}="([^"]*)"`));
-  return match?.[1] ?? '';
+  const match = attrs.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'u'));
+  return match?.[1] ?? match?.[2] ?? '';
 }
 
 function rowOf(ref: string): number {
