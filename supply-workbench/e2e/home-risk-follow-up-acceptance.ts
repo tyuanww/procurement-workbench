@@ -38,8 +38,7 @@ export async function checkHomeRiskFollowUp({ page, origin, out, material, finis
     await drawer.waitFor();
     assert.equal(await risk.getAttribute('aria-expanded'), 'true');
     assert.equal(new URL(page.url()).pathname, '/home');
-    assert.deepEqual(reads, []);
-    page.off('request', watch);
+    await drawer.getByText(/^达肤妍 · \d{4}-\d{2}-\d{2} · \d+ 件$/u).waitFor();
     await drawer.getByText('已逾期', { exact: true }).first().waitFor();
     await drawer.getByText('确认到货晚于需求', { exact: true }).first().waitFor();
     assert.match(await drawer.ariaSnapshot(), /dialog "交期风险"/u);
@@ -47,6 +46,8 @@ export async function checkHomeRiskFollowUp({ page, origin, out, material, finis
     await page.keyboard.press('Tab');
     assert.equal(await drawer.evaluate((element) => element.contains(document.activeElement)), true);
     await page.screenshot({ path: join(out, `home-risk-${width}.png`), animations: 'disabled' });
+    assert.deepEqual(reads, []);
+    page.off('request', watch);
     await page.keyboard.press('Escape');
     await drawer.waitFor({ state: 'hidden' });
     await risk.and(page.locator(':focus')).waitFor();
@@ -81,9 +82,12 @@ export async function checkHomeRiskFollowUp({ page, origin, out, material, finis
     assert.equal(address.searchParams.get('store'), 'dafuyan');
     const ids = address.searchParams.getAll('riskLine').sort();
     assert.ok(ids.includes(material.id) && ids.includes(finished.id), '整组需要包含首页物料逾期与成品晚于需求');
-    const shownIds = await drawer.getByRole('link', { name: /^查看订单 /u }).evaluateAll((links) => links.flatMap((link) => (
-      link instanceof HTMLAnchorElement ? [decodeURIComponent(link.pathname.slice('/lines/'.length))] : []
-    )).sort());
+    const shownIds = await drawer.getByRole('link', { name: /^查看订单 /u }).evaluateAll((links) => links.flatMap((link) => {
+      const href = link.getAttribute('href');
+      if (href === null) return [];
+      const { pathname } = new URL(href, document.baseURI);
+      return [decodeURIComponent(pathname.slice('/lines/'.length))];
+    }).sort());
     assert.deepEqual(ids, shownIds);
     if (originalIds.length > 0) assert.deepEqual(ids, originalIds);
     originalIds = ids;
