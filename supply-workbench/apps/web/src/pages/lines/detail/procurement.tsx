@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
+import { deliveryBackAddress } from '../../../features/follow-up/index.js';
+import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
@@ -11,6 +13,9 @@ const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1
 
 export function ProcurementSection({ detail }: { readonly detail: OrderLineDetail }) {
   const [params] = useSearchParams();
+  const { state } = useLocation();
+  const delivery = params.get('backToDelivery');
+  const returnState = delivery === null ? undefined : detailReturnState(state, deliveryBackAddress(delivery));
   const relatedQuery = procurementDetailQuery(params);
   const procurement = detail.procurement;
   const progress = detail.line.storeProgress;
@@ -21,7 +26,7 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
       {isComponent ? <ComponentFields line={detail.line} /> : null}
       <ProcurementOa progress={progress} />
       <Typography.Title level={2}>{isComponent ? '关联成品' : '关联采购事项'}</Typography.Title>
-      <RelatedProcurementLines lines={procurement?.relatedLines ?? []} query={relatedQuery} />
+      <RelatedProcurementLines lines={procurement?.relatedLines ?? []} query={relatedQuery} returnState={returnState} />
       {procurement === undefined || procurement.sources.length === 0 ? null : <ProcurementSources sources={procurement.sources} />}
 
     </section>
@@ -30,7 +35,7 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
 
 function procurementDetailQuery(params: URLSearchParams): string {
   const related = new URLSearchParams();
-  for (const key of ['store', 'backToProgress']) {
+  for (const key of ['store', 'backToProgress', 'backToDelivery']) {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
@@ -45,11 +50,15 @@ function ProcurementOa({ progress }: { readonly progress: OrderLineDetail['line'
 
 type RelatedLine = NonNullable<OrderLineDetail['procurement']>['relatedLines'][number];
 
-function RelatedProcurementLines({ lines, query }: { readonly lines: readonly RelatedLine[]; readonly query: string }) {
+function RelatedProcurementLines({ lines, query, returnState }: {
+  readonly lines: readonly RelatedLine[];
+  readonly query: string;
+  readonly returnState: ReturnType<typeof detailReturnState>;
+}) {
   return (
     <ul>{lines.map((line) => (
       <li key={line.id}>
-        <Link to={`/lines/${encodeURIComponent(line.id)}${query}`}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
+        <Link to={`/lines/${encodeURIComponent(line.id)}${query}`} state={returnState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
       </li>
     ))}</ul>
   );

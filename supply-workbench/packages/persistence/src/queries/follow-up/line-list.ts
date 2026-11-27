@@ -111,6 +111,7 @@ async function whereForRead({ db, query, today, activeIds }: { readonly db: AppD
 
 function whereOf({ query, today, actorId }: { readonly query: LinesQuery; readonly today: LocalDate; readonly actorId: string | undefined }): SQL | undefined {
   const parts = [
+    query.lineIds === undefined ? undefined : inArray(orderLines.id, [...query.lineIds]),
     storeFilter({ store: query.store, line: orderLines.id, hasMaterialScope: query.lane !== 'finished' }),
     query.lane === undefined ? undefined : eq(orderLines.lane, query.lane),
     textOf(query.q),

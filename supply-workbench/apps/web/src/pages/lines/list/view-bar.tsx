@@ -1,3 +1,4 @@
+import { DELIVERY_QUERY_PARAM } from '../../../features/follow-up/index.js';
 import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
@@ -35,7 +36,7 @@ const DENSITY_PARAM = 'density';
 const HIDDEN_PARAM = 'hide';
 const VIEW_PARAM = 'view';
 const FIXED_COLUMN = LINE_DESK_PINNED_KEY;
-const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM, HIDDEN_PARAM, VIEW_PARAM];
+const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM, HIDDEN_PARAM, VIEW_PARAM, DELIVERY_QUERY_PARAM];
 const DENSITY_OPTIONS = [
   { label: '紧凑', value: 'small' },
   { label: '舒适', value: 'middle' },
@@ -99,6 +100,7 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   if (!next.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
+  copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });
   next.set(VIEW_PARAM, input.view.id);
   return next;
 }
@@ -110,6 +112,7 @@ export function clearFiltersAddress(search: string): URLSearchParams {
   copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
+  copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });
   return next;
 }
 

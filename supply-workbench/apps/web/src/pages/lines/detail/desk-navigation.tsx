@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
-import { businessToday } from '../../../features/follow-up/index.js';
+import { businessToday, deliveryBackAddress } from '../../../features/follow-up/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
+import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
   const isRouted = useInRouterContext();
@@ -9,9 +10,14 @@ export function LineDetailLink(props: { readonly href: string; readonly search: 
   return <Link to={props.href} state={{ lineDeskSearch: props.search }}>{props.children}</Link>;
 }
 
-export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } | { readonly todayPendingId: string } | { readonly todayArrivalId: string } };
+export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string } | { readonly todayPendingId: string } | { readonly todayArrivalId: string } | NonNullable<ReturnType<typeof detailReturnState>> };
 
-export function lineDetailBack(input: { readonly progress: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
+export function lineDetailBack(input: { readonly progress: string | null; readonly delivery?: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
+  if (typeof input.delivery === 'string') {
+    const to = deliveryBackAddress(input.delivery);
+    const state = detailReturnState(input.state, to);
+    return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
+  }
   if (input.progress !== null) return { to: `/progress?${new URLSearchParams(input.progress).toString()}`, label: '返回管理店铺' };
   const today = todayBack(input.state, input.todayBatch);
   if (today !== null) return today;

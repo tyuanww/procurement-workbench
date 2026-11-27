@@ -17,20 +17,21 @@ const STAGE_COLOR: Partial<Record<ProgressStageCount['key'], string>> = {
 const percent = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 });
 const stayOptions = [{ value: '', label: '全部停留' }, ...PROGRESS_STAYS.map(({ bucket, label }) => ({ value: bucket, label }))];
 
-export function ProgressFilters({ filters, lines, oa, stay, drill, overdue, onOa, onStay, onDrill }: {
+export function ProgressFilters({ filters, lines, oa, stay, drill, overdue, onOa, onStay, onDrill, isDelivery }: {
   readonly filters: ReactNode;
   readonly lines: readonly (OrderLineRow | undefined)[];
   readonly oa: string | null;
   readonly stay: ProgressStay | null;
   readonly drill: ProgressDrill;
   readonly overdue: number | null;
+  readonly isDelivery?: boolean;
   readonly onOa: (value: string | null) => void;
   readonly onStay: (value: ProgressStay | null) => void;
   readonly onDrill: (value: ProgressDrill) => void;
 }) {
   return (
     <Card size="small" style={{ marginBottom: space[3] }}>
-      <Flex gap={space[2]} wrap align="center" role="group" aria-label="当前进度筛选">
+      <Flex gap={space[2]} wrap align="center" role="group" aria-label={isDelivery ? '店铺交付筛选' : '当前进度筛选'}>
         {filters}
         <ProgressOaFilter lines={lines} value={oa} onChange={onOa} />
         <Select
@@ -40,7 +41,7 @@ export function ProgressFilters({ filters, lines, oa, stay, drill, overdue, onOa
           style={progressFilterStyle}
           onChange={(value) => onStay(PROGRESS_STAYS.find(({ bucket }) => bucket === value)?.bucket ?? null)}
         />
-        {overdue === null ? null : <Button aria-pressed={drill.kind === 'overdue'} onClick={() => onDrill({ kind: 'overdue' })}>逾期未到 {overdue} 行</Button>}
+        {overdue === null ? null : <Button aria-pressed={drill.kind === 'overdue'} onClick={() => onDrill({ kind: 'overdue' })}>{isDelivery ? '成品' : ''}逾期未到 {overdue} 行</Button>}
         <Button type="text" aria-disabled={drill.kind === 'all'} onClick={() => onDrill({ kind: 'all' })}>清除下钻</Button>
         <ProcurementCutoff />
       </Flex>

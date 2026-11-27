@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
-import { loadViews, presetViews, readDesk } from '../../../features/follow-up/index.js';
+import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, type OrderLens } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
+import { ViewSwitch } from '../../../shared/ui/view-switch.js';
+import { DeliveryOrders } from '../../progress/DeliveryOrders.js';
 import { space, topBar } from '../../../theme/tokens.js';
 import { readReturningLine } from '../detail/desk-navigation.js';
 import { LineAlerts, LineBulkBar } from './actions.js';
@@ -28,6 +30,19 @@ type ResultsRef = RefObject<HTMLDivElement | null>;
 
 export function LineListPage() {
   const [params, setParams] = useSearchParams();
+  const lens = orderLensOf(params);
+  return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}>
+    <div style={{ marginBottom: space[2] }}>
+      <ViewSwitch<OrderLens> aria-label="订单查法" value={lens}
+        options={[{ value: 'query', label: '订单查询' }, { value: 'delivery', label: '按店铺交付' }]}
+        onChange={(value) => setParams(switchOrderLens(params, value))} />
+    </div>
+    {lens === 'delivery' ? <DeliveryOrders /> : <OrderQuery />}
+  </WorkbenchPage>;
+}
+
+function OrderQuery() {
+  const [params, setParams] = useSearchParams();
   const location = useLocation();
   const results = useRef<HTMLDivElement>(null);
   const [users, setUsers] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
@@ -48,7 +63,7 @@ export function LineListPage() {
   useDetailReturnFocus({ results, lineId: readReturningLine(location.state), key: location.key, isSettled: load.kind !== 'pending' });
   useEffect(() => { void loadDeskOwners({ setUsers, setUserId, setOwnerVisible }); }, []);
   return (
-    <WorkbenchPage title="跟进中心">
+    <>
       <LineTop search={search} desk={desk} setParams={setParams} views={viewChoices(userId)} userId={userId} setMessage={setMessage} picked={load.kind === 'ready' ? picked : []} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} onReload={refresh} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys}
         arrivalAction={<ArrivalDesk userId={userId} onMutated={refresh} />}
         onResults={() => results.current?.focus()}
@@ -58,7 +73,7 @@ export function LineListPage() {
         density={density} hiddenKeys={hiddenKeys} onPreviewTrigger={rememberPreviewTrigger} onRetry={refresh} now={now}
       />
       <LinePreviews preview={preview} party={party} search={search} setParams={setParams} />
-    </WorkbenchPage>
+    </>
   );
 }
 

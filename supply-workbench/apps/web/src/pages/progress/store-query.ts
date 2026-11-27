@@ -16,6 +16,7 @@ export function resetProgressPagination(params: URLSearchParams): URLSearchParam
   const next = new URLSearchParams(params);
   next.delete('page');
   next.delete('focusLine');
+  next.delete('openLine');
   return next;
 }
 

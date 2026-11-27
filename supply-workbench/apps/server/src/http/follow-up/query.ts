@@ -18,6 +18,7 @@ export function listQueryOf(query: unknown, actorId: string): LinesQuery {
 export function linesQueryOf(query: unknown, actorId: string): LinesQuery {
   const raw = isRecord(query) ? query : {};
   const parsed = parse(LinesQuerySchema, defined({
+    lineIds: typeof raw.lineIds === 'string' ? [raw.lineIds] : raw.lineIds,
     lane: text(raw.lane),
     store: text(raw.store),
     q: text(raw.q),
