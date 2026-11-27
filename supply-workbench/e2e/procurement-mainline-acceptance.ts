@@ -18,7 +18,7 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   const currentEntry = manager.locator('aside').getByRole('link', { name: '当前进度', exact: true });
   await currentEntry.click();
   await manager.waitForURL(new URL('/progress/current', origin).href);
-  assert.equal(await currentEntry.getAttribute('aria-current'), 'page');
+  await currentEntry.and(manager.locator('[aria-current="page"]')).waitFor();
   const current = manager.getByRole('region', { name: '当前进度表', exact: true });
   const finished = current.getByRole('link', { name: finishedName, exact: true });
   await select(manager.getByRole('combobox', { name: '店铺', exact: true }), manager, storeName);
@@ -131,7 +131,7 @@ export async function checkStoreSchedule({ page, manager, origin, out }: Scenari
   await planning.click();
   await page.waitForURL((url) => url.pathname === '/progress/schedule');
   await page.getByRole('tab', { name: '订单与任务排期', selected: true }).waitFor();
-  assert.equal(await planning.getAttribute('aria-current'), 'page');
+  await planning.and(page.locator('[aria-current="page"]')).waitFor();
   const taskContext = await checkScheduleTaskContext({ page, manager, origin, out });
   return { store, excludedStore: 'yiling', po: finishedPo, stages: ['下单', '齐料', '生产', '交付'], plannedDelivery: '2026-11-26', restoredScale: 'month', todayScheduleLink: true, taskContext };
 }

@@ -168,7 +168,7 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await buyer.goto(new URL('/progress?view=development&store=dafuyan', origin).href);
   const progress = buyer.locator('aside');
   const development = await sidebarLink(progress, '计划与新品', '新品开发');
-  assert.equal(await development.getAttribute('aria-current'), 'page');
+  await development.and(progress.locator('[aria-current="page"]')).waitFor();
   await progress.getByRole('link', { name: '当前进度', exact: true }).press('Enter');
   await buyer.waitForURL(new URL('/progress/current?store=dafuyan', origin).href);
   const main = buyer.getByRole('main');
@@ -214,7 +214,7 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   const risk = await sidebarLink(sidebar, '管理看板', '排期任务进度');
   await risk.click();
   await manager.getByRole('heading', { name: '排期任务进度', level: 1, exact: true }).waitFor();
-  assert.equal(await risk.getAttribute('aria-current'), 'page');
+  await risk.and(sidebar.locator('[aria-current="page"]')).waitFor();
   assertDashboardPeriod(manager, stuckUrl);
   await (await sidebarLink(sidebar, '管理看板', '采购负荷')).click();
   await manager.getByRole('heading', { name: '采购负荷', level: 1, exact: true }).waitFor();
