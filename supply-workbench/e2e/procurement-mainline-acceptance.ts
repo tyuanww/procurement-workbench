@@ -393,7 +393,7 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   const table = page.getByRole('region', { name: '事项跟踪明细' });
   const scope = table.getByRole('combobox', { name: '事项范围' });
   await select(scope, page, '交期风险');
-  await table.getByText('交期风险', { exact: true }).waitFor();
+  await table.getByTitle('交期风险', { exact: true }).waitFor();
   const originalCount = await table.getByRole('status').innerText();
   const search = table.getByRole('textbox', { name: '搜索事项' });
   assert.equal(await search.count(), 0);
