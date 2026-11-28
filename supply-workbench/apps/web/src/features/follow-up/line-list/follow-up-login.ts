@@ -1,8 +1,9 @@
+import { matchPath } from 'react-router';
 import { FOLLOW_UP_FRAGMENT } from './follow-up-address.js';
 
 const LOGIN_FRAGMENT = '#follow-up-login=';
 const storagePrefix = 'workbench.follow-up.login:';
-const isLinePath = (pathname: string) => /^\/lines(?:\/[^/]+)?$/u.test(pathname);
+const isLinePath = (pathname: string) => matchPath('/lines', pathname) !== null || matchPath('/lines/:id', pathname) !== null;
 
 export function followUpFeishuReturn(returnTo: string, token: string) {
   const { pathname, search, hash } = new URL(returnTo, 'https://workbench.invalid');
@@ -19,8 +20,8 @@ export function followUpLoginResume({ pathname, search, hash }: { readonly pathn
   const target = pathname + search;
   try {
     const saved = window.sessionStorage.getItem(storageKey);
-    return { storageKey, to: saved?.startsWith(target + FOLLOW_UP_FRAGMENT) === true ? saved : target };
+    return { storageKey, to: saved?.startsWith(target + FOLLOW_UP_FRAGMENT) === true ? saved : null };
   } catch {
-    return { storageKey, to: target };
+    return { storageKey, to: null };
   }
 }

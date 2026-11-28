@@ -44,8 +44,10 @@ export async function lineDetail(read: Read, { lineId, store }: { readonly lineI
     pendingBuyerNameOf({ db: read.db, lineId, buyerId: line.buyerUserId, buyers: world.users }),
   ]);
   const evidence = await sourceEvidence(read.db, { lineId, batches, snapshot, reports });
+  const visibleShipmentIds = new Set([...reports.shipments, ...evidence.archivedShipmentSources].map(({ id }) => id));
+  const batchDetails = batches.map((batch) => batchWithVisibleShipmentSources(batch, visibleShipmentIds));
   const storeProgress = progress?.get(lineId);
-  return { ...(pendingBuyerName === null ? {} : { pendingBuyerName }), line: { ...(storeProgress === undefined ? {} : { storeProgress }), ...toRow({ line, world, clock: read.clock, timeZone: read.timeZone }), unit: line.unit, purchaseOrderId: line.purchaseOrderId, itemId: line.itemId, cancelledAt: line.cancelledAt, cancelReason: line.cancelReason }, po: poOf(world, line.purchaseOrderId), codes, snapshot, batches, factoryReports: reports, ...evidence, exceptions: exceptionRows.map(exceptionView), followUps: latest(followRows), ...(procurement === undefined ? {} : { procurement }), ...(procurementSchedule === undefined ? {} : { procurementSchedule }) };
+  return { ...(pendingBuyerName === null ? {} : { pendingBuyerName }), line: { ...(storeProgress === undefined ? {} : { storeProgress }), ...toRow({ line, world, clock: read.clock, timeZone: read.timeZone }), unit: line.unit, purchaseOrderId: line.purchaseOrderId, itemId: line.itemId, cancelledAt: line.cancelledAt, cancelReason: line.cancelReason }, po: poOf(world, line.purchaseOrderId), codes, snapshot, batches: batchDetails, factoryReports: reports, ...evidence, exceptions: exceptionRows.map(exceptionView), followUps: latest(followRows), ...(procurement === undefined ? {} : { procurement }), ...(procurementSchedule === undefined ? {} : { procurementSchedule }) };
 }
 
 async function pendingBuyerNameOf(input: { readonly db: AppDatabase; readonly lineId: string; readonly buyerId: string | null; readonly buyers: ListWorld['users'] }): Promise<string | null> {
@@ -207,6 +209,15 @@ async function archivedShipments(db: AppDatabase, { lineId, batches, current }: 
     eq(factoryShipmentRows.linkedOrderLineId, lineId), inArray(factoryShipmentRows.id, [...ids]),
   ));
   return rows.filter((row) => isAssociated(row.linkStatus)).map(shipmentOf);
+}
+
+function batchWithVisibleShipmentSources(batch: OrderLineDetail['batches'][number], visibleIds: ReadonlySet<string>) {
+  const hasUnavailableShipmentSource = batch.shipments.some(({ factoryShipmentRowId, source, voidedAt }) =>
+    source === 'factory_report_adopted' && voidedAt === null && (factoryShipmentRowId === null || !visibleIds.has(factoryShipmentRowId)),
+  );
+  const shipments = batch.shipments.map((shipment) => shipment.factoryShipmentRowId === null || visibleIds.has(shipment.factoryShipmentRowId)
+    ? shipment : { ...shipment, factoryShipmentRowId: null });
+  return { ...batch, shipments, ...(hasUnavailableShipmentSource ? { hasUnavailableShipmentSource } : {}) };
 }
 
 async function sourceFileNames(db: AppDatabase, batchIds: readonly (string | undefined)[]) {
