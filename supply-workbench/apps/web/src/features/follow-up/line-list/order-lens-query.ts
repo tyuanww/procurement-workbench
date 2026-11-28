@@ -1,6 +1,6 @@
 import { LocalDateSchema, OrderLineIdSchema, ProcurementStoreSchema } from '@sw/contracts';
 import type { LocalDate, OrderLineId, ProcurementStore } from '@sw/domain';
-import { followUpAddress } from './follow-up-address.js';
+import { followUpAddress, importBatchOf } from './follow-up-address.js';
 
 export type OrderLens = 'query' | 'delivery';
 export const DELIVERY_QUERY_PARAM = 'deliveryQuery';
@@ -15,11 +15,11 @@ type DeliveryRisk = {
 };
 
 export function orderLensOf(params: URLSearchParams): OrderLens {
-  return params.get('lens') === 'delivery' ? 'delivery' : 'query';
+  return importBatchOf(params) === undefined && params.get('lens') === 'delivery' ? 'delivery' : 'query';
 }
 
 export function switchOrderLens(params: URLSearchParams, lens: OrderLens): URLSearchParams {
-  if (lens === orderLensOf(params)) return new URLSearchParams(params);
+  if (importBatchOf(params) !== undefined || lens === orderLensOf(params)) return new URLSearchParams(params);
 
   const current = activeQuery(params);
   if (lens === 'query') {
@@ -44,9 +44,15 @@ function firstDeliveryQuery(current: URLSearchParams) {
   return next;
 }
 
+export function clearOrderLensParams(params: URLSearchParams): void {
+  params.delete('lens');
+  params.delete(ORDER_QUERY_PARAM);
+}
+
 function activeQuery(params: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(params);
-  for (const key of ['lens', ORDER_QUERY_PARAM, DELIVERY_QUERY_PARAM, 'focusLine']) next.delete(key);
+  clearOrderLensParams(next);
+  for (const key of [DELIVERY_QUERY_PARAM, 'focusLine']) next.delete(key);
   return next;
 }
 

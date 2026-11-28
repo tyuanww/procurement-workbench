@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { localDate } from '../../packages/domain/src/index.js';
 import { readDesk } from '../../apps/web/src/features/follow-up/index.js';
 import {
-  dailyDeliveryParams, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, switchOrderLens,
+  dailyDeliveryParams, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, orderLensOf, switchOrderLens,
 } from '../../apps/web/src/features/follow-up/line-list/order-lens-query.js';
 import { deliveryRiskReasons } from '../../apps/web/src/features/follow-up/line-list/delivery-risk.js';
 import { followUpAddress, followUpParams } from '../../apps/web/src/features/follow-up/line-list/follow-up-address.js';
@@ -30,6 +30,15 @@ describe('跟进中心订单查法', () => {
     expect(clearFiltersAddress(orders.toString()).get('deliveryQuery')).toBe(orders.get('deliveryQuery'));
     expect(viewAddress({ search: orders.toString(), view: { id: 'next', label: '新视图', query: 'lane=material' } }).get('deliveryQuery'))
       .toBe(orders.get('deliveryQuery'));
+  });
+
+  it('导入批次始终使用订单查询，普通链接保留店铺交付查法', () => {
+    const scope = new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', lens: 'delivery' });
+    expect(orderLensOf(scope)).toBe('query');
+    expect(orderLensOf(switchOrderLens(scope, 'delivery'))).toBe('query');
+    expect(switchOrderLens(scope, 'delivery').get('importBatchId')).toBe('batch-a');
+    expect(switchOrderLens(scope, 'delivery').get('store')).toBe('dafuyan');
+    expect(orderLensOf(new URLSearchParams('importBatchId=&lens=delivery'))).toBe('delivery');
   });
 
   it('明确的物料线、无效店铺及负责人筛选需要重新选择范围', () => {

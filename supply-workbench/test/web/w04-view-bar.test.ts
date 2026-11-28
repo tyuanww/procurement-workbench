@@ -97,6 +97,40 @@ describe('已修改状态', () => {
     expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=all&importBatchId=batch%2Ba%3Db');
   });
 
+  it('保留历史链接的显式导入批次和店铺，清空筛选或应用常用视图都沿用', () => {
+    const saved = { id: 'saved-b', label: '另一店批次', query: 'lane=all&importBatchId=batch-b&store=yiling&stage=no_batch' };
+    for (const search of [
+      'importBatchId=batch-a&store=dafuyan&q=目标订单',
+      'importBatchId=batch-a&store=dafuyan&backToImport=%2Fimports%2Fother%3Fdrawer%3Dimport-source%26source%3Dbatch',
+    ]) {
+      const expectScope = (address: URLSearchParams) => {
+        const request = new URLSearchParams(readDesk(address.toString()).requestQuery);
+        expect(request.get('importBatchId')).toBe('batch-a');
+        expect(request.get('store')).toBe('dafuyan');
+        expect(request.has('q')).toBe(false);
+      };
+      expectScope(viewAddress({ search, view: saved }));
+      expectScope(clearFiltersAddress(search));
+    }
+  });
+
+  it('保存或开启订单视图时清理查法参数，且无批次的存量店铺不会带入纯批次范围', () => {
+    const current = 'importBatchId=batch-a&store=dafuyan&lens=delivery&orderQuery=legacy';
+    const savedQuery = new URLSearchParams(saveAddress(current));
+    expect(savedQuery.get('importBatchId')).toBe('batch-a');
+    expect(savedQuery.get('store')).toBe('dafuyan');
+    expect(savedQuery.has('lens')).toBe(false);
+    expect(savedQuery.has('orderQuery')).toBe(false);
+    expect(new URLSearchParams(saveAddress('store=dafuyan')).has('store')).toBe(false);
+    const reopen = (search: string, query: string) => viewAddress({ search, view: { id: 'saved', label: '旧视图', query } });
+    const reopened = reopen('', current);
+    expect(reopened.get('importBatchId')).toBe('batch-a');
+    expect(reopened.get('store')).toBe('dafuyan');
+    expect(reopened.has('lens')).toBe(false);
+    expect(reopened.has('orderQuery')).toBe(false);
+    expect(reopen('importBatchId=batch-a', 'store=yiling').has('store')).toBe(false);
+  });
+
   it('切换到明确保存了另一批次的视图时，按保存的批次查询', () => {
     const view = { id: 'saved-b', label: 'B 批订单', query: 'lane=all&importBatchId=batch-b' };
     const address = viewAddress({ search: 'lane=all&importBatchId=batch-a', view });

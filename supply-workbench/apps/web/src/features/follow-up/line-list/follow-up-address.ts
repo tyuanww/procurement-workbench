@@ -27,3 +27,7 @@ function moveParam(key: string, { from, to }: { readonly from: URLSearchParams; 
   for (const value of from.getAll(key)) to.append(key, value);
   from.delete(key);
 }
+
+export function importBatchOf(params: URLSearchParams): string | undefined {
+  return params.get('importBatchId') || undefined;
+}

@@ -2,10 +2,10 @@ import { ProcurementCutoff } from '../../../shared/ui/procurement-cutoff.js';
 import { useId, useState, type ReactNode } from 'react';
 import { Button, Card, Checkbox, Flex, Input, Select } from 'antd';
 import type { useSearchParams } from 'react-router';
-import { readDesk, writeDesk } from '../../../features/follow-up/index.js';
-import { IMPORT_RETURN_PARAM } from '../../../features/imports/index.js';
+import { importBatchOf, readDesk, writeDesk } from '../../../features/follow-up/index.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { space } from '../../../theme/tokens.js';
+import { clearImportScope } from './import-scope-query.js';
 
 type SearchSetter = ReturnType<typeof useSearchParams>[1];
 type Desk = ReturnType<typeof readDesk>;
@@ -66,13 +66,8 @@ function SearchTerm({ applied, onSearch }: { readonly applied: string; readonly 
 
 function ImportScopeAction({ search, setParams }: { readonly search: string; readonly setParams: SearchSetter }) {
   const params = new URLSearchParams(search);
-  if (!params.has('importBatchId')) return null;
-  return <Button onClick={() => {
-    params.delete('importBatchId');
-    params.delete(IMPORT_RETURN_PARAM);
-    params.delete('page');
-    setParams(params);
-  }}>退出本次导入范围</Button>;
+  if (importBatchOf(params) === undefined) return null;
+  return <Button onClick={() => setParams(clearImportScope(params))}>退出本次导入范围</Button>;
 }
 
 function StageFilter(props: { readonly search: string; readonly desk: Desk; readonly setParams: SearchSetter }) {

@@ -30,8 +30,35 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await manager.goto(shared.href);
   await assertFactoryScopeRows(manager);
   assert.equal(await manager.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+  await checkSharedOrderView(manager, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
-    emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true };
+    emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true, sharedPresetKeepsStore: true };
+}
+
+async function checkSharedOrderView(page: Page, shared: URL) {
+  const address = new URL(shared);
+  address.searchParams.delete('backToImport');
+  address.searchParams.set('lens', 'delivery');
+  await page.goto(address.href);
+  await assertFactoryScopeRows(page);
+  assert.equal(await page.getByRole('radiogroup', { name: '订单查法', exact: true }).count(), 0);
+  const [lines] = await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/v1/lines' && url.searchParams.get('stages') === 'no_batch';
+    }),
+    page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true }).click(),
+  ]);
+  const filters = new URL(lines.url()).searchParams;
+  assert.equal(filters.get('importBatchId'), scopeId);
+  assert.equal(filters.get('store'), currentStore);
+  assert.deepEqual((await lines.json()).items.map((row: { po: { poRaw: string } }) => row.po.poRaw).sort(), storeOrderPos);
+  const [summary] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines/summary'),
+    page.getByRole('button', { name: '筛选结果概览', exact: true }).click(),
+  ]);
+  assert.equal((await summary.json()).total, storeOrderPos.length);
+  await assertFactoryScopeExport(page, address);
 }
 
 async function assertFactoryScopeApi({ page, origin, id, expected, store }: {
