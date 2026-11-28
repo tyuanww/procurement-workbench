@@ -82,6 +82,7 @@ try {
   result.result = 'pass';
 } catch (error) {
   recordFailure(error);
+  await saveResult().catch((saveError: unknown) => console.error('Unable to persist the acceptance failure:', failureMessage(saveError)));
 }
 try {
   await browser.close();
@@ -91,9 +92,13 @@ try {
   console.error('Unable to close the acceptance browser:', result.cleanupFailure);
   process.exitCode = 1;
 } finally {
-  await writeFile(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+  await saveResult();
 }
 console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure, failureAt: result.failureAt }));
+
+function saveResult() {
+  return writeFile(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+}
 
 function recordFailure(error: unknown): void {
   result.result = 'fail';

@@ -139,7 +139,7 @@ try {
 
   stage = browserAcceptanceStage;
   const result = spawnSync(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
-    env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, windowsHide: true,
+    env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, killSignal: 'SIGKILL', windowsHide: true,
   });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
   if (result.error) throw result.error;
@@ -162,7 +162,7 @@ if (app !== undefined) {
   try {
     await stopApplication(app, 'SIGTERM', 15_000);
   } catch (error) {
-    recordCleanup(new Error('隔离应用未在正常关闭期限内退出', { cause: error }));
+    recordCleanup(new Error('隔离应用关闭失败', { cause: error }));
     try {
       await stopApplication(app, 'SIGKILL', 5_000);
     } catch (forceError) {
@@ -214,11 +214,15 @@ try {
 await writeSummary({ sha, result: 'pass' });
 
 async function stopApplication(app: ReturnType<typeof fork>, signal: 'SIGTERM' | 'SIGKILL', timeout: number): Promise<void> {
-  if (app.exitCode !== null || app.signalCode !== null) return;
-  await Promise.all([
-    once(app, 'exit', { signal: globalThis.AbortSignal.timeout(timeout) }),
-    Promise.resolve().then(() => app.kill(signal)),
-  ]);
+  if (app.exitCode === null && app.signalCode === null) {
+    await Promise.all([
+      once(app, 'exit', { signal: globalThis.AbortSignal.timeout(timeout) }),
+      Promise.resolve().then(() => app.kill(signal)),
+    ]);
+  }
+  if (signal === 'SIGTERM' && app.exitCode !== 0 && app.signalCode !== signal) {
+    throw new Error(`隔离应用退出状态异常：${app.signalCode ?? app.exitCode}`);
+  }
 }
 
 async function writeSummary(summary: AcceptanceSummary): Promise<void> {
