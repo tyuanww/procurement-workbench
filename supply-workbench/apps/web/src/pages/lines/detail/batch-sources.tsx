@@ -72,7 +72,9 @@ function purchaseSources(detail: OrderLineDetail): readonly SourceRecord[] {
     importBatchId, fileName, ...fact.source,
     fields: [
       ['采购订单po单号', fact.poRaw], ['需采购子件名称', fact.componentNameRaw], ['子部件代码', fact.componentCodeRaw],
-      ['采购数量', fact.quantityRaw], ['实际交付进度', fact.deliveryProgressRaw ?? null],
+      ['采购数量', fact.quantityRaw],
+      ...(fact.unitRaw === null ? [] : [['单位原文', fact.unitRaw] as const]),
+      ['实际交付进度', fact.deliveryProgressRaw ?? null],
       [procurementCellLabel('OA需求流程编号', fact.oa.source), fact.oa.raw],
       [procurementCellLabel('产品69码', fact.productCodes.source), fact.productCodes.raw],
     ],

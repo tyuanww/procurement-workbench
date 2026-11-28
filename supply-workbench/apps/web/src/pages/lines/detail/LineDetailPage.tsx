@@ -160,6 +160,8 @@ function BatchDetail({ batch, detail, focused, canRecord, hasProcurementSchedule
   const row = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (!focused || row.current === null) return;
+    const active = document.activeElement;
+    if (active !== document.body && active !== row.current) return;
     row.current.focus({ preventScroll: true });
     row.current.scrollIntoView({ block: 'center' });
   }, [focused]);

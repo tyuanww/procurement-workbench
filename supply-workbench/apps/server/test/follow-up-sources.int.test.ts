@@ -107,7 +107,7 @@ it('已采纳出货重挂后仅提示原批次暂无法核对，发货数量和�
   }
 });
 
-it('生成的两批各自只回查需求表对应的一组单元格，工厂换表后仍指向原文件', async () => {
+it('生成的两批各自回查原需求，换表时保留，挂接其他订单后收起原稿', async () => {
   const { app, handle, close } = await openProcurementImport({ isLocal: true });
   try {
     const client = await procurementImportClient(app, handle);
@@ -148,6 +148,50 @@ it('生成的两批各自只回查需求表对应的一组单元格，工厂换�
     expect(before.batchDemandSources).toEqual(expected);
     expect(after.batchDemandSources).toEqual(expected);
     expect(after.sourceFiles).toMatchObject({ 'factory-original': '需求原表.xlsx', 'factory-replacement': '需求换表.xlsx' });
+
+    const otherLine = await app.inject({ method: 'POST', url: '/api/v1/lines', headers: { cookie: client.cookie },
+      payload: { lane: 'material', nameRaw: '合成的另一订单行', qtyOrdered: 100, receiverPartyId: warehouse } });
+    expect(otherLine.statusCode, otherLine.body).toBe(200);
+    const otherLineId = OrderLineDetailSchema.parse(otherLine.json()).line.id;
+    const reviewer = await loginAs(app, 'reviewer');
+    const link = (orderLineId: string, cookie: string) => app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand/origin-row/link',
+      headers: { cookie }, payload: { orderLineId } });
+    const sameLineLink = await link(line.id, reviewer);
+    expect(sameLineLink.statusCode, sameLineLink.body).toBe(200);
+    expect((await client.detail(line.id)).batchDemandSources).toEqual(expected);
+    expect((await link(otherLineId, client.cookie)).statusCode).toBe(403);
+    const relinked = await link(otherLineId, reviewer);
+    expect(relinked.statusCode, relinked.body).toBe(200);
+    const relinkedDetail = await client.detail(line.id);
+    expect(relinkedDetail.batches).toEqual(after.batches);
+    expect(relinkedDetail.factoryReports.demand).toEqual(after.factoryReports.demand);
+    expect(relinkedDetail.batchDemandSources).toEqual({});
+    expect(relinkedDetail.sourceFiles).toEqual({ 'factory-replacement': '需求换表.xlsx' });
+  } finally {
+    await close();
+  }
+});
+
+it('只存有规范日期和数量的旧工厂需求仍生成批次，原表单元格留待核对', async () => {
+  const { app, handle, close } = await openProcurementImport({ isLocal: true });
+  try {
+    const client = await procurementImportClient(app, handle);
+    await insertFactoryImports(handle.db, [{ batch: 'factory-legacy', name: '旧需求原表.xlsx' }]);
+    await handle.db.insert(schema.factoryMaterialDemandRows).values({
+      ...stamp, id: 'legacy-origin', importBatchId: 'factory-legacy', factoryPartyId: factory, sheetName: demandSheet,
+      rowNo: 4, fingerprint: 'legacy-demand', linkStatus: 'unlinked', role: 'material',
+      blockMaterialPoRaw: 'PO20261117009105', itemCodeRaw: '99010005', nameRaw: '合成旧需求包材',
+      slots: { slots: [{ index: 0, date: '2026-11-24', qty: 50 }] }, raw: {},
+    });
+    const generated = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand-rows/generate-batches',
+      headers: { cookie: client.cookie }, payload: { rowIds: ['legacy-origin'] } });
+    expect(generated.statusCode, generated.body).toBe(200);
+    expect(generated.json()).toEqual({ createdLines: 1, createdBatches: 1, skipped: [] });
+    const line = must((await handle.db.select().from(schema.orderLines)).find(({ itemCodeRaw }) => itemCodeRaw === '99010005'));
+    const detail = await client.detail(line.id);
+    expect(detail.batches).toMatchObject([{ plannedQty: 50, dateFactoryRequired: '2026-11-24', originRef: { rowId: 'legacy-origin', slotIndex: 0 } }]);
+    expect(detail.batchDemandSources).toEqual({});
+    expect(detail.sourceFiles).toEqual({});
   } finally {
     await close();
   }
