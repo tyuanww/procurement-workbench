@@ -29,7 +29,7 @@ export function ProgressCurrent({ filters, origin = 'progress', ...scope }: Prog
   readonly filters: ReactNode;
   readonly origin?: ProgressOrderOrigin;
 }) {
-  const { data, error, isLoaded, notes, now, retry } = useCurrentData(scope);
+  const { data, error, isLoaded, hasLoadedResults, notes, now, retry } = useCurrentData(scope);
   const { oa, stay, drill, setOa, setStay, setDrill, clearFilters, tableRef, ...table } = useCurrentFilter();
   const isDelivery = origin === 'delivery';
   const oaRows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
@@ -37,7 +37,7 @@ export function ProgressCurrent({ filters, origin = 'progress', ...scope }: Prog
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
   const insight = progressInsights(scopedRows);
   const emptyMessage = currentEmptyMessage({ drill, oa, stay });
-  const isSourceMissing = useDeliveryReturnFocus(table.search, isDelivery && isLoaded && error === '', tableRef);
+  const isSourceMissing = useDeliveryReturnFocus({ search: table.search, isReady: isDelivery && hasLoadedResults, region: tableRef });
   useProgressRowFocus({ tableRef, search: table.search, isLoaded, isDelivery });
   return (
     <>
@@ -71,9 +71,9 @@ function useProgressRowFocus({ tableRef, search, isLoaded, isDelivery }: {
     const id = new URLSearchParams(search).get('focusLine');
     if (!isLoaded || id === null || last.current === search) return;
     if (isDelivery && document.activeElement !== document.body) return;
-    const row = [...(tableRef.current?.querySelectorAll('tr[data-row-key]') ?? [])].find((element) => element.getAttribute('data-row-key') === id);
+    const row = tableRef.current?.querySelector(`tr[data-row-key="${CSS.escape(id)}"]`);
     row?.querySelector('a')?.focus();
-    if (row !== undefined) last.current = search;
+    if (row != null) last.current = search;
   }, [isLoaded, search, tableRef, isDelivery]);
 }
 
@@ -161,7 +161,8 @@ function useCurrentData({ store, isMine }: ProgressScope) {
     return () => { generation.current++; };
   }, [reload, store, isMine]);
   const isLoaded = loadedScope?.store === store && loadedScope.isMine === isMine;
-  return { data: isLoaded ? data : emptyProgress, error, isLoaded, notes, now, retry: () => setReload((value) => value + 1) };
+  return { data: isLoaded ? data : emptyProgress, error, isLoaded, hasLoadedResults: isLoaded && error === '', notes, now,
+    retry: () => setReload((value) => value + 1) };
 }
 
 function memosForOa({ lines, arrivalMemos }: ProgressData, oa: string | null) {
@@ -243,21 +244,13 @@ function ProgressTable(props: ProgressTableProps) {
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
   const lineOf = (lineId: string) => lines.get(lineId);
-  const deliveryLink = useDeliveryDetailLinks();
-  const orderLink = (lineId: string, action: 'order' | 'overdue' | 'note', focusBatch?: string): ProgressOrderLinkProps => {
-    const store = lineOf(lineId)?.storeProgress?.store;
-    if (origin === 'delivery') {
-      const focusKey = JSON.stringify(['delivery', action, lineId, focusBatch ?? null]);
-      return deliveryLink({ id: lineId, search, store, focusKey, focusBatch });
-    }
-    return { to: scopedLineLink(lineId, { search, store, focusLine: lineId, ...(focusBatch === undefined ? {} : { focusBatch }) }) };
-  };
-  const lineLink = (lineId: string) => orderLink(lineId, 'order');
+  const orderLink = useProgressOrderLink({ lines, search, origin });
+  const lineLink = (lineId: string) => orderLink(lineId, { action: 'order' });
   const overdueLink = (row: ProgressRow) => {
     const due = lineOf(row.lineId)?.nextDue;
-    return row.arrival.kind === 'overdue' && due != null ? orderLink(row.lineId, 'overdue', due.batchId) : undefined;
+    return row.arrival.kind === 'overdue' && due != null ? orderLink(row.lineId, { action: 'overdue', focusBatch: due.batchId }) : undefined;
   };
-  const note = (lineId: string) => <ProgressNote link={orderLink(lineId, 'note')} saved={notes[lineId]} />;
+  const note = (lineId: string) => <ProgressNote link={orderLink(lineId, { action: 'note' })} saved={notes[lineId]} />;
   const expand = (row: ProgressRow) => <ProgressExpandedRow row={row} line={lineOf(row.lineId)} facts={props.batchFacts.get(row.lineId)} search={search} origin={origin} note={isPhone ? note(row.lineId) : null} />;
   return (
     <Table
@@ -281,6 +274,18 @@ function ProgressTable(props: ProgressTableProps) {
       })}
     />
   );
+}
+
+function useProgressOrderLink({ lines, search, origin }: Pick<ProgressTableProps, 'lines' | 'search' | 'origin'>) {
+  const deliveryLink = useDeliveryDetailLinks();
+  return (lineId: string, { action, focusBatch }: { readonly action: 'order' | 'overdue' | 'note'; readonly focusBatch?: string }): ProgressOrderLinkProps => {
+    const store = lines.get(lineId)?.storeProgress?.store;
+    if (origin === 'delivery') {
+      const focusKey = JSON.stringify(['delivery', action, lineId, focusBatch ?? null]);
+      return deliveryLink({ id: lineId, search, store, focusKey, focusBatch });
+    }
+    return { to: scopedLineLink(lineId, { search, store, focusLine: lineId, ...(focusBatch === undefined ? {} : { focusBatch }) }) };
+  };
 }
 
 function ProgressExpandedRow({ row, line, facts, search, origin, note }: {

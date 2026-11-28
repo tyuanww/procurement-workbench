@@ -31,7 +31,11 @@ export function useDeliveryDetailLinks() {
   };
 }
 
-export function useDeliveryReturnFocus(search: string, isReady: boolean, region: RefObject<HTMLElement | null>) {
+export function useDeliveryReturnFocus({ search, isReady, region }: {
+  readonly search: string;
+  readonly isReady: boolean;
+  readonly region: RefObject<HTMLElement | null>;
+}) {
   const { key } = useLocation();
   const [missingAt, setMissingAt] = useState<string | null>(null);
   useDetailReturnFocus(isReady, {

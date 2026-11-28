@@ -44,7 +44,7 @@ function RiskResults({ risk }: { readonly risk: Risk }) {
   const { load, retry } = useRiskRows(risk);
   const isPhone = useShellViewport().band === 'phone';
   const results = useRef<HTMLElement>(null);
-  const isSourceMissing = useDeliveryReturnFocus(search, load.kind === 'ready', results);
+  const isSourceMissing = useDeliveryReturnFocus({ search, isReady: load.kind === 'ready', region: results });
   return <section ref={results} tabIndex={-1} aria-label="首页交期风险结果">
     {load.kind === 'pending' ? <Skeleton active /> : null}
     {load.kind === 'failed' ? <Result status="error" title="这组订单没有读出来" subTitle={load.message}
