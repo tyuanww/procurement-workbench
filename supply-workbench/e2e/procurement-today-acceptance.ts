@@ -361,13 +361,7 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
     await trigger.press('Enter');
     await page.waitForURL(drawerUrl);
     if (width === 1440) await record.press('Enter');
-    else {
-      await record.scrollIntoViewIfNeeded();
-      const box = await record.boundingBox();
-      assert.ok(box && box.width >= 44 && box.height >= 44 && box.x >= 0 && box.y >= 0
-        && box.x + box.width <= 320 && box.y + box.height <= 667);
-      await record.click();
-    }
+    else await openReceiptRecordOnPhone(page, record);
     await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501' && url.searchParams.get('focusBatch') === batch);
     await page.getByText(/待收 25,000 件/u).first().waitFor();
     if (width === 1440) await page.goBack();
@@ -383,6 +377,26 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
   await checkReceiptPageRelocation(page, { trigger, record, source });
   await page.setViewportSize({ width: 320, height: 800 });
   return { widths, batch, stayedOnToday: true, copiedOnlySelectedBatch: true, browserBackAndPageReturn: true, focusRestored: true, relocatedPageFocus: true };
+}
+
+async function openReceiptRecordOnPhone(page: Page, record: Locator) {
+  await record.scrollIntoViewIfNeeded();
+  const target = await record.elementHandle();
+  assert.ok(target);
+  try {
+    const visible = await page.waitForFunction((element) => {
+      const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+      if (left < 0 || top < 0 || right > window.innerWidth || bottom > window.innerHeight) return false;
+      const center = document.elementFromPoint(left + width / 2, top + height / 2);
+      return center !== null && element.contains(center);
+    }, target);
+    await visible.dispose();
+  } finally {
+    await target.dispose();
+  }
+  const box = await record.boundingBox();
+  assert.ok(box && box.width >= 44 && box.height >= 44, '窄屏批次入口的触控区域须达到 44×44');
+  await record.click();
 }
 
 async function checkReceiptPageRelocation(page: Page, { trigger, record, source }: {
