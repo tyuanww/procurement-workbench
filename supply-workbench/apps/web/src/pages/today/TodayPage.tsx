@@ -16,6 +16,7 @@ import { pendingBatchRowId } from './PendingBatches.js';
 import { useTodayKeys } from './use-today-keys.js';
 import { arrivalReturnId, pendingReturnId, screenView, useAppliedPage, useTodaySession } from './today-session.js';
 import { TodayScreen, type TodayScreenProps } from './TodayBoard.js';
+import { visibleArrivals } from './TodayArrivals.js';
 import { sessionRows, useTodayPlan } from './use-today-plan.js';
 import { useUndoMessage } from './use-undo-message.js';
 import { restoreTodayWrite, submitForm } from './today-writes.js';
@@ -108,13 +109,20 @@ function useScreenSession({ state, today, route, board, actionBoard, plan, isInt
   const actionPage = useTodayActionPage({ query, search, setParams, today, isSettled });
   useRowFocus({ id: query.focusId, state, visible,
     isSettled: rowsSettled({ isReady: isSettled || isPlanMode, isSchedule: isPlanMode, plan: plan.load.kind }) });
-  const closeSession = useTodaySession({
-    state,
-    rows: sessionRows({ board: actionBoard, plan }),
-    isReady: isSettled || (isPlanMode && query.focusId === null),
-  });
-  useTodayKeys({ state, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, canRecord });
+  const { close: closeSession, isOpening } = useScreenDrawer({ state, route, plan, actionBoard, isReady: isSettled || (isPlanMode && query.focusId === null),
+    areArrivalsReady: today.isLoadedForQuery });
+  useTodayKeys({ state, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, isOpening, canRecord });
   return { actionPage, closeSession, canRecord };
+}
+
+function useScreenDrawer({ state, route, plan, actionBoard, isReady, areArrivalsReady }: Pick<ScreenInput, 'state' | 'route' | 'plan' | 'actionBoard'> & {
+  readonly isReady: boolean; readonly areArrivalsReady: boolean;
+}) {
+  const arrivals = route.arrivalsView;
+  const rows = arrivals === undefined ? sessionRows({ board: actionBoard, plan }) :
+    visibleArrivals(state.arrivalMemos, arrivals.timing).map((memo) => ({ id: 'batch:' + memo.batchId }));
+  return useTodaySession({ state, rows, isReady: arrivals === undefined ? isReady : areArrivalsReady,
+    setUnavailableArrivalSearch: arrivals === undefined ? undefined : state.setUnavailableArrivalSearch });
 }
 
 function useRowFocus({ id, state, visible, isSettled }: {
@@ -138,6 +146,7 @@ function useTodayState(today: ReturnType<typeof useTodayData>) {
   const data = today.data;
   const [focus, setFocus] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [unavailableArrivalSearch, setUnavailableArrivalSearch] = useState<string | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
   const [isHelpOpen, setHelp] = useState(false);
   const [draft, setDraft] = useState<OpenForm | null>(null);
@@ -151,7 +160,8 @@ function useTodayState(today: ReturnType<typeof useTodayData>) {
     loadError: data === null ? today.loadError : '',
     refresh: today.refresh,
     retry: today.retry,
-    focus, setFocus, drawerId, setDrawerId, undo, setUndo, isHelpOpen, setHelp, draft, setDraft, saveError, setSaveError, notice, setNotice, isSaving, setSaving,
+    focus, setFocus, drawerId, setDrawerId, unavailableArrivalSearch, setUnavailableArrivalSearch, undo, setUndo, isHelpOpen, setHelp, draft, setDraft, saveError, setSaveError,
+    notice, setNotice, isSaving, setSaving,
   };
 }
 
@@ -181,7 +191,7 @@ type ScreenInput = {
   readonly actionBoard: TodayBoard;
   readonly plan: ReturnType<typeof useTodayPlan>;
   readonly route: WorkspaceRoute;
-  readonly closeSession: ReturnType<typeof useTodaySession>;
+  readonly closeSession: ReturnType<typeof useTodaySession>['close'];
 };
 
 function screenProps(input: ScreenInput): TodayScreenProps {
@@ -190,6 +200,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
   return {
     board, asOf: state.asOf,
     arrivalMemos: state.arrivalMemos,
+    hasMissingArrival: state.unavailableArrivalSearch === route.search,
     pendingBatch: state.pendingBatch,
     onPendingBatchChanged: () => applyNextToday(state),
     actionBoard,
@@ -209,7 +220,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     isReady: state.isReady,
     loadError: state.loadError,
     onGroup: (group) => setParams(new URLSearchParams(withGroup({ search, group }))),
-    onOpen: (id) => { state.setDrawerId(id); state.setFocus(id); state.setDraft(null); state.setSaveError(''); },
+    onOpen: (id) => closeSession(id),
     onQuick: ({ id, kind }) => openQuick({ id, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError }),
     onCopy: (text) => { void copyNudge(text, state.setNotice); },
     onCloseDrawer: () => closeSession(null),

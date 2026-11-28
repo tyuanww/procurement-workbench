@@ -49,6 +49,12 @@ export function detailReturnState(state: unknown, target: string | { detailPath:
   return typeof target === 'string' ? undefined : { detailOrigin: target };
 }
 
+export function preserveDetailReturnState({ key, state }: { readonly key: string; readonly state: unknown }) {
+  const origin = linkOrigin(state) ?? historyOrigin(key);
+  if (origin === undefined) return state;
+  return { ...(typeof state === 'object' && state !== null ? state : {}), detailOrigin: origin };
+}
+
 type ReturnFocusFallback = {
   readonly heading: RefObject<HTMLElement | null>;
   readonly onMissing: () => void;
