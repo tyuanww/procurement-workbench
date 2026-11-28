@@ -144,9 +144,16 @@ export type DateChangeView = {
   readonly changedAt: string;
 };
 
-type DemandSlot = FactoryReportOf<'demand'>['payload']['slots'][number];
+/** 原值未采集时没有键，确实采集为空时为 null。 */
+type WithOriginalCells<T> = T & { readonly originalCells?: Readonly<Record<string, string | null>> };
+type ShipmentSourceReport = WithOriginalCells<FactoryReportOf<'shipment'>>;
+type DemandReport = FactoryReportOf<'demand'>;
+type DemandSlot = DemandReport['payload']['slots'][number];
+type DemandSourceReport = WithOriginalCells<Omit<DemandReport, 'payload'> & {
+  readonly payload: Omit<DemandReport['payload'], 'slots'> & { readonly slots: readonly WithOriginalCells<DemandSlot>[] };
+}>;
 type BatchDemandSource = Pick<FactoryReportOf<'demand'>, 'importBatchId' | 'sheetName' | 'rowNo'> & {
-  readonly slot: Pick<DemandSlot, 'index' | 'dateRaw' | 'qtyRaw' | 'sourceColumns'>;
+  readonly slot: WithOriginalCells<Pick<DemandSlot, 'index' | 'dateRaw' | 'qtyRaw' | 'sourceColumns'>>;
 };
 
 export type OrderLineDetail = {
@@ -164,14 +171,14 @@ export type OrderLineDetail = {
   readonly snapshot: { readonly importBatchId: string; readonly at: string; readonly fields: Readonly<Record<string, Provenanced<unknown>>> } | null;
   readonly batches: readonly BatchView[];
   readonly sourceFiles?: Readonly<Record<string, string>>;
-  readonly archivedShipmentSources?: readonly FactoryReportOf<'shipment'>[];
+  readonly archivedShipmentSources?: readonly ShipmentSourceReport[];
   readonly batchDemandSources?: Readonly<Record<string, BatchDemandSource>>;
   readonly factoryReports: {
     readonly inTransit: readonly FactoryReportOf<'in_transit'>[];
-    readonly shipments: readonly FactoryReportOf<'shipment'>[];
+    readonly shipments: readonly ShipmentSourceReport[];
     readonly stock: readonly FactoryReportOf<'stock'>[];
     readonly schedule: readonly FactoryReportOf<'schedule'>[];
-    readonly demand: readonly FactoryReportOf<'demand'>[];
+    readonly demand: readonly DemandSourceReport[];
     readonly packagingCombo: readonly FactoryReportOf<'packaging_combo'>[];
   };
   readonly exceptions: readonly ExceptionView[];

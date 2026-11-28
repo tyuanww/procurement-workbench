@@ -189,7 +189,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
     expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
   });
-  result.checks.followUpOrderQuery = await checkFollowUpOrderQuery({ page: buyer, origin, out, po: componentPo, warehouse });
+  result.checks.followUpOrderQuery = await checkFollowUpOrderQuery({ page: buyer, origin, out, po: componentPo, materialCode: componentCode, warehouse });
   result.checks.followUpDelivery = await checkFollowUpDelivery({ page: manager, buyer, origin, out, warehouse });
   result.checks.importArrivalEvidence = await checkImportedArrivalEvidence(buyer, importPath);
   result.checks.factoryImportScope = await checkFactoryImportScope({ buyer, manager, origin });
