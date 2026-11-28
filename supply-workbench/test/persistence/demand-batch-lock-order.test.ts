@@ -11,7 +11,7 @@ import { settingsRepository } from '../../packages/persistence/src/repositories/
 import { userRepository } from '../../packages/persistence/src/repositories/users.js';
 import { seed } from '../../packages/persistence/src/seed.js';
 import { aUser, anOrderLine } from '../../packages/testkit/src/index.js';
-import { blockedOnPostgres, gate, onlyLineDetail, rawCells, seedLine, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
+import { blockedOnPostgres, gate, onlyLineDetail, rawCells, seedLine, settled, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
 
 it.skipIf(url === undefined)('工厂反序生成两条订单与今日批量建批重叠时，两笔操作都能提交', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
@@ -125,8 +125,10 @@ it.skipIf(url === undefined).each([
     let generated: ReturnType<typeof generate> | undefined;
     try {
       await Promise.race([paused.entered, assigning]);
-      generated = generate({ rowIds: [...pair.rowIds].reverse() }, sample.buyer);
-      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+      const generation = settled(generate({ rowIds: [...pair.rowIds].reverse() }, sample.buyer));
+      generated = generation.result;
+      const hasReachedExpectedState = prior ? generation.isDone : () => blockedOnPostgres(main, applicationName);
+      await expect.poll(hasReachedExpectedState, wait).toBe(true);
     } finally {
       paused.release();
       await Promise.allSettled(generated === undefined ? [assigning] : [assigning, generated]);

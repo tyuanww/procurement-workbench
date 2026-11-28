@@ -12,10 +12,11 @@ import type { Actor } from '../../shared/actor.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
 import { lockOrderLines, requireLockedOrderLine } from '../../shared/locked-order-lines.js';
-import { resolveMaterialLine, sameMaterial, type MaterialIdentity } from './demand-line.js';
+import { isCurrentMaterialLine, resolveMaterialLine, type MaterialIdentity } from './demand-line.js';
 import { commandContext, persistBatch } from './persist-batch.js';
 
 const NO_SLOT = -1;
+const EXISTING_BATCH = '已经生成过批次';
 
 export type SlotSkip = {
   readonly rowId: string;
@@ -51,6 +52,7 @@ type DemandSnapshot = Awaited<ReturnType<UnitOfWorkStores['factoryReports']['get
 type PreparedDemand = {
   readonly lineId: OrderLineId;
   readonly material: MaterialIdentity;
+  readonly matchingLineIds: readonly OrderLineId[];
   readonly lineCreated: boolean;
   readonly rowId: string;
   readonly version: string | null;
@@ -66,14 +68,16 @@ export async function generateDemandRows(input: GenerateInput, sources: readonly
   for (const source of sources) {
     const row = await prepareDemandRow(input, source);
     rows.push(row);
-    if ('lineId' in row) lineIds.add(row.lineId);
+    if ('lineId' in row) {
+      for (const lineId of row.matchingLineIds) lineIds.add(lineId);
+    }
   }
   const lines = await lockOrderLines(input.tx.orderLines, [...lineIds]);
   const outcomes = [];
   for (const row of rows) {
     if ('lineId' in row) {
       const line = requireLockedOrderLine(lines, row.lineId);
-      if (!sameMaterial(line, row.material)) throw new DemandMaterialChanged();
+      if (!await isCurrentMaterialLine(input.tx, { line, material: row.material })) throw new DemandMaterialChanged();
       outcomes.push(await generatePreparedRow(input, { ...row, line }));
     } else {
       outcomes.push(row);
@@ -109,7 +113,20 @@ async function prepareDemandRow(input: GenerateInput, { row, version }: DemandSn
       batches: 0,
       skipped: candidates.map((slot) => skip({ rowId: row.id, slotIndex: slot.slotIndex, reason: line.reason })),
     };
-  return { rowId: row.id, version, lineId: line.lineId, material: line.material, lineCreated: line.created, factoryPartyId: row.factoryPartyId, candidates };
+  if (!line.created && await allSlotsGenerated(input.tx, candidates)) {
+    return { lines: 0, batches: 0, skipped: candidates.map(({ rowId, slotIndex }) => skip({ rowId, slotIndex, reason: EXISTING_BATCH })) };
+  }
+  return {
+    rowId: row.id, version, lineId: line.lineId, material: line.material, matchingLineIds: line.matchingLineIds,
+    lineCreated: line.created, factoryPartyId: row.factoryPartyId, candidates,
+  };
+}
+
+async function allSlotsGenerated(tx: UnitOfWorkStores, candidates: readonly BatchCandidate[]): Promise<boolean> {
+  for (const { rowId, slotIndex } of candidates) {
+    if ((await tx.batches.listByOriginRef({ rowId, slotIndex })).length === 0) return false;
+  }
+  return true;
 }
 
 async function generatePreparedRow(input: GenerateInput, row: PreparedDemand & { readonly line: OrderLine }): Promise<RowOutcome> {
@@ -181,7 +198,7 @@ async function createSlot(
     slotIndex: input.slot.slotIndex,
   });
   if (prior.length > 0) {
-    input.skipped.push(skip({ rowId: input.slot.rowId, slotIndex: input.slot.slotIndex, reason: '已经生成过批次' }));
+    input.skipped.push(skip({ rowId: input.slot.rowId, slotIndex: input.slot.slotIndex, reason: EXISTING_BATCH }));
     return undefined;
   }
   const batchId = input.nextDeliveryBatchId();

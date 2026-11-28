@@ -9,8 +9,10 @@ import { requireDatabase } from '../../packages/persistence/src/require-database
 import { auditRepository } from '../../packages/persistence/src/repositories/audit-log.js';
 import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
+import { itemCodeRepository } from '../../packages/persistence/src/repositories/identity.js';
 import { importBatchRepository } from '../../packages/persistence/src/repositories/import-batches.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
+import { itemRepository } from '../../packages/persistence/src/repositories/items.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { ownerAssignmentRepository } from '../../packages/persistence/src/repositories/owner-assignments.js';
 import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
@@ -56,6 +58,8 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
         },
       },
       orderLines: linesWithHooks(tx, hooks),
+      items: itemRepository(tx),
+      itemCodes: itemCodeRepository(tx),
       ownerAssignments: ownerAssignmentRepository(tx),
       parties: partyRepository(tx),
       users: userRepository(tx),

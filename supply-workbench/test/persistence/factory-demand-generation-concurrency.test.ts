@@ -64,7 +64,7 @@ it.skipIf(url === undefined)('需求批次与人工建批同时提交时按同�
   await withFixture(async ({ main, competing, applicationName, sample }) => {
     await seedLine({ db: main.db, sample, id: sample.lineId });
     const paused = gate();
-    const generate = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
+    const generate = makeGenerateBatchesFromDemand(writes(main.db, { afterLineLock: paused.hold }));
     const create = makeCreateBatch(writes(competing.db));
     const generated = generate({ rowIds: [sample.id] }, sample.buyer);
     let manual: ReturnType<typeof create> | undefined;
@@ -72,7 +72,7 @@ it.skipIf(url === undefined)('需求批次与人工建批同时提交时按同�
       await Promise.race([paused.entered, generated]);
       const running = settled(create({ lineId: sample.lineId, receiverPartyId: sample.factoryId, plannedQty: 75 }, sample.buyer));
       manual = running.result;
-      await expect.poll(() => running.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
     } finally {
       paused.release();
       await Promise.allSettled(manual === undefined ? [generated] : [generated, manual]);
