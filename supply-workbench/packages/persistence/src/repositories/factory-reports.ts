@@ -62,7 +62,9 @@ async function demandSourcesAtGeneration(db: AppDatabase, input: Parameters<Fact
   // 生成凭据只接受已采集的 raw 槽，规范列用于生成批次的业务值。
   const view = demandSourceOf({ ...demand, slots: null });
   if (view.payload.role !== 'material') return sources;
-  for (const slot of view.payload.slots) {
+  for (const fact of demandFacts(demand).slots) {
+    const slot = view.payload.slots.find(({ index }) => index === fact.index);
+    if (slot === undefined || slot.date !== fact.date || slot.qty !== fact.qty) continue;
     const source = batchDemandSourceOf(view, slot);
     if (source !== undefined) sources.set(slot.index, source);
   }

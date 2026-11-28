@@ -26,7 +26,7 @@ const wait = { timeout: 4000, interval: 25 };
 
 it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并发生成只提交一份凭据（目标订单已存在 %s）', async (existing) => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
-    if (existing) await seedLine({ db: main.db, sample, id: orderLineId(sample.id) });
+    if (existing) await seedLine({ db: main.db, sample, id: sample.lineId });
     const paused = gate();
     const first = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
     const second = makeGenerateBatchesFromDemand(writes(competing.db));
@@ -54,7 +54,7 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并
 
 it.skipIf(url === undefined)('真实 PostgreSQL 重联持有写锁时仍生成业务批次，原表保留待核对', async () => {
   await withFixture(async ({ main, competing, sample }) => {
-    const target = orderLineId(sample.id);
+    const target = sample.lineId;
     const other = orderLineId(`${sample.id}-other`);
     await seedLine({ db: main.db, sample, id: target });
     await orderLineRepository(main.db).save(anOrderLine({ id: other, purchaseOrderId: sample.orderId, lane: 'material' }));
@@ -88,6 +88,22 @@ it.skipIf(url === undefined)('真实 PostgreSQL 重联持有写锁时仍生成�
     const after = await onlyLineDetail(main.db, sample.code);
     expect(after.factoryReports.demand).toMatchObject([{ id: sample.id, payload: { slots: [{ originalCells: rawCells }] } }]);
     expect(after.batchDemandSources).toEqual({});
+  });
+}, 15000);
+
+it.skipIf(url === undefined).each([
+  { qty: 100, qtyRaw: '0100.00' },
+  { date: localDate('2026-11-25'), dateRaw: '2026/11/25' },
+])('真实 PostgreSQL 原始槽和生成事实冲突时保留计划值，原表待核对（%j）', async (conflict) => {
+  await withFixture(async ({ main, sample }) => {
+    const reports = factoryReportRepository(main.db);
+    const original = await reports.get(sample.id);
+    await reports.save({ ...original, raw: { slots: [{ ...slot, ...rawCells, ...conflict }] } });
+    const generated = await makeGenerateBatchesFromDemand(writes(main.db))({ rowIds: [sample.id] }, sample.buyer);
+    expect(generated).toEqual({ createdLines: 1, createdBatches: 1, skipped: [] });
+    const detail = await onlyLineDetail(main.db, sample.code);
+    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
+    expect(detail.batchDemandSources).toEqual({});
   });
 }, 15000);
 
@@ -126,7 +142,7 @@ function writes(db: AppDatabase, hooks: Hooks = {}) {
 function sampleOf() {
   const token = randomUUID();
   return {
-    id: entityId(token), importId: entityId(`demand-test-${token}`), factoryId: entityId(`demand-factory-${token}`),
+    id: entityId(token), lineId: orderLineId(token), importId: entityId(`demand-test-${token}`), factoryId: entityId(`demand-factory-${token}`),
     orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `DEMAND-PO-${token}`,
     buyer: { ...anActor('buyer'), id: entityId(`demand-buyer-${token}`) },
     reviewer: { ...anActor('reviewer'), id: entityId(`demand-reviewer-${token}`) },
