@@ -1,9 +1,7 @@
-import { Button, Collapse, Descriptions, Drawer, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
-import { useRef, useState, type Ref } from 'react';
-import { Link } from 'react-router';
-import type { StuckDashboard, StuckItem } from '@sw/contracts';
+import { Button, Collapse, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
+import { useRef, type ReactNode, type Ref } from 'react';
+import type { StuckDashboard } from '@sw/contracts';
 import { batchStatusLabel } from '@sw/domain';
-import { useCan } from '../../shared/actor.js';
 import { formatQuantity, formatTableDate } from '../../shared/ui/format.js';
 import {
   EM_DASH,
@@ -18,13 +16,13 @@ import {
 } from '../../features/performance/index.js';
 import {
   dwellColor,
-  drawerWidth,
   space,
   text,
   topBar,
 } from '../../theme/tokens.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { MetricStrip, StackedBarChart, type MetricItem } from '../../shared/ui/analytics.js';
+import { StuckSelection, stuckTriggerId, useStuckSelection } from './StuckSelection.js';
 import { mobileStuckColumns } from './stuck-mobile.js';
 import { CAUSE_LABEL, CauseFilter, SourceLinks } from './cause-filter.js';
 
@@ -32,14 +30,6 @@ type SearchHandler = (patch: DashboardPatch) => void;
 type TextKey = 'stageLabel' | 'name' | 'waiting' | 'owner';
 
 const CLEAR_FILTERS: StuckFilters = { stage: null, bucket: null, cause: null, card: null };
-
-const WAITING_REASON = {
-  supplier_date: '跟进确认交期',
-  supplier_shipment: '等工厂发货',
-  internal_note: '等回单',
-  internal_review: '待核实物记录',
-  receiver_arrival: '等收货',
-} satisfies Record<NonNullable<StuckItem['waitingOn']['reason']>, string>;
 
 const CARDS = [
   { key: 'overdue', label: '逾期', tone: 'danger', filters: { ...CLEAR_FILTERS, card: 'overdue' } },
@@ -57,11 +47,9 @@ export function StuckPanel(props: {
 }) {
   const { data, query, onSearch, isUpdating } = props;
   const isPhone = useShellViewport().band === 'phone';
-  const [selected, setSelected] = useState<{ readonly batchId: string; readonly open: boolean }>();
   const listRef = useRef<HTMLElement>(null);
+  const { batchId, select } = useStuckSelection({ list: listRef, requestedPage: query.page, displayedPage: isUpdating ? undefined : data.page });
   const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
-  const item = data.items.find((candidate) => candidate.batchId === selected?.batchId);
-  const row = stuck.rows.find((candidate) => candidate.batchId === selected?.batchId);
   const filterList = (patch: DashboardPatch) => {
     onSearch(patch);
     listRef.current?.focus();
@@ -70,22 +58,21 @@ export function StuckPanel(props: {
     <CardRow kpis={data.kpis} filters={query} onSearch={filterList} />
     <CauseFilter counts={data.causeCounts} cause={query.cause} onSearch={filterList} />
   </Flex>;
+  const selection = <StuckSelection batchId={batchId} data={data} rows={stuck.rows} now={props.now}
+    isUpdating={isUpdating || (batchId !== null && data.page !== query.page)} listRef={listRef} onClose={() => select(null)} />;
   return (
     <Flex vertical gap={space[3]}>
       {isPhone ? <Collapse size="small" items={[{ key: 'filters', label: '卡点指标与原因筛选', children: filters }]} /> : filters}
       <StuckList ref={listRef} data={data} query={query} rows={stuck.rows} isUpdating={isUpdating} now={props.now} isPhone={isPhone}
-        onSearch={onSearch} onClear={() => filterList(CLEAR_FILTERS)}
-        onOpen={(batch) => setSelected({ batchId: batch.batchId, open: true })} />
+        selection={selection} onSearch={onSearch} onClear={() => filterList(CLEAR_FILTERS)}
+        onOpen={(batch) => select(batch.batchId, data.page === query.page ? undefined : data.page)} />
       <DwellChart dwell={stuck.dwell} onSearch={filterList} />
       <SourceLinks key={data.asOf} asOf={data.asOf} />
-      {item === undefined || row === undefined || selected === undefined ? null :
-        <StuckDetails item={item} row={row} now={props.now} isOpen={selected.open}
-          onClose={() => setSelected({ ...selected, open: false })} onHidden={() => setSelected(undefined)} />}
     </Flex>
   );
 }
 
-function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch, onClear, onOpen }: {
+function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, selection, onSearch, onClear, onOpen }: {
   readonly ref: Ref<HTMLElement>;
   readonly data: StuckDashboard;
   readonly query: StuckFilters;
@@ -93,6 +80,7 @@ function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch,
   readonly isUpdating: boolean;
   readonly now: Date;
   readonly isPhone: boolean;
+  readonly selection: ReactNode;
   readonly onSearch: SearchHandler;
   readonly onClear: () => void;
   readonly onOpen: (row: StuckTableRow) => void;
@@ -102,6 +90,7 @@ function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch,
       <Typography.Title level={2} style={{ margin: 0 }}>
         卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
       </Typography.Title>
+      {selection}
       <StuckFilter filters={query} onClear={onClear} />
       {data.total === 0 && !isUpdating ? <Empty description="当前筛选没有卡点" /> : (
         <StuckTable rows={isUpdating ? [] : rows} page={data.page} pageSize={data.pageSize}
@@ -218,7 +207,7 @@ function stuckColumns(input: {
     const batch = row.batchSeq === undefined ? '' : `第 ${row.batchSeq} 批`;
     const label = ['查看卡点明细', row.po === EM_DASH ? row.name : row.po, batch].filter(Boolean).join(' ');
     return (
-      <Button type="link" size="small" aria-label={label}
+      <Button id={stuckTriggerId(row.batchId)} type="link" size="small" aria-label={label} aria-haspopup="dialog"
         style={{ maxWidth: '100%', paddingInline: 0, height: 'auto', minHeight: input.isPhone ? 44 : 24, alignItems: 'start',
           justifyContent: 'center', textAlign: 'start', whiteSpace: 'normal', flexDirection: input.isPhone ? 'column' : 'row', gap: input.isPhone ? 0 : space[0] }}
         onClick={() => input.onOpen(row)}>
@@ -250,57 +239,6 @@ function stuckColumns(input: {
       ),
     },
   ];
-}
-
-function StuckDetails({ item, row, now, isOpen, onClose, onHidden }: {
-  readonly item: StuckItem; readonly row: StuckTableRow; readonly now: Date; readonly isOpen: boolean;
-  readonly onClose: () => void; readonly onHidden: () => void;
-}) {
-  const canReadLine = useCan('data.read');
-  const lineHref = canReadLine && item.orderLineId !== undefined
-    ? `/lines/${encodeURIComponent(item.orderLineId)}?focusBatch=${encodeURIComponent(item.batchId)}` : undefined;
-  const signals = stuckSignals(item);
-  return <Drawer open={isOpen} title="卡点批次明细" size={`min(${drawerWidth}px, 100vw)`} onClose={onClose}
-    afterOpenChange={(open) => { if (!open) onHidden(); }}
-    focusable={{ trap: true, focusTriggerAfterClose: true }}>
-    <Descriptions size="small" column={1} items={[
-      { key: 'po', label: '采购单', children: row.po },
-      { key: 'batch', label: '要货批次', children: row.batchSeq === undefined ? row.batchId : `第 ${row.batchSeq} 批` },
-      ...(lineHref === undefined ? [] : [{ key: 'line', label: '订单行', children: <Link to={lineHref}>打开订单行</Link> }]),
-      { key: 'name', label: '品名', children: row.name },
-      { key: 'stage', label: '阶段', children: `${row.stageLabel} · 停留 ${row.daysInStage} 天` },
-      { key: 'waiting', label: '交付等待方', children: item.waitingOn.reason === undefined ? row.waiting : `${row.waiting}（${WAITING_REASON[item.waitingOn.reason]}）` },
-      { key: 'owner', label: '内部负责人', children: row.owner },
-      { key: 'confirmed', label: '确认到货', children: row.confirmed === EM_DASH ? EM_DASH : formatTableDate({ iso: row.confirmed, now }) },
-      { key: 'quantities', label: '批次实物数量', children: <BatchQuantities fulfillment={item.fulfillment} /> },
-      { key: 'signals', label: '关联与异常', children: signals.length === 0 ? EM_DASH : signals.map((label) => <Tag key={label}>{label}</Tag>) },
-    ]} />
-  </Drawer>;
-}
-
-function BatchQuantities({ fulfillment }: { readonly fulfillment: StuckItem['fulfillment'] }) {
-  const unit = fulfillment?.unit;
-  const quantities = [
-    { label: '未发', value: fulfillment?.unshippedQty },
-    { label: '在途', value: fulfillment?.inTransitQty },
-    { label: '实收', value: fulfillment?.receivedQty },
-  ];
-  return <Flex gap={space[2]} wrap>
-    {quantities.map(({ label, value }) => <span key={label} style={{ fontVariantNumeric: 'tabular-nums' }}>
-      {label} {value == null || unit == null ? EM_DASH : `${formatQuantity(value)} ${unit}`}
-    </span>)}
-    {quantities.some(({ value }) => value == null) ? <Typography.Text type="secondary">数量待核</Typography.Text> : null}
-  </Flex>;
-}
-
-function stuckSignals(item: StuckItem): string[] {
-  return [
-    !item.factoryLinked && CAUSE_LABEL.missing_factory,
-    item.factoryUnlinked && CAUSE_LABEL.factory_demand_unlinked,
-    item.exceptionOpen && CAUSE_LABEL.exception_open,
-    item.supplierAliasPending && CAUSE_LABEL.supplier_pending,
-    item.bomMissing && CAUSE_LABEL.bom_missing,
-  ].filter((label) => label !== false);
 }
 
 function textColumn(title: string, dataIndex: TextKey): TableColumnType<StuckTableRow> {

@@ -31,7 +31,8 @@ export function LineDetailPage() {
   const [params] = useFollowUpSearch();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
-  const back = readLineDetailBack({ lineId: id, params, state });
+  const canReadDashboard = useCan('dashboard.read');
+  const back = readLineDetailBack({ lineId: id, params, state, canReadDashboard });
   return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
 }
 

@@ -18,6 +18,7 @@ export type {
   StuckFilters,
 } from './model/query.js';
 export { stuckView } from './model/stuck.js';
+export { STUCK_BATCH_PARAM, STUCK_RETURN_PARAM, stuckOrderFocus, stuckReturnAddress } from './model/stuck-return.js';
 export type {
   DwellRow,
   StuckDistributionInput,
