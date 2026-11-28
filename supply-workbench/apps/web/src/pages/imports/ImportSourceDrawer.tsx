@@ -45,22 +45,21 @@ export function ImportSourceDrawer({ source, record, fileName }: {
   const key = record?.key ?? null;
   const canRead = useCan('data.read');
   useEffect(() => {
-    if (key !== null) trigger.current = importSourceTriggerId(key);
-  }, [key]);
+    if (key !== null) {
+      trigger.current = importSourceTriggerId(key);
+      return;
+    }
+    const triggerId = trigger.current;
+    if (isShown || triggerId === null) return;
+    trigger.current = null;
+    const frame = window.requestAnimationFrame(() => document.getElementById(triggerId)?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isShown, key]);
   return <Drawer title={key === 'batch' ? '核对本次导入来源' : '核对导入记录来源'} open={key !== null}
     size={`min(${drawerWidth}px, 100vw)`} destroyOnHidden
     closable={{ 'aria-label': '关闭导入来源' }}
     focusable={{ trap: true, focusTriggerAfterClose: false }}
-    onClose={source.close} afterOpenChange={(shown) => {
-      setShown(shown);
-      if (!shown && trigger.current !== null) {
-        const triggerId = trigger.current;
-        trigger.current = null;
-        window.requestAnimationFrame(() => {
-          if (trigger.current === null) document.getElementById(triggerId)?.focus();
-        });
-      }
-    }}>
+    onClose={source.close} afterOpenChange={setShown}>
     {record === null ? null : <Flex vertical gap={space[3]}>
       <Descriptions size="small" column={1} styles={{ content: { overflowWrap: 'anywhere' } }} items={[
         { key: 'file', label: '文件', children: fileName },
