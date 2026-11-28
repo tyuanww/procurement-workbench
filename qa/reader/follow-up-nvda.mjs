@@ -173,21 +173,15 @@ async function buyer(page, fixture) {
   const role = 'buyer';
   await visit(page, '/lines', role);
   const search = page.getByPlaceholder('搜索单号 / 品名 / 编码');
-  const order = page.getByRole('link', { name: po, exact: true });
+  const orderPath = '/lines/' + encodeURIComponent(component);
+  const order = page.getByRole('link', { name: po, exact: true })
+    .and(page.locator(`a[href="${orderPath}"], a[href^="${orderPath}?"]`));
   const preview = page.getByRole('row').filter({ has: order }).getByRole('button', { name: '预览', exact: true });
   const batch = page.getByRole('dialog', { name: po + ' 预览', exact: true })
     .getByRole('link', { name: '查看第 2 批', exact: true });
-  await step(role, 'search without changing lane', 'Playwright focuses the search field; NVDA sends typing and Enter; Playwright observes the URL and result', async record => {
-    await search.focus();
-    await reportFocus(record, /搜索|品名|编码/u);
-    await nvda.type(code);
-    record.typingSpeech = [...await nvda.spokenPhraseLog()];
-    assert.equal(await search.inputValue(), code);
-    await nvda.press('Enter');
-    await page.waitForURL(({ searchParams }) => searchParams.get('q') === code && !searchParams.has('lane'));
-    await order.waitFor();
+  await step(role, 'search full material PO without changing lane', 'Playwright focuses the search field; NVDA types the full material PO and submits with Enter; Playwright observes the request, URL and returned row', async record => {
+    await submitSearch(record, po);
     await preview.waitFor();
-    record.order = po;
   });
   await step(role, 'open preview and read the batch link', 'Playwright locates Preview and sends Enter, then focuses the second-batch link; NVDA+Tab reports it', async record => {
     await preview.press('Enter');
@@ -208,13 +202,41 @@ async function buyer(page, fixture) {
     if (record.speechError && batchSpeech.test(record.activationSpeech.join(' '))) delete record.speechError;
   });
   await readSources(page, role);
-  await step(role, 'return to original filtered list', 'Playwright locates the return link and sends Enter; app restores focus on the order; NVDA+Tab reports it', async record => {
+  await step(role, 'return to the original full PO and focus', 'Playwright locates the return link and sends Enter; the app restores the full PO search and same row focus; NVDA+Tab reports that focus', async record => {
     await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
-    await page.waitForURL(({ pathname, searchParams }) => pathname === '/lines' && searchParams.get('q') === code);
+    await page.waitForURL(({ pathname, searchParams }) => pathname === '/lines' && searchParams.get('q') === po && !searchParams.has('lane'));
     await order.and(page.locator(':focus')).waitFor();
-    assert.equal(await search.inputValue(), code);
+    record.restoredQuery = await search.inputValue();
+    assert.equal(record.restoredQuery, po);
+    record.focusedOrderHref = await order.getAttribute('href');
     await reportFocus(record, RegExp(spokenPo, 'u'));
   });
+  await step(role, 'search the full item code and find the same material row', 'Playwright locates the search field; NVDA replaces the restored PO with the full item code and submits; Playwright verifies the new response and same row', async record => {
+    await submitSearch(record, code, true);
+  });
+
+  async function submitSearch(record, term, replace = false) {
+    record.typedQuery = term;
+    await search.focus();
+    await reportFocus(record, /搜索|品名|编码/u);
+    if (replace) await nvda.press('Control+a', { capture: false });
+    await nvda.type(term);
+    record.typingSpeech = [...await nvda.spokenPhraseLog()];
+    assert.equal(await search.inputValue(), term);
+    const result = page.waitForResponse(response => {
+      const { pathname, searchParams } = new URL(response.url());
+      return response.request().method() === 'GET' && pathname === '/api/v1/lines' && searchParams.get('q') === term;
+    });
+    const [response] = await Promise.all([result, nvda.press('Enter')]);
+    assert.ok(response.ok(), 'Order search failed');
+    const { items } = await response.json();
+    const row = items.find(item => item.id === component);
+    assert.ok(row, 'Search did not return the expected material row');
+    assert.equal(row.itemCodeRaw, code);
+    await page.waitForURL(({ searchParams }) => searchParams.get('q') === term && !searchParams.has('lane'));
+    await order.waitFor();
+    record.row = { id: row.id, po, itemCode: row.itemCodeRaw, href: await order.getAttribute('href') };
+  }
 }
 
 async function manager(page) {
