@@ -226,6 +226,7 @@ function SearchButton({ onSearch, hitPx }: { readonly onSearch: () => void; read
   return (
     <Button
       aria-label={searchLabel}
+      aria-haspopup="dialog"
       aria-keyshortcuts={hint.ariaKeys}
       onClick={onSearch}
       icon={isPhone ? <SearchOutlined aria-hidden="true" /> : undefined}
