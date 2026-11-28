@@ -102,6 +102,23 @@ export function describeFactoryReportRepositoryContract(make: () => FactoryRepor
     repo: make(),
     sample: aFactoryStockRow,
   }));
+
+  it('按编码读取和准备重联使用相同的工厂品号及条码规范', async () => {
+    const repo = make();
+    const row = aFactoryStockRow({
+      kind: 'in_transit',
+      inTransit: { poRaw: 'P00012', poNorm: 'P00012', itemCodeRaw: ' ｋ１２３ ', barcodeRaw: 'Ａ  Ｂ', nameRaw: null, qtyRequired: 50 },
+    });
+    await repo.save(row);
+    for (const code of ['Ｋ１２３', ' k123 ', ' a  b ']) {
+      expect((await repo.listByCodeNorm(code)).map(({ id }) => id)).toEqual([row.id]);
+      expect((await repo.lockRelinkRows([code])).map(({ id }) => id)).toEqual([row.id]);
+    }
+    for (const code of ['A B', '　']) {
+      expect(await repo.listByCodeNorm(code)).toEqual([]);
+      expect(await repo.lockRelinkRows([code])).toEqual([]);
+    }
+  });
 }
 
 export function describeProductRepositoryContract(make: () => ProductRepository): void {

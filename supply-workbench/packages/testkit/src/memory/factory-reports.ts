@@ -1,4 +1,4 @@
-import { normalizeText, type OrderLineId } from '@sw/domain';
+import { normalizeFactoryReportCode, type OrderLineId } from '@sw/domain';
 import type { MemoryBox } from './box.js';
 import { idRepository } from './repository.js';
 
@@ -19,10 +19,12 @@ export function factoryReportRepository(box: MemoryBox) {
       return true;
     },
     async listByCodeNorm(codeNorm: string) {
-      return [...box.current.factoryReports.values()].filter((row) => reportCodes(row).some((code) => code === codeNorm));
+      const requested = normalizeFactoryReportCode(codeNorm);
+      if (requested === '') return [];
+      return [...box.current.factoryReports.values()].filter((row) => reportCodes(row).includes(requested));
     },
     async lockRelinkRows(codeNorms: readonly string[]) {
-      const requested = new Set(codeNorms);
+      const requested = new Set(codeNorms.map(normalizeFactoryReportCode).filter((code) => code !== ''));
       return [...box.current.factoryReports.values()]
         .filter((row) => row.linkStatus !== 'manual' && reportCodes(row).some((code) => requested.has(code)));
     },
@@ -30,9 +32,6 @@ export function factoryReportRepository(box: MemoryBox) {
 }
 
 function reportCodes(row: { readonly inTransit: { readonly itemCodeRaw: string | null; readonly barcodeRaw: string | null } | null; readonly demand: { readonly itemCodeRaw: string | null } | null }): string[] {
-  return [row.inTransit?.itemCodeRaw, row.inTransit?.barcodeRaw, row.demand?.itemCodeRaw].flatMap((code) => {
-    if (code === null || code === undefined) return [];
-    const normalized = normalizeText(code);
-    return normalized === '' ? [] : [normalized];
-  });
+  return [row.inTransit?.itemCodeRaw, row.inTransit?.barcodeRaw, row.demand?.itemCodeRaw]
+    .map(normalizeFactoryReportCode).filter((code) => code !== '');
 }

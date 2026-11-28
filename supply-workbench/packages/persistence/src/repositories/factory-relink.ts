@@ -1,4 +1,5 @@
 import { and, ne, sql } from 'drizzle-orm';
+import { normalizeFactoryReportCode } from '@sw/domain';
 import type { AppDatabase } from '../client.js';
 import { factoryInTransitRows, factoryMaterialDemandRows } from '../schema/factory.js';
 import { lockFactorySnapshotSource } from './factory-ownership-lock.js';
@@ -39,13 +40,9 @@ async function reportsByCode(db: AppDatabase, codes: ReadonlySet<string>) {
 }
 
 function matchesReportCode(row: { readonly itemCodeRaw: string | null; readonly barcodeRaw?: string | null }, codes: ReadonlySet<string>): boolean {
-  return codes.has(normalizeReportCode(row.itemCodeRaw)) || codes.has(normalizeReportCode(row.barcodeRaw ?? null));
+  return codes.has(normalizeFactoryReportCode(row.itemCodeRaw)) || codes.has(normalizeFactoryReportCode(row.barcodeRaw));
 }
 
 function relinkCodes(codeNorms: readonly string[]): ReadonlySet<string> {
-  return new Set(codeNorms.map(normalizeReportCode).filter((code) => code !== ''));
-}
-
-function normalizeReportCode(raw: string | null): string {
-  return (raw ?? '').normalize('NFKC').trim().toUpperCase();
+  return new Set(codeNorms.map(normalizeFactoryReportCode).filter((code) => code !== ''));
 }
