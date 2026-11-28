@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { presetViews, readDesk } from '../../apps/web/src/features/follow-up/index.js';
+import { importFollowUpScope, type VerifiedImportReturnTemplate } from '../../apps/web/src/features/imports/index.js';
 import { LineTable } from '../../apps/web/src/pages/lines/list/LineListPage.js';
 import { LineViewBar, clearFiltersAddress, exportAddress, filterSignature, isViewModified, readDensity, readHiddenColumns, saveAddress, toggleColumn, viewAddress, visibleColumns } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
@@ -96,10 +97,107 @@ describe('已修改状态', () => {
     expect(clearFiltersAddress(address.toString()).toString()).toBe('lane=all&importBatchId=batch%2Ba%3Db');
   });
 
+  it('保留历史链接的显式导入批次和店铺，清空筛选或应用常用视图都沿用', () => {
+    const saved = { id: 'saved-b', label: '另一店批次', query: 'lane=all&importBatchId=batch-b&store=yiling&stage=no_batch' };
+    for (const search of [
+      'importBatchId=batch-a&store=dafuyan&q=目标订单',
+      'importBatchId=batch-a&store=dafuyan&backToImport=%2Fimports%2Fother%3Fdrawer%3Dimport-source%26source%3Dbatch',
+    ]) {
+      const expectScope = (address: URLSearchParams) => {
+        const request = new URLSearchParams(readDesk(address.toString()).requestQuery);
+        expect(request.get('importBatchId')).toBe('batch-a');
+        expect(request.get('store')).toBe('dafuyan');
+        expect(request.has('q')).toBe(false);
+      };
+      expectScope(viewAddress({ search, view: saved }));
+      expectScope(clearFiltersAddress(search));
+    }
+  });
+
+  it('保存或开启订单视图时清理查法参数，且无批次的存量店铺不会带入纯批次范围', () => {
+    const current = 'importBatchId=batch-a&store=dafuyan&lens=delivery&orderQuery=legacy';
+    const savedQuery = new URLSearchParams(saveAddress(current));
+    expect(savedQuery.get('importBatchId')).toBe('batch-a');
+    expect(savedQuery.get('store')).toBe('dafuyan');
+    expect(savedQuery.has('lens')).toBe(false);
+    expect(savedQuery.has('orderQuery')).toBe(false);
+    expect(new URLSearchParams(saveAddress('store=dafuyan')).has('store')).toBe(false);
+    const reopen = (search: string, query: string) => viewAddress({ search, view: { id: 'saved', label: '旧视图', query } });
+    const reopened = reopen('', current);
+    expect(reopened.get('importBatchId')).toBe('batch-a');
+    expect(reopened.get('store')).toBe('dafuyan');
+    expect(reopened.has('lens')).toBe(false);
+    expect(reopened.has('orderQuery')).toBe(false);
+    expect(reopen('importBatchId=batch-a', 'store=yiling').has('store')).toBe(false);
+  });
+
   it('切换到明确保存了另一批次的视图时，按保存的批次查询', () => {
     const view = { id: 'saved-b', label: 'B 批订单', query: 'lane=all&importBatchId=batch-b' };
-    const address = viewAddress({ search: 'lane=all&importBatchId=batch-a', view });
+    const search = new URLSearchParams({
+      lane: 'all', importBatchId: 'batch-a', backToImport: '/imports/batch-b?drawer=import-source&source=batch',
+    }).toString();
+    const address = viewAddress({ search, view });
     expect(new URLSearchParams(readDesk(address.toString()).requestQuery).get('importBatchId')).toBe('batch-b');
+    expect(address.has('backToImport')).toBe(false);
+  });
+
+  it('在导入来源下钻范围内应用保存视图时保留本批次和返回地址', () => {
+    const activeId = '0199f0a0-0000-7000-8000-000000000018';
+    const savedId = '0199f0a0-0000-7000-8000-000000000019';
+    const backToImport = `/imports/${activeId}?drawer=import-source&source=batch`;
+    const search = new URLSearchParams({ lane: 'all', importBatchId: activeId, backToImport }).toString();
+    const view = { id: 'saved-b', label: 'B 批订单', query: `lane=all&stage=no_batch&importBatchId=${savedId}` };
+    const address = viewAddress({ search, view });
+    const { requestQuery } = readDesk(address.toString());
+    expect(address.get('backToImport')).toBe(backToImport);
+    expect(new URLSearchParams(requestQuery).get('importBatchId')).toBe(activeId);
+    expect(new URLSearchParams(requestQuery).get('stages')).toBe('no_batch');
+    expect(new URL(exportAddress({ query: requestQuery, columns: COLUMNS }), 'http://localhost').searchParams.get('importBatchId')).toBe(activeId);
+  });
+
+  it('按路由规则接受导入批次大小写、尾斜杠与编码标识', () => {
+    const query = '?drawer=import-source&source=batch';
+    const scope = (route: string, id = 'batch+a=b') =>
+      importFollowUpScope(new URLSearchParams({ importBatchId: id, backToImport: route + query }), { template: 'factory-progress-v1' });
+    for (const route of ['/imports/batch%2Ba%3Db', '/Imports/batch%2Ba%3Db', '/imports/batch%2Ba%3Db//', '/imports/batch+a=b/']) {
+      expect(scope(route)).toEqual({ id: 'batch+a=b', to: route + query, recordKey: 'batch' });
+    }
+    expect(scope('/imports/batch%2Ba%3Db/', 'different')).toBeNull();
+    for (const route of ['/imports/%2Fetc', '/imports/%2E%2E', '/imports/%5Cwrong', '/imports/%ZZ', '//host/imports/batch+a=b', '/imports%2Fbatch+a=b']) {
+      expect(scope(route)).toBeNull();
+    }
+  });
+
+  it('带店铺的导入详情只接受同批次和同店铺的来源地址', () => {
+    const source = '/imports/batch-a?drawer=import-source&source=batch';
+    const scope = (route: string) => importFollowUpScope(new URLSearchParams({
+      importBatchId: 'batch-a', store: 'dafuyan', backToImport: route,
+    }), { template: 'factory-progress-v1' });
+    expect(scope(source + '&store=dafuyan')?.to).toBe(source + '&store=dafuyan');
+    expect(scope(source + '&store=yiling')).toBeNull();
+    expect(scope(source)).toBeNull();
+  });
+
+  it('整批工厂来源比较实际店铺，采购来源通过专用抽屉区分历史店铺', () => {
+    const base = '/imports/batch-a?drawer=import-source';
+    const scope = (source: string, { store, template = 'factory-progress-v1' }: {
+      readonly store?: string | undefined; readonly template?: VerifiedImportReturnTemplate | null;
+    } = {}) => {
+      const params = new URLSearchParams({ importBatchId: 'batch-a', backToImport: base + source });
+      if (store !== undefined) params.set('store', store);
+      return importFollowUpScope(params, { template });
+    };
+    for (const value of [undefined, 'invalid-store', 'all']) {
+      expect(scope('&source=batch&store=yiling', { store: value })).toBeNull();
+      expect(scope('&source=batch&store=all', { store: value })).not.toBeNull();
+      expect(scope('&source=batch', { store: value })).not.toBeNull();
+    }
+    expect(scope('&source=batch&template=po-master-v1&store=yiling')).toBeNull();
+    expect(scope('&source=batch&store=yiling', { template: 'po-master-v1' })?.recordKey).toBe('batch');
+    expect(scope('&source=batch&store=yiling', { template: 'po-master-v1', store: 'yiling' })).toBeNull();
+    expect(scope('&source=procurement-batch&store=yiling')).toBeNull();
+    expect(scope('&source=procurement-batch&store=yiling', { template: 'po-master-v1' })?.to).toBe(base + '&source=procurement-batch&store=yiling');
+    expect(scope('&source=procurement-batch&store=yiling', { store: 'yiling', template: 'po-master-v1' })).toBeNull();
   });
 
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {

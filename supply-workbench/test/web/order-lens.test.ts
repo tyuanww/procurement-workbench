@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { localDate } from '../../packages/domain/src/index.js';
 import { readDesk } from '../../apps/web/src/features/follow-up/index.js';
 import {
-  dailyDeliveryParams, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, switchOrderLens,
+  dailyDeliveryParams, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, orderLensOf, switchOrderLens,
 } from '../../apps/web/src/features/follow-up/line-list/order-lens-query.js';
 import { deliveryRiskReasons } from '../../apps/web/src/features/follow-up/line-list/delivery-risk.js';
 import { followUpAddress, followUpParams } from '../../apps/web/src/features/follow-up/line-list/follow-up-address.js';
 import { followUpFeishuReturn } from '../../apps/web/src/features/follow-up/line-list/follow-up-login.js';
+import { arrivalEvidenceLink, readLineDetailBack } from '../../apps/web/src/pages/lines/detail/desk-navigation.js';
 import { clearFiltersAddress, saveAddress, viewAddress } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
 describe('跟进中心订单查法', () => {
@@ -30,6 +31,60 @@ describe('跟进中心订单查法', () => {
     expect(clearFiltersAddress(orders.toString()).get('deliveryQuery')).toBe(orders.get('deliveryQuery'));
     expect(viewAddress({ search: orders.toString(), view: { id: 'next', label: '新视图', query: 'lane=material' } }).get('deliveryQuery'))
       .toBe(orders.get('deliveryQuery'));
+  });
+
+  it('导入批次始终使用订单查询，普通链接保留店铺交付查法', () => {
+    const scope = new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', lens: 'delivery' });
+    expect(orderLensOf(scope)).toBe('query');
+    expect(orderLensOf(switchOrderLens(scope, 'delivery'))).toBe('query');
+    expect(switchOrderLens(scope, 'delivery').get('importBatchId')).toBe('batch-a');
+    expect(switchOrderLens(scope, 'delivery').get('store')).toBe('dafuyan');
+    expect(orderLensOf(new URLSearchParams('importBatchId=&lens=delivery'))).toBe('delivery');
+  });
+
+  it('关联子件可返回大小写及尾斜杠不同的原订单地址，拒绝非订单和外部地址', () => {
+    const originalState = { lineDeskSearch: 'importBatchId=batch-a&store=dafuyan' };
+    const readBack = (to: string) => readLineDetailBack({ lineId: 'component', params: new URLSearchParams(),
+      state: { relatedOrderOrigin: { to, state: originalState } }, canReadDashboard: false, canReadImports: true });
+    const address = '/Lines/original//?importBatchId=batch-a&store=dafuyan';
+    expect(readBack(address)).toEqual({ to: address, label: '返回原订单', state: originalState });
+    for (const to of ['/imports/batch-a', '/lines', '/lines/%2e%2e', 'https://external.invalid/lines/original', '//external.invalid/lines/original', '/\\external.invalid/lines/original']) {
+      expect(readBack(to)).toBeNull();
+    }
+  });
+
+  it('详情和到仓凭据从当前范围重建地址，不保留其他批次、店铺或来源的历史状态', () => {
+    const source = '/imports/batch-a?store=dafuyan&drawer=import-source&source=batch';
+    const params = new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', backToImport: source });
+    const proof = { isImportMember: true, importReturnTemplate: 'factory-progress-v1' as const, isProcurementSourceRow: false, confirmedArrival: false };
+    const stale = [
+      new URLSearchParams({ importBatchId: 'batch-b', store: 'dafuyan' }),
+      new URLSearchParams({ importBatchId: 'batch-a', store: 'yiling' }),
+      new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', backToImport: source + '&arrivalPage=2' }),
+    ];
+    for (const saved of stale) {
+      saved.set('q', '原列表筛选');
+      const state = { lineDeskSearch: saved.toString(), importBatchOrigin: { stale: true } };
+      const back = readLineDetailBack({ lineId: 'manual', params, state, canReadDashboard: false, canReadImports: true, proof });
+      expect(back?.to).toBe(source);
+      const evidence = arrivalEvidenceLink({ arrivalId: 'receipt', params, state, isImportMember: true });
+      const evidenceQuery = new URL(evidence.to, 'https://workbench.invalid').searchParams;
+      expect(evidenceQuery.get('importBatchId')).toBe('batch-a');
+      expect(evidenceQuery.get('store')).toBe('dafuyan');
+      expect(evidenceQuery.get('backToImport')).toBe(source);
+      expect(evidenceQuery.has('q')).toBe(false);
+      expect(evidence.state).toBeUndefined();
+    }
+    params.delete('importBatchId');
+    const back = readLineDetailBack({ lineId: 'manual', params, state: null, canReadDashboard: false, canReadImports: true });
+    expect(back).toBeNull();
+  });
+
+  it('普通订单详情沿用原来的列表筛选和焦点', () => {
+    const search = 'lane=all&q=完整单号&store=dafuyan';
+    const back = readLineDetailBack({ lineId: 'manual', params: new URLSearchParams(),
+      state: { lineDeskSearch: search }, canReadDashboard: false, canReadImports: true });
+    expect(back).toEqual({ to: '/lines?' + new URLSearchParams(search), label: '返回跟进中心', state: { lineDeskFocus: 'manual' } });
   });
 
   it('明确的物料线、无效店铺及负责人筛选需要重新选择范围', () => {

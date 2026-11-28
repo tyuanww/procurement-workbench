@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Alert, Button, Card, Drawer, Empty, Flex, Pagination, Skeleton, Typography } from 'antd';
 import { ArrivalDetailSchema, ArrivalListSchema, ArrivalSchema, type Arrival, type ArrivalCandidate, type RegisterArrivalInput, type ReviseArrivalInput } from '@sw/contracts';
 import { loadPartyOptions } from '../../../features/master-data/index.js';
-import { useFollowUpSearch } from '../../../features/follow-up/index.js';
+import type { SetURLSearchParams } from 'react-router';
 import { useCanWrite } from '../../../shared/actor.js';
 import { ApiError, apiErrorMessage, apiGet, apiGetWithSignal, apiSend } from '../../../shared/api/client.js';
 import { writeUrlState } from '../../../shared/hooks/url-state.js';
@@ -13,13 +13,14 @@ import { AllocateArrivalForm, arrivalCandidateSource, RegisterArrivalForm, Rollb
 const base = '/api/v1/receipts/arrivals';
 const invalidFields = '请检查凭据字段与数量，数量须大于 0，最多 4 位小数。';
 
-export function ArrivalDesk({ userId, onMutated }: { readonly userId: string; readonly onMutated: () => void }) {
-  const [params, setParams] = useFollowUpSearch();
+export function ArrivalDesk({ search, setParams, userId, onMutated }: {
+  readonly search: string; readonly setParams: SetURLSearchParams; readonly userId: string; readonly onMutated: () => void;
+}) {
   const canWrite = useCanWrite('records.write');
   const isAdmin = useCanWrite('admin');
   if (!canWrite) return null;
-  const selection = params.get('arrival');
-  const select = (value: string | null) => setParams(new URLSearchParams(writeUrlState(params.toString(), { arrival: value })), { replace: true });
+  const selection = new URLSearchParams(search).get('arrival');
+  const select = (value: string | null) => setParams(new URLSearchParams(writeUrlState(search, { arrival: value })), { replace: true });
   return <>
     <Button onClick={() => select('list')}>到仓待归单</Button>
     {selection === null ? null : <Drawer open title="到仓待归单" size="large" onClose={() => select(null)}>

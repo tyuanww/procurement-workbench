@@ -23,23 +23,19 @@ describe('导入按钮和问题分组', () => {
       kind: 'committed',
       steps: [
         { to: '/master', label: '去审核 26 个新主体' },
-        { to: '/lines?lane=all&importBatchId=batch-a', label: '查看本次导入订单' },
       ],
     });
-    expect(stepLabels(continuationOf(summary({ template: 'po-master-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual([
-      '查看本次导入订单',
-    ]);
+    expect(stepLabels(continuationOf(summary({ template: 'po-master-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual([]);
     const factory = continuationOf(summary({ template: 'factory-progress-v1', status: 'committed', pendingAliases: 4, unresolvedConflicts: 0, error: null }));
     expect(factory).toEqual({
       kind: 'committed',
       steps: [
         { to: '/master', label: '去审核 4 个新主体' },
-        { to: '/lines', label: '去跟进中心' },
       ],
     });
     expect(stepLabels(factory).join('')).not.toContain('行');
     expect(stepLabels(factory).join('')).not.toContain('按总表');
-    expect(stepLabels(continuationOf(summary({ template: 'factory-progress-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual(['去跟进中心']);
+    expect(stepLabels(continuationOf(summary({ template: 'factory-progress-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual([]);
     expect(stepLabels(continuationOf(summary({ template: 'product-archive-v1', status: 'committed', pendingAliases: 2, unresolvedConflicts: 0, error: null })))).toEqual(['去审核 2 个新主体', '去产品档案']);
     expect(stepLabels(continuationOf(summary({ template: 'product-archive-v1', status: 'committed', pendingAliases: 0, unresolvedConflicts: 0, error: null })))).toEqual(['去产品档案']);
     expect(stepLabels(continuationOf(summary({ template: 'bom-v1', status: 'committed', pendingAliases: 3, unresolvedConflicts: 0, error: null })))).toEqual(['去审核 3 个新主体']);
@@ -60,8 +56,8 @@ describe('导入按钮和问题分组', () => {
   });
 });
 
-function summary(input: Omit<ImportContinuationInput, 'importBatchId' | 'canReviewAliases'>): ImportContinuationInput {
-  return { ...input, importBatchId: 'batch-a', canReviewAliases: true };
+function summary(input: Omit<ImportContinuationInput, 'canReviewAliases'>): ImportContinuationInput {
+  return { ...input, canReviewAliases: true };
 }
 
 function stepLabels(value: ImportContinuation): readonly string[] {
