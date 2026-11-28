@@ -174,6 +174,7 @@ async function checkGlobalSearchReturn(page: Page, origin: URL) {
   await search.getByPlaceholder('单号 / 品名 / 编码').fill('FS-COMPONENT');
   await search.locator('a[href="/lines/scope-line-component"]').press('Enter');
   await component.waitFor();
+  await page.getByPlaceholder('单号 / 品名 / 编码').waitFor({ state: 'detached' });
   assert.equal(page.url(), destination);
   await page.getByRole('region', { name: '订单详情', exact: true }).locator('button, a').first().focus();
   await page.goBack();
