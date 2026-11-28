@@ -1,3 +1,4 @@
+import { StateConflictError } from '@sw/application/errors';
 import type { CodeLink, ItemCode, ItemName, PartyAlias } from '@sw/domain';
 import type { NameDecision } from '../../../application/src/ports/item-name-repository.js';
 import type { MemoryBox } from './box.js';
@@ -26,6 +27,7 @@ export function itemCodeRepository(box: MemoryBox) {
     async insertIfAbsent(code: ItemCode) {
       const existing = [...box.current.itemCodes.values()].find((row) => row.codeType === code.codeType && row.codeNorm === code.codeNorm);
       if (existing !== undefined) return existing.id;
+      if (box.current.itemCodes.has(code.id)) throw new StateConflictError('编码标识已被其他编码占用');
       await repo.save(code);
       return code.id;
     },

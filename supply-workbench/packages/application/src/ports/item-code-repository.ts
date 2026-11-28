@@ -11,7 +11,7 @@ export interface ItemCodeRepository {
   find(id: string): Promise<ItemCode | undefined>;
   /** 插入或按 id 覆盖。事务由 UnitOfWork.run 负责。 */
   save(entity: ItemCode): Promise<void>;
-  /** 仅登记不存在的编码，返回同类型和规范编码的实际 ID，保留已有审核结果。 */
+  /** 仅登记不存在的编码，返回同类型和规范编码的实际 ID，保留已有审核结果。ID 已被其他编码占用时抛出状态冲突。 */
   insertIfAbsent(entity: ItemCode): Promise<EntityId>;
   /** 规范化后相同的编码。没有就空数组。 */
   listByNorm(codeNorm: string): Promise<readonly ItemCode[]>;
