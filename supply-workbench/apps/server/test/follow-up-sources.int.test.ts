@@ -172,6 +172,12 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
     const sameLineLink = await link(line.id, reviewer);
     expect(sameLineLink.statusCode, sameLineLink.body).toBe(200);
     expect((await client.detail(line.id)).batchDemandSources).toEqual(expected);
+    await handle.exec("update factory_material_demand_rows set link_status = 'unlinked', link_reason = 'NO_CANDIDATE_LINE' where id = 'origin-row'");
+    const uncertain = await client.detail(line.id);
+    expect(uncertain.batches).toEqual(after.batches);
+    expect(uncertain.batchDemandSources).toEqual({});
+    expect(uncertain.sourceFiles).toEqual({ 'factory-replacement': '需求换表.xlsx' });
+    await handle.exec("update factory_material_demand_rows set link_status = 'manual', link_reason = null where id = 'origin-row'");
     expect((await link(otherLineId, client.cookie)).statusCode).toBe(403);
     const relinked = await link(otherLineId, reviewer);
     expect(relinked.statusCode, relinked.body).toBe(200);

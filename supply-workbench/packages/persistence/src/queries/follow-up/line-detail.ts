@@ -185,7 +185,9 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
         isNull(factoryMaterialDemandRows.linkReason),
       )),
     ));
-    for (const row of rows) byId.set(row.id, demandSourceOf(row));
+    for (const row of rows) {
+      if (row.linkedOrderLineId === null || isAssociated(row.linkStatus)) byId.set(row.id, demandSourceOf(row));
+    }
   }
   return Object.fromEntries(origins.flatMap(({ batchId, rowId, slotIndex }) => {
     const row = byId.get(rowId);
