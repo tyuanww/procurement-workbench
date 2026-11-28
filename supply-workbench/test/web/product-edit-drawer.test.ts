@@ -1,15 +1,27 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import { ProductEditDrawer, type ProductEditDrawerProps } from '../../apps/web/src/pages/products/ProductEditDrawer.js';
-import { readProductEdit, writeProductEdit, writeWorkbookBatch } from '../../apps/web/src/pages/products/product-edit-url.js';
+import { readProductEdit, resolveProductDetailDrawers, writeProductEdit, writeWorkbookBatch } from '../../apps/web/src/pages/products/product-edit-url.js';
 import type { WorkbookBatch } from '../../apps/web/src/pages/products/product-workbook-api.js';
 import { drawerWide } from '../../apps/web/src/theme/tokens.js';
 import { act, button, calls, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, useHostState, waitFor } from './party-preview-dom.js';
 
 describe('产品编辑抽屉的 URL 状态', () => {
-  it('打开只加 drawer=edit，card、scope、stage 都保留', () => {
-    const next = writeProductEdit({ search: '?card=purchases&scope=exact&stage=confirmed', isOpen: true });
+  it('打开编辑时清掉采购记录，保留 card、scope、stage', () => {
+    const next = writeProductEdit({ search: '?card=purchases&scope=exact&stage=confirmed&purchaseRecord=line-1', isOpen: true });
     expect(next.toString()).toBe('card=purchases&scope=exact&stage=confirmed&drawer=edit');
+  });
+
+  it('恢复冲突链接时只保留当前权限可用的抽屉', () => {
+    const conflict = new URLSearchParams('card=purchases&scope=exact&drawer=edit&purchaseRecord=line-1');
+    expect(resolveProductDetailDrawers(conflict, true).toString()).toBe('card=purchases&scope=exact&drawer=edit');
+    expect(resolveProductDetailDrawers(conflict, false).toString()).toBe('card=purchases&scope=exact&purchaseRecord=line-1');
+    expect(conflict.has('purchaseRecord')).toBe(true);
+  });
+
+  it('非采购页签不保留采购记录', () => {
+    const stock = new URLSearchParams('card=stock&scope=exact&purchaseRecord=line-1');
+    expect(resolveProductDetailDrawers(stock, true).toString()).toBe('card=stock&scope=exact');
   });
 
   it('关闭只删 drawer，card、scope、stage 不动', () => {

@@ -3,14 +3,15 @@ import { join } from 'node:path';
 import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarGroup } from './sidebar.ts';
+import { checkProductPurchaseEntry } from './product-purchase-acceptance.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
 const todayWidths = [320, 390, 768, 1280, 1440, 1920] as const;
 const calendarMonthInput = 'input[aria-label="选择日历月份"]';
 
-export async function checkFrontendCloseout({ page, origin, out }: {
-  readonly page: Page; readonly origin: URL; readonly out: string;
+export async function checkFrontendCloseout({ page, manager, origin, out }: {
+  readonly page: Page; readonly manager: Page; readonly origin: URL; readonly out: string;
 }) {
   await page.route('**/api/v1/today?scope=all', async (route) => {
     const response = await route.fetch();
@@ -43,8 +44,9 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await checkProductArchive(page, out);
   await checkProductSearch(page, origin);
   await checkProductPackagingReturn(page, origin);
+  const purchaseEntry = await checkProductPurchaseEntry({ page, manager, origin, out });
   return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次'], arrivals: ['待收批次'], dailySchedule: ['今日', '逾期', '前置阻塞'],
-    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'] },
+    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'], purchaseEntry },
     savedFollowUpView: true };
 }
 

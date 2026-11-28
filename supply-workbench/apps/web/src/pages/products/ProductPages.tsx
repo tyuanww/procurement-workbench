@@ -19,7 +19,7 @@ import { ProductDetailBody, productHeading } from './ProductDetailBody.js';
 import { ProductCards, productViewOf, type ProductView } from './product-cards.js';
 import { ProductEditDrawer } from './ProductEditDrawer.js';
 import { ProductTable } from './product-table.js';
-import { readProductEdit, writeProductEdit, writeWorkbookBatch } from './product-edit-url.js';
+import { readProductEdit, resolveProductDetailDrawers, writeProductEdit, writeWorkbookBatch } from './product-edit-url.js';
 import { ProductJourney, productNavigationState } from './product-journey.js';
 
 const detailCard = { ...surfaceStyle(), padding: space[3], minWidth: 0 };
@@ -166,11 +166,17 @@ export function ProductDetailPage() {
 function ProductDetail({ id }: { readonly id: string }) {
   const { pathname, state } = useLocation();
   const locationState = productNavigationState(state);
-  const [search, setSearch] = useSearchParams();
+  const [routeSearch, setSearch] = useSearchParams();
+  const canImport = useCan('imports.write');
+  const search = resolveProductDetailDrawers(routeSearch, canImport);
+  const resolvedSearch = search.toString();
+  const shouldReplace = search !== routeSearch;
+  useEffect(() => {
+    if (shouldReplace) setSearch(resolvedSearch, { state, replace: true, preventScrollReset: true });
+  }, [resolvedSearch, setSearch, shouldReplace, state]);
   const setParams = (next: Parameters<typeof setSearch>[0]) => setSearch(next, { state: locationState });
   const detail = useProductDetail(id);
   const { overview, hasOverviewError } = detail;
-  const canImport = useCan('imports.write');
   const setEdit = (isOpen: boolean) => setParams(writeProductEdit({ search: search.toString(), isOpen }));
   const canEdit = overview !== null && canImport;
   return (
