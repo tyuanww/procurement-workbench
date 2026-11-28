@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { release, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { acceptanceSummary, type AcceptanceSummary } from './acceptance-diagnostics.ts';
 
 const [sha, output] = process.argv.slice(2);
 assert.ok(sha && /^[0-9a-f]{40}$/.test(sha), 'Provide the full Git SHA');
@@ -70,12 +71,15 @@ const appLog = join(working, 'app.log');
 let pgStarted = false;
 let app: ReturnType<typeof fork> | undefined;
 let appExit: Promise<unknown[]> | undefined;
+const browserAcceptanceStage = '执行采购浏览器验收';
+let stage = '准备合成样本与浏览器';
 try {
   const webDir = resolve('apps/web/dist/app');
   evidence.fixtures = [await verifyProcurementFixture()];
   evidence.entry = await webEntry(webDir);
   evidence.postgres = commandOutput(pgTool('pg_ctl'), ['--version']);
   evidence.browser = await browserVersion();
+  stage = '初始化隔离 PostgreSQL';
   const appPort = await availablePort(appPortFromEnv());
   const pgPort = await availablePort();
   assert.notEqual(pgPort, appPort, 'PostgreSQL and the application need separate ports');
@@ -108,6 +112,7 @@ try {
   for (const key of ['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_REDIRECT_URI', 'FEISHU_REPORT_FOLDER_TOKEN', 'WEEKLY_REPORT_CRON']) delete env[key];
   for (const task of ['migrate', 'seed']) run(process.execPath, ['--experimental-strip-types', '--import', productionLoader, 'scripts/db-lifecycle.ts', task], { env });
 
+  stage = '启动并检查构建后的应用';
   app = fork('docker/start.ts', [], {
     env,
     execArgv: ['--experimental-strip-types', '--import', productionLoader, '--import', './e2e/native-server.ts'],
@@ -129,16 +134,24 @@ try {
   evidence.health = health;
   assert.equal(health.ok, true);
 
+  stage = browserAcceptanceStage;
   const result = spawnSync(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
     env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, windowsHide: true,
   });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
   assert.equal(result.status, 0, 'Procurement browser acceptance failed');
+  stage = '核对浏览器实际加载的入口';
   await verifyServedEntry(evidence.entry);
   evidence.result = 'pass';
 } catch (error) {
   evidence.result = 'fail';
   evidence.error = error instanceof Error ? error.message : String(error);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const browser: unknown = stage === browserAcceptanceStage
+      ? await readFile(join(evidenceDir, 'preaccept', 'result.json'), 'utf8').then(JSON.parse).catch(() => undefined)
+      : undefined;
+    await writeSummary({ sha, result: 'fail', stage, browser });
+  }
   throw error;
 } finally {
   if (app?.exitCode === null && app.signalCode === null) {
@@ -157,6 +170,12 @@ try {
   } finally {
     await writeEvidence();
   }
+}
+await writeSummary({ sha, result: 'pass' });
+
+async function writeSummary(summary: AcceptanceSummary): Promise<void> {
+  const path = process.env.GITHUB_STEP_SUMMARY;
+  if (path) await appendFile(path, acceptanceSummary(summary)).catch(() => console.error('Unable to write the browser acceptance summary.'));
 }
 
 function run(command: string, args: readonly string[], options: ExecFileSyncOptions = {}): void {
