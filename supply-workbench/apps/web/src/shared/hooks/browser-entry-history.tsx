@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { createPath, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 
-type Entry = { readonly key: string; readonly address: string; readonly index: number | undefined };
+type Entry = { readonly key: string; readonly state: unknown; readonly index: number | undefined };
 const PreviousBrowserEntry = createContext<Entry | undefined>(undefined);
 
 export function BrowserEntryHistory({ children }: { readonly children: ReactNode }) {
   const location = useLocation();
   const key = location.key;
-  const entry: Entry = { key, address: createPath(location), index: browserEntryIndex(key) };
+  const entry: Entry = { key, state: location.state, index: browserEntryIndex(key) };
   const [history, setHistory] = useState<{ readonly current: Entry; readonly previous?: Entry }>({ current: entry });
   if (history.current.key !== key) setHistory({ current: entry, previous: history.current });
   const previous = history.current.key === key ? history.previous : history.current;

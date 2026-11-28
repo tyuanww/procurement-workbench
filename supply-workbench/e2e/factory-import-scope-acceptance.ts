@@ -41,6 +41,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkPendingPreviewReturn(buyer, origin);
   await checkDelayedDetailReturnFocus(buyer, shared);
   await checkRelatedOrderFocusHistory(buyer, shared);
+  await checkGlobalSearchReturn(buyer, origin);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
@@ -152,6 +153,32 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
 
 function afterFocusEffects(page: Page) {
   return page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
+}
+
+async function checkGlobalSearchReturn(page: Page, origin: URL) {
+  const original = new URL('/lines/scope-line-manual?focus=buyer', origin);
+  await page.goto(original.href);
+  const owner = page.getByRole('region', { name: '订单负责人', exact: true });
+  const related = page.getByRole('region', { name: '关联采购事项', exact: true })
+    .getByRole('link', { name: /FS-COMPONENT$/u });
+  const component = page.getByRole('heading', { name: 'FS-COMPONENT', exact: true });
+  await owner.and(page.locator(':focus')).waitFor();
+  await related.press('Enter');
+  await component.waitFor();
+  const destination = page.url();
+  await page.goBack();
+  await related.and(page.locator(':focus')).waitFor();
+
+  await page.getByRole('button', { name: '搜索单号、品名、供应商', exact: true }).press('Enter');
+  const search = page.getByRole('dialog', { name: '搜索', exact: true });
+  await search.getByPlaceholder('单号 / 品名 / 编码').fill('FS-COMPONENT');
+  await search.locator('a[href="/lines/scope-line-component"]').press('Enter');
+  await component.waitFor();
+  assert.equal(page.url(), destination);
+  await page.getByRole('region', { name: '订单详情', exact: true }).locator('button, a').first().focus();
+  await page.goBack();
+  await page.waitForURL(original.href);
+  await owner.and(page.locator(':focus')).waitFor();
 }
 
 function factoryRelatedComponent(page: Page) {

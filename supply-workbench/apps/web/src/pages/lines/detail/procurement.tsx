@@ -5,7 +5,7 @@ import { BatchViewSchema, EntityIdSchema, FollowUpViewSchema, type OrderLineDeta
 import { isNotProvided } from '@sw/domain';
 import { deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
-import { detailReturnState, useDetailFocusLinks } from '../../../shared/hooks/detail-return-focus.js';
+import { detailDepartureState, detailReturnState, useDetailFocusLinks } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
@@ -74,7 +74,7 @@ function RelatedProcurementLines({ lines, section }: {
   const batch = isImportMember ? EntityIdSchema.safeParse(params.get('importBatchId')).data : undefined;
   const members = useRelatedImportMembers({ batch, store: params.get('store'), lines });
   const source = createPath(location);
-  const detailFocusLink = useDetailFocusLinks({ recordDestination: true });
+  const detailFocusLink = useDetailFocusLinks();
   const isReady = !isCheckingImportMembership && members !== undefined;
   useRestoreRelatedOrder(isReady, section);
   if (lines.length === 0) return null;
@@ -88,10 +88,11 @@ function RelatedProcurementLines({ lines, section }: {
     <ul>{lines.map((line) => {
       const isMember = members.has(line.id);
       const href = followUpAddress(`/lines/${encodeURIComponent(line.id)}`, isMember ? scoped : query);
-      const { state: focus, ...link } = detailFocusLink(source, relatedOrderFocusLink(line.id));
+      const { id, state: focus } = detailFocusLink(source, relatedOrderFocusLink(line.id));
       const originState = isMember ? undefined : relatedOrderState(location, batch === undefined ? undefined : focus);
+      const state = detailDepartureState(originState ?? returnState, focus.detailOrigin);
       return <li key={line.id}>
-        <Link to={href} state={originState ?? returnState} {...link}>{relatedLineLabel(line)}</Link>
+        <Link to={href} state={state} id={id}>{relatedLineLabel(line)}</Link>
       </li>;
     })}</ul>
   );

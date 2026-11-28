@@ -8,7 +8,7 @@ const detailOriginSchema = z.union([
   z.object({ sourceKey: z.undefined().optional(), detailPath: z.string(), sourceLink: z.string() }),
 ]);
 type DetailOrigin = z.infer<typeof detailOriginSchema>;
-const historyOriginSchema = detailOriginSchema.and(z.object({ destination: z.string().optional() }));
+const departureSchema = z.object({ detailDeparture: detailOriginSchema });
 const historyMarker = 'workbenchDetailOrigin';
 const linkId = (detailPath: string) => `detail-link:${detailPath}`;
 
@@ -16,7 +16,7 @@ export function useDetailFocusLink(detailPath: string, sourceLink = detailPath) 
   return useDetailFocusLinks()(detailPath, sourceLink);
 }
 
-export function useDetailFocusLinks({ recordDestination = false } = {}) {
+export function useDetailFocusLinks() {
   const { key } = useLocation();
   return (detailPath: string, sourceLink = detailPath) => {
     const origin: DetailOrigin = { sourceKey: key, detailPath, ...(sourceLink === detailPath ? {} : { sourceLink }) };
@@ -25,8 +25,7 @@ export function useDetailFocusLinks({ recordDestination = false } = {}) {
       state: { detailOrigin: origin },
       onClick(event: MouseEvent<HTMLAnchorElement>) {
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        const marker = recordDestination ? { ...origin, destination: createPath(new URL(event.currentTarget.href)) } : origin;
-        window.history.replaceState({ ...window.history.state, [historyMarker]: marker }, '');
+        window.history.replaceState({ ...window.history.state, [historyMarker]: origin }, '');
       },
     };
   };
@@ -42,7 +41,7 @@ function linkOrigin(state: unknown) {
 
 function historyOrigin(key: string) {
   if (typeof window === 'undefined') return undefined;
-  const origin = historyOriginSchema.safeParse(window.history.state?.[historyMarker]).data;
+  const origin = readOrigin(window.history.state?.[historyMarker]);
   return origin?.sourceKey === key ? origin : undefined;
 }
 
@@ -72,17 +71,21 @@ export type DetailReturnFocus = {
   readonly restore: (fallback: HTMLElement | null) => void;
 };
 
+export function detailDepartureState(state: unknown, departure: DetailOrigin) {
+  return { ...(state !== null && typeof state === 'object' ? state : {}), detailDeparture: departure };
+}
+
 function useArrivalOrigin(sourceLinkPrefix: string) {
   const location = useLocation();
   const { key, state } = location;
   const navigation = useNavigationType();
   const previous = usePreviousBrowserEntry();
-  const popOrigin = navigation === 'POP' ? historyOrigin(key) : undefined;
-  const candidate = navigation === 'POP' ? popOrigin : linkOrigin(state);
-  const routeOrigin = matchesReturnRoute(candidate, { address: createPath(location), sourceLinkPrefix });
   const index = browserEntryIndex(key);
-  const isDirectBack = index !== undefined && previous?.index === index + 1 && previous.address === popOrigin?.destination;
-  return { key, origin: navigation === 'POP' && !isDirectBack ? undefined : routeOrigin };
+  const previousDeparture = index !== undefined && previous?.index === index + 1
+    ? departureSchema.safeParse(previous.state).data?.detailDeparture : undefined;
+  const popOrigin = previousDeparture?.sourceKey === key ? previousDeparture : undefined;
+  const candidate = navigation === 'POP' ? popOrigin : linkOrigin(state);
+  return { key, origin: matchesReturnRoute(candidate, { address: createPath(location), sourceLinkPrefix }) };
 }
 
 function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceLinkPrefix }: {
