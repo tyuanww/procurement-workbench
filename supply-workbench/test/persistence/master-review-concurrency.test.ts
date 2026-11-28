@@ -136,9 +136,14 @@ it.skipIf(url === undefined)('自动重联与主数据审核按相同表顺序�
       inTransit: { poRaw: sample.poRaw, poNorm, itemCodeRaw: code.codeNorm, nameRaw: '合成包材', barcodeRaw: null, qtyRequired: 50 },
     }));
     const paused = gate();
+    const links = factoryLinkQueries(main.db);
     const bulkRelink = makeRelinkFactoryRows({
       ...writes(main.db, { afterDemandSave: async () => { if (!paused.hasEntered()) await paused.hold(); } }),
-      links: factoryLinkQueries(main.db),
+      links: {
+        ...links,
+        listOrderLineRefs: async () => (await links.listOrderLineRefs()).filter(({ orderLineId }) => orderLineId === sample.lineId),
+        listFactoryRowRefs: async () => (await links.listFactoryRowRefs()).filter(({ rowId }) => rowId === transitId || rowId === demand.id),
+      },
     });
     const review = makeResolveMultiName(reviewWrites(competing.db, { nextId: keys.firstItem }));
     try {
