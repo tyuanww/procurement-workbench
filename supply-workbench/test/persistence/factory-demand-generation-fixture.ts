@@ -175,6 +175,9 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
+    delete from batch_date_changes where batch_id in (select batch.id from delivery_batches batch
+      join order_lines line on line.id = batch.order_line_id
+      where line.item_code_raw = '${sample.code}' or line.id in ('${sample.lineId}', '${sample.id}-other'));
     delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}' or id in ('${sample.lineId}', '${sample.id}-other'));
     delete from owner_assignments where subject_id in ('${sample.lineId}', '${sample.id}-other') or owner_user_id = '${sample.buyer.id}';
     delete from line_factory_links where order_line_id = '${sample.lineId}';
