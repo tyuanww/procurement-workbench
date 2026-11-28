@@ -10,6 +10,7 @@ import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../../director-home/home-location.js';
+import { relatedOrderState, useRelatedImportMembers } from './related-procurement-navigation.js';
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
@@ -44,10 +45,6 @@ function procurementDetailQuery(params: URLSearchParams): URLSearchParams {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
-  const batch = EntityIdSchema.safeParse(params.get('importBatchId')).data;
-  if (batch !== undefined) related.set('importBatchId', batch);
-  const source = importFollowUpScope(params);
-  if (source !== null) related.set(IMPORT_RETURN_PARAM, source.to);
   return related;
 }
 
@@ -61,16 +58,32 @@ type RelatedLine = NonNullable<OrderLineDetail['procurement']>['relatedLines'][n
 
 function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLine[] }) {
   const [params] = useFollowUpSearch();
-  const { state } = useLocation();
+  const location = useLocation();
+  const batch = EntityIdSchema.safeParse(params.get('importBatchId')).data;
+  const members = useRelatedImportMembers({ batch, store: params.get('store'), lines });
   const query = procurementDetailQuery(params);
-  const returnState = procurementReturnState(params, state);
+  const scoped = procurementImportQuery({ query, params, batch });
+  const returnState = procurementReturnState(params, location.state);
+  const ordinaryState = relatedOrderState(location, batch !== undefined) ?? returnState;
   return (
-    <ul>{lines.map((line) => (
-      <li key={line.id}>
-        <Link to={followUpAddress(`/lines/${encodeURIComponent(line.id)}`, query)} state={returnState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
-      </li>
-    ))}</ul>
+    <ul>{lines.map((line) => {
+      const isMember = members?.has(line.id) === true;
+      const href = followUpAddress(`/lines/${encodeURIComponent(line.id)}`, isMember ? scoped : query);
+      return <li key={line.id}>
+        <Link to={href} state={isMember ? returnState : ordinaryState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
+      </li>;
+    })}</ul>
   );
+}
+
+function procurementImportQuery({ query, params, batch }: {
+  readonly query: URLSearchParams; readonly params: URLSearchParams; readonly batch: string | undefined;
+}): URLSearchParams {
+  const scoped = new URLSearchParams(query);
+  if (batch !== undefined) scoped.set('importBatchId', batch);
+  const source = importFollowUpScope(params);
+  if (source !== null) scoped.set(IMPORT_RETURN_PARAM, source.to);
+  return scoped;
 }
 
 type ProcurementSourcesList = NonNullable<OrderLineDetail['procurement']>['sources'];

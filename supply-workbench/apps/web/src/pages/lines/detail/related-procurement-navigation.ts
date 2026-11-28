@@ -1,0 +1,61 @@
+import { ProcurementStoreSchema } from '@sw/contracts';
+import { useEffect, useState } from 'react';
+import type { Location } from 'react-router';
+import { z } from 'zod';
+import { read } from '../../../shared/api/reads.js';
+
+const MAX_MEMBERS = 100;
+const MAX_QUERY_LENGTH = 3800;
+const relatedOrderOriginSchema = z.object({
+  to: z.string().regex(/^\/lines\/[^/?#\\]+(?:[?#].*)?$/u),
+  state: z.unknown(),
+});
+
+export function useRelatedImportMembers(input: {
+  readonly batch: string | undefined; readonly store: string | null; readonly lines: readonly { readonly id: string }[];
+}): ReadonlySet<string> | undefined {
+  const query = relatedImportQuery(input);
+  const [resolved, setResolved] = useState<{ readonly query: string | null; readonly ids?: ReadonlySet<string> }>({ query });
+  if (resolved.query !== query) setResolved({ query });
+  useEffect(() => {
+    if (query === null) return;
+    const abort = new AbortController();
+    void read({ name: 'lines', query, signal: abort.signal }).then(({ items }) => {
+      if (!abort.signal.aborted) setResolved({ query, ids: new Set(items.map(({ id }) => id)) });
+    }, () => undefined);
+    return () => abort.abort();
+  }, [query]);
+  return resolved.query === query ? resolved.ids : undefined;
+}
+
+function relatedImportQuery({ batch, store, lines }: Parameters<typeof useRelatedImportMembers>[0]): string | null {
+  if (batch === undefined || lines.length === 0) return null;
+  const params = new URLSearchParams({ importBatchId: batch, pageSize: String(MAX_MEMBERS) });
+  const validStore = ProcurementStoreSchema.safeParse(store).data;
+  if (validStore !== undefined) params.set('store', validStore);
+  let length = params.toString().length;
+  for (const { id } of lines.slice(0, MAX_MEMBERS)) {
+    length += new URLSearchParams({ lineIds: id }).toString().length + 1;
+    if (length > MAX_QUERY_LENGTH) break;
+    params.append('lineIds', id);
+  }
+  return params.has('lineIds') ? params.toString() : null;
+}
+
+function readRelatedOrderOrigin(state: unknown) {
+  if (state === null || typeof state !== 'object' || !('relatedOrderOrigin' in state)) return undefined;
+  return relatedOrderOriginSchema.safeParse(state.relatedOrderOrigin).data;
+}
+
+export function relatedOrderState(location: Location<unknown>, keepOriginal: boolean) {
+  const origin = readRelatedOrderOrigin(location.state);
+  if (origin !== undefined) return { relatedOrderOrigin: origin };
+  if (!keepOriginal) return undefined;
+  const { pathname, search, hash, state } = location;
+  return { relatedOrderOrigin: { to: pathname + search + hash, state } };
+}
+
+export function relatedOrderBack(state: unknown) {
+  const origin = readRelatedOrderOrigin(state);
+  return origin === undefined ? null : { ...origin, label: '返回原订单' };
+}

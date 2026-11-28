@@ -25,6 +25,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await assertFactoryScopeApi({ page: buyer, origin, id: scopeId, expected: ['FS-YILING'], store: 'yiling' });
   const shared = await checkFactorySourceRoundTrip(buyer, origin);
   await checkCopiedSourceFromAnotherStore(buyer, shared);
+  await checkRelatedBatchMember(buyer, origin);
   await checkEmptyFactorySource(buyer, origin);
   const denied = await manager.request.get(new URL(`/api/v1/imports/${scopeId}`, origin).href);
   assert.equal(denied.status(), 403);
@@ -34,7 +35,47 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkSharedOrderView(manager, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
-    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true };
+    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, relatedOrdersKeepTrueScope: true };
+}
+
+function factoryRelatedComponent(page: Page) {
+  return page.getByRole('region', { name: '关联采购事项', exact: true }).getByRole('link', { name: /FS-COMPONENT/ });
+}
+
+async function checkRelatedBatchMember(page: Page, origin: URL) {
+  const purchaseBatch = 'scope-import-store-evidence';
+  await page.goto(new URL(`/lines?importBatchId=${purchaseBatch}&store=${currentStore}`, origin).href);
+  await page.getByRole('link', { name: 'FS-MANUAL', exact: true }).press('Enter');
+  const related = factoryRelatedComponent(page).and(page.locator(`a[href*="importBatchId=${purchaseBatch}"]`));
+  await related.press('Enter');
+  await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('store'), currentStore);
+}
+
+async function checkRelatedOutsideFactoryBatch(page: Page, origin: URL) {
+  const scopedRow = page.getByRole('link', { name: 'FS-MANUAL', exact: true });
+  const [membership] = await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/v1/lines' && url.searchParams.get('lineIds') === 'scope-line-component';
+    }),
+    scopedRow.press('Enter'),
+  ]);
+  const lookup = new URL(membership.url()).searchParams;
+  assert.equal(lookup.get('importBatchId'), scopeId);
+  assert.equal(lookup.get('store'), currentStore);
+  assert.deepEqual((await membership.json()).items, []);
+  const from = page.url();
+  const related = factoryRelatedComponent(page);
+  const address = new URL(await related.getAttribute('href') ?? '', origin);
+  assert.equal(address.search, `?store=${currentStore}`);
+  await related.press('Enter');
+  await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+  await page.getByRole('link', { name: '返回原订单', exact: true }).press('Enter');
+  await page.waitForURL(from);
+  await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+  await scopedRow.and(page.locator(':focus')).waitFor();
 }
 
 async function checkCopiedSourceFromAnotherStore(page: Page, shared: URL) {
@@ -140,6 +181,7 @@ async function checkFactorySourceRoundTrip(page: Page, origin: URL) {
   await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch');
   await assertFactoryScopeRows(page);
   await assertFactoryScopeExport(page, origin);
+  await checkRelatedOutsideFactoryBatch(page, origin);
   await page.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
   await page.waitForURL(sourceUrl);
   await orderLink.and(page.locator(':focus')).waitFor();

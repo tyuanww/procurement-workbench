@@ -36,6 +36,29 @@ INSERT INTO procurement_observations (import_batch_id, sheet_name, row_no, finis
 VALUES ('scope-import-store-evidence', '达肤妍项目进度表', 2, ARRAY['scope-line-manual', 'scope-line-matched'], ARRAY[]::text[], '{}'),
        ('scope-import-store-evidence', '译龄项目进度表', 2, ARRAY['scope-line-yiling'], ARRAY[]::text[], '{}');
 
+-- This procurement component belongs to a committed purchase import and shares a real store relation
+-- with FS-MANUAL. The current factory report names FS-MANUAL alone.
+INSERT INTO purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, lane)
+VALUES ('scope-po-component', now(), now(), 'FS-COMPONENT', 'FS-COMPONENT', 'OTHER', ARRAY[]::text[], 'material');
+
+INSERT INTO order_lines (id, created_at, updated_at, purchase_order_id, lane, name_raw, qty_ordered, unit,
+  origin, missing_in_latest_import, latest_import_presence, stage, stage_changed_at)
+VALUES ('scope-line-component', now(), now(), 'scope-po-component', 'material', '合成范围采购子件', 10, '件',
+  'import_procurement_component', false, 'not_applicable', 'no_batch', now());
+
+INSERT INTO procurement_finished_lines (material_line_id, finished_line_id)
+VALUES ('scope-line-component', 'scope-line-manual');
+
+INSERT INTO import_rows (id, import_batch_id, sheet_name, row_no, raw, parsed, issues, action, target_id)
+VALUES ('scope-procurement-finished-source', 'scope-import-store-evidence', '达肤妍项目进度表', 4, '{}', '{}', '[]',
+  'create', 'scope-line-manual');
+
+INSERT INTO procurement_observations (import_batch_id, sheet_name, row_no, finished_line_ids, material_line_id, reasons, fact)
+VALUES ('scope-import-store-evidence', '达肤妍项目进度表', 5, ARRAY['scope-line-manual'], 'scope-line-component', ARRAY[]::text[],
+  '{"source":{"sheetName":"达肤妍项目进度表","rowNo":5},"status":"active","oa":{"raw":null,"refs":[],"source":null},
+    "productCodes":{"raw":null,"source":null},"componentCodeRaw":null,"componentNameRaw":"合成范围采购子件","poRaw":"FS-COMPONENT",
+    "supplierRaw":null,"buyerRaw":null,"quantityRaw":"10","quantity":10,"unitRaw":"件"}');
+
 INSERT INTO factory_stock_rows (id, import_batch_id, factory_party_id, sheet_name, row_no, raw, fingerprint,
   linked_order_line_id, link_status, created_at, updated_at)
 SELECT 'scope-stock-' || report.key, 'scope-import-' || report.batch, report.factory, '库存数量汇总', report.row_no,

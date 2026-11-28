@@ -8,6 +8,7 @@ import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/impo
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 import { importFollowUpReturn, readImportBatchOriginState } from '../../imports/import-source.js';
+import { relatedOrderBack } from './related-procurement-navigation.js';
 
 type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode };
 
@@ -58,7 +59,7 @@ export function readLineDetailBack({ lineId, params, state, canReadImports }: {
   const back = lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,
     progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), deliveryEntry: params.get('deliveryEntry'), home: params.get(HOME_RISK_RETURN_PARAM),
     schedule: params.get('backToSchedule') });
-  return back ?? (canReadImports ? importFollowUpReturn({ params, state }) : null) ?? importOrdersBack(params);
+  return relatedOrderBack(state) ?? back ?? (canReadImports ? importFollowUpReturn({ params, state }) : null) ?? importOrdersBack(params);
 }
 
 export function lineDetailBack(input: BackSource): DetailBack | null {
