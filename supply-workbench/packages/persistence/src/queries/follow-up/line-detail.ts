@@ -9,7 +9,7 @@ import type { AppDatabase } from '../../client.js';
 import { ownerAssignmentRepository } from '../../repositories/owner-assignments.js';
 import { instant } from '../../mappers/time.js';
 import { importBatches, importRows, itemCodes } from '../../schema/index.js';
-import { exceptions, followUps, orderLineSnapshots, orderLines } from '../../schema/orders.js';
+import { deliveryBatches, exceptions, followUps, orderLineSnapshots, orderLines } from '../../schema/orders.js';
 import { storedFiles } from '../../schema/platform.js';
 import { factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { isRecord, oneOf } from './guards.js';
@@ -19,7 +19,7 @@ import { procurementDetail } from './procurement.js';
 import { batchViews } from './batch-view.js';
 import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 import { toRow, loadRelations, type ListWorld } from './line-row.js';
-import { comboOf, demandSourceOf, isAssociated, scheduleOf, shipmentSourceOf, stockOf, transitSourceOf } from './payloads.js';
+import { batchDemandSourceOf, comboOf, demandSourceOf, isAssociated, scheduleOf, shipmentSourceOf, stockOf, transitSourceOf } from './payloads.js';
 
 const FOLLOW_UP_LIMIT = 50;
 const PURCHASE_SOURCE_FIELDS = ['po', 'nameRaw', 'barcodeRaw', 'qtyOrdered', 'firstDeliveryOn', 'shippedQtyReported', 'statusReported'];
@@ -175,8 +175,13 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
     origin === 'from_factory_demand' && originRef !== null ? [{ batchId: id, ...originRef }] : [],
   );
   if (origins.length === 0) return {};
+  const saved = await db.select({ id: deliveryBatches.id, originRef: deliveryBatches.originRef }).from(deliveryBatches)
+    .where(and(eq(deliveryBatches.orderLineId, lineId), inArray(deliveryBatches.id, origins.map(({ batchId }) => batchId))));
+  const sources = new Map(saved.map(({ id, originRef }) => [id, originRef?.generationSource]));
+  // 没有标记的是旧批次，仍走按订单归属核验的旧逻辑。
+  const legacy = origins.filter(({ batchId }) => sources.get(batchId) === undefined);
   const byId = new Map(current.map((row) => [row.id, row]));
-  const missing = [...new Set(origins.map(({ rowId }) => rowId).filter((id) => !byId.has(id)))];
+  const missing = [...new Set(legacy.map(({ rowId }) => rowId).filter((id) => !byId.has(id)))];
   if (missing.length > 0) {
     const rows = await db.select().from(factoryMaterialDemandRows).where(and(
       inArray(factoryMaterialDemandRows.id, missing),
@@ -190,15 +195,13 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
     }
   }
   return Object.fromEntries(origins.flatMap(({ batchId, rowId, slotIndex }) => {
+    const savedSource = sources.get(batchId);
+    if (savedSource !== undefined) return savedSource === null ? [] : [[batchId, savedSource]];
     const row = byId.get(rowId);
     if (row?.payload.role !== 'material') return [];
     const slot = row.payload.slots.find(({ index }) => index === slotIndex);
-    if (slot === undefined || !Object.values(slot.originalCells ?? {}).some((raw) => raw?.trim())) return [];
-    const { importBatchId, sheetName, rowNo } = row;
-    const { index, dateRaw, qtyRaw, sourceColumns, originalCells } = slot;
-    return [[batchId, { importBatchId, sheetName, rowNo, slot: {
-      index, dateRaw, qtyRaw, ...(sourceColumns === undefined ? {} : { sourceColumns }), ...(originalCells === undefined ? {} : { originalCells }),
-    } }] as const];
+    const source = slot === undefined ? undefined : batchDemandSourceOf(row, slot);
+    return source === undefined ? [] : [[batchId, source]];
   }));
 }
 

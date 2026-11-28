@@ -1,8 +1,14 @@
 import type { FactoryReportRow, OrderLineId } from '@sw/domain';
+import type { BatchDemandSource } from './delivery-batch-repository.js';
 
 export interface FactoryReportRepository {
   /** 找不到就抛 NotFoundError。 */
   get(id: string): Promise<FactoryReportRow>;
+  /** 普通生成事实照常返回。只有本事务稳定读到的需求行可以提供原表凭据。 */
+  getForDemandGeneration(id: string): Promise<{
+    readonly row: FactoryReportRow;
+    readonly sources: ReadonlyMap<number, BatchDemandSource>;
+  }>;
   /** 找不到返回 undefined。 */
   find(id: string): Promise<FactoryReportRow | undefined>;
   /** 插入或按 id 覆盖。事务由 UnitOfWork.run 负责。 */

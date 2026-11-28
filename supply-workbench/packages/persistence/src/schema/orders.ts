@@ -1,4 +1,5 @@
-import type { ReceiptEvidence, ShipmentEvidence } from '@sw/domain';
+import type { DeliveryBatch, ReceiptEvidence, ShipmentEvidence } from '@sw/domain';
+import type { BatchDemandSource } from '../../../application/src/ports/delivery-batch-repository.js';
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { at, day, id, qty, timestamps } from './columns.js';
@@ -85,7 +86,9 @@ export const deliveryBatches = pgTable(
     status: text('status').notNull(),
     statusChangedAt: at('status_changed_at').notNull(),
     origin: text('origin').notNull(),
-    originRef: jsonb('origin_ref'),
+    originRef: jsonb('origin_ref').$type<NonNullable<DeliveryBatch['originRef']> & {
+      readonly generationSource?: BatchDemandSource | null;
+    }>(),
     closedAt: at('closed_at'),
     closedReason: text('closed_reason'),
     cancelledAt: at('cancelled_at'),

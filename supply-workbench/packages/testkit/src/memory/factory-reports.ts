@@ -6,6 +6,9 @@ export function factoryReportRepository(box: MemoryBox) {
   const repo = idRepository(() => box.current.factoryReports, '代工厂上报');
   return {
     ...repo,
+    async getForDemandGeneration(id: string) {
+      return { row: await repo.get(id), sources: new Map<never, never>() };
+    },
     async linkUnassignedTransit(rowId: string, lineId: OrderLineId) {
       const row = await repo.find(rowId);
       if (row?.kind !== 'in_transit' || row.linkedOrderLineId !== null) return false;

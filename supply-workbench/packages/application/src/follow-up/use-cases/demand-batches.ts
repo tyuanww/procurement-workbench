@@ -12,6 +12,7 @@ import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
 import { resolveMaterialLine } from './demand-line.js';
 import { commandContext, persistBatch } from './persist-batch.js';
+import type { BatchDemandSource } from '../../ports/delivery-batch-repository.js';
 
 const NO_SLOT = -1;
 
@@ -37,7 +38,7 @@ type GenerateInput = {
 };
 
 export async function generateDemandRow(input: GenerateInput): Promise<RowOutcome> {
-  const row = await input.tx.factoryReports.get(input.rowId);
+  const { row, sources } = await input.tx.factoryReports.getForDemandGeneration(input.rowId);
   const blocked = blockReason(row);
   if (blocked !== null) return skippedRow(row.id, blocked);
   const demand = row.demand;
@@ -70,6 +71,7 @@ export async function generateDemandRow(input: GenerateInput): Promise<RowOutcom
     lineId: line.lineId,
     factoryPartyId: row.factoryPartyId,
     candidates,
+    sources: row.linkedOrderLineId === null || row.linkedOrderLineId === line.lineId ? sources : new Map(),
   });
   return { lines: line.created ? 1 : 0, batches: made.batches, skipped: made.skipped };
 }
@@ -92,6 +94,7 @@ async function createSlots(
     readonly lineId: OrderLineId;
     readonly factoryPartyId: EntityId;
     readonly candidates: readonly BatchCandidate[];
+    readonly sources: ReadonlyMap<number, BatchDemandSource>;
   },
 ): Promise<{ readonly batches: number; readonly skipped: SlotSkip[] }> {
   const skipped: SlotSkip[] = [];
@@ -100,7 +103,8 @@ async function createSlots(
   const line = await input.tx.orderLines.get(input.lineId);
   const receiver = line.receiverPartyId ?? input.factoryPartyId;
   for (const slot of input.candidates) {
-    const outcome = await createSlot({ ...input, slot, seq, receiver, unit: line.unit, skipped });
+    const outcome = await createSlot({ ...input, slot, seq, receiver, unit: line.unit, skipped,
+      generationSource: input.sources.get(slot.slotIndex) ?? null });
     if (outcome === 'skipped') continue;
     seq += 1;
     batches += 1;
@@ -116,6 +120,7 @@ async function createSlot(
     readonly receiver: EntityId;
     readonly unit: string | null;
     readonly skipped: SlotSkip[];
+    readonly generationSource: BatchDemandSource | null;
   },
 ): Promise<'created' | 'skipped'> {
   const prior = await input.tx.batches.listByOriginRef({
@@ -140,7 +145,8 @@ async function createSlot(
     },
     commandContext({ actor: input.actor, at: input.at, nextId: batchId }),
   );
-  await persistBatch({ tx: input.tx, records: { batch, shipments: [], receipts: [], deliveryNote: null }, dateChanges: [] });
+  const records = { batch, shipments: [], receipts: [], deliveryNote: null };
+  await persistBatch({ tx: input.tx, records, dateChanges: [], generationSource: input.generationSource });
   await input.tx.audit.record(
     auditOf({ action: 'batch.create', subject: batch, ctx: { actor: input.actor, at: input.at, entity: '要货批次' } }),
   );

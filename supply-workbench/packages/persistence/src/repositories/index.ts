@@ -36,7 +36,7 @@ export function placeholderStores(): UnitOfWorkStores {
     },
     exceptions: { get: p01, find: p01, save: p01, remove: p01 },
     followUps: { get: p01, find: p01, save: p01, remove: p01 },
-    factoryReports: { get: p02, find: p02, save: p02, linkUnassignedTransit: p02, listByCodeNorm: p02 },
+    factoryReports: { get: p02, getForDemandGeneration: p02, find: p02, save: p02, linkUnassignedTransit: p02, listByCodeNorm: p02 },
     imports: { get: p02, find: p02, save: p02, list: p02, listRows: p02, saveRow: p02 },
     products: { get: p03, find: p03, save: p03 },
     productImages: { get: p03, listByProduct: p03, save: p03 },
