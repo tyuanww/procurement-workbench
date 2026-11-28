@@ -57,7 +57,7 @@ function showBulk(role: Role): string {
 function showNote(role: Role): string {
   const react = reactOf();
   const router = routerOf();
-  const note = react.createElement(ProgressNote, { href: '/lines/line-1', saved: '已向工厂催单' });
+  const note = react.createElement(ProgressNote, { link: { to: '/lines/line-1' }, saved: '已向工厂催单' });
   const page = react.createElement(router.MemoryRouter, { children: note });
   return markup(ActorRoles, { roles: [role], children: page });
 }

@@ -102,8 +102,8 @@ function RiskOrderLink({ source, lineId, identity, po, batchId }: {
 }
 
 function RiskGroupLink({ source, rows, today }: { readonly source: RiskSource; readonly rows: readonly WorkRow[]; readonly today: LocalDate }) {
-  const target = homeDeliveryRiskAddress({ store: source.store, date: today, ids: rows.map(({ line }) => line.id) });
-  const back = new URLSearchParams({ [HOME_RISK_RETURN_PARAM]: source.search });
+  const target = homeDeliveryRiskAddress({ store: source.store, date: today, ids: rows.map(({ line }) => line.id),
+    returnQuery: new URLSearchParams({ [HOME_RISK_RETURN_PARAM]: source.search }) });
   const link = useDetailFocusLink(homeAddress(new URLSearchParams(source.search)), HOME_RISK_GROUP_FOCUS);
-  return <Flex justify="end"><Link to={`${target}&${back}`} {...link} style={{ paddingBlock: space[1] }}>查看这组订单</Link></Flex>;
+  return <Flex justify="end"><Link to={target} {...link} style={{ paddingBlock: space[1] }}>查看这组订单</Link></Flex>;
 }

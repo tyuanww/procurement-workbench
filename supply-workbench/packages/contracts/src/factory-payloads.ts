@@ -69,6 +69,16 @@ export const schedulePayload = strictObject({
   stepRaw: nullable(z.string()),
 });
 
+export const demandSlot = strictObject({
+  index: z.number(),
+  sourceColumns: optional(strictObject({ date: z.number().int().positive(), quantity: z.number().int().positive() })),
+  date: nullable(LocalDateSchema),
+  dateRaw: nullable(z.string()),
+  qty: nullable(z.number()),
+  qtyRaw: nullable(z.string()),
+  issues: z.array(issue),
+});
+
 export const demandPayload = strictObject({
   role: z.enum(['parent', 'material']),
   blockPoRaw: nullable(z.string()),
@@ -81,15 +91,7 @@ export const demandPayload = strictObject({
   qtyFinishedEstimate: parsedNumber,
   qtyGross: parsedNumber,
   qtyNet: parsedNumber,
-  slots: z.array(strictObject({
-    index: z.number(),
-    sourceColumns: optional(strictObject({ date: z.number().int().positive(), quantity: z.number().int().positive() })),
-    date: nullable(LocalDateSchema),
-    dateRaw: nullable(z.string()),
-    qty: nullable(z.number()),
-    qtyRaw: nullable(z.string()),
-    issues: z.array(issue),
-  })),
+  slots: z.array(demandSlot),
 });
 
 export const comboPayload = strictObject({

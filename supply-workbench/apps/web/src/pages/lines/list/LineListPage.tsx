@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { useLocation } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
-import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, type OrderLens } from '../../../features/follow-up/index.js';
+import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, useFollowUpSearch, type OrderLens } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
@@ -24,12 +24,12 @@ import { closePartyPreview, openPartyPreview, readPartyPreview } from './party-p
 
 export { LineTable, type LineTableProps } from './line-table.js';
 
-type SearchSetter = ReturnType<typeof useSearchParams>[1];
+type SearchSetter = ReturnType<typeof useFollowUpSearch>[1];
 type Desk = ReturnType<typeof readDesk>;
 type ResultsRef = RefObject<HTMLDivElement | null>;
 
 export function LineListPage() {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const lens = orderLensOf(params);
   return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}>
     <div style={{ marginBottom: space[2] }}>
@@ -42,7 +42,7 @@ export function LineListPage() {
 }
 
 function OrderQuery() {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const location = useLocation();
   const results = useRef<HTMLDivElement>(null);
   const [users, setUsers] = useState<readonly { readonly id: string; readonly name: string }[]>([]);

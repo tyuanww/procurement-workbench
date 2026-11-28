@@ -8,18 +8,19 @@ import { fontSize, space, statusColor, text } from '../../theme/tokens.js';
 import { ProgressNextAction } from './progress-material-risk.js';
 import { progressArrivalDate } from './progress-mobile.js';
 import { storeLabels } from './store-query.js';
+import type { ProgressOrderLinkProps } from './delivery-detail-link.js';
 
 export function progressColumns(input: {
   readonly lines: ReadonlyMap<string, OrderLineRow>;
-  readonly lineHref: (lineId: string) => string;
-  readonly overdueHref: (row: ProgressRow) => string | undefined;
+  readonly lineLink: (lineId: string) => ProgressOrderLinkProps;
+  readonly overdueLink: (row: ProgressRow) => ProgressOrderLinkProps | undefined;
   readonly note: (lineId: string) => ReactNode;
   readonly now: Date;
 }): TableColumnsType<ProgressRow> {
   return [
     { title: '品名 / 单号', key: 'identity', rowScope: 'row', render: (_value: unknown, row: ProgressRow) => (
       <Flex vertical style={{ overflowWrap: 'anywhere' }}>
-        <Link to={input.lineHref(row.lineId)}>{row.title}</Link>
+        <Link {...input.lineLink(row.lineId)}>{row.title}</Link>
         <Typography.Text type="secondary">{row.po}</Typography.Text>
         <Typography.Text type="secondary">{storeLabels[input.lines.get(row.lineId)?.storeProgress?.store ?? 'unassigned']} · {row.supplierLabel}</Typography.Text>
       </Flex>
@@ -28,7 +29,7 @@ export function progressColumns(input: {
     { title: '停留天数', width: 88, align: 'right', render: (_value: unknown, row: ProgressRow) => <StayDays row={row} /> },
     { title: '确认到货', width: 116, render: (_value: unknown, row: ProgressRow) => (
       <Flex vertical gap={space[0]} align="flex-start">
-        {progressArrivalDate({ arrival: row.arrival, now: input.now, href: input.overdueHref(row) })}
+        {progressArrivalDate({ arrival: row.arrival, now: input.now, link: input.overdueLink(row) })}
         {row.arrival.kind === 'missing' ? null : <ArrivalTag arrival={row.arrival} />}
       </Flex>
     ) },
