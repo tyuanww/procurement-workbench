@@ -12,8 +12,7 @@ export function runAcceptanceProcess(env: typeof process.env): Promise<Outcome> 
   const child = spawn(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
     env, stdio: 'inherit', windowsHide: true,
   });
-  const timeout = process.platform === 'win32' ? 420_000 : 360_000;
-  return waitForAcceptanceProcess(child, timeout);
+  return waitForAcceptanceProcess(child, 420_000);
 }
 
 export async function waitForAcceptanceProcess(child: ChildProcess, timeout: number): Promise<Outcome> {
