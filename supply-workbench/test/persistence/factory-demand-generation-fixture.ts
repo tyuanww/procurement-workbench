@@ -62,6 +62,7 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
           await hooks.afterDemandSave?.();
         },
       },
+      imports: importBatchRepository(tx),
       orderLines: linesWithHooks(tx, hooks),
       items: itemRepository(tx),
       itemCodes: itemCodeRepository(tx),
@@ -181,6 +182,7 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
     delete from users where id = '${sample.buyer.id}';
     delete from purchase_orders where id = '${sample.orderId}' or po_norm in ('${sample.poRaw}', upper('ALT-${sample.id}'));
     delete from factory_material_demand_rows where import_batch_id = '${sample.importId}';
+    delete from import_rows where import_batch_id = '${sample.importId}';
     delete from import_batches where id = '${sample.importId}';
   `);
 }
