@@ -21,7 +21,10 @@ export async function commitConfirmedArrival(ctx: CommitContext): Promise<Commit
   const writtenLines = new Set(locked
     .filter((item) => item.row.action === 'update' && item.decision === 'update')
     .map((item) => item.loaded.batch.orderLineId));
-  for (const item of locked) await confirm({ ctx, ...item, noWait: writtenLines.size > 1 });
+  if (writtenLines.size > 1) {
+    for (const lineId of writtenLines) await ctx.tx.orderLines.lock(lineId, { noWait: true });
+  }
+  for (const item of locked) await confirm({ ctx, ...item });
   return { affectedLineIds: [], presentLineIds: [] };
 }
 
@@ -39,13 +42,12 @@ async function lockBatch(ctx: CommitContext, id: string) {
   }
 }
 
-async function confirm({ ctx, row, confirmation, loaded, decision, noWait }: {
+async function confirm({ ctx, row, confirmation, loaded, decision }: {
   readonly ctx: CommitContext;
   readonly row: CommitContext['rows'][number];
   readonly confirmation: NonNullable<ReturnType<typeof confirmationOf>>;
   readonly loaded: Awaited<ReturnType<CommitContext['tx']['batches']['lockWithRecords']>>;
   readonly decision: ReturnType<typeof confirmationDecision>;
-  readonly noWait: boolean;
 }): Promise<void> {
   if (decision === 'unchanged') {
     if (row.action !== 'unchanged') await ctx.tx.imports.saveRow({ ...row, action: 'unchanged' });
@@ -55,7 +57,6 @@ async function confirm({ ctx, row, confirmation, loaded, decision, noWait }: {
   if (row.action === 'unchanged') throw new StateConflictError('ARRIVAL_CONFIRM_DATE_CHANGED');
   if (decision === 'ARRIVAL_CONFIRM_DATE_REASON_MISSING') throw new DateChangeReasonRequiredError();
   if (decision !== 'update') throw new StateConflictError(decision);
-  if (noWait) await ctx.tx.orderLines.lock(loaded.batch.orderLineId, { noWait: true });
   const id = entityId(`confirmed-arrival:${ctx.batch.id}:${row.id}`);
   await updateLockedBatch({
     tx: ctx.tx,
