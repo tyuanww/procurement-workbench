@@ -57,6 +57,7 @@ export function WorkDetails({ rows, owners, location, onLocationChange }: {
           : { ...location, isSearchOpen: false, filter: { ...filter, search: '' }, page: filter.search === '' ? page : 1 })} />
     </div>}>
     <Table<WorkRow> size="small" rowKey={(row) => row.line.id} columns={columns(setSelected, sort)} dataSource={filtered}
+      showSorterTooltip={location.drawer !== 'risk'}
       scroll={{ x: 520, y: tableHeight }}
       pagination={{ current: page, pageSize, hideOnSinglePage: true, showSizeChanger: false, size: 'small' }}
       onChange={(...args) => {

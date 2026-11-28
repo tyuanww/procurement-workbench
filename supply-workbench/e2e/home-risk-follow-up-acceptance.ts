@@ -46,14 +46,22 @@ export async function checkHomeRiskFollowUp({ page, origin, out, material, finis
     await page.keyboard.press('Tab');
     assert.equal(await drawer.evaluate((element) => element.contains(document.activeElement)), true);
     await page.screenshot({ path: join(out, `home-risk-${width}.png`), animations: 'disabled' });
+    const sortHint = page.getByText('点击降序', { exact: true });
+    assert.equal(await sortHint.isVisible(), false);
     assert.deepEqual(reads, []);
     page.off('request', watch);
     await page.keyboard.press('Escape');
     await drawer.waitFor({ state: 'hidden' });
     await risk.and(page.locator(':focus')).waitFor();
 
+    if (width === 1440) {
+      await page.mouse.move(0, 0);
+      await sort.hover();
+      await sortHint.waitFor();
+    }
     await risk.press('Enter');
     await drawer.waitFor();
+    assert.equal(await sortHint.isVisible(), false);
     const homeUrl = page.url();
     const order = drawer.getByRole('link', { name: new RegExp('^查看订单 ' + material.po, 'u') })
       .and(drawer.locator(`a[href^="/lines/${encodeURIComponent(material.id)}?"]`));
