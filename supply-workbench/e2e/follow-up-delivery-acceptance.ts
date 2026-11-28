@@ -180,15 +180,14 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
     await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
     await page.goto(address.href);
     const sources = [
-      { link: order, batchId: null, source: '物料单号' },
-      { link: overdue, batchId: batches[0], source: '逾期批次' },
+      { link: order, batchId: null, source: '订单主链接' },
+      { link: overdue, batchId: batches[0] ?? null, source: '逾期批次' },
     ];
     if (width === 1440) sources.push({ link: note, batchId: null, source: '订单备注' });
     for (const { link, batchId, source } of sources) {
       for (const fromButton of [true, false]) {
         await openDeliveryDetail(page, { link, lineId, batchId, source, width });
-        await returnToDailyDelivery(page, { address, fromButton, width });
-        await link.and(page.locator(':focus')).waitFor();
+        await returnToDailyDelivery(page, { address, fromButton, source, width, focus: link });
       }
     }
   }
@@ -198,9 +197,8 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
       { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
     assert.ok(saved.ok(), await saved.text());
   }
-  await returnToDailyDelivery(page, { address, fromButton: true, width: 1440 });
+  await returnToDailyDelivery(page, { address, fromButton: true, source: '已移出逾期结果的批次', width: 1440, focus: results });
   await results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }).waitFor();
-  await results.and(page.locator(':focus')).waitFor();
   assert.equal(await row.count(), 0);
 }
 
@@ -208,31 +206,35 @@ async function openDeliveryDetail(page: Page, { link, lineId, batchId, source, w
   readonly link: Locator; readonly lineId: string; readonly batchId: string | null;
   readonly source: string; readonly width: number;
 }) {
-  const href = await link.getAttribute('href');
-  assert.ok(href, `${width}px ${source}缺少详情地址，当前地址 ${page.url()}`);
-  const address = new URL(href, page.url());
   const expectedPath = `/lines/${lineId}`;
-  assert.equal(decodeURIComponent(address.pathname), expectedPath, `${width}px ${source}详情地址 ${address.href}，预期路径 ${expectedPath}`);
-  const actualBatch = address.searchParams.get('focusBatch');
-  assert.equal(actualBatch, batchId, `${width}px ${source}详情地址 ${address.href}，批次实际 ${actualBatch}，预期 ${batchId}`);
-  await Promise.all([page.waitForURL(address.href), link.press('Enter')]);
-  await page.getByRole('region', { name: '批次', exact: true }).waitFor();
-}
-
-async function returnToDailyDelivery(page: Page, { address, fromButton, width }: {
-  readonly address: URL; readonly fromButton: boolean; readonly width: number;
-}) {
-  const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
-  const href = await back.getAttribute('href');
-  assert.ok(href, `${width}px 订单详情缺少返回地址，预期 ${address.href}，当前地址 ${page.url()}`);
-  const target = new URL(href, page.url());
-  assert.equal(target.href, address.href, `${width}px 订单详情返回地址实际 ${target.href}，预期 ${address.href}`);
-  const activate = () => fromButton ? back.press('Enter') : page.goBack({ waitUntil: 'commit' });
   try {
-    await Promise.all([page.waitForURL(address.href, { waitUntil: 'commit' }), activate()]);
+    await link.press('Enter');
+    await page.waitForURL((url) => decodeURIComponent(url.pathname) === expectedPath && url.searchParams.get('focusBatch') === batchId,
+      { waitUntil: 'commit' });
+    await page.getByRole('region', { name: '批次', exact: true }).waitFor();
   } catch (cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    throw new Error(`${width}px ${fromButton ? '显式返回' : '浏览器后退'}后 URL 为 ${page.url()}\n${detail}`, { cause });
+    throw new Error(`${width}px ${source}打开详情，预期路径 ${expectedPath}、批次 ${batchId}，当前地址 ${page.url()}\n${detail}`, { cause });
+  }
+}
+
+async function returnToDailyDelivery(page: Page, { address, fromButton, source, width, focus }: {
+  readonly address: URL; readonly fromButton: boolean; readonly source: string; readonly width: number; readonly focus: Locator;
+}) {
+  try {
+    if (fromButton) {
+      const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
+      const href = await back.getAttribute('href');
+      assert.ok(href, '订单详情缺少返回地址');
+      const target = new URL(href, page.url());
+      assert.equal(target.href, address.href, `订单详情返回链接地址为 ${target.href}`);
+      await back.press('Enter');
+    } else await page.goBack({ waitUntil: 'commit' });
+    await page.waitForURL(address.href, { waitUntil: 'commit' });
+    await focus.and(page.locator(':focus')).waitFor();
+  } catch (cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${width}px ${source} ${fromButton ? '显式返回' : '浏览器后退'}，预期 ${address.href}，当前地址 ${page.url()}\n${detail}`, { cause });
   }
 }
 
