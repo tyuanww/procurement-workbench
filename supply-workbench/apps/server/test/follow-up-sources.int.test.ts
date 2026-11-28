@@ -35,9 +35,18 @@ it('原表回查保留采购行、工厂需求原列与已采纳出货的历史�
 
     const read = await client.detail(component);
     expect(read.sourceFiles).toMatchObject({ 'factory-active': '工厂当前.xlsx', 'factory-history': '工厂历史.xlsx' });
-    expect(read.factoryReports.demand).toMatchObject([{ sheetName: '09月排产包材原料需求表', rowNo: 4, payload: {
+    expect(read.factoryReports.demand.find(({ id }) => id === 'material-demand')).toMatchObject({ sheetName: '09月排产包材原料需求表', rowNo: 4, payload: {
       slots: [{ sourceColumns: { date: 10, quantity: 11 }, qtyRaw: '50' }, { sourceColumns: { date: 12, quantity: 13 }, qtyRaw: '100' }],
-    } }]);
+    } });
+    expect(Object.fromEntries(read.factoryReports.demand.map(({ id, originalCells }) => [id, originalCells?.blockOrderRaw]))).toEqual({
+      'material-demand': undefined, 'demand-order-blank': null, 'demand-order-original': '非 PO 分组',
+    });
+    expect(read.factoryReports.inTransit.find(({ id }) => id === 'legacy-transit')).toMatchObject({
+      originalCells: {}, payload: { qtyRequired: { value: 10 }, qtyDeliveredFactory: { value: 5 } },
+    });
+    expect(read.factoryReports.inTransit.find(({ id }) => id === 'recorded-transit')).toMatchObject({
+      originalCells: { nameRaw: null, qtyRequired: '020.0' }, payload: { qtyRequired: { value: 20 } },
+    });
     expect(read.factoryReports.shipments.map(({ id }) => id)).toEqual(['current-shipment']);
     expect(read.factoryReports.shipments[0]?.payload.shipOrArriveOn).toEqual({ raw: '预计9/10', value: null });
     expect(read.factoryReports.shipments[0]?.originalCells).toEqual({ itemCodeRaw: null, qty: '020.00', shipOrArriveOn: '预计9/10' });
@@ -163,6 +172,12 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
     const sameLineLink = await link(line.id, reviewer);
     expect(sameLineLink.statusCode, sameLineLink.body).toBe(200);
     expect((await client.detail(line.id)).batchDemandSources).toEqual(expected);
+    await handle.exec("update factory_material_demand_rows set link_status = 'unlinked', link_reason = 'NO_CANDIDATE_LINE' where id = 'origin-row'");
+    const uncertain = await client.detail(line.id);
+    expect(uncertain.batches).toEqual(after.batches);
+    expect(uncertain.batchDemandSources).toEqual({});
+    expect(uncertain.sourceFiles).toEqual({ 'factory-replacement': '需求换表.xlsx' });
+    await handle.exec("update factory_material_demand_rows set link_status = 'manual', link_reason = null where id = 'origin-row'");
     expect((await link(otherLineId, client.cookie)).statusCode).toBe(403);
     const relinked = await link(otherLineId, reviewer);
     expect(relinked.statusCode, relinked.body).toBe(200);
@@ -264,8 +279,16 @@ async function insertSources(db: AppDatabase, lineId: string) {
       raw: { itemCodeRaw: { raw: null, value: null }, qty: { raw: '020.00', value: 20 }, shipOrArriveOn: { raw: '预计9/10', value: null } },
       lotRaw: 'LOT-CURRENT', qty: '20', shipOrArriveOn: null },
   ]);
-  await db.insert(schema.factoryMaterialDemandRows).values({
-    ...ref, id: 'material-demand', importBatchId: 'factory-active', sheetName: demandSheet, rowNo: 4, fingerprint: 'demand',
-    role: 'material', itemCodeRaw: '99010003', nameRaw: '测试通用盖子', slots, raw: { slots },
-  });
+  const demand = { ...ref, importBatchId: 'factory-active', sheetName: demandSheet, role: 'material', itemCodeRaw: '99010003', nameRaw: '测试通用盖子' };
+  await db.insert(schema.factoryMaterialDemandRows).values([
+    { ...demand, id: 'material-demand', rowNo: 4, fingerprint: 'demand', slots, raw: { slots, blockLabelRaw: null } },
+    { ...demand, id: 'demand-order-blank', rowNo: 5, fingerprint: 'demand-blank', slots: [], raw: { blockPoRaw: null, blockLabelRaw: null } },
+    { ...demand, id: 'demand-order-original', rowNo: 6, fingerprint: 'demand-original', slots: [], raw: { blockLabelRaw: '非 PO 分组' } },
+  ]);
+  const transit = { ...ref, importBatchId: 'factory-active', sheetName: '在途订单汇总' };
+  await db.insert(schema.factoryInTransitRows).values([
+    { ...transit, id: 'legacy-transit', rowNo: 2, fingerprint: 'transit-legacy', raw: {}, qtyRequired: '10', qtyDeliveredFactory: '5' },
+    { ...transit, id: 'recorded-transit', rowNo: 3, fingerprint: 'transit-recorded',
+      raw: { nameRaw: { raw: null, value: null }, qtyRequired: { raw: '020.0', value: 20 } }, qtyRequired: '20' },
+  ]);
 }

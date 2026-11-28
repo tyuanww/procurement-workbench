@@ -31,6 +31,8 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, materialC
   const batchPath = new URL('/api/v1' + orderPath + '/batches', origin);
   const second = await createBatch(page, batchPath, warehouse);
   assert.equal(second.seq, 2);
+  const plan = await readBatchPlan(page, new URL('/api/v1' + orderPath, origin), second.id);
+  assert.deepEqual(plan, { quantity: 100, confirmed: '2099-11-27' });
   const searchAddress = page.url();
 
   for (const { width, height } of [{ width: 1440, height: 900 }, { width: 320, height: 667 }]) {
@@ -73,7 +75,18 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, materialC
   await page.getByText(/没有符合条件的订单行/u).waitFor();
   assert.equal(await order.count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
-  return { po, materialCode, batch: second.seq, widths: [1440, 320], sourceEvidence: true, returnFocus: true, explicitFinishedLane: true };
+  return { po, materialCode, batch: second.seq, plan, widths: [1440, 320], sourceEvidence: true, returnFocus: true, explicitFinishedLane: true };
+}
+
+async function readBatchPlan(page: Page, path: URL, id: string) {
+  const response = await page.request.get(path.href);
+  assert.ok(response.ok(), await response.text());
+  const payload: unknown = await response.json();
+  assert.ok(typeof payload === 'object' && payload !== null && 'batches' in payload && Array.isArray(payload.batches));
+  const batches: unknown[] = payload.batches;
+  const batch = batches.find((item) => typeof item === 'object' && item !== null && 'id' in item && item.id === id);
+  assert.ok(batch !== undefined && 'plannedQty' in batch && 'dateBuyerConfirmed' in batch, '第 2 批缺少计划量或确认日');
+  return { quantity: batch.plannedQty, confirmed: batch.dateBuyerConfirmed };
 }
 
 async function createBatch(page: Page, path: URL, receiverPartyId: string) {

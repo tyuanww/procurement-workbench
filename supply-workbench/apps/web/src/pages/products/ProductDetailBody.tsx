@@ -1,6 +1,6 @@
 import { productSection, productSectionLabels } from './product-section.js';
-import { Alert, Button, Descriptions, Empty, Flex, Image, Modal, Result, Select, Skeleton, Table, Typography } from 'antd';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Alert, Button, Descriptions, Empty, Flex, Image, Modal, Result, Select, Skeleton, Table, Typography, type RefSelectProps } from 'antd';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ProductDrillLink } from './product-journey.js';
 import {
   ProductMaterialsSchema,
@@ -21,6 +21,8 @@ import { ContentTabs, ViewSwitch } from '../../shared/ui/view-switch.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
 import { ProductVariantTag } from './product-cards.js';
+import { ProductPurchaseDrawer, ProductPurchaseTrigger, useProductPurchaseSelection } from './ProductPurchaseDrawer.js';
+import { purchaseRecordParam } from './product-edit-url.js';
 import { OwnerNameForm } from './product-owner-editor.js';
 
 type ProductPanelLoad<T> =
@@ -162,13 +164,14 @@ function PurchaseTab({ path, search, patch }: Pick<ProductDetailInput, 'search' 
     <ViewSwitch<ProductPurchases['scope']> aria-label="采购条码范围" value={scope} onChange={(value) => patch({ scope: value })}
       options={[{ label: '全部渠道', value: 'all_channels' }, { label: '只看本条码', value: 'exact' }]} />
     <ProductPanel key={url} path={url} schema={ProductPurchasesSchema}>
-      {(purchases) => <PurchasesPanel purchases={purchases} stage={search.get('stage')} patch={patch} />}
+      {(purchases) => <PurchasesPanel purchases={purchases} stage={search.get('stage')} purchaseRecord={search.get(purchaseRecordParam)} patch={patch} />}
     </ProductPanel>
   </Flex>;
 }
 
 function PurchasesPanel(props: {
   readonly stage: string | null;
+  readonly purchaseRecord: string | null;
   readonly purchases: ProductPurchases;
   readonly patch: ProductDetailInput['patch'];
 }) {
@@ -177,28 +180,33 @@ function PurchasesPanel(props: {
   }));
   const stage = options.find(option => option.value === props.stage)?.value ?? '';
   const rows = props.purchases.rows.filter(({ orderLine }) => !stage || orderLine.stage === stage);
+  const selected = rows.find(({ orderLine }) => orderLine.id === props.purchaseRecord);
+  const stageFilter = useRef<RefSelectProps>(null);
+  const selection = useProductPurchaseSelection({ lineId: props.purchaseRecord, isAvailable: selected !== undefined, fallback: stageFilter });
   return <div id="purchases" style={{ width: '100%' }}>
     <Flex align="center" wrap gap={space[2]}>
-      <Select aria-label="采购阶段" value={stage} virtual={false} style={{ width: 152, maxWidth: '100%' }}
+      <Select ref={stageFilter} aria-label="采购阶段" value={stage} virtual={false} style={{ width: 152, maxWidth: '100%' }}
         popupMatchSelectWidth={200} onChange={value => props.patch({ stage: value || null })}
         options={[{ value: '', label: '全部阶段' }, ...options]} />
       <span role="status">采购 {rows.length} 行</span>
     </Flex>
+    {selection.hasUnavailableRecord ? <p role="status" className="dossier-note">原采购记录不在当前结果中，已保留采购筛选。</p> : null}
     <Table<ProductPurchases['rows'][number]> size="small" rowKey={row => row.orderLine.id}
       className="dossier-result" pagination={false} dataSource={rows} tableLayout="fixed"
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此范围没有采购记录。">
         {stage ? <Button onClick={() => props.patch({ stage: null })}>查看全部阶段</Button> : null}
       </Empty> }}
       columns={[
-        { title: '采购单 / 商品条码', key: 'order', render: (_, { orderLine, channelMatch }) => <div>
-          <ProductDrillLink to={`/lines/${encodeURIComponent(orderLine.id)}`} tabLabel="采购">{orderLine.po.poRaw ?? '查看订单行'}</ProductDrillLink>
-          {orderLine.nameRaw && <div className="dossier-note dossier-purchase-name">{orderLine.nameRaw}</div>}
-          <div className="dossier-note">{orderLine.barcodeRaw}</div>
-          {props.purchases.scope === 'all_channels' && <span className="dossier-note">{channelMatchLabel(channelMatch)}</span>}
+        { title: '采购单 / 商品条码', key: 'order', render: (_, row) => <div>
+          <ProductPurchaseTrigger row={row} onOpen={selection.select} />
+          {row.orderLine.nameRaw && <div className="dossier-note dossier-purchase-name">{row.orderLine.nameRaw}</div>}
+          <div className="dossier-note">{row.orderLine.barcodeRaw}</div>
+          {props.purchases.scope === 'all_channels' && <span className="dossier-note">{channelMatchLabel(row.channelMatch)}</span>}
         </div> },
         { title: '品名', key: 'sku', responsive: ['sm'], render: (_, { orderLine }) => orderLine.nameRaw ?? '—' },
         { title: '采购阶段', key: 'stage', width: 100, render: (_, { orderLine }) => <StatusTag status={orderLine.stage} /> },
       ]} />
+    {selected === undefined ? null : <ProductPurchaseDrawer key={selected.orderLine.id} row={selected} onClose={() => selection.select(null)} />}
   </div>;
 }
 

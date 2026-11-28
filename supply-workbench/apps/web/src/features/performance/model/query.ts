@@ -102,7 +102,7 @@ function readSparse(search: string): SparseUrl {
     from,
     to,
     lane: readMember(params.get('lane'), LANES),
-    view: readView(params.get('view')),
+    view: readDashboardSubview(params.get('view')),
     stage: readMember(params.get('stage'), BATCH_STATUSES),
     bucket: readMember(params.get('bucket'), STUCK_BUCKETS),
     cause: readMember(params.get('cause'), STUCK_CAUSES),
@@ -126,7 +126,7 @@ function readPreset(input: {
   return preset;
 }
 
-function readView(raw: string | null): ListedView | null {
+export function readDashboardSubview(raw: string | null): ListedView | null {
   const view = readMember(raw, DASHBOARD_VIEWS);
   return view === 'stuck' ? null : view;
 }

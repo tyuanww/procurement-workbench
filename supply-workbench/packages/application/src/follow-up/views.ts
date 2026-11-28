@@ -174,7 +174,7 @@ export type OrderLineDetail = {
   readonly archivedShipmentSources?: readonly ShipmentSourceReport[];
   readonly batchDemandSources?: Readonly<Record<string, BatchDemandSource>>;
   readonly factoryReports: {
-    readonly inTransit: readonly FactoryReportOf<'in_transit'>[];
+    readonly inTransit: readonly WithOriginalCells<FactoryReportOf<'in_transit'>>[];
     readonly shipments: readonly ShipmentSourceReport[];
     readonly stock: readonly FactoryReportOf<'stock'>[];
     readonly schedule: readonly FactoryReportOf<'schedule'>[];

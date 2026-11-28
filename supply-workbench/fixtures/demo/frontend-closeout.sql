@@ -9,21 +9,23 @@ FROM (VALUES
   ('no-date', 'UI-DEMO-002', '演示清润面霜', '2099000000200', '001', 600, 'awaiting_date', 'awaiting_date', NULL),
   ('pending', 'UI-DEMO-003', '演示净润洁面乳渠道装', '2099000000101-1', '001', 500, 'no_batch', NULL, NULL),
   ('arrival', 'UI-DEMO-004', '演示净润洁面乳', '2099000000101', '001', 800, 'awaiting_receipt', 'shipped', 0),
-  ('buyer', 'UI-DEMO-005', '演示净润洁面乳渠道装', '2099000000101-1', '002', 300, 'awaiting_shipment', 'confirmed', 0)
+  ('buyer', 'UI-DEMO-005', '演示净润洁面乳', '2099000000101-1', '002', 300, 'awaiting_shipment', 'confirmed', 0)
 ) AS scenario(key, po, product_name, barcode, user_suffix, quantity, stage, batch_status, confirmed_offset);
 
 INSERT INTO parties (id, created_at, updated_at, display_name, is_supplier, is_factory, is_own_warehouse)
 VALUES ('ui-demo-factory', now(), now(), '演示包装工厂', true, true, false)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, lane)
-SELECT 'ui-demo-po-' || key, now(), now(), po, po, 'OTHER', ARRAY[]::text[], 'ui-demo-factory', 'finished'
+INSERT INTO purchase_orders (id, created_at, updated_at, po_raw, po_norm, po_format, related_po_raws, supplier_party_id, supplier_raw, lane)
+SELECT 'ui-demo-po-' || key, now(), now(), po, po, 'OTHER', ARRAY[]::text[], 'ui-demo-factory',
+  CASE WHEN key = 'buyer' THEN 'UI-DEMO-SUPPLIER-ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ' END, 'finished'
 FROM preview_orders
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO order_lines (id, created_at, updated_at, purchase_order_id, lane, barcode_raw, name_raw, qty_ordered, unit,
+INSERT INTO order_lines (id, created_at, updated_at, purchase_order_id, lane, barcode_raw, name_raw, item_code_raw, qty_ordered, unit,
   buyer_user_id, receiver_party_id, origin, missing_in_latest_import, latest_import_presence, stage, stage_changed_at, next_due_batch_id, next_due_date)
-SELECT 'ui-demo-line-' || key, now(), now(), 'ui-demo-po-' || key, 'finished', barcode, product_name, quantity, '件',
+SELECT 'ui-demo-line-' || key, now(), now(), 'ui-demo-po-' || key, 'finished', barcode, product_name,
+  CASE WHEN key = 'buyer' THEN 'UI-DEMO-ITEM-005' END, quantity, '件',
   '0199f0a0-0000-7000-8000-000000000' || user_suffix, '0199f0a0-0000-7000-8000-000000000010',
   'manual', false, 'not_applicable', stage, now(),
   CASE WHEN batch_status IS NOT NULL THEN 'ui-demo-batch-' || key END, business_day + confirmed_offset
