@@ -73,8 +73,7 @@ function purchaseSources(detail: OrderLineDetail): readonly SourceRecord[] {
     fields: [
       ['采购订单po单号', fact.poRaw], ['需采购子件名称', fact.componentNameRaw], ['子部件代码', fact.componentCodeRaw],
       ['采购数量', fact.quantityRaw],
-      ...(fact.unitRaw === null ? [] : [['单位原文', fact.unitRaw] as const]),
-      ['实际交付进度', fact.deliveryProgressRaw ?? null],
+      ['实际交付进度', fact.deliveryProgressRaw ?? undefined],
       [procurementCellLabel('OA需求流程编号', fact.oa.source), fact.oa.raw],
       [procurementCellLabel('产品69码', fact.productCodes.source), fact.productCodes.raw],
     ],
@@ -87,7 +86,7 @@ function purchaseSources(detail: OrderLineDetail): readonly SourceRecord[] {
     importBatchId: snapshot.importBatchId, fileName: detail.sourceFiles?.[snapshot.importBatchId], sheetName: imported.sheet, rowNo: imported.rowNo,
     fields: PURCHASE_FIELDS.flatMap(([label, key]) => {
       const field = snapshot.fields[key];
-      return field === undefined ? [] : [[label, field.raw ?? null]];
+      return field === undefined ? [] : [[label, field.raw]];
     }),
   }];
 }
@@ -119,8 +118,8 @@ function orderFactorySources(detail: OrderLineDetail, { assignedIds, origin }: {
   const transitRows = inTransit.map((row) => ({
     ...rowLocation(row, files),
     fields: [
-      ['订单号', row.payload.po.raw], ['品名', row.payload.nameRaw.raw],
-      ['采购需求量', row.payload.qtyRequired.raw], ['已交货数量', row.payload.qtyDeliveredFactory.raw],
+      ['订单号', row.originalCells?.po], ['品名', row.originalCells?.nameRaw],
+      ['采购需求量', row.originalCells?.qtyRequired], ['已交货数量', row.originalCells?.qtyDeliveredFactory],
     ] satisfies SourceField[],
   }));
   return [...demandRows, ...transitRows, ...shipments.filter((row) => !assignedIds.has(row.id)).map((row) => shipmentRecord(row, files))];
