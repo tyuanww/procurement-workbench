@@ -2,10 +2,12 @@ import { expect, it } from 'vitest';
 import { makeRelinkFactoryRows, makeSetLineFactoryLink } from '../../packages/application/src/factory-links/index.js';
 import { makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
 import { makeLinkFactoryRow } from '../../packages/application/src/master-data/index.js';
+import { entityId } from '../../packages/domain/src/index.js';
 import type { AppDatabase } from '../../packages/persistence/src/client.js';
 import { factoryLinkQueries } from '../../packages/persistence/src/queries/factory-links/index.js';
+import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
 import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
-import { aParty } from '../../packages/testkit/src/index.js';
+import { aFactoryStockRow, aParty } from '../../packages/testkit/src/index.js';
 import { blockedOnPostgres, gate, onlyLineDetail, rawCells, seedLine, seedOtherFactoryReport, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
 
 it.skipIf(url === undefined).each([
@@ -68,16 +70,9 @@ it.skipIf(url === undefined)('自动批量首挂只让受影响订单的凭据�
       const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
       await main.exec(`update factory_stock_rows set item_code_raw = '${sample.code}' where id = '${rowId}'`);
       const paused = gate();
-      const queries = factoryLinkQueries(competing.db);
       const relink = makeRelinkFactoryRows({
         ...writes(competing.db, { afterFactoryLinkSave: paused.hold }),
-        links: {
-          ...queries,
-          async listFactoryRowRefs() {
-            const rows = await queries.listFactoryRowRefs();
-            return rows.filter((row) => row.rowId === rowId);
-          },
-        },
+        links: scopedFactoryReports(competing.db, [rowId]),
       })({ limit: 1 }, sample.reviewer);
       try {
         await Promise.race([relink, paused.entered]);
@@ -96,6 +91,56 @@ it.skipIf(url === undefined)('自动批量首挂只让受影响订单的凭据�
     });
   });
 }, 15000);
+
+it.skipIf(url === undefined)('批量重联会拆掉原归属时，处理前序报告期间原订单已待核对', async () => {
+  await withFixture(async ({ main, competing, sample }) => {
+    await withFixture(async ({ sample: target }) => {
+      await seedLine({ db: main.db, sample, id: sample.lineId });
+      await seedLine({ db: main.db, sample: target, id: target.lineId });
+      const { rowId: fallback, factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
+      await makeLinkFactoryRow(writes(main.db))({ table: 'stock', rowId: fallback, orderLineId: sample.lineId }, sample.reviewer);
+      const moving = await seedMovingShipment(main.db, { sample, target });
+      try {
+        const { rowId: first } = await seedOtherFactoryReport(main.db, { sample: target, kind: 'in_transit' });
+        await main.exec(`update factory_in_transit_rows set item_code_raw = '${target.code}' where id = '${first}'`);
+        expect((await onlyLineDetail(main.db, sample.code)).line.factory?.id).toBe(sample.factoryId);
+        const paused = gate();
+        const relink = makeRelinkFactoryRows({
+          ...writes(competing.db, { afterFactoryLinkSave: paused.hold }), links: scopedFactoryReports(competing.db, [first, moving]),
+        })({}, sample.reviewer);
+        try {
+          await Promise.race([relink, paused.entered]);
+          await expectPlanWithoutSource(main.db, sample);
+        } finally {
+          paused.release();
+          await relink;
+        }
+        expect((await onlyLineDetail(main.db, sample.code)).line.factory?.id).toBe(factory.id);
+      } finally {
+        await main.exec(`delete from factory_shipment_rows where id = '${moving}'`);
+      }
+    });
+  });
+}, 15000);
+
+async function seedMovingShipment(db: AppDatabase, { sample, target }: { readonly sample: Sample; readonly target: Sample }) {
+  const id = entityId(`1-${sample.id}-moving-shipment`);
+  await factoryReportRepository(db).save(aFactoryStockRow({
+    id, importBatchId: sample.importId, factoryPartyId: sample.factoryId, fingerprint: id, kind: 'shipment',
+    linkedOrderLineId: sample.lineId, linkStatus: 'linked', raw: { itemCodeRaw: target.code },
+  }));
+  return id;
+}
+
+function scopedFactoryReports(db: AppDatabase, ids: readonly string[]) {
+  const queries = factoryLinkQueries(db);
+  return {
+    ...queries,
+    async listFactoryRowRefs() {
+      return (await queries.listFactoryRowRefs()).filter((row) => ids.includes(row.rowId));
+    },
+  };
+}
 
 it.skipIf(url === undefined)('同单生成先确认原表时，之后的改挂不会覆盖历史凭据', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {

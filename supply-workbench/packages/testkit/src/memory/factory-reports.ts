@@ -11,6 +11,8 @@ export function factoryReportRepository(box: MemoryBox) {
     },
     async demandSourcesAtGeneration() { return new Map<never, never>(); },
     lockSnapshotSource: async () => {},
+    lockReportSources: async () => {},
+    effectiveReportOwners: async () => [],
     lockSnapshotOrders: async () => {},
     async linkUnassignedTransit(rowId: string, lineId: OrderLineId) {
       const row = await repo.find(rowId);

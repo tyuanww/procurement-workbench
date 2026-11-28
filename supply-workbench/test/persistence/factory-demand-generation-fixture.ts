@@ -9,6 +9,7 @@ import { requireDatabase } from '../../packages/persistence/src/require-database
 import { auditRepository } from '../../packages/persistence/src/repositories/audit-log.js';
 import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
+import { codeLinkRepository, itemCodeRepository } from '../../packages/persistence/src/repositories/identity.js';
 import { importBatchRepository } from '../../packages/persistence/src/repositories/import-batches.js';
 import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
@@ -45,24 +46,21 @@ type Hooks = {
   readonly afterLineLock?: (id: string) => Promise<void>;
   readonly afterFactoryLinkSave?: () => Promise<void>;
   readonly afterSnapshotCommit?: () => Promise<void>;
+  readonly afterSnapshotSourceLock?: () => Promise<void>;
+  readonly afterCodeLinkSave?: () => Promise<void>;
   readonly afterSourceFreeze?: () => Promise<void>;
 };
 
 export function writes(db: AppDatabase, hooks: Hooks = {}) {
   const uow = createUnitOfWork(db, (transaction) => {
     const tx = requireDatabase(transaction);
-    const reports = factoryReportRepository(tx);
     const factoryLinks = lineFactoryLinkRepository(tx);
     return {
       ...placeholderStores(),
       batches: batchesWithHooks(tx, hooks),
-      factoryReports: {
-        ...reports,
-        async save(row: Parameters<typeof reports.save>[0]) {
-          await reports.save(row);
-          await hooks.afterDemandSave?.();
-        },
-      },
+      factoryReports: reportsWithHooks(tx, hooks),
+      codeLinks: codeLinksWithHooks(tx, hooks),
+      itemCodes: itemCodeRepository(tx),
       factoryLinks: {
         ...factoryLinks,
         async save(row: Parameters<typeof factoryLinks.save>[0]) {
@@ -80,6 +78,32 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
     };
   });
   return { uow, clock, ids: systemIds() };
+}
+
+function reportsWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const repo = factoryReportRepository(tx);
+  return {
+    ...repo,
+    async save(row: Parameters<typeof repo.save>[0]) {
+      await repo.save(row);
+      await hooks.afterDemandSave?.();
+    },
+    async lockSnapshotSource(factoryPartyId: string) {
+      await repo.lockSnapshotSource(factoryPartyId);
+      await hooks.afterSnapshotSourceLock?.();
+    },
+  };
+}
+
+function codeLinksWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const repo = codeLinkRepository(tx);
+  return {
+    ...repo,
+    async save(link: Parameters<typeof repo.save>[0]) {
+      await repo.save(link);
+      await hooks.afterCodeLinkSave?.();
+    },
+  };
 }
 
 function auditWithHooks(tx: AppDatabase, hooks: Hooks) {

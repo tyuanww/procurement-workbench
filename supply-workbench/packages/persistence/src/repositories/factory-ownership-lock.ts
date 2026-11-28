@@ -17,6 +17,12 @@ export async function tryLockFactoryOwnershipForEvidence(db: AppDatabase, orderL
   return locked !== undefined;
 }
 
+export async function lockReportSources(db: AppDatabase, factoryPartyIds: readonly string[]): Promise<void> {
+  for (const factoryPartyId of [...new Set(factoryPartyIds)].sort()) {
+    await lockFactorySnapshotSource(db, { factoryPartyId, kind: 'report' });
+  }
+}
+
 export async function lockFactorySnapshotSource(db: AppDatabase, { factoryPartyId, kind }: {
   readonly factoryPartyId: string; readonly kind: 'publish' | 'report';
 }): Promise<void> {
