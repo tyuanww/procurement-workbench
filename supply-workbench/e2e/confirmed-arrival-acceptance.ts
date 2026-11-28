@@ -157,7 +157,8 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   assert.equal(await target.count(), 0);
   await page.keyboard.press('Escape');
   await drawer.waitFor({ state: 'hidden' });
-  await batchRow(secondBatchId).getByRole('button', { name: /^查看来源/u }).press('Enter');
+  const secondSource = batchRow(secondBatchId).getByRole('button', { name: /^查看来源/u });
+  await secondSource.press('Enter');
   await target.waitFor();
   const sourceUrl = page.url();
   await target.press('Enter');
@@ -167,6 +168,9 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   await page.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
   await page.waitForURL(sourceUrl);
   await target.and(page.locator(':focus')).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await secondSource.and(page.locator(':focus')).waitFor();
 
   const response = await page.request.get(new URL(`/api/v1/lines/${lineId}`, origin).href);
   assert.ok(response.ok());
@@ -174,5 +178,6 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   assert.equal(batches.length, 2);
   const actual = batches.map((batch: { id: string; dateBuyerConfirmed: string | null }) => [batch.id, batch.dateBuyerConfirmed]);
   assert.deepEqual(actual, [[firstBatchId, '2025-01-01'], [secondBatchId, date]]);
-  return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual, followUp: { focusBatch: secondBatchId, skippedStaysLocal: true, explicitBackFocus: true } };
+  return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual,
+    followUp: { focusBatch: secondBatchId, skippedStaysLocal: true, explicitBackFocus: true, drawerEscapeFocus: true } };
 }
