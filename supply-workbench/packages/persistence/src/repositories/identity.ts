@@ -1,5 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { NotFoundError } from '@sw/application/errors';
+import { NotFoundError, StateConflictError } from '@sw/application/errors';
 import { CODE_TYPES, REVIEW_STATUSES, type CodeLink, type ItemCode, type ItemName } from '@sw/domain';
 import type { CodeLinkRepository } from '../../../application/src/ports/code-link-repository.js';
 import type { ItemCodeRepository } from '../../../application/src/ports/item-code-repository.js';
@@ -22,12 +22,12 @@ export function itemCodeRepository(db: AppDatabase): ItemCodeRepository {
     },
     async insertIfAbsent(entity) {
       const [inserted] = await db.insert(itemCodes).values(entity)
-        .onConflictDoNothing({ target: [itemCodes.codeType, itemCodes.codeNorm] })
+        .onConflictDoNothing()
         .returning();
       if (inserted !== undefined) return entityId(inserted.id);
       const [existing] = await db.select({ id: itemCodes.id }).from(itemCodes)
         .where(and(eq(itemCodes.codeType, entity.codeType), eq(itemCodes.codeNorm, entity.codeNorm)));
-      if (existing === undefined) throw new NotFoundError('编码', entity.codeNorm);
+      if (existing === undefined) throw new StateConflictError('编码标识已被其他编码占用');
       return entityId(existing.id);
     },
     async listByNorm(codeNorm) {
