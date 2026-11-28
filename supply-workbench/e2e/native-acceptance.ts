@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
-import { execFileSync, fork, spawnSync, type ExecFileSyncOptions } from 'node:child_process';
+import { execFileSync, fork, type ChildProcess, type ExecFileSyncOptions } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { release, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { acceptanceSummary, failureMessage, writeAcceptanceJson, type AcceptanceSummary } from './acceptance-diagnostics.ts';
+import { runAcceptanceProcess } from './acceptance-process.ts';
 
 const [sha, output] = process.argv.slice(2);
 assert.ok(sha && /^[0-9a-f]{40}$/.test(sha), 'Provide the full Git SHA');
@@ -24,7 +26,7 @@ await mkdir(evidenceDir);
 type SuiteOutcome = {
   suite: string;
   status: number | null;
-  signal: ReturnType<typeof spawnSync>['signal'];
+  signal: ChildProcess['signalCode'];
   error: string | undefined;
 };
 
@@ -47,6 +49,8 @@ type RunEvidence = {
   health?: Readonly<Record<string, unknown>>;
   result?: 'pass' | 'fail';
   error?: string;
+  failureStage?: string;
+  cleanupError?: string;
 };
 
 const evidence: RunEvidence = {
@@ -69,13 +73,18 @@ const pgLog = join(working, 'postgres.log');
 const appLog = join(working, 'app.log');
 let pgStarted = false;
 let app: ReturnType<typeof fork> | undefined;
-let appExit: Promise<unknown[]> | undefined;
+const browserAcceptanceStage = '执行采购浏览器验收';
+const cleanupStage = '清理隔离服务与数据库';
+let stage = '准备合成样本与浏览器';
+let failure: { readonly stage: string; readonly error: unknown } | undefined;
+let browserCleanupErrors: readonly unknown[] = [];
 try {
   const webDir = resolve('apps/web/dist/app');
   evidence.fixtures = [await verifyProcurementFixture()];
   evidence.entry = await webEntry(webDir);
   evidence.postgres = commandOutput(pgTool('pg_ctl'), ['--version']);
   evidence.browser = await browserVersion();
+  stage = '初始化隔离 PostgreSQL';
   const appPort = await availablePort(appPortFromEnv());
   const pgPort = await availablePort();
   assert.notEqual(pgPort, appPort, 'PostgreSQL and the application need separate ports');
@@ -108,12 +117,13 @@ try {
   for (const key of ['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_REDIRECT_URI', 'FEISHU_REPORT_FOLDER_TOKEN', 'WEEKLY_REPORT_CRON']) delete env[key];
   for (const task of ['migrate', 'seed']) run(process.execPath, ['--experimental-strip-types', '--import', productionLoader, 'scripts/db-lifecycle.ts', task], { env });
 
+  stage = '启动并检查构建后的应用';
   app = fork('docker/start.ts', [], {
     env,
     execArgv: ['--experimental-strip-types', '--import', productionLoader, '--import', './e2e/native-server.ts'],
     silent: true,
   });
-  appExit = once(app, 'exit');
+  const appExit = once(app, 'exit');
   assert.ok(app.stdout && app.stderr, 'Application log pipes are unavailable');
   const log = createWriteStream(appLog);
   app.stdout.pipe(log, { end: false });
@@ -129,34 +139,97 @@ try {
   evidence.health = health;
   assert.equal(health.ok, true);
 
-  const result = spawnSync(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
-    env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, windowsHide: true,
-  });
+  stage = browserAcceptanceStage;
+  const result = await runAcceptanceProcess({ ...env, PGBIN: process.env.PGBIN });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
-  assert.equal(result.status, 0, 'Procurement browser acceptance failed');
+  browserCleanupErrors = result.cleanupErrors ?? [];
+  if (result.error) throw result.error;
+  const outcome = result.signal ?? `exit status ${result.status}`;
+  assert.equal(result.status, 0, `Procurement browser acceptance failed (${outcome})`);
+  stage = '核对浏览器实际加载的入口';
   await verifyServedEntry(evidence.entry);
-  evidence.result = 'pass';
 } catch (error) {
-  evidence.result = 'fail';
-  evidence.error = error instanceof Error ? error.message : String(error);
-  throw error;
-} finally {
-  if (app?.exitCode === null && app.signalCode === null) {
-    app.kill();
-    await appExit;
-  }
-  if (evidence.result === 'fail') {
-    for (const file of [pgLog, appLog]) {
-      const log = await readFile(file, 'utf8').catch(() => '');
-      if (log.trim()) console.error(log.split('\n').slice(-25).join('\n').trim());
+  failure = { stage, error };
+}
+
+const cleanupErrors: string[] = [];
+function recordCleanup(error: unknown): void {
+  const message = failureMessage(error);
+  cleanupErrors.push(message);
+  console.error('Unable to clean up isolated acceptance:', message);
+  failure ??= { stage: cleanupStage, error };
+}
+for (const error of browserCleanupErrors) recordCleanup(error);
+if (app !== undefined) {
+  try {
+    await stopApplication(app, 'SIGTERM', 15_000);
+  } catch (error) {
+    recordCleanup(new Error('隔离应用关闭失败', { cause: error }));
+    try {
+      await stopApplication(app, 'SIGKILL', 5_000);
+    } catch (forceError) {
+      recordCleanup(new Error('无法强制关闭隔离应用', { cause: forceError }));
     }
   }
-  try {
-    if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
-    await rm(working, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  } finally {
-    await writeEvidence();
+}
+try {
+  if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
+} catch (error) {
+  recordCleanup(error);
+}
+if (failure !== undefined) {
+  for (const file of [pgLog, appLog]) {
+    const log = await readFile(file, 'utf8').catch(() => '');
+    if (log.trim()) console.error(log.split('\n').slice(-25).join('\n').trim());
   }
+}
+if (!cleanupErrors.length) {
+  try {
+    await rm(working, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (error) {
+    recordCleanup(error);
+  }
+}
+if (cleanupErrors.length) evidence.cleanupError = cleanupErrors.join('\n');
+
+if (failure !== undefined) {
+  const error = failureMessage(failure.error);
+  evidence.result = 'fail';
+  evidence.error = error;
+  evidence.failureStage = failure.stage;
+  await writeEvidence().catch((error: unknown) => console.error('Unable to save acceptance evidence:', failureMessage(error)));
+  const browser: unknown = process.env.GITHUB_STEP_SUMMARY && failure.stage === browserAcceptanceStage
+    ? await readFile(join(evidenceDir, 'preaccept', 'result.json'), 'utf8').then(JSON.parse).catch(() => undefined)
+    : undefined;
+  const additionalCleanup = failure.stage === cleanupStage ? cleanupErrors.slice(1) : cleanupErrors;
+  const cleanup = additionalCleanup.length ? { cleanupErrors: additionalCleanup } : {};
+  await writeSummary({ sha, result: 'fail', stage: failure.stage, browser, error, ...cleanup });
+  throw failure.error;
+}
+evidence.result = 'pass';
+try {
+  await writeEvidence();
+} catch (error) {
+  await writeSummary({ sha, result: 'fail', stage: '保存验收证据', browser: undefined, error: failureMessage(error) });
+  throw error;
+}
+await writeSummary({ sha, result: 'pass' });
+
+async function stopApplication(app: ReturnType<typeof fork>, signal: 'SIGTERM' | 'SIGKILL', timeout: number): Promise<void> {
+  if (app.exitCode === null && app.signalCode === null) {
+    await Promise.all([
+      once(app, 'exit', { signal: globalThis.AbortSignal.timeout(timeout) }),
+      Promise.resolve().then(() => app.kill(signal)),
+    ]);
+  }
+  if (signal === 'SIGTERM' && app.exitCode !== 0 && app.signalCode !== signal) {
+    throw new Error(`隔离应用退出状态异常：${app.signalCode ?? app.exitCode}`);
+  }
+}
+
+async function writeSummary(summary: AcceptanceSummary): Promise<void> {
+  const path = process.env.GITHUB_STEP_SUMMARY;
+  if (path) await appendFile(path, acceptanceSummary(summary)).catch(() => console.error('Unable to write the browser acceptance summary.'));
 }
 
 function run(command: string, args: readonly string[], options: ExecFileSyncOptions = {}): void {
@@ -230,5 +303,5 @@ async function browserVersion(): Promise<string> {
 }
 
 async function writeEvidence(): Promise<void> {
-  await writeFile(join(evidenceDir, 'run.json'), JSON.stringify(evidence, null, 2) + '\n');
+  await writeAcceptanceJson(join(evidenceDir, 'run.json'), evidence);
 }

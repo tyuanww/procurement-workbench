@@ -55,8 +55,8 @@ function SourceEvidence({ detail, batch }: { readonly detail: OrderLineDetail; r
     <EvidenceGroup title="采购表 · 本单参考" rows={purchaseSources(detail)} canReadImport={canReadImport}
       empty="暂无可回查的采购原表行。" />
     <EvidenceGroup title="工厂表 · 本批已归属" rows={confirmed} canReadImport={canReadImport}
-      empty="本批暂无已归属的工厂出货原行。" />
-    {batchIds.length > confirmed.length ? <p role="status">本批有工厂归批记录的原行待核对。</p> : null}
+      empty="本批暂无已归属的工厂出货原行。"
+      notice={batch.hasUnavailableShipmentSource === true ? '本批已登记发货，历史原表暂无法核对。' : undefined} />
     <EvidenceGroup title="工厂表 · 本单参考" rows={reference} canReadImport={canReadImport}
       empty="本单暂无可参考的物料需求、在途或未归批出货原表行。" />
   </Flex>;
@@ -150,22 +150,24 @@ function rowLocation(row: Pick<SourceRecord, 'importBatchId' | 'sheetName' | 'ro
   return { importBatchId: row.importBatchId, fileName: files?.[row.importBatchId], sheetName: row.sheetName, rowNo: row.rowNo };
 }
 
-function EvidenceGroup({ title, rows, canReadImport, empty }: {
+function EvidenceGroup({ title, rows, canReadImport, empty, notice }: {
   readonly title: string;
   readonly rows: readonly SourceRecord[];
   readonly canReadImport: boolean;
   readonly empty: string;
+  readonly notice?: string | undefined;
 }) {
   const isCompact = Grid.useBreakpoint().xs === true;
   return <section aria-label={title} className="batch-source-group">
     <Typography.Title level={4}>{title}</Typography.Title>
-    {rows.length === 0 ? <Typography.Text type="secondary">{empty}</Typography.Text> : rows.map((row) => (
+    {rows.length === 0 && notice === undefined ? <Typography.Text type="secondary">{empty}</Typography.Text> : rows.map((row) => (
       <Descriptions key={JSON.stringify([row.importBatchId, row.sheetName, row.rowNo])} size="small" column={1}
         layout={isCompact ? 'vertical' : 'horizontal'} styles={{ title: { whiteSpace: 'normal' } }}
         title={<SourceLocation row={row} canReadImport={canReadImport} />}
         items={row.fields.map(([label, raw]) => ({ key: label, label, children: raw === null || raw.trim() === '' ? '原表未填' : raw }))}
       />
     ))}
+    {notice === undefined ? null : <Typography.Text type="secondary" role="status">{notice}</Typography.Text>}
   </section>;
 }
 
