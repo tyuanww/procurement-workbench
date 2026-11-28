@@ -190,13 +190,23 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.personalWorkspace = await checkPersonalWorkspace({ buyer, peer, origin,
     expectReceiptFailure: (path) => { expectedFailures.push({ role: 'buyer', path, status: 503 }); },
   });
+  browserTiming('followUpOrderQuery');
   result.checks.followUpOrderQuery = await checkFollowUpOrderQuery({ page: buyer, origin, out, po: componentPo, materialCode: componentCode, warehouse });
+  browserTiming('followUpDelivery');
   result.checks.followUpDelivery = await checkFollowUpDelivery({ page: manager, buyer, origin, out, warehouse });
+  browserTiming('importArrivalEvidence');
   result.checks.importArrivalEvidence = await checkImportedArrivalEvidence(buyer, importPath);
+  browserTiming('factoryImportScope');
   result.checks.factoryImportScope = await checkFactoryImportScope({ buyer, manager, origin });
+  browserTiming('accountLogout');
   result.checks.accountLogout = await checkAccountLogout(buyer, origin, (path) => {
     expectedFailures.push({ role: 'buyer', path, status: 503 });
   });
+  browserTiming('done');
+}
+
+function browserTiming(step: string): void {
+  console.log(`[browser timing] ${step} elapsed=${Math.round(process.uptime() * 1000)}ms`);
 }
 
 async function checkPageStories({ buyer, manager }: { readonly buyer: Page; readonly manager: Page }) {
