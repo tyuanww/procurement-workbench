@@ -1,50 +1,165 @@
 import { expect, it } from 'vitest';
-import { makeCreateHintBatches, makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
+import { makeAssignLines, makeCreateHintBatches, makeGenerateBatchesFromDemand, makeUpdateLine } from '../../packages/application/src/follow-up/index.js';
+import { makeAssignOwner } from '../../packages/application/src/owner/index.js';
 import { purchaseOrderKey } from '../../packages/application/src/follow-up/use-cases/purchase-order-ref.js';
 import { entityId, orderLineId } from '../../packages/domain/src/index.js';
+import type { AppDatabase } from '../../packages/persistence/src/client.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
-import { anOrderLine } from '../../packages/testkit/src/index.js';
-import { blockedOnPostgres, gate, onlyLineDetail, seedLine, url, wait, withFixture, writes } from './factory-demand-generation-fixture.js';
+import { settingsRepository } from '../../packages/persistence/src/repositories/settings.js';
+import { userRepository } from '../../packages/persistence/src/repositories/users.js';
+import { seed } from '../../packages/persistence/src/seed.js';
+import { aUser, anOrderLine } from '../../packages/testkit/src/index.js';
+import { blockedOnPostgres, gate, onlyLineDetail, rawCells, seedLine, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
 
 it.skipIf(url === undefined)('工厂反序生成两条订单与今日批量建批重叠时，两笔操作都能提交', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
-    await seedLine({ db: main.db, sample, id: sample.lineId });
-    const secondLine = orderLineId(`${sample.id}-other`);
-    const secondCode = `${sample.code}-second`;
-    const secondRow = entityId(`${sample.id}-second`);
-    await orderLineRepository(main.db).save(anOrderLine({
-      id: secondLine, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: secondCode,
-    }));
-    const reports = factoryReportRepository(main.db);
-    const first = await reports.get(sample.id);
-    if (first.demand === null) throw new Error('合成行缺少工厂需求');
-    await reports.save({ ...first, id: secondRow, fingerprint: secondRow, rowNo: 5,
-      demand: { ...first.demand, itemCodeRaw: secondCode },
+    await seed(main.exec);
+    const warehouse = (await settingsRepository(main.db).get()).ownWarehousePartyId;
+    if (warehouse === null) throw new Error('合成配置缺少我方仓库');
+    const pair = await seedDemandPair(main.db, {
+      sample, fields: { buyerUserId: sample.buyer.id, qtyOrdered: 120, unit: '个', receiverPartyId: warehouse },
     });
     const paused = gate();
     const hint = makeCreateHintBatches(writes(main.db, {
       afterLineLock: async (id) => { if (id === sample.lineId) await paused.hold(); },
     }));
-    const hinting = hint({ lineIds: [sample.lineId, secondLine], source: 'today', includeCompleted: false }, sample.buyer);
+    const hinting = hint({ lineIds: pair.lineIds, source: 'today', includeCompleted: false }, sample.buyer);
     const generate = makeGenerateBatchesFromDemand(writes(competing.db));
     let generated: ReturnType<typeof generate> | undefined;
     try {
       await Promise.race([paused.entered, hinting]);
-      generated = generate({ rowIds: [secondRow, sample.id] }, sample.buyer);
+      generated = generate({ rowIds: [...pair.rowIds].reverse() }, sample.buyer);
       await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
     } finally {
       paused.release();
       await Promise.allSettled(generated === undefined ? [hinting] : [hinting, generated]);
     }
-    expect((await hinting).skipped.map((entry) => entry.lineId)).toEqual([sample.lineId, secondLine]);
+    expect(await hinting).toEqual({ created: 2, skipped: [] });
     expect(await generated).toEqual({ createdLines: 0, createdBatches: 2, skipped: [] });
-    for (const code of [sample.code, secondCode]) {
-      expect((await onlyLineDetail(main.db, code)).batches).toMatchObject([{ seq: 1, plannedQty: 50 }]);
+    for (const id of pair.lineIds) {
+      const batches = await deliveryBatchRepository(main.db).listByOrderLine(id);
+      expect([...batches].sort((left, right) => left.seq - right.seq)).toMatchObject([
+        { seq: 1, plannedQty: 120, origin: 'from_po_master_hint', receiverPartyId: warehouse },
+        { seq: 2, plannedQty: 50, origin: 'from_factory_demand', receiverPartyId: warehouse },
+      ]);
     }
   });
 }, 15000);
+
+it.skipIf(url === undefined).each([false, true])('真 PostgreSQL 等待改料提交后重新解析材料（有可复用订单行 %s）', async (existing) => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const paused = gate();
+    const alternate = existing ? orderLineId(`${sample.id}-other`) : null;
+    if (alternate !== null) {
+      await orderLineRepository(main.db).save(anOrderLine({
+        id: alternate, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: `${sample.code}-before`,
+      }));
+    }
+    const otherCode = `${sample.code}-edited`;
+    const editing = updateMaterialLines(main.db, { sample, alternate, otherCode, paused });
+    const generate = makeGenerateBatchesFromDemand(writes(competing.db));
+    let generated: ReturnType<typeof generate> | undefined;
+    try {
+      await Promise.race([paused.entered, editing]);
+      generated = generate({ rowIds: [sample.id] }, sample.buyer);
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(generated === undefined ? [editing] : [editing, generated]);
+    }
+    expect(await editing).toEqual({ lineId: sample.lineId });
+    expect(await generated).toEqual({ createdLines: existing ? 0 : 1, createdBatches: 1, skipped: [] });
+    expect((await orderLineRepository(main.db).get(sample.lineId)).itemCodeRaw).toEqual(otherCode);
+    expect(await deliveryBatchRepository(main.db).listByOrderLine(sample.lineId)).toEqual([]);
+    const correct = await onlyLineDetail(main.db, sample.code);
+    expect(correct.line.id).not.toEqual(sample.lineId);
+    if (alternate !== null) expect(correct.line.id).toEqual(alternate);
+    expect(correct.batches).toMatchObject([{ seq: 1, plannedQty: 50 }]);
+    expect(Object.values(correct.batchDemandSources ?? {})).toMatchObject([{ slot: { originalCells: rawCells } }]);
+    expect(await generate({ rowIds: [sample.id] }, sample.buyer)).toEqual({
+      createdLines: 0, createdBatches: 0, skipped: [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }],
+    });
+  });
+}, 15000);
+
+function updateMaterialLines(db: AppDatabase, { sample, alternate, otherCode, paused }: {
+  readonly sample: Sample; readonly alternate: ReturnType<typeof orderLineId> | null;
+  readonly otherCode: string; readonly paused: ReturnType<typeof gate>;
+}) {
+  const deps = writes(db);
+  return deps.uow.run(async (tx) => {
+    const update = makeUpdateLine({ ...deps, uow: { run: (effect) => effect(tx) } });
+    const from = { lineId: sample.lineId, itemCodeRaw: otherCode };
+    const receipt = await update(from, sample.buyer);
+    if (alternate !== null) {
+      const to = { lineId: alternate, itemCodeRaw: sample.code };
+      await update(to, sample.buyer);
+    }
+    await paused.hold();
+    return receipt;
+  });
+}
+
+it.skipIf(url === undefined).each([
+  { route: 'follow-up', prior: false },
+  { route: 'owner', prior: true },
+] as const)('真 PostgreSQL 逆序批量分配与生成重叠可提交（%j）', async ({ route, prior }) => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    const pair = await seedDemandPair(main.db, { sample });
+    await userRepository(main.db).save(aUser({ id: sample.buyer.id }));
+    const generate = makeGenerateBatchesFromDemand(writes(competing.db));
+    if (prior) expect(await generate({ rowIds: pair.rowIds }, sample.buyer)).toEqual({ createdLines: 0, createdBatches: 2, skipped: [] });
+    const paused = gate();
+    const written: string[] = [];
+    const deps = writes(main.db, { afterLineSave: async (id) => {
+      written.push(id);
+      if (id === pair.lineIds[1]) await paused.hold();
+    } });
+    const lineIds = [...pair.lineIds].reverse();
+    const assigning = route === 'follow-up'
+      ? makeAssignLines(deps)({ lineIds, buyerUserId: sample.buyer.id }, sample.buyer)
+      : makeAssignOwner(deps)({ lineIds, ownerUserId: sample.buyer.id }, sample.buyer);
+    let generated: ReturnType<typeof generate> | undefined;
+    try {
+      await Promise.race([paused.entered, assigning]);
+      generated = generate({ rowIds: [...pair.rowIds].reverse() }, sample.buyer);
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(generated === undefined ? [assigning] : [assigning, generated]);
+    }
+    expect(await assigning).toEqual({ updated: 2 });
+    expect(written).toEqual(lineIds);
+    const skipped = [...pair.rowIds].reverse().map((rowId) => ({ rowId, slotIndex: 0, reason: '已经生成过批次' }));
+    expect(await generated).toEqual({ createdLines: 0, createdBatches: prior ? 0 : 2, skipped: prior ? skipped : [] });
+    for (const id of pair.lineIds) {
+      expect((await orderLineRepository(main.db).get(id)).buyerUserId).toEqual(sample.buyer.id);
+      expect((await deliveryBatchRepository(main.db).listByOrderLine(id)).map((batch) => batch.seq)).toEqual([1]);
+    }
+  });
+}, 15000);
+
+async function seedDemandPair(db: AppDatabase, { sample, fields = {} }: {
+  readonly sample: Sample; readonly fields?: Partial<ReturnType<typeof anOrderLine>>;
+}) {
+  await seedLine({ db, sample, id: sample.lineId, fields });
+  const secondLine = orderLineId(`${sample.id}-other`);
+  const secondCode = `${sample.code}-second`;
+  const secondRow = entityId(`${sample.id}-second`);
+  await orderLineRepository(db).save(anOrderLine({
+    ...fields, id: secondLine, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: secondCode,
+  }));
+  const reports = factoryReportRepository(db);
+  const first = await reports.get(sample.id);
+  if (first.demand === null) throw new Error('合成行缺少工厂需求');
+  await reports.save({ ...first, id: secondRow, fingerprint: secondRow, rowNo: 5,
+    demand: { ...first.demand, itemCodeRaw: secondCode },
+  });
+  return { lineIds: [sample.lineId, secondLine], rowIds: [sample.id, secondRow] } as const;
+}
 
 it.skipIf(url === undefined)('四个不同需求行按相反物料单顺序同时生成时，两单各有两个连续批次', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {

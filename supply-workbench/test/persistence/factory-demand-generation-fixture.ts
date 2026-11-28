@@ -14,9 +14,11 @@ import { importBatchRepository } from '../../packages/persistence/src/repositori
 import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
 import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
+import { ownerAssignmentRepository } from '../../packages/persistence/src/repositories/owner-assignments.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
 import { settingsRepository } from '../../packages/persistence/src/repositories/settings.js';
+import { userRepository } from '../../packages/persistence/src/repositories/users.js';
 import { createUnitOfWork } from '../../packages/persistence/src/unit-of-work.js';
 import { aFactoryStockRow, anActor, anOrderLine, aParty, aPurchaseOrder, FixedClock } from '../../packages/testkit/src/index.js';
 
@@ -44,6 +46,7 @@ type Hooks = {
   readonly afterOriginRead?: () => Promise<void>;
   readonly afterDemandSave?: () => Promise<void>;
   readonly afterLineLock?: (id: string) => Promise<void>;
+  readonly afterLineSave?: (id: string) => Promise<void>;
   readonly afterFactoryLinkSave?: () => Promise<void>;
   readonly afterSnapshotCommit?: () => Promise<void>;
   readonly afterSnapshotSourceLock?: () => Promise<void>;
@@ -71,6 +74,8 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
       },
       parties: partyRepository(tx),
       orderLines: orderLinesWithHooks(tx, hooks),
+      ownerAssignments: ownerAssignmentRepository(tx),
+      users: userRepository(tx),
       settings: settingsRepository(tx),
       purchaseOrders: purchaseOrderRepository(tx),
       imports: importBatchRepository(tx),
@@ -142,6 +147,10 @@ function orderLinesWithHooks(tx: AppDatabase, hooks: Hooks) {
       await hooks.afterLineLock?.(id);
       return line;
     },
+    async save(line: Parameters<typeof orders.save>[0]) {
+      await orders.save(line);
+      await hooks.afterLineSave?.(line.id);
+    },
   };
 }
 
@@ -194,12 +203,15 @@ async function seedDemand(db: AppDatabase, sample: Sample): Promise<void> {
   }));
 }
 
-export async function seedLine({ db, sample, id }: { readonly db: AppDatabase; readonly sample: Sample; readonly id: ReturnType<typeof orderLineId> }): Promise<void> {
+export async function seedLine({ db, sample, id, fields }: {
+  readonly db: AppDatabase; readonly sample: Sample; readonly id: ReturnType<typeof orderLineId>;
+  readonly fields?: Partial<ReturnType<typeof anOrderLine>>;
+}): Promise<void> {
   const parsed = parsePoCell(sample.poRaw).value;
   await purchaseOrderRepository(db).save(aPurchaseOrder({
     id: sample.orderId, poRaw: sample.poRaw, poNorm: parsed.poNorm, poFormat: parsed.poFormat, lane: 'material',
   }));
-  await orderLineRepository(db).save(anOrderLine({ id, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: sample.code }));
+  await orderLineRepository(db).save(anOrderLine({ ...fields, id, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: sample.code }));
 }
 
 export async function onlyLineDetail(db: AppDatabase, code: string) {
@@ -214,9 +226,11 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
-    delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other');
+    delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}' or id in ('${sample.lineId}', '${sample.id}-other'));
+    delete from owner_assignments where subject_id in ('${sample.lineId}', '${sample.id}-other') or owner_user_id = '${sample.buyer.id}';
     delete from line_factory_links where order_line_id = '${sample.lineId}';
-    delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
+    delete from order_lines where item_code_raw = '${sample.code}' or id in ('${sample.lineId}', '${sample.id}-other');
+    delete from users where id = '${sample.buyer.id}';
     delete from purchase_orders where id = '${sample.orderId}' or po_norm in ('${sample.poRaw}', upper('ALT-${sample.id}'));
     delete from factory_material_demand_rows where import_batch_id = '${sample.importId}';
     delete from factory_shipment_rows where id = '0-${sample.id}-report';

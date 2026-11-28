@@ -2,36 +2,48 @@ import type { GenerateBatchesFromDemand, GenerateBatchesFromDemandDeps } from '.
 import { purchaseOrderKey } from './purchase-order-ref.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { authorize } from '../../shared/authorize.js';
-import { freezeGenerationEvidence, generateDemandRows, type RowOutcome, type SlotSkip } from './demand-batches.js';
+import { StateConflictError } from '../../shared/errors.js';
+import { DemandMaterialChanged, freezeGenerationEvidence, generateDemandRows, type GenerateInput, type RowOutcome, type SlotSkip } from './demand-batches.js';
+
+const MATERIAL_RETRIES = 2;
 
 export const makeGenerateBatchesFromDemand =
   (deps: GenerateBatchesFromDemandDeps): GenerateBatchesFromDemand =>
   async (input, actor) => {
     authorize(actor, 'records.write');
-    const at = deps.clock.now();
-    const skipped: SlotSkip[] = [];
-    let createdLines = 0;
-    let createdBatches = 0;
-    await deps.uow.run(async (tx) => {
-      const demands = await lockedDemands(tx, input.rowIds);
-      const outcomes = await generateDemandRows({
-        tx, actor, at,
-        nextOrderLineId: () => deps.ids.orderLine(),
-        nextEntityId: () => deps.ids.next(),
-        nextDeliveryBatchId: () => deps.ids.deliveryBatch(),
-      }, demands);
-      const evidence: NonNullable<RowOutcome['evidence']>[] = [];
-      for (const outcome of outcomes) {
-        createdLines += outcome.lines;
-        createdBatches += outcome.batches;
-        skipped.push(...outcome.skipped);
-        if (outcome.evidence !== undefined) evidence.push(outcome.evidence);
+    const context = {
+      actor, at: deps.clock.now(),
+      nextOrderLineId: () => deps.ids.orderLine(),
+      nextEntityId: () => deps.ids.next(),
+      nextDeliveryBatchId: () => deps.ids.deliveryBatch(),
+    };
+    for (let retries = 0; ; retries += 1) {
+      try {
+        return await deps.uow.run((tx) => generateOnce({ ...context, tx }, input.rowIds));
+      } catch (error) {
+        if (!(error instanceof DemandMaterialChanged)) throw error;
+        if (retries === MATERIAL_RETRIES) throw new StateConflictError('order_line.material_changed');
       }
-      // 所有订单写入完成后再取工厂行锁，避免与主数据回填后重联的顺序相反。
-      for (const source of evidence) await freezeGenerationEvidence(tx, source);
-    });
-    return { createdLines, createdBatches, skipped };
+    }
   };
+
+async function generateOnce(input: GenerateInput, rowIds: readonly string[]) {
+  const { tx } = input;
+  const outcomes = await generateDemandRows(input, await lockedDemands(tx, rowIds));
+  const skipped: SlotSkip[] = [];
+  const evidence: NonNullable<RowOutcome['evidence']>[] = [];
+  let createdLines = 0;
+  let createdBatches = 0;
+  for (const outcome of outcomes) {
+    createdLines += outcome.lines;
+    createdBatches += outcome.batches;
+    skipped.push(...outcome.skipped);
+    if (outcome.evidence !== undefined) evidence.push(outcome.evidence);
+  }
+  // 所有订单写入完成后再取工厂行锁，避免与主数据回填后重联的顺序相反。
+  for (const source of evidence) await freezeGenerationEvidence(tx, source);
+  return { createdLines, createdBatches, skipped };
+}
 
 async function lockedDemands(tx: UnitOfWorkStores, rowIds: readonly string[]) {
   await tx.batches.lockDemandGeneration({ rowIds });
