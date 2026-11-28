@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkHomeRiskFollowUp } from './home-risk-follow-up-acceptance.ts';
+import { checkLargeHomeRiskGroup } from './home-risk-large-group-acceptance.ts';
 
 const store = 'dafuyan';
 const materialPo = 'PO20261117009103';
@@ -105,9 +106,10 @@ export async function checkFollowUpDelivery({ page, buyer, origin, out, warehous
   const homeRisk = await checkHomeRiskFollowUp({ page, origin, out, material: { id: material.id, po: materialPo },
     finished: { id: late.id, batch: lateBatch, arrivalDate: tomorrow } });
   await checkDailyReturn({ page: buyer, daily, lineId: due.id, batches: dueBatches, newDate: tomorrow });
+  const largeRiskGroup = await checkLargeHomeRiskGroup({ page, origin });
   return { source: finished.id, material: material.id, relatedFinished: 3, views: [1440, 320],
     wideAndNarrowReturnFocus: true, secondRiskPageReturnFocus: true, dailyReturnFocusAndFallback: true, explicitlySelectedDetailIds: [...visitedDetails],
-    originalRiskRows: [material.id, late.id], chronologicalOpenOverdueRowsBefore: before, chronologicalOpenOverdueRowsAfter: after, homeRisk };
+    originalRiskRows: [material.id, late.id], chronologicalOpenOverdueRowsBefore: before, chronologicalOpenOverdueRowsAfter: after, homeRisk, largeRiskGroup };
 }
 
 async function checkRiskPageReturn({ page, daily, today, lineId, batchId }: {

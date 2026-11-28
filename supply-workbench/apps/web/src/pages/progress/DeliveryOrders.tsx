@@ -1,7 +1,6 @@
 import { Card, Empty, Flex, Select } from 'antd';
 import { type ProcurementStore } from '@sw/contracts';
-import { useSearchParams } from 'react-router';
-import { deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskOf } from '../../features/follow-up/index.js';
+import { deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskOf, useFollowUpSearch } from '../../features/follow-up/index.js';
 import { space } from '../../theme/tokens.js';
 import { DeliveryRiskOrders } from './delivery-risk-orders.js';
 import { ProgressCurrent } from './progress-current.js';
@@ -12,7 +11,7 @@ const storeOptions = Object.entries(storeLabels).map(([value, label]) => ({ valu
 const buyerOptions = [{ value: 'all', label: '全部事项' }, { value: 'mine', label: '我的事项' }];
 
 export function DeliveryOrders() {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const risk = homeDeliveryRiskOf(params);
   if (risk.kind !== 'daily') return <DeliveryRiskOrders risk={risk} />;
 

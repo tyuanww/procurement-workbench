@@ -1,7 +1,7 @@
 import type { ProcurementStore } from '@sw/contracts';
 import { useState, type ReactNode, type RefObject } from 'react';
 import { Link, useLocation, type LinkProps } from 'react-router';
-import { deliveryBackAddress } from '../../features/follow-up/index.js';
+import { deliveryBackAddress, followUpAddress } from '../../features/follow-up/index.js';
 import { useDetailFocusLinks, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 
 type DeliveryLinkInput = {
@@ -26,8 +26,9 @@ export function useDeliveryDetailLinks() {
     const href = new URLSearchParams();
     if (store !== undefined) href.set('store', store);
     href.set('backToDelivery', source.toString());
+    href.set('deliveryEntry', focusKey);
     if (focusBatch !== undefined) href.set('focusBatch', focusBatch);
-    return { to: `/lines/${encodeURIComponent(id)}?${href}`, ...focusLink(deliveryBackAddress(source.toString()), focusKey) };
+    return { to: followUpAddress(`/lines/${encodeURIComponent(id)}`, href), ...focusLink(deliveryBackAddress(source.toString()), focusKey) };
   };
 }
 

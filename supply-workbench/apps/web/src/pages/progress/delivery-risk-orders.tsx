@@ -1,8 +1,8 @@
 import { Button, Card, Empty, Flex, Result, Skeleton, Table, Tag, Typography, type TableColumnsType } from 'antd';
 import type { OrderLineRow } from '@sw/contracts';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router';
-import { dailyDeliveryParams, DELIVERY_RISK_REASONS, deliveryRiskReasons, type homeDeliveryRiskOf } from '../../features/follow-up/index.js';
+import { Link, useLocation } from 'react-router';
+import { dailyDeliveryParams, DELIVERY_RISK_REASONS, deliveryRiskReasons, useFollowUpSearch, type homeDeliveryRiskOf } from '../../features/follow-up/index.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
@@ -16,7 +16,7 @@ type Load = { kind: 'pending' } | { kind: 'failed'; message: string } | { kind: 
 const READ_LIMIT = 100;
 
 export function DeliveryRiskOrders({ risk }: { readonly risk: Risk | { kind: 'invalid' } }) {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const { state } = useLocation();
   const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
   const close = <Button onClick={() => {
@@ -38,7 +38,7 @@ export function DeliveryRiskOrders({ risk }: { readonly risk: Risk | { kind: 'in
 }
 
 function RiskResults({ risk }: { readonly risk: Risk }) {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const { page, pageSize } = progressPagination(params);
   const search = params.toString();
   const { load, retry } = useRiskRows(risk);
