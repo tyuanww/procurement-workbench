@@ -40,8 +40,12 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkSharedProcurementReturn({ page: manager, origin, store: currentStore });
   await checkPendingPreviewReturn(buyer, origin);
   await checkDelayedDetailReturnFocus(buyer, shared);
-  await checkRelatedOrderFocusHistory(buyer, shared);
-  await checkGlobalSearchReturn(buyer, origin);
+  seedDemoFixture(new URL('../fixtures/demo/factory-import-focus.sql', import.meta.url));
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 320, height: 667 }]) {
+    await buyer.setViewportSize(viewport);
+    await checkRelatedOrderFocusHistory(buyer, shared);
+    await checkGlobalSearchReturn(buyer, origin);
+  }
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
@@ -50,7 +54,6 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
 }
 
 async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
-  seedDemoFixture(new URL('../fixtures/demo/factory-import-focus.sql', import.meta.url));
   const preview = new URL(shared);
   preview.searchParams.set('q', 'FS-MANUAL');
   preview.searchParams.set('drawer', 'preview');
@@ -68,6 +71,11 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   const inside = related.getByRole('link', { name: /FS-COMPONENT-C$/u }).and(page.locator('a[href]'));
   await outside.press('Enter');
   await page.getByRole('link', { name: '返回原订单', exact: true }).press('Enter');
+  await page.waitForURL(original);
+  await outside.and(page.locator(':focus')).waitFor();
+  await page.goBack();
+  await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
+  await page.goForward();
   await page.waitForURL(original);
   await outside.and(page.locator(':focus')).waitFor();
   await outside.press('Enter');
@@ -149,6 +157,31 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await page.goBack();
   await page.waitForURL(batchAddress);
   await outside.and(page.locator(':focus')).waitFor();
+  await outside.press('Enter');
+  await component.waitFor();
+  await returnWhileSessionIsLoading(page, batchAddress);
+  await outside.and(page.locator(':focus')).waitFor();
+}
+
+async function returnWhileSessionIsLoading(page: Page, source: string) {
+  const isSession = (url: URL) => url.pathname === '/api/v1/me';
+  let release: () => void = () => undefined;
+  const paused = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(isSession, async (route) => {
+    await paused;
+    await route.continue().catch(() => undefined);
+  }, { times: 1 });
+  try {
+    await Promise.all([
+      page.waitForRequest((request) => isSession(new URL(request.url()))),
+      page.reload({ waitUntil: 'domcontentloaded' }),
+    ]);
+    await page.goBack({ waitUntil: 'commit' });
+    await page.waitForURL(source);
+  } finally {
+    release();
+    await page.unroute(isSession);
+  }
 }
 
 function afterFocusEffects(page: Page) {

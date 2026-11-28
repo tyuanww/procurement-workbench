@@ -84,7 +84,8 @@ function useArrivalOrigin(sourceLinkPrefix: string) {
   const previousDeparture = index !== undefined && previous?.index === index + 1
     ? departureSchema.safeParse(previous.state).data?.detailDeparture : undefined;
   const popOrigin = previousDeparture?.sourceKey === key ? previousDeparture : undefined;
-  const candidate = navigation === 'POP' ? popOrigin : linkOrigin(state);
+  const isForward = index !== undefined && previous?.index !== undefined && previous.index < index;
+  const candidate = navigation === 'POP' && !isForward ? popOrigin : linkOrigin(state);
   return { key, origin: matchesReturnRoute(candidate, { address: createPath(location), sourceLinkPrefix }) };
 }
 
