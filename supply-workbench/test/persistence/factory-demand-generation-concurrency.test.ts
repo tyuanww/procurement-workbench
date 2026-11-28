@@ -1,30 +1,17 @@
-import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { systemIds } from '../../apps/server/src/system/ids.js';
+import { makeRelinkFactoryRows, makeSetLineFactoryLink } from '../../packages/application/src/factory-links/index.js';
 import { makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
 import { makeLinkFactoryRow } from '../../packages/application/src/master-data/index.js';
 import { linkIdOf, linkOf } from '../../packages/application/src/shared/factory-link.js';
-import { entityId, localDate, orderLineId, parsePoCell } from '../../packages/domain/src/index.js';
-import { createDb, type AppDatabase, type AppHandle } from '../../packages/persistence/src/client.js';
-import { migrate } from '../../packages/persistence/src/migrate.js';
-import { followUpQueries } from '../../packages/persistence/src/queries/follow-up/index.js';
-import { requireDatabase } from '../../packages/persistence/src/require-database.js';
-import { auditRepository } from '../../packages/persistence/src/repositories/audit-log.js';
-import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
-import { importBatchRepository } from '../../packages/persistence/src/repositories/import-batches.js';
-import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
-import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
+import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
-import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
-import { createUnitOfWork } from '../../packages/persistence/src/unit-of-work.js';
-import { aFactoryStockRow, anActor, anOrderLine, aPurchaseOrder, FixedClock } from '../../packages/testkit/src/index.js';
-
-const url = process.env.SW_PG_URL;
-const clock = new FixedClock('2026-11-28T00:00:00.000Z');
-const slot = { index: 0, date: localDate('2026-11-24'), qty: 50 };
-const rawCells = { dateRaw: '2026/11/24', qtyRaw: '050.00' };
-const wait = { timeout: 4000, interval: 25 };
+import { localDate, orderLineId } from '../../packages/domain/src/index.js';
+import type { AppDatabase } from '../../packages/persistence/src/client.js';
+import { factoryLinkQueries } from '../../packages/persistence/src/queries/factory-links/index.js';
+import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
+import { anOrderLine, aParty } from '../../packages/testkit/src/index.js';
+import { blockedOnPostgres, clock, gate, onlyLineDetail, rawCells, seedLine, seedOtherFactoryReport, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
 
 it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并发生成只提交一份凭据（目标订单已存在 %s）', async (existing) => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
@@ -127,6 +114,124 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 未关联需
   });
 }, 15000);
 
+it.skipIf(url === undefined).each([
+  { kind: 'shipment', table: 'shipment' },
+  { kind: 'in_transit', table: 'in-transit' },
+  { kind: 'stock', table: 'stock' },
+] as const)('代工厂手工关联的活动 $kind 上报也能证明订单归属', async ({ kind, table }) => {
+  await withFixture(async ({ main, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind });
+    await makeLinkFactoryRow(writes(main.db))({ table, rowId, orderLineId: sample.lineId }, sample.reviewer);
+    expect((await onlyLineDetail(main.db, sample.code)).line.factory?.id).toBe(factory.id);
+    await expectPlanWithoutSource(main.db, sample);
+  });
+}, 15000);
+
+it.skipIf(url === undefined).each(['insert', 'update', 'report'] as const)('真实 PostgreSQL 归属事务还在写 %s 时仍生成业务批次，原表待核对', async (path) => {
+  await withFixture(async ({ main, competing, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
+    const originalFactory = aParty({ id: sample.factoryId, isFactory: true });
+    await partyRepository(main.db).save(originalFactory);
+    if (path === 'update') {
+      await makeSetLineFactoryLink(writes(main.db))({ orderLineId: sample.lineId, factoryPartyId: originalFactory.id }, sample.reviewer);
+    }
+    const paused = gate();
+    const write = path === 'report'
+      ? makeLinkFactoryRow(writes(competing.db, { afterDemandSave: paused.hold }))({
+        table: 'stock', rowId, orderLineId: sample.lineId,
+      }, sample.reviewer)
+      : makeSetLineFactoryLink(writes(competing.db, { afterFactoryLinkSave: paused.hold }))({
+        orderLineId: sample.lineId, factoryPartyId: factory.id,
+      }, sample.reviewer);
+    void write.catch(() => undefined);
+    try {
+      await expect.poll(paused.hasEntered, wait).toBe(true);
+      const generated = settled(expectPlanWithoutSource(main.db, sample));
+      try {
+        await expect.poll(generated.isDone, wait).toBe(true);
+        await generated.result;
+      } finally {
+        paused.release();
+        await Promise.allSettled([generated.result]);
+      }
+    } finally {
+      paused.release();
+      await write;
+    }
+    const after = await onlyLineDetail(main.db, sample.code);
+    expect(after.line.factory?.id).toBe(factory.id);
+    expect(after.batchDemandSources).toEqual({});
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('自动批量首挂只让受影响订单的凭据待核对', async () => {
+  await withFixture(async ({ main, competing, sample }) => {
+    await withFixture(async ({ sample: unaffected }) => {
+      await seedLine({ db: main.db, sample, id: sample.lineId });
+      await seedLine({ db: main.db, sample: unaffected, id: unaffected.lineId });
+      const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
+      await main.exec(`update factory_stock_rows set item_code_raw = '${sample.code}' where id = '${rowId}'`);
+      const paused = gate();
+      const relink = makeRelinkFactoryRows({
+        ...writes(competing.db, { afterFactoryLinkSave: paused.hold }),
+        links: factoryLinkQueries(competing.db),
+      })({ limit: 1 }, sample.reviewer);
+      try {
+        await Promise.race([relink, paused.entered]);
+        await expectPlanWithoutSource(main.db, sample);
+        const generate = makeGenerateBatchesFromDemand(writes(main.db));
+        expect(await generate({ rowIds: [unaffected.id] }, unaffected.buyer)).toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
+        const detail = await onlyLineDetail(main.db, unaffected.code);
+        expect(Object.values(detail.batchDemandSources ?? {})).toMatchObject([{ importBatchId: unaffected.importId, slot: { originalCells: rawCells } }]);
+      } finally {
+        paused.release();
+        await relink;
+      }
+      const detail = await onlyLineDetail(main.db, sample.code);
+      expect(detail.line.factory?.id).toBe(factory.id);
+      expect(detail.batchDemandSources).toEqual({});
+    });
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('同单生成先确认原表时，之后的改挂不会覆盖历史凭据', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const { factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
+    const paused = gate();
+    const generate = makeGenerateBatchesFromDemand(writes(main.db, { afterSourceFreeze: paused.hold }));
+    const generation = generate({ rowIds: [sample.id] }, sample.buyer);
+    let assignment: ReturnType<ReturnType<typeof makeSetLineFactoryLink>> | undefined;
+    try {
+      await Promise.race([generation, paused.entered]);
+      assignment = makeSetLineFactoryLink(writes(competing.db))({
+        orderLineId: sample.lineId, factoryPartyId: factory.id,
+      }, sample.reviewer);
+      void assignment.catch(() => undefined);
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(assignment === undefined ? [generation] : [generation, assignment]);
+    }
+    expect(await generation).toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
+    await assignment;
+    const detail = await onlyLineDetail(main.db, sample.code);
+    expect(detail.line.factory?.id).toBe(factory.id);
+    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
+    expect(Object.values(detail.batchDemandSources ?? {})).toMatchObject([{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
+  });
+}, 15000);
+
+async function expectPlanWithoutSource(db: AppDatabase, sample: Sample): Promise<void> {
+  expect(await makeGenerateBatchesFromDemand(writes(db))({ rowIds: [sample.id] }, sample.buyer))
+    .toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
+  const detail = await onlyLineDetail(db, sample.code);
+  expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
+  expect(detail.batchDemandSources).toEqual({});
+}
+
 it.skipIf(url === undefined).each(['raw', 'normalized'] as const)('真实 PostgreSQL 重复 %s 槽索引只影响生成凭据', async (repeated) => {
   await withFixture(async ({ main, sample }) => {
     const reports = factoryReportRepository(main.db);
@@ -146,145 +251,3 @@ it.skipIf(url === undefined).each(['raw', 'normalized'] as const)('真实 Postgr
     expect(detail.batchDemandSources).toEqual({});
   });
 }, 15000);
-
-type Hooks = { readonly afterOriginRead?: () => Promise<void>; readonly afterDemandSave?: () => Promise<void> };
-
-function writes(db: AppDatabase, hooks: Hooks = {}) {
-  const uow = createUnitOfWork(db, (transaction) => {
-    const tx = requireDatabase(transaction);
-    const batches = deliveryBatchRepository(tx);
-    const reports = factoryReportRepository(tx);
-    return {
-      ...placeholderStores(),
-      batches: {
-        ...batches,
-        async listByOriginRef(ref: { readonly rowId: string; readonly slotIndex: number }) {
-          const found = await batches.listByOriginRef(ref);
-          await hooks.afterOriginRead?.();
-          return found;
-        },
-      },
-      factoryReports: {
-        ...reports,
-        async save(row: Parameters<typeof reports.save>[0]) {
-          await reports.save(row);
-          await hooks.afterDemandSave?.();
-        },
-      },
-      orderLines: orderLineRepository(tx),
-      purchaseOrders: purchaseOrderRepository(tx),
-      audit: auditRepository(tx),
-    };
-  });
-  return { uow, clock, ids: systemIds() };
-}
-
-function sampleOf() {
-  const token = randomUUID();
-  return {
-    id: entityId(token), lineId: orderLineId(token), importId: entityId(`demand-test-${token}`), factoryId: entityId(`demand-factory-${token}`),
-    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `DEMAND-PO-${token}`,
-    buyer: { ...anActor('buyer'), id: entityId(`demand-buyer-${token}`) },
-    reviewer: { ...anActor('reviewer'), id: entityId(`demand-reviewer-${token}`) },
-  };
-}
-
-type Sample = ReturnType<typeof sampleOf>;
-type Fixture = { readonly main: AppHandle; readonly competing: AppHandle; readonly applicationName: string; readonly sample: Sample };
-
-async function withFixture(run: (fixture: Fixture) => Promise<void>): Promise<void> {
-  if (url === undefined) throw new Error('需要一次性 PostgreSQL 库');
-  const sample = sampleOf();
-  const applicationName = `demand-test-${sample.id}`;
-  const secondUrl = new URL(url);
-  secondUrl.searchParams.set('application_name', applicationName);
-  const main = await createDb({ driver: 'pg', url });
-  const competing = await createDb({ driver: 'pg', url: secondUrl.href });
-  try {
-    await migrate(main.exec);
-    try {
-      await seedDemand(main.db, sample);
-      await run({ main, competing, applicationName, sample });
-    } finally {
-      await clearSample(main, sample);
-    }
-  } finally {
-    await Promise.all([main.close(), competing.close()]);
-  }
-}
-
-async function seedDemand(db: AppDatabase, sample: Sample): Promise<void> {
-  await importBatchRepository(db).save({
-    id: sample.importId, fileId: sample.importId, template: 'factory-progress-v1', factoryPartyId: sample.factoryId,
-    status: 'committed', createdAt: clock.now(), updatedAt: clock.now(), fileMeta: {}, stats: {}, decisions: {},
-    committedBy: sample.buyer.id, committedAt: clock.now(), createdBy: sample.buyer.id, rolledBackAt: null, rolledBackBy: null, error: null,
-  });
-  await factoryReportRepository(db).save(aFactoryStockRow({
-    id: sample.id, importBatchId: sample.importId, factoryPartyId: sample.factoryId, fingerprint: sample.id,
-    kind: 'demand', sheetName: '11月排产包材原料需求表', rowNo: 4, linkReason: 'NO_CANDIDATE_LINE',
-    raw: { slots: [{ ...slot, ...rawCells, sourceColumns: { date: 10, quantity: 11 } }] },
-    demand: { role: 'material', blockMaterialPoRaw: sample.poRaw, poNorm: null, itemCodeRaw: sample.code, nameRaw: '合成包材', slots: [slot] },
-  }));
-}
-
-async function seedLine({ db, sample, id }: { readonly db: AppDatabase; readonly sample: Sample; readonly id: ReturnType<typeof orderLineId> }): Promise<void> {
-  const parsed = parsePoCell(sample.poRaw).value;
-  await purchaseOrderRepository(db).save(aPurchaseOrder({
-    id: sample.orderId, poRaw: sample.poRaw, poNorm: parsed.poNorm, poFormat: parsed.poFormat, lane: 'material',
-  }));
-  await orderLineRepository(db).save(anOrderLine({ id, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: sample.code }));
-}
-
-async function onlyLineDetail(db: AppDatabase, code: string) {
-  const lines = await orderLineRepository(db).listByCodeNorm(code);
-  expect(lines).toHaveLength(1);
-  const [line] = lines;
-  if (line === undefined) throw new Error('没有生成合成订单');
-  return followUpQueries({ db, clock, timeZone: 'Asia/Shanghai' }).getDetail(line.id);
-}
-
-async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
-  // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
-  await handle.exec(`
-    delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
-    delete from delivery_batches where origin_ref->>'rowId' = '${sample.id}';
-    delete from line_factory_links where order_line_id = '${sample.lineId}';
-    delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
-    delete from purchase_orders where po_raw = '${sample.poRaw}';
-    delete from factory_material_demand_rows where id = '${sample.id}';
-    delete from import_batches where id = '${sample.importId}';
-  `);
-}
-
-async function blockedOnPostgres(observer: AppHandle, applicationName: string): Promise<boolean> {
-  // applicationName 含固定前缀和本次测试 UUID。
-  const result = await observer.exec(`select exists (
-    select 1 from pg_stat_activity where datname = current_database() and application_name = '${applicationName}'
-      and cardinality(pg_blocking_pids(pid)) > 0
-  ) as waiting`);
-  return typeof result === 'object' && result !== null && 'rows' in result
-    && Array.isArray(result.rows) && result.rows[0]?.waiting === true;
-}
-
-function gate() {
-  let isEntered = false;
-  let notify: () => void = () => {};
-  let release: () => void = () => {};
-  const enteredPromise = new Promise<void>((resolve) => { notify = resolve; });
-  const released = new Promise<void>((resolve) => { release = resolve; });
-  return {
-    entered: enteredPromise, hasEntered: () => isEntered, release,
-    async hold() {
-      isEntered = true;
-      notify();
-      await released;
-    },
-  };
-}
-
-function settled<T>(result: Promise<T>) {
-  let isDone = false;
-  const setDone = () => { isDone = true; };
-  void result.then(setDone, setDone);
-  return { result, isDone: () => isDone };
-}

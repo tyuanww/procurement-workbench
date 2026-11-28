@@ -29,6 +29,7 @@ async function commitBatch({ tx, input, actor, clock }: {
 }): Promise<void> {
   const batch = await lockedBatch(tx, input.importBatchId);
   if (!canTransitionImport(batch.status, 'commit')) throw new StateConflictError(batch.status);
+  await lockFactorySnapshot(tx, batch);
   const at = clock.now();
   const revision = revisionOf(batch.revision) + 1;
   const procurementReplay = batch.template === 'po-master-v1' ? await tx.procurement?.originalBatchId(batch.fileId) ?? null : null;
@@ -49,6 +50,10 @@ async function commitBatch({ tx, input, actor, clock }: {
   const committed = { ...batch, revision, status: 'committed' as const, committedBy: actor.id, committedAt: at, error: null, updatedAt: at };
   await saveImportRevision({ repo: tx.imports, next: committed, expectedRevision: input.expectedRevision });
   await tx.audit.record(auditOf({ action: 'import.commit', subject: committed, ctx: { actor, at, entity: '导入批次' } }));
+}
+
+async function lockFactorySnapshot(tx: UnitOfWorkStores, batch: ImportBatch): Promise<void> {
+  if (batch.template === 'factory-progress-v1' && batch.factoryPartyId !== null) await tx.factoryReports.lockSnapshotSource(batch.factoryPartyId);
 }
 
 async function lockedBatch(tx: UnitOfWorkStores, id: string): Promise<ImportBatch> {

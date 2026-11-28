@@ -7,15 +7,21 @@ import { entityId, entityIdOrNull, orderLineId } from '../mappers/id.js';
 import { instant } from '../mappers/time.js';
 import { lineFactoryLinks } from '../schema/orders.js';
 import { parties } from '../schema/platform.js';
+import { lockFactoryOwnershipChange } from './factory-ownership-lock.js';
 
 const STATUSES: readonly LineFactoryLinkStatus[] = ['linked', 'unlinked', 'manual'];
 const SOURCES: readonly LineFactoryLinkSource[] = ['po_master', 'factory_progress', 'relink', 'manual'];
 const CONFIDENCES: readonly LineFactoryMatchBasis[] = ['po', 'item_code', 'barcode', 'column', 'manual', 'none'];
 
 export function lineFactoryLinkRepository(db: AppDatabase): LineFactoryLinkRepository {
+  const prelocked = new Set<string>();
   return {
     find: (orderLineId) => find(db, orderLineId),
-    save: (entity) => save(db, entity),
+    async lockOwnershipChanges(ids) {
+      await lockFactoryOwnershipChange(db, ids);
+      for (const id of ids) prelocked.add(id);
+    },
+    save: (entity) => save(db, { entity, isPrelocked: prelocked.has(entity.orderLineId) }),
     findFactoriesByName: (displayName) => findFactoriesByName(db, displayName),
   };
 }
@@ -26,12 +32,16 @@ async function find(db: AppDatabase, orderLineIdValue: string): Promise<LineFact
   return row === undefined ? undefined : toLink(row);
 }
 
-async function save(db: AppDatabase, entity: LineFactoryLink): Promise<boolean> {
+async function save(db: AppDatabase, { entity, isPrelocked }: { readonly entity: LineFactoryLink; readonly isPrelocked: boolean }): Promise<boolean> {
+  const isNegative = entity.source !== 'manual' && entity.factoryPartyId === null;
+  const hasOwnershipChange = !isNegative || (await find(db, entity.orderLineId))?.factoryPartyId != null;
+  if (hasOwnershipChange && !isPrelocked) await lockFactoryOwnershipChange(db, [entity.orderLineId]);
   const row = toRow(entity);
   const updated = await db.insert(lineFactoryLinks).values(row).onConflictDoUpdate({
     target: lineFactoryLinks.id,
     set: row,
-    setWhere: sql`${entity.source === 'manual'} or (${lineFactoryLinks.source} <> 'manual' and ${lineFactoryLinks.status} <> 'manual')`,
+    setWhere: sql`(${entity.source === 'manual'} or (${lineFactoryLinks.source} <> 'manual' and ${lineFactoryLinks.status} <> 'manual'))
+      and (${hasOwnershipChange} or ${lineFactoryLinks.factoryPartyId} is null)`,
   }).returning();
   return updated.length > 0;
 }
