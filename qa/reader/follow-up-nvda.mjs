@@ -43,7 +43,7 @@ try {
   const fixture = await seed(browser, { origin, accessCode, cwd: process.cwd() });
   await step('setup', 'start reader', 'Guidepup starts portable NVDA on this Windows desktop', async record => {
     assert.ok(nvda.detect(), 'Guidepup did not detect NVDA');
-    await nvda.start({ capture: true, settings: { 'virtualBuffers.autoSayAllOnPageLoad': false } });
+    await nvda.start({ capture: true, settings: { virtualBuffers: { autoSayAllOnPageLoad: false } } });
     started = true;
     evidence.reader.version = nvda.version;
     record.spoken = [...await nvda.spokenPhraseLog()];
@@ -53,7 +53,7 @@ try {
     try {
       await login(page, origin, accessCode, account);
       await scenario(page, fixture);
-      evidence.checks[role] = 'pass';
+      evidence.checks[role] = evidence.steps.some(step => step.role === role && step.status === 'fail') ? 'fail' : 'pass';
     } catch (error) {
       evidence.checks[role] = 'fail';
       evidence.errors.push({ role, error: sanitize(error) });
@@ -82,8 +82,9 @@ async function step(role, name, action, check) {
   await save();
   try {
     await check(record);
-    record.status = 'pass';
-    console.log(role, name, JSON.stringify(record.spoken ?? []));
+    record.status = record.speechError ? 'fail' : 'pass';
+    if (record.speechError) evidence.errors.push({ role, name, error: record.speechError });
+    console.log(role, name, record.status, JSON.stringify(record.spoken ?? []));
   } catch (error) {
     record.status = 'fail';
     record.error = sanitize(error);
@@ -96,7 +97,11 @@ async function step(role, name, action, check) {
 async function reportFocus(record, expected) {
   await nvda.clearSpokenPhraseLog();
   await nvda.perform(nvda.keyboardCommands.reportCurrentFocus);
-  await collectSpeech(record, expected);
+  try {
+    await collectSpeech(record, expected);
+  } catch (error) {
+    record.speechError = sanitize(error);
+  }
 }
 
 async function collectSpeech(record, expected, waitMs = 5000) {
@@ -120,6 +125,15 @@ async function visit(page, path, role) {
       await page.goto(origin + path, { waitUntil: 'load' });
       await page.bringToFront();
       await page.waitForFunction(() => document.hasFocus());
+      const title = await page.title();
+      await nvda.clearSpokenPhraseLog();
+      for (let n = 0; n < 5; n++) {
+        await nvda.perform(nvda.keyboardCommands.reportTitle);
+        const speech = await nvda.lastSpokenPhrase();
+        if ((title && speech.includes(title)) || /Microsoft[ -]*Edge/u.test(speech)) break;
+        await nvda.press('Alt+Escape', { capture: false });
+      }
+      record.windowSpeech = [...await nvda.spokenPhraseLog()];
       const asset = await page.locator('script[type="module"][src^="/assets/"]').first().getAttribute('src');
       const response = responses.get(new URL(asset, origin).href);
       assert.ok(response?.ok(), 'Browser did not load the application entry');
@@ -147,6 +161,7 @@ async function buyer(page, fixture) {
     await search.focus();
     await reportFocus(record, /搜索|品名|编码/u);
     await nvda.type(code);
+    record.typingSpeech = [...await nvda.spokenPhraseLog()];
     assert.equal(await search.inputValue(), code);
     await nvda.press('Enter');
     await page.waitForURL(({ searchParams }) => searchParams.get('q') === code && !searchParams.has('lane'));
@@ -161,12 +176,16 @@ async function buyer(page, fixture) {
     await reportFocus(record, /查看第\s*2\s*批/u);
   });
   await step(role, 'open directly to batch 2', 'NVDA sends Enter to the focused batch link; Playwright observes app-managed focus; NVDA+Tab reads the batch', async record => {
+    await nvda.clearSpokenPhraseLog();
     await nvda.press('Enter');
+    record.activationSpeech = [...await nvda.spokenPhraseLog()];
     await page.waitForURL(url => decodeURIComponent(url.pathname) === '/lines/' + component && url.searchParams.get('focusBatch') === fixture.second.id);
     await page.waitForFunction(() => document.activeElement?.matches('li[tabindex="-1"]') &&
       document.activeElement.textContent?.includes('2 · 已确认 · 确认 2026-11-27'));
     record.activeTag = await page.locator(':focus').evaluate(element => element.tagName);
-    await reportFocus(record, /(?:第\s*2\s*批|2\s*[·,. ]*\s*已确认|2026[-/ ]11[-/ ]27)/u);
+    const batchSpeech = /(?:第\s*2\s*批|2\s*[·,. ]*\s*已确认|2026[-/ ]11[-/ ]27)/u;
+    await reportFocus(record, batchSpeech);
+    if (record.speechError && batchSpeech.test(record.activationSpeech.join(' '))) delete record.speechError;
   });
   await readSources(page, role);
   await step(role, 'return to original filtered list', 'Playwright locates the return link and sends Enter; app restores focus on the order; NVDA+Tab reports it', async record => {
@@ -243,6 +262,7 @@ async function readSources(page, role) {
     ['采购表', purchase, /purchase-synthetic\.xlsx.*达肤妍项目进度表.*第\s*5\s*行/u],
     ['工厂表', factory, /factory-synthetic\.xlsx.*09月排产包材原料需求表.*第\s*4\s*行/u],
   ];
+  let headingReached = false;
   for (const [title, section, row] of references) {
     const action = role === 'buyer'
       ? 'Playwright locates and focuses the source-row link; NVDA+Tab reads the file, sheet and row'
@@ -257,6 +277,9 @@ async function readSources(page, role) {
       }
       assert.equal(await section.getByRole('link').count(), 0);
       const heading = new RegExp(title + '\\s*·?\\s*本单参考', 'u');
+      if (!headingReached) {
+        await nvda.perform(nvda.keyboardCommands.exitFocusMode, { capture: false });
+      }
       await nvda.clearSpokenPhraseLog();
       for (let count = 0; count < 12; count++) {
         await nvda.perform(nvda.keyboardCommands.moveToNextHeadingLevel4);
@@ -264,8 +287,9 @@ async function readSources(page, role) {
         if (heading.test(record.spoken.at(-1) ?? '')) break;
       }
       assert.match(record.spoken.at(-1) ?? '', heading);
-      await nvda.clearSpokenPhraseLog();
       record.heading = record.spoken.at(-1);
+      headingReached = true;
+      await nvda.clearSpokenPhraseLog();
       for (let count = 0; count < 8; count++) {
         await nvda.next();
         record.spoken = [...await nvda.spokenPhraseLog()];

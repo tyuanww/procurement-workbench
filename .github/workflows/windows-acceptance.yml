@@ -67,7 +67,12 @@ jobs:
           New-Item -Type Directory $tools | Out-Null
           npx -y --min-release-age=0 --ignore-scripts=false @guidepup/setup@0.29.3 setup --ci
           npm install --prefix $tools --no-audit --no-fund --no-progress --save-exact @guidepup/guidepup@0.40.0
-          npx -y --min-release-age=0 --ignore-scripts=false @guidepup/setup@0.29.3 install
+          Push-Location $tools
+          try {
+            npx -y --min-release-age=0 --ignore-scripts=false @guidepup/setup@0.29.3 install
+          } finally {
+            Pop-Location
+          }
           "READER_TOOLS=$tools" >> $env:GITHUB_ENV
       - name: Verify both role paths using NVDA and headed Edge
         run: |
