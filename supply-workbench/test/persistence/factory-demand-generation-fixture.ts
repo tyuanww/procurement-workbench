@@ -273,6 +273,7 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
     delete from factory_shipment_rows where id = '0-${sample.id}-report';
     delete from factory_in_transit_rows where id = '0-${sample.id}-report';
     delete from factory_stock_rows where id = '0-${sample.id}-report';
+    delete from import_rows where import_batch_id in ('${sample.importId}', '${sample.importId}-other');
     delete from import_batches where id in ('${sample.importId}', '${sample.importId}-other');
     delete from parties where id in ('${sample.factoryId}', '${sample.factoryId}-other');
   `);

@@ -15,10 +15,13 @@ export async function commitConfirmedArrival(ctx: CommitContext): Promise<Commit
   const locked = [];
   for (const item of pending) {
     const loaded = await lockBatch(ctx, item.confirmation.batchId);
-    locked.push({ ...item, loaded });
+    locked.push({ ...item, loaded, decision: confirmationDecision(loaded.batch, item.confirmation) });
   }
   locked.sort((a, b) => compareIds(a.loaded.batch.orderLineId, b.loaded.batch.orderLineId));
-  for (const item of locked) await confirm({ ctx, ...item });
+  const writtenLines = new Set(locked
+    .filter((item) => item.row.action === 'update' && item.decision === 'update')
+    .map((item) => item.loaded.batch.orderLineId));
+  for (const item of locked) await confirm({ ctx, ...item, noWait: writtenLines.size > 1 });
   return { affectedLineIds: [], presentLineIds: [] };
 }
 
@@ -36,13 +39,14 @@ async function lockBatch(ctx: CommitContext, id: string) {
   }
 }
 
-async function confirm({ ctx, row, confirmation, loaded }: {
+async function confirm({ ctx, row, confirmation, loaded, decision, noWait }: {
   readonly ctx: CommitContext;
   readonly row: CommitContext['rows'][number];
   readonly confirmation: NonNullable<ReturnType<typeof confirmationOf>>;
   readonly loaded: Awaited<ReturnType<CommitContext['tx']['batches']['lockWithRecords']>>;
+  readonly decision: ReturnType<typeof confirmationDecision>;
+  readonly noWait: boolean;
 }): Promise<void> {
-  const decision = confirmationDecision(loaded.batch, confirmation);
   if (decision === 'unchanged') {
     if (row.action !== 'unchanged') await ctx.tx.imports.saveRow({ ...row, action: 'unchanged' });
     return;
@@ -51,6 +55,7 @@ async function confirm({ ctx, row, confirmation, loaded }: {
   if (row.action === 'unchanged') throw new StateConflictError('ARRIVAL_CONFIRM_DATE_CHANGED');
   if (decision === 'ARRIVAL_CONFIRM_DATE_REASON_MISSING') throw new DateChangeReasonRequiredError();
   if (decision !== 'update') throw new StateConflictError(decision);
+  if (noWait) await ctx.tx.orderLines.lock(loaded.batch.orderLineId, { noWait: true });
   const id = entityId(`confirmed-arrival:${ctx.batch.id}:${row.id}`);
   await updateLockedBatch({
     tx: ctx.tx,

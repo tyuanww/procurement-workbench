@@ -1,8 +1,8 @@
 import type { GenerateBatchesFromDemand, GenerateBatchesFromDemandDeps } from '../boundary.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { authorize } from '../../shared/authorize.js';
-import { isOrderLineLockBusy, StateConflictError } from '../../shared/errors.js';
-import { lockOrderLines } from '../../shared/locked-order-lines.js';
+import { StateConflictError } from '../../shared/errors.js';
+import { retryOrderLineLock } from '../../shared/locked-order-lines.js';
 import { DemandMaterialChanged, freezeGenerationEvidence, generateDemandRows, type GenerateInput, type RowOutcome, type SlotSkip } from './demand-batches.js';
 
 const MATERIAL_RETRIES = 2;
@@ -20,12 +20,8 @@ export const makeGenerateBatchesFromDemand =
     let materialRetries = 0;
     for (;;) {
       try {
-        return await deps.uow.run((tx) => generateOnce({ ...context, tx }, input.rowIds));
+        return await retryOrderLineLock(deps.uow, (tx) => generateOnce({ ...context, tx }, input.rowIds));
       } catch (error) {
-        if (isOrderLineLockBusy(error)) {
-          await deps.uow.run((tx) => lockOrderLines(tx.orderLines, [error.lineId]));
-          continue;
-        }
         if (!(error instanceof DemandMaterialChanged)) throw error;
         if (materialRetries === MATERIAL_RETRIES) throw new StateConflictError('order_line.material_changed');
         materialRetries += 1;
