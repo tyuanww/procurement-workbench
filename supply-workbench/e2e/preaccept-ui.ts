@@ -684,10 +684,7 @@ async function checkProcurementImport(page: Page): Promise<string> {
   assert.equal(await component.getByText('共用子件', { exact: true }).count(), 2);
   const rowSource = component.getByRole('button', { name: /^查看来源/u });
   const sourceDrawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
-  await rowSource.press('Enter');
-  await sourceDrawer.getByText(workbookName, { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).pathname, importPath);
-  assert.equal(await sourceDrawer.getByRole('link').count(), 0);
+  await checkDefaultProcurementSource({ page, rowSource, sourceDrawer, importPath });
   await page.keyboard.press('Escape');
   await rowSource.and(page.locator(':focus')).waitFor();
   await page.screenshot({ path: join(out, 'procurement-preview.png'), animations: 'disabled' });
@@ -785,6 +782,30 @@ async function checkProcurementImport(page: Page): Promise<string> {
     sourceUrl, previewStaysLocal: true, drawerEscapeFocus: true, browserBackFocus: true, explicitBackFocus: true,
     widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedStaysLocal: true, completedSourceKeepsAssociation: true, candidateDeepLinkFocus: true };
   return importPath;
+}
+
+async function checkDefaultProcurementSource({ page, rowSource, sourceDrawer, importPath }: {
+  readonly page: Page; readonly rowSource: Locator; readonly sourceDrawer: Locator; readonly importPath: string;
+}) {
+  const before = new URL(page.url());
+  assert.equal(before.searchParams.has('previewOa'), false);
+  const previewReads: string[] = [];
+  const record = (request: { url: () => string; method: () => string }) => {
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname === `/api/v1${importPath}/procurement`) previewReads.push(url.search);
+  };
+  page.on('request', record);
+  try {
+    await rowSource.press('Enter');
+    await sourceDrawer.getByText(workbookName, { exact: true }).waitFor();
+    const address = new URL(page.url());
+    assert.equal(address.pathname, importPath);
+    assert.equal(address.searchParams.has('previewOa'), true);
+    assert.equal(await sourceDrawer.getByRole('link').count(), 0);
+    assert.deepEqual(previewReads, []);
+  } finally {
+    page.off('request', record);
+  }
 }
 
 async function checkLocalImportSources({ page, importPath, drawer }: {
