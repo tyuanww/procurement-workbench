@@ -27,7 +27,7 @@ export function placeholderStores(): UnitOfWorkStores {
       getWithRecords: p01,
       lockWithRecords: p01,
       listByOrderLine: p01,
-      listByOriginRef: p01,
+      listByOriginRef: p01, lockDemandGeneration: p01,
       findAdoptedShipment: p01,
       findBatchIdOf: p01,
       save: p01,

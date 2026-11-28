@@ -11,6 +11,7 @@ export const makeGenerateBatchesFromDemand =
     let createdLines = 0;
     let createdBatches = 0;
     await deps.uow.run(async (tx) => {
+      await tx.batches.lockDemandGeneration(input.rowIds);
       const evidence: NonNullable<RowOutcome['evidence']>[] = [];
       for (const rowId of input.rowIds) {
         const outcome = await generateDemandRow({

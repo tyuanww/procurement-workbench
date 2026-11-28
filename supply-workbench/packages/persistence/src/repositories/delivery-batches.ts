@@ -28,6 +28,7 @@ export function deliveryBatchRepository(db: AppDatabase): DeliveryBatchRepositor
     lockWithRecords: async (id) => recordsOf(db, await lockBatch(db, id)),
     listByOrderLine: (orderLineId) => listByLine(db, orderLineId),
     listByOriginRef: (ref) => listBySlot(db, ref),
+    lockDemandGeneration: (rowIds) => lockDemandGeneration(db, rowIds),
     findAdoptedShipment: (rowId) => adopted(db, rowId),
     findBatchIdOf: (kind, recordId) => batchIdOf({ db, kind, recordId }),
     save: (entity) => saveBatch(db, entity),
@@ -141,6 +142,18 @@ async function listByLine(db: AppDatabase, orderLineId: string): Promise<readonl
 async function listBySlot(db: AppDatabase, ref: { readonly rowId: string; readonly slotIndex: number }): Promise<readonly DeliveryBatch[]> {
   const rows = await db.select().from(deliveryBatches).where(sql`${deliveryBatches.originRef}->>'rowId' = ${ref.rowId} and (${deliveryBatches.originRef}->>'slotIndex')::int = ${ref.slotIndex}`);
   return rows.map(toBatch);
+}
+
+async function lockDemandGeneration(db: AppDatabase, rowIds: readonly string[]): Promise<void> {
+  if (rowIds.length === 0) return;
+  await db.execute(sql`
+    select pg_advisory_xact_lock(lock_key)
+    from (
+      select distinct hashtextextended('supply.follow-up.demand-generation:' || row_id, 0) as lock_key
+      from jsonb_array_elements_text(${JSON.stringify(rowIds)}::jsonb) as demand_rows(row_id)
+      order by lock_key
+    ) generation_lock_keys
+  `);
 }
 
 async function adopted(db: AppDatabase, rowId: string) {

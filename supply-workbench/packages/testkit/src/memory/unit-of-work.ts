@@ -83,6 +83,7 @@ function batchRepository(box: MemoryBox): DeliveryBatchRepository {
     lockWithRecords: (id) => batchWithRecords(box, id),
     listByOrderLine: async (orderLineId) => batchesOnLine(box, orderLineId),
     listByOriginRef: async (ref) => batchesFromSlot(box, ref),
+    lockDemandGeneration: async () => {},
     findAdoptedShipment: async (rowId) => adoptedShipment(box, rowId),
     findBatchIdOf: async (kind, recordId) => findBatchId({ box, kind, recordId }),
     saveWithRecords: async (records) => saveBatchRecords(box, records),
