@@ -233,5 +233,14 @@ function columnSlots(value: unknown): unknown[] {
 
 function slotOf(value: unknown): FactoryReportOf<'demand'>['payload']['slots'] {
   if (!isRecord(value) || typeof value.index !== 'number') return [];
-  return [{ index: value.index, date: dateOrNull(value.date) ?? null, dateRaw: textOrNull(value.dateRaw), qty: typeof value.qty === 'number' ? value.qty : null, qtyRaw: textOrNull(value.qtyRaw), issues: [] }];
+  const sourceColumns = demandSourceColumns(value.sourceColumns);
+  return [{ index: value.index, ...(sourceColumns === undefined ? {} : { sourceColumns }), date: dateOrNull(value.date) ?? null, dateRaw: textOrNull(value.dateRaw), qty: typeof value.qty === 'number' ? value.qty : null, qtyRaw: textOrNull(value.qtyRaw), issues: [] }];
+}
+
+function demandSourceColumns(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const { date, quantity } = value;
+  if (typeof date !== 'number' || typeof quantity !== 'number') return undefined;
+  if (!Number.isSafeInteger(date) || date < 1 || !Number.isSafeInteger(quantity) || quantity < 1) return undefined;
+  return { date, quantity };
 }

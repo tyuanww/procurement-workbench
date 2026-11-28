@@ -83,7 +83,7 @@ function readSlot({ input, row, pair }: { readonly input: ParseInput; readonly r
   const date = parseDate(input.sheet.cell(row, pair.dateCol) ?? emptyCell(), input);
   const qty = parseQty(input.sheet.cell(row, pair.qtyCol) ?? emptyCell());
   if (date.value === null && qty.value === null && date.issues.length === 0 && qty.issues.length === 0) return [];
-  return [{ index: pair.index, date: date.value, dateRaw: date.raw || null, qty: qty.value, qtyRaw: qty.raw || null, issues: [...stamp(date.issues, '到货时间'), ...stamp(qty.issues, '数量')] }];
+  return [{ index: pair.index, sourceColumns: { date: pair.dateCol, quantity: pair.qtyCol }, date: date.value, dateRaw: date.raw || null, qty: qty.value, qtyRaw: qty.raw || null, issues: [...stamp(date.issues, '到货时间'), ...stamp(qty.issues, '数量')] }];
 }
 
 function slotPairs(sheet: SheetLike, row: number): SlotPair[] {

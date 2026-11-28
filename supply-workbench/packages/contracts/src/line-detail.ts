@@ -53,6 +53,8 @@ export const OrderLineDetailSchema: z.ZodType<OrderLineDetail> = strictObject({
     fields: z.record(z.string(), provenancedSchema(z.unknown())),
   })),
   batches: z.array(BatchViewSchema),
+  sourceFiles: optional(z.record(z.string(), z.string())),
+  archivedShipmentSources: optional(z.array(report('shipment', shipmentPayload))),
   factoryReports: strictObject({
     inTransit: z.array(report('in_transit', inTransitPayload)),
     shipments: z.array(report('shipment', shipmentPayload)),
