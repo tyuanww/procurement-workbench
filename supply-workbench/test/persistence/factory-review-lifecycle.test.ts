@@ -116,6 +116,53 @@ it.skipIf(url === undefined)('同期重复快照只保留先发布的编码对�
   });
 }, 15000);
 
+it.skipIf(url === undefined).each([true, false])('同工厂两份编码对照排列相反的快照都可提交（已有编码：%s）', async (hasExistingCodes) => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    const codes = await seedReviewedLine(main.db, sample);
+    const imports = importBatchRepository(main.db);
+    const alternateLink = entityId(`link:${right}:${left}`);
+    if (hasExistingCodes) {
+      const links = codeLinkRepository(main.db);
+      await links.save({ ...await links.get(codes.linkId), id: alternateLink, fromCodeId: codes.rightId, toCodeId: codes.leftId });
+    } else {
+      await main.exec(cleanupCodes(codes));
+    }
+    const { first, secondId } = await stageReorderedReports(main.db, sample);
+    try {
+      const leftSaved = gate();
+      const rightSaved = gate();
+      const hook = hasExistingCodes ? 'afterCodeLinkSave' : 'afterItemCodeSave';
+      const publish = makeCommitImport(writes(main.db, { [hook]: leftSaved.hold }));
+      const publishReordered = makeCommitImport(writes(competing.db, { [hook]: rightSaved.hold }));
+      const publishing = publish({ importBatchId: first.id }, sample.reviewer);
+      let reordering: ReturnType<typeof publishReordered> | undefined;
+      try {
+        await Promise.race([leftSaved.entered, publishing]);
+        reordering = publishReordered({ importBatchId: secondId }, sample.reviewer);
+        void reordering.catch(() => undefined);
+        await Promise.race([rightSaved.entered, expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true)]);
+      } finally {
+        leftSaved.release();
+        rightSaved.release();
+        await Promise.allSettled(reordering === undefined ? [publishing] : [publishing, reordering]);
+      }
+      const [firstOutcome, secondOutcome] = await Promise.all([publishing, reordering]);
+      expect(firstOutcome).toEqual({ importBatchId: first.id });
+      expect(secondOutcome).toEqual({ importBatchId: secondId });
+      expect(await imports.get(first.id)).toMatchObject({ status: 'committed' });
+      expect(await imports.get(secondId)).toMatchObject({ status: 'committed' });
+    } finally {
+      await main.exec(`
+        delete from factory_in_transit_rows where id in ('${first.reportId}', '${secondId}-row:report');
+        delete from import_rows where import_batch_id in ('${first.id}', '${secondId}');
+        delete from import_batches where id in ('${first.id}', '${secondId}');
+        delete from code_links where id = '${alternateLink}'; ${cleanupCodes(codes)}
+        delete from item_codes where id in ('code:pack_30:${left}', 'code:pack_30:${right}');
+      `);
+    }
+  });
+}, 15000);
+
 it.skipIf(url === undefined)('不同处理上限的自动重联可以同时提交', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
     const ids = await seedTwoReportKinds(main.db, sample);
@@ -187,6 +234,23 @@ async function stageIncomingReport(db: AppDatabase, sample: Sample) {
   const parsed = { po: { value: { poRaw: sample.poRaw, poNorm: sample.poRaw } }, itemCodeRaw: { value: left }, qtyRequired: { value: 50 } };
   await imports.saveRow({ id: importRowId, importBatchId: id, sheetName, rowNo: 2, raw: {}, parsed, issues: [], action: 'create', targetId: null, skipReason: null });
   return { id, reportId: entityId(`${importRowId}:report`) };
+}
+
+async function stageReorderedReports(db: AppDatabase, sample: Sample) {
+  const first = await stageIncomingReport(db, sample);
+  const imports = importBatchRepository(db);
+  const secondId = entityId(`${first.id}-reordered`);
+  const original = await imports.get(first.id);
+  const pairs = [
+    { fromCodeRaw: left, toCodeRaw: right, sheetName: '编码对照', rowNo: 2 },
+    { fromCodeRaw: right, toCodeRaw: left, sheetName: '编码对照', rowNo: 3 },
+  ];
+  await imports.save({ ...original, fileMeta: { codeLinks: pairs } });
+  await imports.save({ ...original, id: secondId, fileId: secondId, fileMeta: { codeLinks: [...pairs].reverse() } });
+  for (const row of await imports.listRows(first.id)) {
+    await imports.saveRow({ ...row, id: entityId(`${secondId}-row`), importBatchId: secondId });
+  }
+  return { first, secondId };
 }
 
 async function seedTwoReportKinds(db: AppDatabase, sample: Sample) {

@@ -52,6 +52,7 @@ type Hooks = {
   readonly afterSnapshotCommit?: () => Promise<void>;
   readonly afterSnapshotSourceLock?: () => Promise<void>;
   readonly afterCodeLinkSave?: () => Promise<void>;
+  readonly afterItemCodeSave?: () => Promise<void>;
   readonly afterSourceFreeze?: () => Promise<void>;
 };
 
@@ -59,12 +60,19 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
   const uow = createUnitOfWork(db, (transaction) => {
     const tx = requireDatabase(transaction);
     const factoryLinks = lineFactoryLinkRepository(tx);
+    const itemCodes = itemCodeRepository(tx);
     return {
       ...placeholderStores(),
       batches: batchesWithHooks(tx, hooks),
       factoryReports: reportsWithHooks(tx, hooks),
       codeLinks: codeLinksWithHooks(tx, hooks),
-      itemCodes: itemCodeRepository(tx),
+      itemCodes: {
+        ...itemCodes,
+        async save(code: Parameters<typeof itemCodes.save>[0]) {
+          await itemCodes.save(code);
+          await hooks.afterItemCodeSave?.();
+        },
+      },
       items: itemRepository(tx),
       factoryLinks: {
         ...factoryLinks,
