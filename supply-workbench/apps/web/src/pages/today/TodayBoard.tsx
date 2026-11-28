@@ -1,14 +1,13 @@
-import { Button, Card, Empty, Modal, Result, Typography } from 'antd';
+import { Button, Modal, Result, Typography } from 'antd';
 import { useCallback, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
 import type { TodayResponse } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
 import {
-  ArrivalMemos, TodayDrawer, arrivalShortcutPath, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf, type ArrivalsView,
-  type ActionDetail, type ArrivalTiming, type BoardRow, type GroupMode, type OpenForm, type PlanLoad, type QuickAction, type ReceiptWork, type TodayBoard,
+  TodayDrawer, helpStyle, screenStyle, taskIdOf, todayMotionCss, todayViewOf, type ArrivalsView,
+  type ActionDetail, type GroupMode, type OpenForm, type PlanLoad, type QuickAction, type ReceiptWork, type TodayBoard,
 } from '../../features/today/index.js';
 import { TaskDrawer } from '../../features/plan/index.js';
-import type { ActionPageControls } from './ActionControls.js';
+import { batchCopy, type ActionPageControls } from './ActionControls.js';
 import { ActionBoard, isActionFiltered, isBusinessDay, type ActionBoardProps, type ActionLane } from './ActionBoard.js';
 import { PENDING_BATCH_TARGET, PendingBatchPagination, pendingBatchCards, pendingBatchRowId, usePendingBatches } from './PendingBatches.js';
 import { ScheduleView } from './ScheduleView.js';
@@ -19,16 +18,16 @@ import { TodayLoadingCard } from './TodayLoadingCard.js';
 import { TodayActionSummary } from './TodayActionSummary.js';
 import { ActionAssistant } from './ActionAssistant.js';
 import { TodaySectionNavigation } from './TodaySectionNavigation.js';
-import { focusSection } from './today-focus.js';
+import { focusSection, workspaceRowId } from './today-focus.js';
 import type { CalendarBusinessDayPreview } from './use-calendar-business-day.js';
 import type { MyPlan } from './use-today-plan.js';
 import { WorkspaceCalendar, WorkspaceViewControls, type WorkspaceControls } from './WorkspaceViews.js';
 import type { WorkspaceFilterSelection, WorkspaceInbox } from './action-query.js';
+import { ArrivalsPane, arrivalsTitle } from './TodayArrivals.js';
 
 const NAVIGATION_HELP = 'j k 或方向键移动，Enter 打开';
 const ACTION_HELP = `${NAVIGATION_HELP}，d 改期，s 发货，r 收货，n 跟进，e 异常，? 帮助，Esc 关闭`;
 const SCHEDULE_HELP = `${NAVIGATION_HELP}，? 帮助，Esc 关闭`;
-const ARRIVAL_TIMING_TITLES = { overdue: '到仓逾期', due_today: '今日应到' } satisfies Record<ArrivalTiming, string>;
 
 export type TodayScreenProps = {
   readonly asOf?: TodayResponse['asOf'] | undefined;
@@ -39,6 +38,7 @@ export type TodayScreenProps = {
   readonly search?: string;
   readonly arrivalsView?: ArrivalsView | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
+  readonly hasMissingArrival?: boolean;
   readonly arrivalFocusId?: string | null;
   readonly pendingFocusId?: string | null;
   readonly pendingBatch?: TodayResponse['pendingBatch'];
@@ -96,7 +96,8 @@ function TodayContent(props: TodayScreenProps): ReactNode {
   if (props.arrivalsView === undefined) return <WorkspaceBody {...props} />;
   if (!props.isReady) return <TodayLoadingCard label="正在读取在途待收" />;
   if (props.loadError !== '') return <TodayError {...props} />;
-  return <ArrivalsPane memos={props.arrivalMemos ?? []} view={props.arrivalsView} search={props.search ?? ''} />;
+  return <ArrivalsPane view={props.arrivalsView} memos={props.arrivalMemos ?? []} search={props.search ?? ''}
+    drawerId={props.drawerId} hasMissingDrawer={props.hasMissingArrival === true} onOpen={props.onOpen} onClose={props.onCloseDrawer} />;
 }
 
 function TodayError(props: TodayScreenProps): ReactNode {
@@ -134,23 +135,6 @@ function ShortcutHelp({ isOpen, isNavigationOnly, onClose }: { readonly isOpen: 
   return <Modal title="快捷键帮助" open={isOpen} onCancel={onClose} footer={null} centered destroyOnHidden closable={{ 'aria-label': '关闭快捷键帮助' }}>
     {isOpen ? <Typography.Paragraph>{isNavigationOnly ? SCHEDULE_HELP : ACTION_HELP}</Typography.Paragraph> : null}
   </Modal>;
-}
-
-function arrivalsTitle(timing: ArrivalTiming | undefined): string {
-  return timing === undefined ? '在途待收' : ARRIVAL_TIMING_TITLES[timing];
-}
-
-function ArrivalsPane({ memos, view, search }: { readonly memos: TodayResponse['arrivalMemos']; readonly view: ArrivalsView; readonly search: string }): ReactNode {
-  const returnSearch = new URLSearchParams(search).get('actionReturn') ?? '';
-  const rows = view.timing === undefined ? memos : memos.filter((memo) => memo.status === view.timing);
-  const title = arrivalsTitle(view.timing);
-  return <>
-    {view.timing === undefined ? null : <Link style={{ alignSelf: 'flex-start' }} to={arrivalShortcutPath({ returnSearch })}>查看全部在途</Link>}
-    <Card size="small">
-      {rows.length === 0 ? <Empty description={`当前没有${title}批次。`} />
-        : <ArrivalMemos memos={rows} today={{ focusBatch: view.focusBatch, title: view.timing === undefined ? '待收批次' : title }} />}
-    </Card>
-  </>;
 }
 
 function ActionPane(props: TodayScreenProps & { readonly receipts: ReadonlyMap<string, ReceiptWork> }): ReactNode {
@@ -288,35 +272,37 @@ function SchedulePane(props: TodayScreenProps): ReactNode {
   );
 }
 
-function PageDrawers(props: TodayScreenProps & { readonly receipt: ReceiptWork | undefined }): ReactNode {
-  const taskId = taskIdOf(props.drawerId);
-  return (
-    <>
-      <TodayDrawer
-        row={openRow(props.actionBoard ?? props.board, props.drawerId)}
-        detail={props.drawerId === null ? undefined : props.detailOf?.(props.drawerId)}
-        batchSeq={props.drawerId === null ? undefined : props.batchSeqOf?.(props.drawerId)}
-        fulfillment={props.drawerId === null ? undefined : props.fulfillmentOf?.(props.drawerId)}
-        receipt={props.receipt}
-        onQuick={(kind) => { if (props.drawerId !== null) props.onQuick({ id: props.drawerId, kind }); }}
-        isOpen={props.drawerId !== null && taskId === null}
-        draft={props.draft}
-        hadDate={props.hadDate}
-        lane={props.lane}
-        isSaving={props.isSaving}
-        saveError={props.saveError}
-        onClose={props.onCloseDrawer}
-        onDraft={props.onDraft}
-        onSubmit={props.onSubmit}
-      />
-      <TaskDrawer workItemId={taskId} isOpen={taskId !== null} showScheduleLink onClose={props.onCloseDrawer} onChanged={props.onTaskChanged ?? noop} />
-    </>
-  );
+function PageDrawers(props: TodayScreenProps & { readonly receipt: ReceiptWork | undefined }) {
+  const id = props.drawerId;
+  const taskId = taskIdOf(id);
+  return <>
+    <TodayDrawer {...actionContext(props, id)} drawerId={id} receipt={props.receipt}
+      onQuick={(kind) => { if (id !== null) props.onQuick({ id, kind }); }}
+      isOpen={id !== null && taskId === null}
+      draft={props.draft}
+      hadDate={props.hadDate}
+      lane={props.lane}
+      isSaving={props.isSaving}
+      saveError={props.saveError}
+      onClose={props.onCloseDrawer}
+      onDraft={props.onDraft}
+      onSubmit={props.onSubmit}
+    />
+    <TaskDrawer workItemId={taskId} isOpen={taskId !== null} showScheduleLink onClose={props.onCloseDrawer} onChanged={props.onTaskChanged ?? noop} />
+  </>;
 }
 
-function openRow(board: TodayBoard, drawerId: string | null): BoardRow | null {
-  if (drawerId === null || board.body.kind !== 'groups') return null;
-  return board.body.rows.find((row) => row.id === drawerId) ?? null;
+function actionContext(props: TodayScreenProps, id: string | null) {
+  if (id === null) return { row: null };
+  const { body } = props.actionBoard ?? props.board;
+  return {
+    row: body.kind === 'groups' ? body.rows.find((row) => row.id === id) ?? null : null,
+    detail: props.detailOf?.(id),
+    batchSeq: props.batchSeqOf?.(id),
+    fulfillment: props.fulfillmentOf?.(id),
+    copy: batchCopy(props.actionPage, id),
+    returnFocusId: workspaceRowId(id),
+  };
 }
 
 function noop(): void {

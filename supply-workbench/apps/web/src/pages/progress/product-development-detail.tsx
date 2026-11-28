@@ -1,4 +1,4 @@
-import { Card, Descriptions, Drawer, Space, Tag, Typography } from 'antd';
+import { Card, Descriptions, Drawer, Flex, Space, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import type { ProductDevelopment, ProductDevelopmentBatch, ProductDevelopmentNode, ProductDevelopmentProject } from '@sw/contracts';
 import { batchStatusLabel, DEVELOPMENT_DESTINATION_LABELS, type LocalDate } from '@sw/domain';
@@ -25,10 +25,10 @@ export function DevelopmentDetail({ node, project, users, today, onClose, onChan
   </div>} size={`min(${drawerWide}px, 100vw)`} open onClose={onClose} className="development-detail"
     focusable={{ trap: true, focusTriggerAfterClose: true }}>
     <div className="development-detail-body">
-      <NodeOverview node={node} project={project} today={today} />
+      <NodeOverview node={node} project={project} today={today} selectedBatch={selectedBatch} />
       <DetailActions node={node} project={project} users={users} onChanged={onChanged} />
       <DevelopmentNodeEventTimeline node={node} />
-      {node.formalLink === null ? null : <LinkedFulfillment node={node} store={project.store} selectedBatch={selectedBatch} />}
+      {node.formalLink === null ? null : <LinkedFulfillment batches={node.batches} selectedBatch={selectedBatch} />}
     </div>
   </Drawer>;
 }
@@ -57,8 +57,9 @@ function DetailActions({ node, project, users, onChanged }: {
   </Space>;
 }
 
-function NodeOverview({ node, project, today }: {
+function NodeOverview({ node, project, today, selectedBatch }: {
   readonly node: ProductDevelopmentNode; readonly project: ProductDevelopmentProject; readonly today: LocalDate;
+  readonly selectedBatch: string | null;
 }): ReactNode {
   const item = developmentNodeCoordination({ node, today });
   const risk = item === null ? [] : coordinationReasons(item).filter((reason) => node.status !== 'blocked' || reason !== '风险原因 已阻塞');
@@ -72,9 +73,11 @@ function NodeOverview({ node, project, today }: {
     </div>
     {risk.length === 0 ? null : <Typography.Text className="development-detail-risk">{risk.join(' · ')}</Typography.Text>}
     <div className="development-detail-deadline">
+      <span>计划开始 <time dateTime={node.plannedStart}>{node.plannedStart}</time></span>
       <span>项目要求日 <time dateTime={node.plannedEnd}>{node.plannedEnd}</time></span>
       {node.daysUntilRequired === null ? null : <Typography.Text type="secondary">{countdownOf(node.daysUntilRequired)}</Typography.Text>}
     </div>
+    <OrderDependency node={node} store={project.store} selectedBatch={selectedBatch} />
     <div className="development-detail-facts">
       <DevelopmentFollowUpFacts followUp={node.followUp} colon={false} />
       <Descriptions size="small" column={1} colon={false} className="development-project-facts" items={[
@@ -86,20 +89,33 @@ function NodeOverview({ node, project, today }: {
   </Card>;
 }
 
-function LinkedFulfillment({ node, store, selectedBatch }: { readonly node: ProductDevelopmentNode; readonly store: ProductDevelopmentProject['store']; readonly selectedBatch: string | null }): ReactNode {
+function OrderDependency({ node, store, selectedBatch }: {
+  readonly node: ProductDevelopmentNode; readonly store: ProductDevelopmentProject['store']; readonly selectedBatch: string | null;
+}): ReactNode {
   const formal = node.formalLink;
-  if (formal === null) return null;
+  if (formal === null) return <Typography.Text type="secondary" className="development-detail-order-status">
+    {node.destination === 'other' ? '此节点在项目内跟进' : '尚未关联正式订单'}
+  </Typography.Text>;
+  const hasMaterial = formal.procurementLineId !== formal.orderLineId;
+  const selected = node.batches.find(({ id }) => id === selectedBatch);
+  const batch = selected === undefined ? {} : { batchId: selected.id };
+  return <Flex wrap align="center" gap={space[2]} className="development-detail-order-links">
+    <Typography.Text strong>采购依赖</Typography.Text>
+    {hasMaterial ? <ScheduleOrderLink order={{ lineId: formal.procurementLineId, ...batch }}
+      store={store} focusKey="development-material">查看关联子件采购单</ScheduleOrderLink> : null}
+    <ScheduleOrderLink order={{ lineId: formal.orderLineId, ...(hasMaterial ? {} : batch) }}
+      store={store} focusKey="development-oa">OA {formal.oaRef}</ScheduleOrderLink>
+  </Flex>;
+}
+
+function LinkedFulfillment({ batches, selectedBatch }: {
+  readonly batches: ProductDevelopmentNode['batches']; readonly selectedBatch: string | null;
+}): ReactNode {
   return <Card title="正式订单履约" size="small">
     <Space orientation="vertical" size="middle" style={{ display: 'flex' }}>
-      <Space wrap>
-        <ScheduleOrderLink order={{ lineId: formal.orderLineId, ...(selectedBatch !== null && formal.procurementLineId === formal.orderLineId ? { batchId: selectedBatch } : {}) }}
-          store={store} focusKey="development-oa">OA {formal.oaRef}</ScheduleOrderLink>
-        {formal.procurementLineId === formal.orderLineId ? null :
-          <ScheduleOrderLink order={{ lineId: formal.procurementLineId, ...(selectedBatch === null ? {} : { batchId: selectedBatch }) }} store={store} focusKey="development-material">打开子件采购事项</ScheduleOrderLink>}
-      </Space>
       <Typography.Text type="secondary">后续承诺、发货和收货在正式采购事项中登记。</Typography.Text>
-      {node.batches.length === 0 ? <Typography.Text type="secondary">当前无正式要货批次</Typography.Text> :
-        node.batches.map((batch) => <BatchFacts key={batch.id} batch={batch} isSelected={batch.id === selectedBatch} />)}
+      {batches.length === 0 ? <Typography.Text type="secondary">当前无正式要货批次</Typography.Text> :
+        batches.map((batch) => <BatchFacts key={batch.id} batch={batch} isSelected={batch.id === selectedBatch} />)}
     </Space>
   </Card>;
 }

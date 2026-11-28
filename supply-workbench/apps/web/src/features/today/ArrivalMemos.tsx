@@ -1,5 +1,5 @@
 import { Button } from 'antd';
-import { Link, useLinkClickHandler, useLocation } from 'react-router';
+import { Link } from 'react-router';
 import { useEffect, useRef } from 'react';
 import type { TodayResponse } from '@sw/contracts';
 import { SectionGroup, SectionRow } from '../../shared/ui/section.js';
@@ -7,42 +7,48 @@ import { statusColor, text } from '../../theme/tokens.js';
 
 type Memo = TodayResponse['arrivalMemos'][number];
 
-const labels = {
+export const arrivalStatusLabel = {
   in_transit: '在途待收',
   due_today: '今日应到',
   overdue: '到仓逾期',
 } satisfies Record<Memo['status'], string>;
 
+export const arrivalMemoButtonId = (batchId: string) => `today-arrival:${batchId}`;
+
+type TodayArrivals = {
+  readonly focusBatch: string | null;
+  readonly title?: string;
+  readonly onOpen: (batchId: string) => void;
+};
+
 export function ArrivalMemos({ memos, today }: {
   readonly memos: readonly Memo[];
-  readonly today?: { readonly focusBatch: string | null; readonly title?: string };
+  readonly today?: TodayArrivals;
 }) {
   if (memos.length === 0) return null;
   return (
     <SectionGroup title={today === undefined ? '到仓备忘录' : (today.title ?? '待收批次')} meta={`${memos.length} 批`}>
-      {memos.map((memo) => <ArrivalMemoRow key={memo.batchId} memo={memo} hasTodayReturn={today !== undefined} isFocused={today?.focusBatch === memo.batchId} />)}
+      {memos.map((memo) => <ArrivalMemoRow key={memo.batchId} memo={memo} today={today} />)}
     </SectionGroup>
   );
 }
 
-function ArrivalMemoRow({ memo, hasTodayReturn, isFocused }: { readonly memo: Memo; readonly hasTodayReturn: boolean; readonly isFocused: boolean }) {
-  const location = useLocation();
+function ArrivalMemoRow({ memo, today }: { readonly memo: Memo; readonly today: TodayArrivals | undefined }) {
   const batch = `批次 ${memo.batchSeq ?? memo.batchId}`;
   const query = new URLSearchParams({ focusBatch: memo.batchId });
-  if (hasTodayReturn) query.set('backToToday', 'arrivals');
   const href = `/lines/${encodeURIComponent(memo.line.id)}?${query}`;
   const identity = `${memo.line.poRaw ?? '—'} · ${memo.line.nameRaw ?? '—'} · ${batch}`;
-  const link = useRef<HTMLAnchorElement>(null);
-  const open = useLinkClickHandler<HTMLAnchorElement>(href, { state: { todaySearch: location.search } });
-  useEffect(() => { if (isFocused) link.current?.focus(); }, [isFocused]);
+  const button = useRef<HTMLButtonElement>(null);
+  const isFocused = today?.focusBatch === memo.batchId;
+  useEffect(() => { if (isFocused) button.current?.focus(); }, [isFocused]);
   return (
-    <div className="today-arrival-row" data-current={isFocused || undefined}><SectionRow action={hasTodayReturn
-      ? <Button color="primary" variant="link" ref={link} href={href} aria-label={`查看批次 ${identity}`}
-        onClick={open}>查看批次</Button>
-      : <Link ref={link} to={href} aria-label={`查看批次 ${identity}`}>查看批次</Link>}>
+    <div className="today-arrival-row" data-current={isFocused || undefined}><SectionRow action={today === undefined
+      ? <Link to={href} aria-label={`查看批次 ${identity}`}>查看批次</Link>
+      : <span className="today-touch"><Button type="link" ref={button} id={arrivalMemoButtonId(memo.batchId)} aria-label={`查看批次 ${identity}`}
+        onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); today.onOpen(memo.batchId); }}>查看批次</Button></span>}>
       <div>{identity} · {memo.warehouse ?? '收货方未命名'}</div>
       <div style={{ color: memo.status === 'overdue' ? statusColor.danger.text : text.secondary }}>
-        {labels[memo.status]} · 待收 {quantity(memo.inTransitQty, memo.unit)} · 实收 {quantity(memo.receivedQty, memo.unit)} · {memo.confirmedDate ?? '确认日未定'}
+        {arrivalStatusLabel[memo.status]} · 待收 {quantity(memo.inTransitQty, memo.unit)} · 实收 {quantity(memo.receivedQty, memo.unit)} · {memo.confirmedDate ?? '确认日未定'}
       </div>
     </SectionRow></div>
   );

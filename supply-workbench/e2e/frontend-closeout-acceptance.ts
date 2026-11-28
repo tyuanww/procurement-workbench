@@ -3,14 +3,15 @@ import { join } from 'node:path';
 import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarGroup } from './sidebar.ts';
+import { checkProductPurchaseEntry } from './product-purchase-acceptance.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
 const todayWidths = [320, 390, 768, 1280, 1440, 1920] as const;
 const calendarMonthInput = 'input[aria-label="选择日历月份"]';
 
-export async function checkFrontendCloseout({ page, origin, out }: {
-  readonly page: Page; readonly origin: URL; readonly out: string;
+export async function checkFrontendCloseout({ page, manager, origin, out }: {
+  readonly page: Page; readonly manager: Page; readonly origin: URL; readonly out: string;
 }) {
   await page.route('**/api/v1/today?scope=all', async (route) => {
     const response = await route.fetch();
@@ -43,8 +44,9 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await checkProductArchive(page, out);
   await checkProductSearch(page, origin);
   await checkProductPackagingReturn(page, origin);
+  const purchaseEntry = await checkProductPurchaseEntry({ page, manager, origin, out });
   return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次'], arrivals: ['待收批次'], dailySchedule: ['今日', '逾期', '前置阻塞'],
-    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'] },
+    archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'], purchaseEntry },
     savedFollowUpView: true };
 }
 
@@ -352,7 +354,7 @@ async function checkCalendarBesideResults(page: Page): Promise<void> {
 }
 
 async function checkArrivals(page: Page): Promise<void> {
-  await page.setViewportSize({ width: 320, height: 780 });
+  await page.setViewportSize({ width: 320, height: 667 });
   const tabs = page.getByRole('tablist', { name: '今日事项视图' });
   assert.deepEqual(await tabs.getByRole('tab').allTextContents(), ['行动板', '在途待收', '今日排期']);
   const arrivals = tabs.getByRole('tab', { name: /在途待收$/u });
@@ -375,12 +377,23 @@ async function checkFilteredArrivalReturn(page: Page): Promise<void> {
   const arrivalQuery = new URLSearchParams({ view: 'arrivals', timing: 'due_today', actionReturn });
   await page.goto(new URL('/today?' + arrivalQuery, page.url()).href);
   await page.getByRole('heading', { name: '今日应到', level: 1, exact: true }).waitFor();
-  const batch = page.getByRole('link', { name: /查看批次 UI-DEMO-004/u });
+  const batch = page.getByRole('button', { name: /查看批次 UI-DEMO-004/u });
   await batch.click();
+  const drawer = page.getByRole('dialog').filter({ hasText: 'UI-DEMO-004' });
+  await drawer.getByText(/收货方 ·/u).waitFor();
+  const record = drawer.getByRole('link', { name: '核对本批记录', exact: true });
+  await page.waitForURL(({ pathname, searchParams }) => pathname === '/today' && searchParams.get('drawer') === 'batch:ui-demo-batch-arrival');
+  const drawerUrl = page.url();
+  await record.click();
   await page.waitForURL((url) => url.pathname === '/lines/ui-demo-line-arrival' && url.searchParams.get('focusBatch') === 'ui-demo-batch-arrival');
+  await page.getByRole('region', { name: '批次', exact: true }).locator('li:focus').getByText(/待收 800 件/u).waitFor();
   await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
-  await page.waitForURL(({ searchParams }) => searchParams.get('timing') === 'due_today' && searchParams.get('actionReturn') === actionReturn);
+  await page.waitForURL(drawerUrl);
+  await record.and(page.locator(':focus')).waitFor();
   await page.getByRole('tab', { name: /在途待收$/u, selected: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await page.waitForURL((url) => url.search === '?' + arrivalQuery);
   await batch.and(page.locator(':focus')).waitFor();
   await page.getByRole('tab', { name: /行动板$/u }).click();
   await page.waitForURL((url) => url.search === '?' + actionReturn);

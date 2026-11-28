@@ -23,13 +23,15 @@ export function productNavigationState(state: unknown): unknown {
   return navigation;
 }
 
-export function ProductDrillLink({ to, tabLabel, sourceLink = to, children }: { to: string; tabLabel: string; sourceLink?: string; children: ReactNode }) {
+export function ProductDrillLink({ to, tabLabel, sourceLink = to, isFocusReady, children }: {
+  to: string; tabLabel: string; sourceLink?: string; isFocusReady?: boolean; children: ReactNode;
+}) {
   const here = useLocation();
   const focus = useDetailFocusLink(to, sourceLink);
   const link = useRef<HTMLAnchorElement>(null);
   const restore = useContext(ProductRestore);
-  useDetailReturnFocus(true);
-  useEffect(() => restore?.(sourceLink, link.current), [restore, sourceLink]);
+  useDetailReturnFocus(isFocusReady ?? true, { allowContainerFocus: isFocusReady !== undefined });
+  useEffect(() => { if (isFocusReady !== false) restore?.(sourceLink, link.current); }, [isFocusReady, restore, sourceLink]);
   const origin: ProductOrigin = { address: here.pathname + here.search, state: here.state, target: sourceLink, tabLabel };
   return <Link {...focus} ref={link} to={to} state={{ ...focus.state, productOrigin: origin }}>{children}</Link>;
 }

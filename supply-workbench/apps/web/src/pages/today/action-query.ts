@@ -45,7 +45,7 @@ export function actionQuery(search: string): ActionQuery {
   const inbox = TodayInboxSchema.safeParse(requested).data ?? (reasons.includes('follow_up_scheduled') ? 'scheduled' : 'today');
   return {
     page: readPage(params),
-    focusId: readFocus(params),
+    focusId: params.get('view') === 'arrivals' ? null : readFocus(params),
     reasons,
     sort: readSort(params),
     work: readWork({ params, reasons }),

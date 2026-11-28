@@ -32,12 +32,12 @@ export function LineDetailPage() {
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
   const canReadImports = useCan('imports.read');
-  const back = readLineDetailBack({ lineId: id, params, state, canReadImports });
+  const canReadDashboard = useCan('dashboard.read');
+  const back = readLineDetailBack({ lineId: id, params, state, canReadDashboard, canReadImports });
   return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
 }
 
-type LineDetailBack = ReturnType<typeof readLineDetailBack>;
-function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: LineDetailBack }) {
+function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: ReturnType<typeof readLineDetailBack> }) {
   const [detail, setDetail] = useState<OrderLineDetail | null>(null);
   const [events, setEvents] = useState<readonly TimelineEvent[]>([]);
   const [message, setMessage] = useState('');
