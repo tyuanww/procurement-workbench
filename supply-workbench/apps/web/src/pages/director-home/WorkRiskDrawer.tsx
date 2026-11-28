@@ -32,12 +32,12 @@ export function WorkRiskDrawer({ id, isOpen, rows, store, scopeLabel, today, sea
   useDetailReturnFocus(isOpen && isShown, { allowContainerFocus: true, fallback: { heading, onMissing: () => setMissing(true) } });
   const source = store === null ? null : { store, search };
 
-  return <Drawer title={<Typography.Title level={2} ref={heading} tabIndex={-1} style={{ margin: 0, font: 'inherit' }}>交期风险</Typography.Title>}
+  return <Drawer id={id} title={<Typography.Title level={2} ref={heading} tabIndex={-1} style={{ margin: 0, font: 'inherit' }}>交期风险</Typography.Title>}
     size={`min(${drawerWidth}px, 100vw)`} open={isOpen} destroyOnHidden
     closable={{ 'aria-label': '关闭交期风险' }} focusable={{ trap: true, focusTriggerAfterClose: false }} onClose={onClose}
     afterOpenChange={setShown}
     footer={source !== null && rows.length !== 0 ? <RiskGroupLink source={source} rows={rows} today={today} /> : null}>
-    <Flex id={id} vertical gap={space[2]}>
+    <Flex vertical gap={space[2]}>
       <Typography.Text type="secondary">{scopeLabel} · {today} · {rows.length} 件</Typography.Text>
       {isMissing ? <Alert type="warning" showIcon title="原记录已不在当前交期风险范围内，已保留首页筛选。" /> : null}
       {rows.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前店铺范围没有交期风险。" /> : <>
