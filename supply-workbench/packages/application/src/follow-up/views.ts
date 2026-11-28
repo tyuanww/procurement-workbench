@@ -74,6 +74,7 @@ export type BatchView = {
   readonly cancelledAt: string | null;
   readonly cancelReason: string | null;
   readonly shipments: readonly ShipmentView[];
+  readonly hasUnavailableShipmentSource?: boolean;
   readonly receipts: readonly ReceiptView[];
   readonly deliveryNote: DeliveryNoteView | null;
   readonly fulfillment?: BatchFulfillment;
@@ -143,6 +144,18 @@ export type DateChangeView = {
   readonly changedAt: string;
 };
 
+/** 原值未采集时没有键，确实采集为空时为 null。 */
+type WithOriginalCells<T> = T & { readonly originalCells?: Readonly<Record<string, string | null>> };
+type ShipmentSourceReport = WithOriginalCells<FactoryReportOf<'shipment'>>;
+type DemandReport = FactoryReportOf<'demand'>;
+type DemandSlot = DemandReport['payload']['slots'][number];
+type DemandSourceReport = WithOriginalCells<Omit<DemandReport, 'payload'> & {
+  readonly payload: Omit<DemandReport['payload'], 'slots'> & { readonly slots: readonly WithOriginalCells<DemandSlot>[] };
+}>;
+type BatchDemandSource = Pick<FactoryReportOf<'demand'>, 'importBatchId' | 'sheetName' | 'rowNo'> & {
+  readonly slot: WithOriginalCells<Pick<DemandSlot, 'index' | 'dateRaw' | 'qtyRaw' | 'sourceColumns'>>;
+};
+
 export type OrderLineDetail = {
   readonly ownerUndo?: { readonly expectedAssignmentId: EntityId; readonly previousBuyer: UserRef | null };
   readonly pendingBuyerName?: string;
@@ -157,12 +170,15 @@ export type OrderLineDetail = {
   readonly codes: readonly ItemCodeView[];
   readonly snapshot: { readonly importBatchId: string; readonly at: string; readonly fields: Readonly<Record<string, Provenanced<unknown>>> } | null;
   readonly batches: readonly BatchView[];
+  readonly sourceFiles?: Readonly<Record<string, string>>;
+  readonly archivedShipmentSources?: readonly ShipmentSourceReport[];
+  readonly batchDemandSources?: Readonly<Record<string, BatchDemandSource>>;
   readonly factoryReports: {
-    readonly inTransit: readonly FactoryReportOf<'in_transit'>[];
-    readonly shipments: readonly FactoryReportOf<'shipment'>[];
+    readonly inTransit: readonly WithOriginalCells<FactoryReportOf<'in_transit'>>[];
+    readonly shipments: readonly ShipmentSourceReport[];
     readonly stock: readonly FactoryReportOf<'stock'>[];
     readonly schedule: readonly FactoryReportOf<'schedule'>[];
-    readonly demand: readonly FactoryReportOf<'demand'>[];
+    readonly demand: readonly DemandSourceReport[];
     readonly packagingCombo: readonly FactoryReportOf<'packaging_combo'>[];
   };
   readonly exceptions: readonly ExceptionView[];

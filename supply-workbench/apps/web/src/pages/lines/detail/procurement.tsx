@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
+import { deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
+import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
+import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../../director-home/home-location.js';
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
@@ -26,13 +29,21 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
   );
 }
 
-function procurementDetailQuery(params: URLSearchParams): string {
+function procurementReturnState(params: URLSearchParams, state: unknown) {
+  const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
+  if (home !== null) return detailReturnState(state, home);
+  const delivery = params.get('backToDelivery');
+  if (delivery !== null) return detailReturnState(state, deliveryBackAddress(delivery));
+  return params.has('backToSchedule') ? state : undefined;
+}
+
+function procurementDetailQuery(params: URLSearchParams): URLSearchParams {
   const related = new URLSearchParams();
-  for (const key of ['store', 'backToProgress', 'backToSchedule']) {
+  for (const key of ['store', 'backToProgress', 'backToSchedule', 'backToDelivery', 'deliveryEntry', HOME_RISK_RETURN_PARAM]) {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
-  return related.size === 0 ? '' : `?${related.toString()}`;
+  return related;
 }
 
 function ProcurementOa({ progress }: { readonly progress: OrderLineDetail['line']['storeProgress'] }) {
@@ -44,14 +55,14 @@ function ProcurementOa({ progress }: { readonly progress: OrderLineDetail['line'
 type RelatedLine = NonNullable<OrderLineDetail['procurement']>['relatedLines'][number];
 
 function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLine[] }) {
-  const [params] = useSearchParams();
+  const [params] = useFollowUpSearch();
   const { state } = useLocation();
   const query = procurementDetailQuery(params);
-  const returnState = params.has('backToSchedule') ? state : undefined;
+  const returnState = procurementReturnState(params, state);
   return (
     <ul>{lines.map((line) => (
       <li key={line.id}>
-        <Link to={`/lines/${encodeURIComponent(line.id)}${query}`} state={returnState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
+        <Link to={followUpAddress(`/lines/${encodeURIComponent(line.id)}`, query)} state={returnState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
       </li>
     ))}</ul>
   );
@@ -80,7 +91,7 @@ function ProcurementSource({ entry, canReadImport }: { readonly entry: Procureme
       {canReadImport ? <Link to={`/imports/${encodeURIComponent(entry.importBatchId)}`}>{source}</Link> : source}
       {' · '}{entry.fileName ?? entry.importBatchId}
       {' · '}{fact.status === 'completed' ? '源表标为已完结' : '项目表'}
-      {' · '}{fact.quantityRaw ?? '采购量未填'}{fact.quantityRaw === null || fact.unitRaw === null ? '' : `（单位原文 ${fact.unitRaw}）`}
+      {' · '}{fact.quantityRaw ?? '采购量未填'}
       {' · '}{fact.buyerRaw ?? '采购员未填'}
       {' · '}{fact.supplierRaw ?? '供应商未填'}
       {fact.deliveryProgressRaw == null ? null : ` · 源表交付原文 ${fact.deliveryProgressRaw}`}

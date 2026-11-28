@@ -1,29 +1,36 @@
-import { useEffect, useRef, type MouseEvent } from 'react';
+import { useEffect, useRef, type MouseEvent, type RefObject } from 'react';
 import { useLocation, useNavigationType } from 'react-router';
+import { z } from 'zod';
 
-type DetailOrigin = { readonly sourceKey: string; readonly detailPath: string; readonly sourceLink?: string };
+const detailOriginSchema = z.union([
+  z.object({ sourceKey: z.string(), detailPath: z.string(), sourceLink: z.string().optional() }),
+  z.object({ sourceKey: z.undefined().optional(), detailPath: z.string(), sourceLink: z.string() }),
+]);
+type DetailOrigin = z.infer<typeof detailOriginSchema>;
 const historyMarker = 'workbenchDetailOrigin';
 const linkId = (detailPath: string) => `detail-link:${detailPath}`;
 
 export function useDetailFocusLink(detailPath: string, sourceLink = detailPath) {
+  return useDetailFocusLinks()(detailPath, sourceLink);
+}
+
+export function useDetailFocusLinks() {
   const { key } = useLocation();
-  const origin: DetailOrigin = { sourceKey: key, detailPath, ...(sourceLink === detailPath ? {} : { sourceLink }) };
-  return {
-    id: linkId(sourceLink),
-    state: { detailOrigin: origin },
-    onClick(event: MouseEvent<HTMLAnchorElement>) {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      window.history.replaceState({ ...window.history.state, [historyMarker]: origin }, '');
-    },
+  return (detailPath: string, sourceLink = detailPath) => {
+    const origin: DetailOrigin = { sourceKey: key, detailPath, ...(sourceLink === detailPath ? {} : { sourceLink }) };
+    return {
+      id: linkId(sourceLink),
+      state: { detailOrigin: origin },
+      onClick(event: MouseEvent<HTMLAnchorElement>) {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        window.history.replaceState({ ...window.history.state, [historyMarker]: origin }, '');
+      },
+    };
   };
 }
 
 function readOrigin(value: unknown): DetailOrigin | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  if (!('sourceKey' in value) || typeof value.sourceKey !== 'string') return undefined;
-  if (!('detailPath' in value) || typeof value.detailPath !== 'string') return undefined;
-  const sourceLink = 'sourceLink' in value && typeof value.sourceLink === 'string' ? value.sourceLink : undefined;
-  return { sourceKey: value.sourceKey, detailPath: value.detailPath, ...(sourceLink === undefined ? {} : { sourceLink }) };
+  return detailOriginSchema.safeParse(value).data;
 }
 
 function linkOrigin(state: unknown) {
@@ -35,24 +42,40 @@ function historyOrigin(key: string) {
   return origin?.sourceKey === key ? origin : undefined;
 }
 
-export function detailReturnState(state: unknown, detailPath: string) {
+export function detailReturnState(state: unknown, target: string | { detailPath: string; sourceLink: string }) {
+  const detailPath = typeof target === 'string' ? target : target.detailPath;
   const origin = linkOrigin(state);
-  return origin?.detailPath === detailPath ? { detailOrigin: origin } : undefined;
+  if (origin?.detailPath === detailPath) return { detailOrigin: origin };
+  return typeof target === 'string' ? undefined : { detailOrigin: target };
 }
 
-export function useDetailReturnFocus(isReady: boolean, { allowContainerFocus = false } = {}) {
+type ReturnFocusFallback = {
+  readonly heading: RefObject<HTMLElement | null>;
+  readonly onMissing: () => void;
+};
+
+export function useDetailReturnFocus(isReady: boolean, { allowContainerFocus = false, fallback, sourcePath }: {
+  readonly allowContainerFocus?: boolean; readonly fallback?: ReturnFocusFallback; readonly sourcePath?: string;
+} = {}) {
   const { key, state } = useLocation();
   const navigation = useNavigationType();
   const restored = useRef<string | null>(null);
   useEffect(() => {
     if (!isReady || restored.current === key) return;
     const origin = navigation === 'POP' ? historyOrigin(key) : linkOrigin(state);
-    if (origin === undefined) return;
-    const target = document.getElementById(linkId(origin.sourceLink ?? origin.detailPath));
-    if (target === null) return;
+    if (origin === undefined || (sourcePath !== undefined && origin.detailPath !== sourcePath)) return;
+    const destination = findReturnTarget(origin, fallback);
+    if (!destination) return;
     restored.current = key;
-    if (canRestoreFocus(target, allowContainerFocus)) target.focus();
-  }, [allowContainerFocus, isReady, key, state, navigation]);
+    if (canRestoreFocus(destination, allowContainerFocus)) destination.focus();
+  }, [allowContainerFocus, isReady, key, state, navigation, fallback, sourcePath]);
+}
+
+function findReturnTarget(origin: DetailOrigin, fallback: ReturnFocusFallback | undefined) {
+  const target = document.getElementById(linkId(origin.sourceLink ?? origin.detailPath));
+  if (target !== null) return target;
+  fallback?.onMissing();
+  return fallback?.heading.current;
 }
 
 function canRestoreFocus(target: HTMLElement, allowContainerFocus: boolean): boolean {

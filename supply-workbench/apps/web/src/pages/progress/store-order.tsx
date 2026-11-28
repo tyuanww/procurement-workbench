@@ -1,5 +1,7 @@
 import { Select, Typography } from 'antd';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { DeliveryDetailLink } from './delivery-detail-link.js';
 import type { OrderLineRow, ProcurementStore, StoreProgressMaterial } from '@sw/contracts';
 import { procurementOaReferences } from '@sw/domain';
 import { useCan } from '../../shared/actor.js';
@@ -43,6 +45,8 @@ export function ProgressOaFilter(props: {
   );
 }
 
+export type ProgressOrderOrigin = 'progress' | 'delivery';
+
 export function scopedLineLink(id: string, { search, store, focusLine, focusBatch }: {
   readonly search: string;
   readonly store: ProcurementStore | undefined;
@@ -57,14 +61,21 @@ export function scopedLineLink(id: string, { search, store, focusLine, focusBatc
   return `/lines/${encodeURIComponent(id)}?${params.toString()}`;
 }
 
-export function StoreOrderDetails({ line, search }: { readonly line: OrderLineRow | undefined; readonly search: string }) {
+export function StoreOrderDetails({ line, search, origin = 'progress' }: {
+  readonly line: OrderLineRow | undefined;
+  readonly search: string;
+  readonly origin?: ProgressOrderOrigin;
+}) {
   const canReadImport = useCan('imports.read');
   const progress = line?.storeProgress;
   if (line === undefined || progress === undefined) return null;
+  const detail = (id: string, children: ReactNode) => origin === 'delivery'
+    ? <DeliveryDetailLink id={id} search={search} store={progress.store} focusKey={`delivery:${line.id}:${id}`}>{children}</DeliveryDetailLink>
+    : <Link to={scopedLineLink(id, { search, store: progress.store, focusLine: line.id })}>{children}</Link>;
   return (
-    <section aria-label="成品与关联采购事项">
+    <section aria-label="成品与关联采购事项" style={{ overflowWrap: 'anywhere' }}>
       <p>
-        <Link to={scopedLineLink(line.id, { search, store: progress.store, focusLine: line.id })}>成品订单行详情</Link>
+        {detail(line.id, '成品订单行详情')}
         {' · '}{progressOrderRef(line)}{' · '}{storeLabels[progress.store]}
         {' · '}{line.qtyOrdered === null ? '订单数量未填' : `订单数量 ${amount.format(line.qtyOrdered)}`}
       </p>
@@ -78,7 +89,7 @@ export function StoreOrderDetails({ line, search }: { readonly line: OrderLineRo
       <Typography.Text strong>关联采购事项（{progress.materials.length}）</Typography.Text>
       {progress.materials.length === 0 ? null : <ul>{progress.materials.map((entry) => (
         <li key={entry.id}>
-          <Link to={scopedLineLink(entry.id, { search, store: progress.store, focusLine: line.id })}>{[entry.nameRaw, entry.codeRaw, entry.poRaw].filter(Boolean).join(' · ') || '打开采购事项'}</Link>
+          {detail(entry.id, [entry.nameRaw, entry.codeRaw, entry.poRaw].filter(Boolean).join(' · ') || '打开采购事项')}
           {' · '}{sourceText(entry.source)}
           {' · '}{materialQuantity(entry)}
           {entry.deliveryProgressRaw === null ? null : ` · 源表交付原文 ${entry.deliveryProgressRaw}`}

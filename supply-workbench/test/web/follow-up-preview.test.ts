@@ -59,6 +59,7 @@ describe('跟进台预览只读内容', () => {
     expect(html).toContain('开放批次最早的采购确认到货日');
     expect(html).toContain('对应批次');
     expect(html).toContain('href="/lines/line-1?focusBatch=batch-1"');
+    expect(html).toMatch(/href="\/lines\/line-1\?focusBatch=batch-2"[^>]*>查看第 2 批<\/a>/);
     expect(html).toMatch(/第 1 批[^<]*下一到货/);
     expect(html).toContain('2026-11-12');
     expect(html).toContain('供应商承诺日');

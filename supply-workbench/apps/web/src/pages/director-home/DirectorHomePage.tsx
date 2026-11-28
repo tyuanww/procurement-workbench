@@ -3,6 +3,7 @@ import { Alert, Button, Flex, Skeleton } from 'antd';
 import { DirectorBrandsSchema, DirectorScheduleSchema } from '@sw/contracts';
 import { businessDay } from '@sw/domain';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { businessTimeZone } from '../../shared/business-time-zone.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
@@ -11,6 +12,7 @@ import { space } from '../../theme/tokens.js';
 import { projectStyles } from './director-projects.styles.js';
 import { DirectorWorkBoard } from './DirectorWorkBoard.js';
 import { DirectorProjects } from './DirectorProjects.js';
+import { homeWorkParams, initialHomeWork, readHomeWork, type HomeWorkLocation } from './home-location.js';
 import { brandIndex, type BrandScope } from './project-register.js';
 
 const root = '/api/v1/dashboard/director';
@@ -35,16 +37,21 @@ function useDirectorRead<T>(read: (signal: AbortSignal) => Promise<T>) {
 
 export function DirectorHomePage() {
   const [today] = useState(() => businessDay(new Date().toISOString(), businessTimeZone()));
-  const [scope, setScope] = useState<BrandScope>('all');
+  const [params, setParams] = useSearchParams();
+  const location = readHomeWork(params);
+  const { scope } = location;
+  const changeLocation = (next: HomeWorkLocation) => setParams(homeWorkParams(next), { replace: true, preventScrollReset: true });
   const brands = useDirectorRead(readBrands);
   const schedule = useDirectorRead(readSchedule);
   const memberships = useMemo(() => brandIndex(brands.load?.value ?? []), [brands.load]);
   const names = brandNames(brands.load?.value, schedule.load?.value?.brands);
   return <WorkbenchPage title="首页"><Flex vertical gap={space[3]}>
     <style>{projectStyles}</style>
-    <BrandButtons names={names} scope={scope} onChange={setScope} />
+    <BrandButtons names={names} scope={scope} onChange={(nextScope) => {
+      if (nextScope !== scope) changeLocation({ ...initialHomeWork, scope: nextScope });
+    }} />
     {brands.load?.error ? <Alert type="error" title="采购店铺归属暂未读出" action={<Button onClick={brands.retry}>重试</Button>} /> : null}
-    <DirectorWorkBoard scope={scope} today={today} memberships={memberships} brandsReady={brands.load?.value !== undefined}>
+    <DirectorWorkBoard location={location} onLocationChange={changeLocation} today={today} memberships={memberships} brandsReady={brands.load?.value !== undefined}>
       {!schedule.load ? <Skeleton active /> : schedule.load.error !== undefined
         ? <Alert type="error" title="新品开发排期暂未读出" description={schedule.load.error} action={<Button onClick={schedule.retry}>重试</Button>} />
         : <DirectorProjects key={scope} schedule={schedule.load.value} scope={scope} today={today} />}

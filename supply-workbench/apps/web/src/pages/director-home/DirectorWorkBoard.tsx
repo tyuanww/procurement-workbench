@@ -1,15 +1,17 @@
 import { Alert, Button, Col, Flex, Row, Skeleton } from 'antd';
-import { lineInScope, type BrandScope } from './project-register.js';
+import { lineInScope } from './project-register.js';
 import type { LocalDate } from '@sw/domain';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useOutletContext } from 'react-router';
 import type { ShellView } from '../../features/shell/index.js';
 import { failureText, readFailureOf } from '../../shared/api/reads.js';
-import { MetricStrip } from '../../shared/ui/analytics.js';
+import { MetricStrip, type MetricItem } from '../../shared/ui/analytics.js';
 import { navGlyph } from '../../shared/ui/nav-glyph.js';
 import { bg, border, brand, radiusCard, space } from '../../theme/tokens.js';
 import { WorkDetails } from './WorkDetails.js';
-import { initialFilter, inView, loadWorkLines, ownerLoads, VIEWS, workRows, type View, type WorkFilter, type WorkRow } from './work-register.js';
+import { WorkRiskDrawer } from './WorkRiskDrawer.js';
+import { homeRiskStore, homeScopeLabel, homeWorkParams, type HomeWorkLocation } from './home-location.js';
+import { initialFilter, inView, loadWorkLines, ownerLoads, VIEWS, workRows, type View, type WorkRow } from './work-register.js';
 
 type Load = { kind: 'ready'; rows: WorkRow[] } | { kind: 'error'; message: string };
 function useWorkRegister(today: LocalDate) {
@@ -42,10 +44,14 @@ function Shortcuts() {
   </nav>;
 }
 
-export function DirectorWorkBoard({ scope, today, children, memberships, brandsReady }: {
+type ChangeLocation = (next: HomeWorkLocation) => void;
+
+export function DirectorWorkBoard({ location, onLocationChange, today, children, memberships, brandsReady }: {
   readonly memberships: Map<string, Set<string | null>>; readonly brandsReady: boolean;
-  readonly scope: BrandScope; readonly today: LocalDate; readonly children: ReactNode;
+  readonly location: HomeWorkLocation; readonly onLocationChange: ChangeLocation;
+  readonly today: LocalDate; readonly children: ReactNode;
 }) {
+  const { scope } = location;
   const { load, retry } = useWorkRegister(today);
   const rows = useMemo(() => {
     if (load?.kind !== 'ready') return [];
@@ -58,7 +64,7 @@ export function DirectorWorkBoard({ scope, today, children, memberships, brandsR
       <Shortcuts />
       {load === undefined || (scope !== 'all' && !brandsReady) ? <Skeleton active /> : load.kind === 'error'
         ? <Alert type="error" showIcon title="事项清单暂未读出" description={load.message} action={<Button onClick={retry}>重试</Button>} />
-        : <FilteredWork key={scope} rows={rows} />}
+        : <FilteredWork key={scope} rows={rows} today={today} location={location} onLocationChange={onLocationChange} />}
     </Flex></Col>
     <Col xs={24} lg={8} style={{ minWidth: 0 }}><Flex vertical gap={space[3]}>
       {children}
@@ -66,20 +72,37 @@ export function DirectorWorkBoard({ scope, today, children, memberships, brandsR
   </Row>;
 }
 
-function FilteredWork({ rows }: { readonly rows: WorkRow[] }) {
-  const [filter, setFilter] = useState<WorkFilter>(initialFilter);
+function FilteredWork({ rows, location, onLocationChange, today }: {
+  readonly rows: WorkRow[]; readonly location: HomeWorkLocation; readonly onLocationChange: ChangeLocation; readonly today: LocalDate;
+}) {
+  const { filter, drawer, scope } = location;
+  const riskRows = rows.filter((row) => inView(row, 'risk'));
+  const riskControl = useRef<HTMLButtonElement>(null);
+  const focusRiskControl = useCallback(() => riskControl.current?.focus({ preventScroll: true }), []);
+  const riskId = useId();
+  const riskAction = {
+    dialog: { id: riskId, isOpen: drawer === 'risk', trigger: riskControl },
+    select: () => onLocationChange({ ...location, drawer: 'risk' }),
+  };
   return <>
-    <WorkMetrics rows={rows} view={filter.view} onSelect={(view) => setFilter({ ...initialFilter, view })} />
-    <WorkDetails rows={rows} owners={ownerLoads(rows)} filter={filter} onFilter={setFilter} />
+    <WorkMetrics rows={rows} riskCount={riskRows.length} view={filter.view} riskAction={riskAction}
+      onSelect={(view) => onLocationChange({ ...location, filter: { ...initialFilter, view }, page: 1 })} />
+    <WorkDetails rows={rows} owners={ownerLoads(rows)} location={location} onLocationChange={onLocationChange} />
+    <WorkRiskDrawer id={riskId} rows={riskRows} isOpen={drawer === 'risk'} store={homeRiskStore(scope)} scopeLabel={homeScopeLabel(scope)} today={today}
+      search={homeWorkParams(location).toString()} onClose={() => onLocationChange({ ...location, drawer: null })}
+      onClosed={focusRiskControl} />
   </>;
 }
 
-function WorkMetrics({ rows, view, onSelect }: { readonly rows: readonly WorkRow[]; readonly view: View; readonly onSelect: (view: View) => void }) {
+function WorkMetrics({ rows, riskCount, view, riskAction, onSelect }: {
+  readonly rows: readonly WorkRow[]; readonly riskCount: number; readonly view: View;
+  readonly riskAction: NonNullable<MetricItem['action']>; readonly onSelect: (view: View) => void;
+}) {
   const keys: readonly View[] = ['all', 'risk', 'watch'];
   const hints = { all: '每条成品或物料订单行算一件', risk: '已逾期或确认到货晚于需求', watch: '交期、异常或负责人需要跟踪' };
   const tones = { all: 'neutral', risk: 'danger', watch: 'warning' } as const;
   return <MetricStrip ariaLabel="事项概览" items={keys.map((key) => ({
-    key, label: VIEWS[key], value: rows.filter((row) => inView(row, key)).length, unit: '件', hint: hints[key], tone: tones[key],
-    action: { isActive: key === view, select: () => onSelect(key) },
+    key, label: VIEWS[key], value: key === 'risk' ? riskCount : rows.filter((row) => inView(row, key)).length, unit: '件', hint: hints[key], tone: tones[key],
+    action: key === 'risk' ? riskAction : { isActive: key === view, select: () => onSelect(key) },
   }))} />;
 }

@@ -1,11 +1,10 @@
-import type { FactoryReportOf } from '@sw/application';
+import type { FactoryReportOf, OrderLineDetail } from '@sw/application';
 import type { ParsedCell, ParsedPo } from '../../../../application/src/ports/parsed-rows.js';
 import { PO_FORMATS, localDate, type LocalDate } from '@sw/domain';
 import { isRecord, textOrNull } from './guards.js';
 
 const EMPTY_TEXT: ParsedCell<string> = { raw: null, value: null };
 const EMPTY_NUMBER: ParsedCell<number> = { raw: null, value: null };
-const EMPTY_DATE: ParsedCell<LocalDate> = { raw: null, value: null };
 const EMPTY_PO: ParsedCell<ParsedPo> = { raw: null, value: null };
 
 type Envelope = {
@@ -20,6 +19,9 @@ type Envelope = {
   readonly linkStatus: string;
   readonly linkReason: string | null;
 };
+type ShipmentSourceReport = OrderLineDetail['factoryReports']['shipments'][number];
+type DemandSourceReport = OrderLineDetail['factoryReports']['demand'][number];
+type DemandRow = Envelope & { role: string; blockPoRaw: string | null; blockMaterialPoRaw: string | null; blockLabelRaw: string | null; itemCodeRaw: string | null; nameRaw: string | null; unitRaw: string | null; qtyOnHand: string | null; qtyFinishedEstimate: string | null; qtyGross: string | null; qtyNet: string | null; slots: unknown };
 
 export function isAssociated(status: string): boolean {
   return status === 'linked' || status === 'manual';
@@ -45,6 +47,13 @@ export function transitOf(row: Envelope & { poRaw: string | null; nameRaw: strin
   } };
 }
 
+export function transitSourceOf(row: Parameters<typeof transitOf>[0]): OrderLineDetail['factoryReports']['inTransit'][number] {
+  const raw = record(row.raw);
+  return { ...transitOf(row), originalCells: originalsOf({
+    po: cellRaw(raw.po), nameRaw: cellRaw(raw.nameRaw), qtyRequired: cellRaw(raw.qtyRequired), qtyDeliveredFactory: cellRaw(raw.qtyDeliveredFactory),
+  }) };
+}
+
 export function shipmentOf(row: Envelope & { poRaw: string | null; itemCodeRaw: string | null; nameRaw: string | null; lotRaw: string | null; qty: string | null; casePackRaw: string | null; palletsRaw: string | null; shipmentKindRaw: string | null; shipOrArriveOn: string | null; destinationRaw: string | null; vehicleRaw: string | null; note2Raw: string | null }): FactoryReportOf<'shipment'> {
   const raw = record(row.raw);
   return { ...envelope(row), kind: 'shipment', payload: {
@@ -61,6 +70,14 @@ export function shipmentOf(row: Envelope & { poRaw: string | null; itemCodeRaw: 
     vehicleRaw: textCell(raw.vehicleRaw, row.vehicleRaw),
     note2Raw: textCell(raw.note2Raw, row.note2Raw),
   } };
+}
+
+export function shipmentSourceOf(row: Parameters<typeof shipmentOf>[0]): ShipmentSourceReport {
+  const raw = record(row.raw);
+  return { ...shipmentOf(row), originalCells: originalsOf({
+    po: cellRaw(raw.po), itemCodeRaw: cellRaw(raw.itemCodeRaw), lotRaw: cellRaw(raw.lotRaw),
+    qty: cellRaw(raw.qty), shipOrArriveOn: cellRaw(raw.shipOrArriveOn),
+  }) };
 }
 
 export function stockOf(row: Envelope & { poRaw: string | null; itemCodeRaw: string | null; nameRaw: string | null; lotRaw: string | null; qtyOnHand: string | null; palletsRaw: string | null; coaOn: string | null; producedOn: string | null; inspectionRaw: string | null; inspected: boolean | null }): FactoryReportOf<'stock'> {
@@ -96,9 +113,22 @@ export function scheduleOf(row: Envelope & { poRaw: string | null; itemCodeRaw: 
   } };
 }
 
-export function demandOf(row: Envelope & { role: string; blockPoRaw: string | null; blockMaterialPoRaw: string | null; blockLabelRaw: string | null; itemCodeRaw: string | null; nameRaw: string | null; unitRaw: string | null; qtyOnHand: string | null; qtyFinishedEstimate: string | null; qtyGross: string | null; qtyNet: string | null; slots: unknown }): FactoryReportOf<'demand'> {
+export function demandOf(row: DemandRow): FactoryReportOf<'demand'> {
+  return mapDemand(row, false);
+}
+
+export function demandSourceOf(row: DemandRow): DemandSourceReport {
+  return mapDemand(row, true);
+}
+
+function mapDemand(row: DemandRow, captureOriginal: boolean): DemandSourceReport {
   const raw = record(row.raw);
-  return { ...envelope(row), kind: 'demand', payload: {
+  const originalCells = captureOriginal ? originalsOf({
+    blockMaterialPoRaw: raw.blockMaterialPoRaw,
+    blockOrderRaw: demandOrderOriginal(raw),
+    itemCodeRaw: cellRaw(raw.itemCodeRaw), nameRaw: cellRaw(raw.nameRaw), unitRaw: cellRaw(raw.unitRaw), qtyNet: cellRaw(raw.qtyNet),
+  }) : undefined;
+  return { ...envelope(row), kind: 'demand', ...(originalCells === undefined ? {} : { originalCells }), payload: {
     role: demandRole(raw.role, row.role),
     blockPoRaw: textOrNull(raw.blockPoRaw) ?? row.blockPoRaw,
     blockMaterialPoRaw: textOrNull(raw.blockMaterialPoRaw) ?? row.blockMaterialPoRaw,
@@ -110,7 +140,7 @@ export function demandOf(row: Envelope & { role: string; blockPoRaw: string | nu
     qtyFinishedEstimate: numberCell(raw.qtyFinishedEstimate, row.qtyFinishedEstimate),
     qtyGross: numberCell(raw.qtyGross, row.qtyGross),
     qtyNet: numberCell(raw.qtyNet, row.qtyNet),
-    slots: slotsOf(raw.slots, row.slots),
+    slots: slotsOf({ rawSlots: raw.slots, column: row.slots, captureOriginal }),
   } };
 }
 
@@ -146,6 +176,26 @@ function record(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
+function cellRaw(cell: unknown): unknown {
+  return isRecord(cell) && (cell.raw !== null || cell.value === null) ? cell.raw : undefined;
+}
+
+function originalText(value: unknown): string | null | undefined {
+  return typeof value === 'string' || value === null ? value : undefined;
+}
+
+function demandOrderOriginal(raw: Readonly<Record<string, unknown>>) {
+  const alternatives = [originalText(raw.blockPoRaw), originalText(raw.blockLabelRaw)];
+  return alternatives.find((text) => text?.trim()) ?? (alternatives.includes(undefined) ? undefined : null);
+}
+
+function originalsOf(fields: Readonly<Record<string, unknown>>): Readonly<Record<string, string | null>> {
+  return Object.fromEntries(Object.entries(fields).flatMap(([key, value]) => {
+    const raw = originalText(value);
+    return raw === undefined ? [] : [[key, raw] as const];
+  }));
+}
+
 function textCell(value: unknown, fallback: string | null): ParsedCell<string> {
   const parsed = readCell(value);
   if (parsed === undefined) return fallback === null ? EMPTY_TEXT : { raw: fallback, value: fallback };
@@ -165,7 +215,7 @@ function dateCell(value: unknown, fallback: string | null): ParsedCell<LocalDate
   const fromCell = parsed === undefined ? undefined : dateOrNull(parsed.value);
   if (fromCell !== undefined) return { raw: parsed?.raw ?? null, value: fromCell };
   const fromColumn = dateOrNull(fallback);
-  return fromColumn === undefined ? EMPTY_DATE : { raw: fallback, value: fromColumn };
+  return { raw: parsed?.raw ?? (fromColumn === undefined ? null : fallback), value: fromColumn ?? null };
 }
 
 function poCell(value: unknown, fallback: string | null): ParsedCell<ParsedPo> {
@@ -221,9 +271,11 @@ function strings(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
-function slotsOf(rawSlots: unknown, column: unknown): FactoryReportOf<'demand'>['payload']['slots'] {
+function slotsOf({ rawSlots, column, captureOriginal }: {
+  readonly rawSlots: unknown; readonly column: unknown; readonly captureOriginal: boolean;
+}): DemandSourceReport['payload']['slots'] {
   const source = Array.isArray(rawSlots) ? rawSlots : columnSlots(column);
-  return source.flatMap(slotOf);
+  return source.flatMap((slot) => slotOf(slot, captureOriginal));
 }
 
 function columnSlots(value: unknown): unknown[] {
@@ -231,7 +283,24 @@ function columnSlots(value: unknown): unknown[] {
   return value.slots;
 }
 
-function slotOf(value: unknown): FactoryReportOf<'demand'>['payload']['slots'] {
+function slotOf(value: unknown, captureOriginal: boolean): DemandSourceReport['payload']['slots'] {
   if (!isRecord(value) || typeof value.index !== 'number') return [];
-  return [{ index: value.index, date: dateOrNull(value.date) ?? null, dateRaw: textOrNull(value.dateRaw), qty: typeof value.qty === 'number' ? value.qty : null, qtyRaw: textOrNull(value.qtyRaw), issues: [] }];
+  const sourceColumns = demandSourceColumns(value.sourceColumns);
+  const originalCells = captureOriginal ? demandSlotOriginals(value) : undefined;
+  return [{ index: value.index, ...(sourceColumns === undefined ? {} : { sourceColumns }), date: dateOrNull(value.date) ?? null, dateRaw: textOrNull(value.dateRaw), qty: typeof value.qty === 'number' ? value.qty : null, qtyRaw: textOrNull(value.qtyRaw), ...(originalCells === undefined ? {} : { originalCells }), issues: [] }];
+}
+
+function demandSlotOriginals({ date, dateRaw, qty, qtyRaw }: Readonly<Record<string, unknown>>) {
+  return originalsOf({
+    dateRaw: dateRaw === null && typeof date === 'string' ? undefined : dateRaw,
+    qtyRaw: qtyRaw === null && typeof qty === 'number' ? undefined : qtyRaw,
+  });
+}
+
+function demandSourceColumns(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const { date, quantity } = value;
+  if (typeof date !== 'number' || typeof quantity !== 'number') return undefined;
+  if (!Number.isSafeInteger(date) || date < 1 || !Number.isSafeInteger(quantity) || quantity < 1) return undefined;
+  return { date, quantity };
 }

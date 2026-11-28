@@ -6,7 +6,7 @@ import {
   FollowUpViewSchema,
   OrderLineRowSchema,
 } from './follow-up-views.js';
-import { comboPayload, demandPayload, inTransitPayload, schedulePayload, shipmentPayload, stockPayload } from './factory-payloads.js';
+import { comboPayload, demandPayload, demandSlot, inTransitPayload, schedulePayload, shipmentPayload, stockPayload } from './factory-payloads.js';
 import { LinkStatusSchema, PoFormatSchema } from './enums.js';
 import { ItemCodeViewSchema } from './master-views.js';
 import { ProcurementScheduleViewSchema } from './procurement-schedule.js';
@@ -29,6 +29,11 @@ const report = <K extends string, P>(kind: K, payload: z.ZodType<P>) => strictOb
   kind: z.literal(kind),
   payload,
 });
+
+const originalCells = optional(z.record(z.string(), nullable(z.string())));
+const shipmentSourceReport = report('shipment', shipmentPayload).extend({ originalCells });
+const demandSourceSlot = demandSlot.extend({ originalCells });
+const demandSourceReport = report('demand', demandPayload.extend({ slots: z.array(demandSourceSlot) })).extend({ originalCells });
 
 export const OrderLineDetailSchema: z.ZodType<OrderLineDetail> = strictObject({
   pendingBuyerName: optional(z.string()),
@@ -53,12 +58,20 @@ export const OrderLineDetailSchema: z.ZodType<OrderLineDetail> = strictObject({
     fields: z.record(z.string(), provenancedSchema(z.unknown())),
   })),
   batches: z.array(BatchViewSchema),
+  sourceFiles: optional(z.record(z.string(), z.string())),
+  archivedShipmentSources: optional(z.array(shipmentSourceReport)),
+  batchDemandSources: optional(z.record(z.string(), strictObject({
+    importBatchId: z.string(),
+    sheetName: z.string(),
+    rowNo: z.number(),
+    slot: demandSourceSlot.pick({ index: true, dateRaw: true, qtyRaw: true, sourceColumns: true, originalCells: true }),
+  }))),
   factoryReports: strictObject({
-    inTransit: z.array(report('in_transit', inTransitPayload)),
-    shipments: z.array(report('shipment', shipmentPayload)),
+    inTransit: z.array(report('in_transit', inTransitPayload).extend({ originalCells })),
+    shipments: z.array(shipmentSourceReport),
     stock: z.array(report('stock', stockPayload)),
     schedule: z.array(report('schedule', schedulePayload)),
-    demand: z.array(report('demand', demandPayload)),
+    demand: z.array(demandSourceReport),
     packagingCombo: z.array(report('packaging_combo', comboPayload)),
   }),
   exceptions: z.array(ExceptionViewSchema),

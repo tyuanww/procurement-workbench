@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Flex, Form, Input, Result, Skeleton, Typography } from 'antd';
 import { AuthModeSchema, SessionUserSchema, type DevLoginRequest } from '@sw/contracts';
 import { useLocation } from 'react-router';
+import { followUpFeishuReturn } from '../../features/follow-up/index.js';
 import { apiGet, apiSend } from '../../shared/api/client.js';
 import { usePageTitle } from '../../shared/ui/page.js';
 import { bg, brand, space } from '../../theme/tokens.js';
@@ -22,15 +23,33 @@ export function LoginPage() {
         {mode === 'loading' ? <Skeleton active paragraph={{ rows: 4 }} /> : null}
         {mode === 'error' ? <Result status="error" title="无法读取登录配置" subTitle="请联系管理员检查服务配置。" /> : null}
         {mode === 'dev' ? <AccessCodeLoginForm returnTo={returnTo} /> : null}
-        {mode === 'feishu' ? <>
-          <Typography.Paragraph type="secondary">使用企业飞书账号登录。</Typography.Paragraph>
-          <Button type="primary" href={feishuStartHref(returnTo)} block>
-            使用飞书登录
-          </Button>
-        </> : null}
+        {mode === 'feishu' ? <FeishuLogin returnTo={returnTo} /> : null}
       </Card>
     </Flex>
   );
+}
+
+function FeishuLogin({ returnTo }: { readonly returnTo: string }) {
+  const [token] = useState(() => window.crypto.randomUUID());
+  const [hasStorageError, setStorageError] = useState(false);
+  const { returnTo: destination, stored } = followUpFeishuReturn(returnTo, token);
+  const href = feishuStartHref(destination);
+  const login = stored === undefined
+    ? <Button type="primary" href={href} block>使用飞书登录</Button>
+    : <Button type="primary" block onClick={() => {
+      try {
+        window.sessionStorage.setItem(stored.key, stored.value);
+      } catch {
+        setStorageError(true);
+        return;
+      }
+      window.location.assign(href);
+    }}>使用飞书登录</Button>;
+  return <>
+    <Typography.Paragraph type="secondary">使用企业飞书账号登录。</Typography.Paragraph>
+    {hasStorageError ? <Alert type="error" title="浏览器无法在登录后恢复这组订单。请先允许当前站点使用会话存储。" /> : null}
+    {login}
+  </>;
 }
 
 function AccessCodeLoginForm({ returnTo }: { readonly returnTo: string }) {

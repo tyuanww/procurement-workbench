@@ -4,7 +4,7 @@ import { Alert, Button, Card, Collapse, Empty, Flex, Input, Result, Select, Skel
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
-import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits } from '../../../features/follow-up/index.js';
+import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits, useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { useCan, useCanWrite } from '../../../shared/actor.js';
 import { PageHeader } from '../../../shared/ui/page.js';
 import { space } from '../../../theme/tokens.js';
@@ -16,7 +16,8 @@ import { FulfillmentRecords, FulfillmentSummary } from './fulfillment.js';
 import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../features/plan/index.js';
 import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
-import { lineDetailBack, orderScheduleAddress, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
+import { BatchSources } from './batch-sources.js';
+import { orderScheduleAddress, readLineDetailBack, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
 
 const MISSING_PO = '无单号';
 
@@ -27,11 +28,11 @@ export function lineTitle(poRaw: string | null): string {
 
 export function LineDetailPage() {
   const { id = '' } = useParams();
-  const [params] = useSearchParams();
+  const [params] = useFollowUpSearch();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
-  const todayBatch = params.get('backToToday') === 'arrivals' ? params.get('focusBatch') : null;
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), schedule: params.get('backToSchedule'), state, lineId: id, todayBatch })} />;
+  const back = readLineDetailBack({ lineId: id, params, state });
+  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
 }
 
 function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {
@@ -122,7 +123,7 @@ function BatchSection({ detail, canRecord, ...reload }: Reload & { readonly deta
       {detail.batches.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" /> : (
         <Flex component="ul" role="list" vertical gap={space[2]} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
           {detail.batches.map((batch) => (
-            <BatchDetail {...reload} key={batch.id} batch={batch} focused={focusedBatch === batch.id} canRecord={canRecord}
+            <BatchDetail {...reload} key={batch.id} batch={batch} detail={detail} focused={focusedBatch === batch.id} canRecord={canRecord}
               hasProcurementSchedule={detail.procurementSchedule !== undefined} onOpen={(drawer, reportId) => openRecord({
                 search, setParams, drawer, batchId: batch.id, ...(reportId === undefined ? {} : { reportId }),
               })} />
@@ -144,8 +145,9 @@ function ProcurementScheduleEvidence({ detail, params }: { readonly detail: Orde
   </section>;
 }
 
-function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen, lineId, setMessage, onReload }: Reload & {
+function BatchDetail({ batch, detail, focused, canRecord, hasProcurementSchedule, onOpen, lineId, setMessage, onReload }: Reload & {
   readonly batch: OrderLineDetail['batches'][number];
+  readonly detail: OrderLineDetail;
   readonly focused: boolean;
   readonly canRecord: boolean;
   readonly hasProcurementSchedule: boolean;
@@ -156,6 +158,8 @@ function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen
   const row = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (!focused || row.current === null) return;
+    const active = document.activeElement;
+    if (active !== document.body && active !== row.current) return;
     row.current.focus({ preventScroll: true });
     row.current.scrollIntoView({ block: 'center' });
   }, [focused]);
@@ -164,6 +168,7 @@ function BatchDetail({ batch, focused, canRecord, hasProcurementSchedule, onOpen
       <Card size="small" title={batchLineText(batch)}>
         <Flex vertical gap={space[2]}>
           {batch.fulfillment === undefined ? null : <FulfillmentSummary facts={batch.fulfillment} />}
+          <BatchSources detail={detail} batch={batch} />
           {canEdit && batch.fulfillment?.unit === null ? <BatchUnitCorrection batchId={batch.id} onReload={onReload} /> : null}
           {hasProcurementSchedule ? <ProcurementBatchDates batch={batch} /> : <BatchPromise batch={batch} />}
           {canEdit ? <ProcurementFollowUp lineId={lineId} batchId={batch.id} onReload={onReload} /> : null}

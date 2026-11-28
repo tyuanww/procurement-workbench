@@ -22,7 +22,12 @@ it('导入隐藏需求表，物料行继承单号并保留自身库存', () => {
   expect(parsed.demand).toMatchObject([
     { rowNo: 3, payload: { role: 'parent', blockPoRaw: 'PO20260101000001', blockMaterialPoRaw: 'MATERIAL-001' } },
     {
-      rowNo: 4, payload: { role: 'material', blockPoRaw: 'PO20260101000001', blockMaterialPoRaw: 'MATERIAL-001', qtyOnHand: { value: 20 } },
+      rowNo: 4, payload: { role: 'material', blockPoRaw: 'PO20260101000001', blockMaterialPoRaw: 'MATERIAL-001', qtyOnHand: { value: 20 },
+        slots: [
+          { sourceColumns: { date: 10, quantity: 11 }, dateRaw: '2026-09-21', qtyRaw: '30' },
+          { sourceColumns: { date: 12, quantity: 13 }, dateRaw: '2026-09-24', qtyRaw: '50' },
+        ],
+      },
       issues: expect.arrayContaining([expect.objectContaining({ code: 'CONTEXT_INHERITED' })]),
     },
     { rowNo: 5, skipReason: 'ROW_REPEATED_HEADER' },

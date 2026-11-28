@@ -111,6 +111,7 @@ export type ScheduleCellPayload = {
 
 export type DemandSlot = {
   readonly index: number;
+  readonly sourceColumns?: { readonly date: number; readonly quantity: number };
   readonly date: LocalDate | null;
   readonly dateRaw: string | null;
   readonly qty: number | null;
