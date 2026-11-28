@@ -213,7 +213,7 @@ try {
 }
 await writeSummary({ sha, result: 'pass' });
 
-async function stopApplication(app: ReturnType<typeof fork>, signal: NodeJS.Signals, timeout: number): Promise<void> {
+async function stopApplication(app: ReturnType<typeof fork>, signal: 'SIGTERM' | 'SIGKILL', timeout: number): Promise<void> {
   if (app.exitCode !== null || app.signalCode !== null) return;
   await Promise.all([
     once(app, 'exit', { signal: globalThis.AbortSignal.timeout(timeout) }),
