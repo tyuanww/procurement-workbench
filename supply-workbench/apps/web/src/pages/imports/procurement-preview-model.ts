@@ -68,7 +68,7 @@ export type ComponentRow = {
 export type FinishedSummary = FinishedRow & { readonly statuses: readonly ComponentFact['status'][]; readonly orderLineId?: string };
 
 export function componentSourceLineId(row: ComponentRow): string | undefined {
-  return row.fact.status === 'active' ? row.observation?.materialLineId ?? undefined : undefined;
+  return row.observation?.materialLineId ?? undefined;
 }
 type VisibleProcurement = {
   readonly rows: readonly FinishedSummary[];

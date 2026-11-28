@@ -16,13 +16,23 @@ export function useDetailImportProof({ params, lineId, canReadImports }: {
   const isProcurementSourceRow = useVerifiedProcurementRow({
     address: importReturnTemplate === 'po-master-v1' ? params.get(IMPORT_RETURN_PARAM) : null, lineId,
   });
-  const isConfirmedArrival = useConfirmedArrivalReturn({ params, lineId, canReadImports });
-  return { ...membership, importReturnTemplate, isProcurementSourceRow, confirmedArrival: isConfirmedArrival };
+  const isArrivalSource = useConfirmedArrivalReturn({ params, lineId, canReadImports });
+  return { ...membership, importReturnTemplate, isProcurementSourceRow: isProcurementSourceRow === true,
+    confirmedArrival: isArrivalSource === true,
+    isCheckingImportSource: importReturnTemplate === undefined || isProcurementSourceRow === undefined || isArrivalSource === undefined };
 }
 
-function useVerifiedProcurementRow({ address, lineId }: { readonly address: string | null; readonly lineId: string }): boolean {
+function useCurrentSourceCheck(key: string) {
+  const [check, setCheck] = useState<{ readonly key: string; readonly result?: boolean }>({ key });
+  if (check.key !== key) setCheck({ key });
+  return [check.key === key ? check.result : undefined, setCheck] as const;
+}
+
+function useVerifiedProcurementRow({ address, lineId }: { readonly address: string | null; readonly lineId: string }): boolean | undefined {
   const key = JSON.stringify([address, lineId]);
-  const [verified, setVerified] = useState<string>();
+  const [isVerified, setCheck] = useCurrentSourceCheck(key);
+  const source = importFollowUpBackAddress(address);
+  const isEnabled = source !== null && procurementImportSourceOf(source.recordKey) !== undefined;
   useEffect(() => {
     const back = importFollowUpBackAddress(address);
     if (back === null || procurementImportSourceOf(back.recordKey) === undefined) return;
@@ -30,16 +40,17 @@ function useVerifiedProcurementRow({ address, lineId }: { readonly address: stri
     const oa = procurementPreviewOa(new URLSearchParams(to.slice(to.indexOf('?'))));
     const abort = new AbortController();
     void fetchProcurementPreview({ id, oa, signal: abort.signal }).then((preview) => {
-      if (abort.signal.aborted || preview?.submission?.originalBatchId !== id) return;
+      if (abort.signal.aborted) return;
+      if (preview?.submission?.originalBatchId !== id) { setCheck({ key, result: false }); return; }
       const { rows, related } = visibleProcurement(preview);
       const finished = rows.find((row) => importSourceKey('finished', row.source) === recordKey);
       const component = related.find(({ fact }) => importSourceKey('component', fact.source) === recordKey);
       const target = component === undefined ? finished?.orderLineId : componentSourceLineId(component);
-      if (target === lineId) setVerified(key);
-    }, () => undefined);
+      setCheck({ key, result: target === lineId });
+    }, () => { if (!abort.signal.aborted) setCheck({ key, result: false }); });
     return () => abort.abort();
-  }, [address, key, lineId]);
-  return verified === key;
+  }, [address, key, lineId, setCheck]);
+  return isEnabled ? isVerified : false;
 }
 
 export function useImportLineMember({ params, lineId, enabled = true }: {
@@ -54,22 +65,24 @@ const rowsSchema = listResponseSchema(ImportRowViewSchema);
 
 function useConfirmedArrivalReturn({ params, lineId, canReadImports }: {
   readonly params: URLSearchParams; readonly lineId: string; readonly canReadImports: boolean;
-}): boolean {
+}): boolean | undefined {
   const address = canReadImports && !params.has('importBatchId') ? params.get(IMPORT_RETURN_PARAM) : null;
   const focusBatch = EntityIdSchema.safeParse(params.get('focusBatch')).data;
   const key = JSON.stringify([address, focusBatch, lineId]);
-  const [verified, setVerified] = useState<string>();
+  const [isVerified, setCheck] = useCurrentSourceCheck(key);
+  const sourceAddress = importFollowUpBackAddress(address);
+  const isEnabled = sourceAddress !== null && readArrivalImportSource(sourceAddress.recordKey) !== undefined && focusBatch !== undefined && lineId !== '';
   useEffect(() => {
     const back = importFollowUpBackAddress(address);
     const source = readArrivalImportSource(back?.recordKey ?? null);
     if (back === null || source === undefined || focusBatch === undefined || lineId === '') return;
     const abort = new AbortController();
     void verifyConfirmedArrival({ importId: back.id, source, focusBatch, lineId, signal: abort.signal }).then((matches) => {
-      if (matches && !abort.signal.aborted) setVerified(key);
-    }, () => undefined);
+      if (!abort.signal.aborted) setCheck({ key, result: matches });
+    }, () => { if (!abort.signal.aborted) setCheck({ key, result: false }); });
     return () => abort.abort();
-  }, [address, focusBatch, key, lineId]);
-  return verified === key;
+  }, [address, focusBatch, key, lineId, setCheck]);
+  return isEnabled ? isVerified : false;
 }
 
 async function verifyConfirmedArrival({ importId, source, focusBatch, lineId, signal }: {

@@ -33,11 +33,11 @@ export function LineDetailPage() {
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { back, membership } = useLineDetailNavigation({ lineId: id, params });
   return <LineImportMembership.Provider value={membership}>
-    <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />
+    <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} isCheckingImportSource={membership.isCheckingImportSource} />
   </LineImportMembership.Provider>;
 }
 
-function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: ReturnType<typeof readLineDetailBack> }) {
+function LineDetailContent({ lineId, store, back, isCheckingImportSource }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: ReturnType<typeof readLineDetailBack>; readonly isCheckingImportSource: boolean }) {
   const [detail, setDetail] = useState<OrderLineDetail | null>(null);
   const [events, setEvents] = useState<readonly TimelineEvent[]>([]);
   const [message, setMessage] = useState('');
@@ -47,7 +47,7 @@ function LineDetailContent({ lineId, store, back }: { readonly lineId: string; r
   const title = detail === null ? '订单行' : lineTitle(detail.po.poRaw);
   const browserTitle = [title, detail?.line.nameRaw].filter(Boolean).join(' · ');
   return (
-    <section style={{ maxWidth: 1440 }}>
+    <section aria-label="订单详情" aria-busy={isCheckingImportSource} style={{ maxWidth: 1440 }}>
       {back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}
       <PageHeader title={title} browserTitle={browserTitle} showIdentity />
       {detail === null ? null : <LineIdentity line={detail.line} />}

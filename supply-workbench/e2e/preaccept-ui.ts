@@ -990,6 +990,7 @@ async function checkRejectedProcurementSources({ detached, copied, sourceUrl }: 
     detached.goto(copied.href),
   ]);
   assert.ok(preview.ok(), '真实采购预览须完成复查');
+  await detached.getByRole('region', { name: '订单详情' }).and(detached.locator('[aria-busy="false"]')).waitFor();
   await detached.getByRole('link', { name: '返回本批订单', exact: true }).waitFor();
   assert.equal(await show.count(), 0);
 

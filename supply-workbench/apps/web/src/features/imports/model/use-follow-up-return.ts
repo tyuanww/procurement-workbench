@@ -15,7 +15,8 @@ export function fetchImportBatchSummary(id: string, signal: AbortSignal) {
 export function useImportReturnTemplate(params: URLSearchParams, enabled: boolean): VerifiedImportReturnTemplate | null | undefined {
   const candidate = enabled ? importFollowUpCandidate(params) : null;
   const importId = candidate?.id ?? null;
-  const [result, setResult] = useState<{ readonly id: string; readonly template: VerifiedImportReturnTemplate | null }>();
+  const [result, setResult] = useState<{ readonly id: string | null; readonly template?: VerifiedImportReturnTemplate | null }>({ id: importId });
+  if (result.id !== importId) setResult({ id: importId });
   useEffect(() => {
     if (importId === null) return;
     const controller = new AbortController();
@@ -29,5 +30,5 @@ export function useImportReturnTemplate(params: URLSearchParams, enabled: boolea
     return () => controller.abort();
   }, [importId]);
   if (importId === null) return null;
-  return importId === result?.id ? result.template : undefined;
+  return importId === result.id ? result.template : undefined;
 }

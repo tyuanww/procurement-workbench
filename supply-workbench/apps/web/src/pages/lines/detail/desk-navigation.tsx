@@ -92,7 +92,8 @@ export function useLineDetailNavigation({ lineId, params }: { readonly lineId: s
   return { back: readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports, proof }), membership: proof };
 }
 
-type ImportProof = Pick<ReturnType<typeof useDetailImportProof>, 'isImportMember' | 'importReturnTemplate' | 'isProcurementSourceRow' | 'confirmedArrival'>;
+type ImportProof = Pick<ReturnType<typeof useDetailImportProof>, 'isImportMember' | 'importReturnTemplate' | 'isProcurementSourceRow' | 'confirmedArrival'>
+  & { readonly isCheckingImportSource?: boolean };
 
 export function readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports, proof }: {
   readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown;
@@ -114,7 +115,7 @@ function importDetailBack({ params, state, desk, canReadImports, proof }: {
   readonly params: URLSearchParams; readonly state: unknown; readonly desk: URLSearchParams | null;
   readonly canReadImports: boolean; readonly proof: ImportProof | undefined;
 }) {
-  if (proof === undefined) return null;
+  if (proof === undefined || proof.isCheckingImportSource === true) return null;
   const importState = desk === null && lineDeskParams(state) !== null ? undefined : state;
   const source = canReadImports && (proof.isImportMember || proof.confirmedArrival)
     ? importFollowUpReturn({ params, state: importState, template: proof.importReturnTemplate, isProcurementSourceRow: proof.isProcurementSourceRow, confirmedArrival: proof.confirmedArrival }) : null;

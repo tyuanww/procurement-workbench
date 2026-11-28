@@ -201,12 +201,18 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId, expec
 
 async function checkMismatchedArrivalReturn(page: Page, linkedOrder: URL) {
   linkedOrder.searchParams.set('focusBatch', firstBatchId);
+  const source = new URL(linkedOrder.searchParams.get('backToImport') ?? '', linkedOrder);
+  const rowsPath = '/api/v1' + source.pathname + '/rows';
   const [rows] = await Promise.all([
-    page.waitForResponse((response) => /\/api\/v1\/imports\/[^/]+\/rows$/.test(new URL(response.url()).pathname)),
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === rowsPath && url.searchParams.get('page') === (source.searchParams.get('arrivalPage') ?? '1');
+    }),
     page.goto(linkedOrder.href),
   ]);
   assert.ok(rows.ok());
   await page.getByRole('heading', { name: po, exact: true }).waitFor();
+  await page.getByRole('region', { name: '订单详情' }).and(page.locator('[aria-busy="false"]')).waitFor();
   assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
 }
 
