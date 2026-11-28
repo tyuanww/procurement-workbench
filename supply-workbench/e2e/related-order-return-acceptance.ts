@@ -242,9 +242,10 @@ async function checkGlobalSearchReturn(page: Page, origin: URL) {
   const trigger = page.getByRole('button', { name: '搜索单号、品名、供应商', exact: true });
   const search = page.getByRole('dialog', { name: '搜索', exact: true });
   const input = search.getByPlaceholder('单号 / 品名 / 编码');
-  async function chooseOrder() {
+  async function chooseOrder({ repeatShortcut = false } = {}) {
     await trigger.press('Enter');
     await input.fill('FS-COMPONENT');
+    if (repeatShortcut) await input.press('Control+k');
     await search.locator('a[href="/lines/scope-line-component"]').press('Enter');
     await page.waitForURL(destination);
   }
@@ -257,7 +258,7 @@ async function checkGlobalSearchReturn(page: Page, origin: URL) {
   await page.goBack();
   await page.waitForURL(original.href);
   await owner.and(page.locator(':focus')).waitFor();
-  await chooseOrder();
+  await chooseOrder({ repeatShortcut: true });
   await page.goBack();
   await page.waitForURL(original.href);
   await owner.and(page.locator(':focus')).waitFor();

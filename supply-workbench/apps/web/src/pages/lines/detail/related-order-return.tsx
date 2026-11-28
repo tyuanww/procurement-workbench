@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useEffectEvent, useRef, type ReactNode, type RefObject } from 'react';
-import { useNavigationType } from 'react-router';
+import { useLocation, useNavigationType } from 'react-router';
 import { useOneTimeDetailReturnFocus, type DetailReturnFocus } from '../../../shared/hooks/detail-return-focus.js';
-import { SearchDialogFocus, useCanRestoreEntryFocus } from '../../../shared/hooks/browser-entry-history.js';
+import { SearchDialogFocus, useCanRestoreEntryFocus, usePreviousBrowserEntry } from '../../../shared/hooks/browser-entry-history.js';
 import { relatedFocusPrefix } from './related-procurement-navigation.js';
 
 const RelatedOrderReturn = createContext<(DetailReturnFocus & { readonly orderRegion: RefObject<HTMLElement | null> }) | null>(null);
@@ -32,6 +32,9 @@ export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, bloc
   const returnFocus = useContext(RelatedOrderReturn);
   const { isBlocking: isSearchBlockingFocus, returnTarget } = useContext(SearchDialogFocus);
   const navigation = useNavigationType();
+  const { key, pathname } = useLocation();
+  const previous = usePreviousBrowserEntry();
+  const isDetailReentry = navigation === 'POP' && (previous?.pathname !== pathname || previous.key === key);
   const canRestore = useCanRestoreEntryFocus();
   const handledVisit = useRef<typeof canRestore | null>(null);
   const entry = useRef<T>(null);
@@ -47,9 +50,9 @@ export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, bloc
       return;
     }
     if (isSearchBlockingFocus || handledVisit.current === canRestore) return;
-    const isEntry = handledVisit.current === null || navigation === 'POP';
+    const isEntry = handledVisit.current === null || isDetailReentry;
     handledVisit.current = canRestore;
     if (isEntry) focus();
-  }, [focused, isSearchBlockingFocus, canRestore, navigation]);
+  }, [focused, isSearchBlockingFocus, canRestore, isDetailReentry]);
   return entry;
 }

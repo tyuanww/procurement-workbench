@@ -105,18 +105,13 @@ export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailRet
   const canRestore = useCanRestoreEntryFocus();
   const { isBlocking: isSearchBlockingFocus, returnTarget } = useContext(SearchDialogFocus);
   const restored = useRef<{ key: string; canRestore: typeof canRestore } | null>(null);
-  const waitingForSearch = useRef<typeof canRestore | null>(null);
   const restore = useCallback((fallback: HTMLElement | null) => {
-    if (origin === undefined || (restored.current?.key === key && restored.current.canRestore === canRestore)) return;
-    if (isSearchBlockingFocus) {
-      waitingForSearch.current = canRestore;
-      return;
-    }
+    if (isSearchBlockingFocus || origin === undefined || (restored.current?.key === key && restored.current.canRestore === canRestore)) return;
     const target = findReturnTarget(origin, undefined) ?? fallback;
     if (target === null) return;
     // Limit focus changes to this visit. A later Back can reuse the same history entry.
     restored.current = { key, canRestore };
-    if (canRestore({ searchReturnTarget: waitingForSearch.current === canRestore ? returnTarget : null })) target.focus();
+    if (canRestore({ searchReturnTarget: returnTarget })) target.focus();
   }, [key, origin, canRestore, isSearchBlockingFocus, returnTarget]);
   return { hasOrigin: origin !== undefined, restore };
 }

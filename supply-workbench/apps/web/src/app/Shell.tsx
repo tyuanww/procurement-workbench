@@ -30,10 +30,11 @@ export function Shell(props: {
   const searchOpener = useRef<Element | null>(null);
   const [restoredTarget, setRestoredTarget] = useState<Element | null>(null);
   const openSearch = useCallback(() => {
+    if (search !== 'closed') return;
     searchOpener.current = document.activeElement;
     setRestoredTarget(null);
     setSearch('open');
-  }, []);
+  }, [search]);
   useSearchShortcut(openSearch);
   const synced = syncFrame({ frame, snapshot: viewport });
   if (synced !== frame) setFrame(synced);
