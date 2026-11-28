@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { clearInterval, setInterval } from 'node:timers';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { browserFailureLocation, failureMessage, writeAcceptanceJson } from './acceptance-diagnostics.ts';
