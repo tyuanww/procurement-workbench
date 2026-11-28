@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { URLSearchParams } from 'node:url';
-import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Request } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarLink } from './sidebar.ts';
 
 const finishedPo = 'PO20261117009001';
 const finishedName = '测试成品水';
+const developmentMaterialPo = 'PO20261117009103';
 const store = 'dafuyan';
 const storeName = '达肤妍';
 const otherStoreName = '译龄';
@@ -310,19 +311,158 @@ export async function checkProductDevelopment({ buyer, reviewer, buyerId, review
   const reviewDetail = reviewer.getByRole('dialog', { name: new RegExp(node, 'u') });
   await reviewDetail.getByText('供应商承诺日 ' + promised, { exact: false }).waitFor();
   await reviewDetail.getByText(evidence, { exact: true }).waitFor();
-  await reviewDetail.getByRole('button', { name: '关联正式订单', exact: true }).click();
-  const link = reviewer.getByRole('dialog', { name: '关联正式订单', exact: true });
-  await link.getByLabel('搜索 OA 编号', { exact: true }).fill('9901');
-  await link.getByRole('button', { name: '查找订单', exact: true }).click();
-  await select(link.getByRole('combobox'), reviewer, new RegExp(finishedPo));
-  await link.getByRole('button', { name: '确认关联', exact: true }).click();
+  await linkDevelopmentOrder(reviewer, reviewDetail);
   const oa = reviewDetail.getByRole('link', { name: 'OA XPKA(CN)9901', exact: true });
   await oa.waitFor();
   await reviewer.reload();
   await oa.waitFor();
   await reviewDetail.getByText(evidence, { exact: true }).waitFor();
   await reviewer.screenshot({ path: join(out, 'procurement-development.png'), animations: 'disabled' });
-  return { project: title, node, required, promised, evidence, linkedPo: finishedPo, linkedOa: 'XPKA(CN)9901' };
+  const procurement = await checkDevelopmentProcurement({ buyer, reviewer, buyerId, reviewerId, projectId, origin, out });
+  return { project: title, node, required, promised, evidence, linkedPo: finishedPo, linkedOa: 'XPKA(CN)9901', procurement };
+}
+
+async function linkDevelopmentOrder(page: Page, detail: Locator, materialPo?: string) {
+  await detail.getByRole('button', { name: '关联正式订单', exact: true }).click();
+  const link = page.getByRole('dialog', { name: '关联正式订单', exact: true });
+  await link.getByLabel('搜索 OA 编号', { exact: true }).fill('9901');
+  await link.getByRole('button', { name: '查找订单', exact: true }).click();
+  const choices = link.getByRole('combobox');
+  await select(choices.first(), page, new RegExp(finishedPo));
+  if (materialPo !== undefined) {
+    await select(choices.last(), page, new RegExp(materialPo));
+  }
+  await link.getByRole('button', { name: '确认关联', exact: true }).click();
+  await link.waitFor({ state: 'hidden' });
+}
+
+const packagingNode = '合成瓶盖包装到厂';
+const designNode = '合成瓶盖设计稿确认';
+const materialAction = '查看关联子件采购单';
+const developmentStart = '2026-11-20';
+const developmentRequired = '2026-11-24';
+
+async function checkDevelopmentProcurement({ buyer, reviewer, buyerId, reviewerId, projectId, origin, out }: Scenario & {
+  readonly buyer: Page; readonly reviewer: Page; readonly buyerId: string; readonly reviewerId: string; readonly projectId: string;
+}) {
+  const packageId = randomUUID();
+  const assignment = { projectId, plannedStart: developmentStart, plannedEnd: developmentRequired, ownerUserId: reviewerId };
+  await seedDevelopment(reviewer, origin, 'nodes', {
+    ...assignment, id: packageId, title: packagingNode, destination: 'packaging_to_factory', buyerUserId: buyerId,
+  });
+  await seedDevelopment(reviewer, origin, 'nodes', {
+    ...assignment, id: randomUUID(), title: designNode, destination: 'other', buyerUserId: null,
+  });
+  const source = new URL('/progress/development', origin);
+  source.search = new URLSearchParams({ store, developmentProject: projectId, developmentPeriod: 'month', developmentMonth: '2026-11' }).toString();
+  await reviewer.goto(source.href);
+  await reviewer.getByRole('button', { name: packagingNode, exact: true }).click();
+  const packageDetail = reviewer.getByRole('dialog', { name: new RegExp(packagingNode, 'u') });
+  await packageDetail.getByText('尚未关联正式订单', { exact: true }).waitFor();
+  assert.equal(await packageDetail.getByRole('link', { name: materialAction, exact: true }).count(), 0);
+  await linkDevelopmentOrder(reviewer, packageDetail, developmentMaterialPo);
+  await packageDetail.getByRole('link', { name: materialAction, exact: true }).waitFor();
+
+  const desktop = await visitDevelopmentNodes({ page: buyer, source, out, useTouch: false });
+  const browser = buyer.context().browser();
+  assert.ok(browser);
+  const mobile = await browser.newContext({
+    viewport: { width: 320, height: 667 }, isMobile: true, hasTouch: true, storageState: await buyer.context().storageState(),
+  });
+  try {
+    const page = await mobile.newPage();
+    page.setDefaultTimeout(15_000);
+    const phone = await visitDevelopmentNodes({ page, source, out, useTouch: true });
+    return { materialPo: developmentMaterialPo, desktop, phone };
+  } finally {
+    await mobile.close();
+  }
+}
+
+async function visitDevelopmentNodes({ page, source, out, useTouch }: {
+  readonly page: Page; readonly source: URL; readonly out: string; readonly useTouch: boolean;
+}) {
+  const requests: string[] = [];
+  const watch = (request: Request) => {
+    const url = new URL(request.url());
+    if (url.origin === source.origin && url.pathname.startsWith('/api/v1/')) requests.push(url.pathname);
+  };
+  const activate = (target: Locator) => useTouch ? target.tap() : target.press('Enter');
+  const close = (drawer: Locator) => useTouch ? drawer.getByRole('button', { name: /^(关闭|Close)$/u }).tap() : page.keyboard.press('Escape');
+  const node = (title: string) => page.getByRole('region', { name: '节点看板', exact: true }).getByRole('button', { name: title, exact: true });
+  const dialog = (title: string) => page.getByRole('dialog', { name: new RegExp(title, 'u') });
+  page.on('request', watch);
+  try {
+    await page.goto(source.href);
+    const design = dialog(designNode);
+    await activate(node(designNode));
+    await design.getByText('此节点在项目内跟进', { exact: true }).waitFor();
+    assert.equal(await design.locator('a[href^="/lines/"]').count(), 0);
+    await close(design);
+    await design.waitFor({ state: 'hidden' });
+    await node(designNode).and(page.locator(':focus')).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('developmentProject'), source.searchParams.get('developmentProject'));
+    assert.deepEqual(developmentDetailReads(requests), [], '打开项目与设计稿节点时不读取订单详情');
+    const beforePackage = requests.length;
+
+    const packaging = dialog(packagingNode);
+    await activate(node(packagingNode));
+    await packaging.getByText('包材到加工厂', { exact: false }).first().waitFor();
+    await packaging.getByText('计划开始 ' + developmentStart, { exact: true }).first().waitFor();
+    await packaging.getByText('项目要求日 ' + developmentRequired, { exact: true }).first().waitFor();
+    const order = packaging.getByRole('link', { name: materialAction, exact: true });
+    await order.waitFor();
+    assert.match(await order.ariaSnapshot(), new RegExp(materialAction, 'u'));
+    const bounds = await order.boundingBox();
+    assert.ok(bounds && bounds.y + bounds.height <= (page.viewportSize()?.height ?? 0), '节点打开时应能看到采购单入口');
+    if (useTouch) {
+      assert.ok(bounds.width >= 44 && bounds.height >= 44);
+      assert.equal(Math.round((await packaging.boundingBox())?.width ?? 0), 320);
+    }
+    assert.deepEqual(developmentDetailReads(requests.slice(beforePackage)), [], '打开有关联的节点时不读取订单详情');
+    const beforeLookup = requests.length;
+    const sourceDrawer = page.url();
+    await page.screenshot({ path: join(out, `development-packaging-${useTouch ? 320 : 1440}.png`), animations: 'disabled' });
+    if (!useTouch) {
+      for (let count = 0; count < 6 && await order.and(page.locator(':focus')).count() === 0; count += 1) await page.keyboard.press('Tab');
+      await order.and(page.locator(':focus')).waitFor();
+    }
+    await activate(order);
+    const heading = page.getByRole('heading', { name: developmentMaterialPo, level: 1, exact: true });
+    await heading.waitFor();
+    const materialPath = new URL(page.url()).pathname;
+    assert.match(materialPath, /^\/lines\/[^/]+$/u);
+    assert.deepEqual([...new Set(developmentDetailReads(requests.slice(beforeLookup)))], [materialPath.slice('/lines/'.length)]);
+    const requested = requests.length;
+    await activate(page.getByRole('link', { name: '返回新品开发', exact: true }));
+    await page.waitForURL(sourceDrawer);
+    await order.and(page.locator(':focus')).waitFor();
+    assert.deepEqual(developmentDetailReads(requests.slice(requested)), [], '返回原节点时不重新读取订单详情');
+    const returned = requests.length - requested;
+    if (!useTouch) {
+      await page.keyboard.press('Enter');
+      await heading.waitFor();
+      await page.goBack();
+      await page.waitForURL(sourceDrawer);
+      await order.and(page.locator(':focus')).waitFor();
+    }
+    await close(packaging);
+    await packaging.waitFor({ state: 'hidden' });
+    await node(packagingNode).and(page.locator(':focus')).waitFor();
+    return { project: source.searchParams.get('developmentProject'), period: source.searchParams.get('developmentMonth'),
+      design: designNode, packaging: packagingNode, browserBack: !useTouch, viewport: page.viewportSize(),
+      apiRequests: { projectAndDesign: beforePackage, packaging: beforeLookup - beforePackage, order: requested - beforeLookup, returnToNode: returned },
+      unrelatedOrderDetails: 0 };
+  } finally {
+    page.off('request', watch);
+  }
+}
+
+function developmentDetailReads(paths: readonly string[]) {
+  return paths.flatMap((path) => {
+    const id = /^\/api\/v1\/lines\/([^/]+)(?:\/(?:timeline|factory-link))?$/u.exec(path)?.[1];
+    return id === undefined || id === 'summary' || id === 'owner-options' ? [] : [id];
+  });
 }
 
 export async function checkManagementMeeting({ page, origin, out, materialPo }: Scenario & {

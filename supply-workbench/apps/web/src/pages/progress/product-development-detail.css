@@ -32,6 +32,14 @@
 .development-detail-deadline { margin-block-start: 8px; color: var(--ant-color-text-secondary); }
 .development-detail-deadline time { font-weight: 600; color: var(--ant-color-text); }
 .development-detail-risk { display: block; margin-block-start: 4px; }
+.development-detail-order-status { display: block; }
+.development-detail-order-status, .development-detail-order-links { margin-block-start: 8px; }
+.development-detail-order-links a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+}
 .development-detail-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
@@ -55,5 +63,5 @@
 
 @media (pointer: coarse), (max-width: 767px) {
   .development-detail-actions .ant-btn { min-block-size: 44px; }
-  .development-detail .ant-drawer-close { min-inline-size: 44px; min-block-size: 44px; }
+  .development-detail .ant-drawer-close, .development-detail-order-links a { min-inline-size: 44px; min-block-size: 44px; }
 }
