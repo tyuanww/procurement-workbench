@@ -38,6 +38,7 @@ export type TodayScreenProps = {
   readonly search?: string;
   readonly arrivalsView?: ArrivalsView | undefined;
   readonly arrivalMemos?: TodayResponse['arrivalMemos'];
+  readonly hasMissingArrival?: boolean;
   readonly arrivalFocusId?: string | null;
   readonly pendingFocusId?: string | null;
   readonly pendingBatch?: TodayResponse['pendingBatch'];
@@ -96,7 +97,7 @@ function TodayContent(props: TodayScreenProps): ReactNode {
   if (!props.isReady) return <TodayLoadingCard label="正在读取在途待收" />;
   if (props.loadError !== '') return <TodayError {...props} />;
   return <ArrivalsPane view={props.arrivalsView} memos={props.arrivalMemos ?? []} search={props.search ?? ''}
-    drawerId={props.drawerId} onOpen={props.onOpen} onClose={props.onCloseDrawer} />;
+    drawerId={props.drawerId} hasMissingDrawer={props.hasMissingArrival === true} onOpen={props.onOpen} onClose={props.onCloseDrawer} />;
 }
 
 function TodayError(props: TodayScreenProps): ReactNode {

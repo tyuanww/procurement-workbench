@@ -30,6 +30,12 @@ it('旧全量日历的未来日期落在已约跟进，今天默认打开工作�
   expect(legacyPersonalPath('scope=pending&focus=batch%3A1', today)).toBe('/today?focusId=batch%3A1');
 });
 
+it('从今日排期的批次记录返回同一排期抽屉', () => {
+  const today = '?group=schedule&drawer=batch%3Asample';
+  expect(lineDetailBack({ progress: null, state: null, today, focusBatch: 'sample', lineId: 'line-1' }))
+    .toMatchObject({ label: '返回今日排期', to: '/today' + today });
+});
+
 it('今日和三日到期使用截止日，逾期和已完成不计入待办', () => {
   expect(matches('due', { due: '2026-11-29' })).toBe(false);
   expect(matches('due', {})).toBe(true);

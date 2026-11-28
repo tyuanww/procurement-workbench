@@ -121,7 +121,8 @@ function useScreenDrawer({ state, route, plan, actionBoard, isReady, areArrivals
   const arrivals = route.arrivalsView;
   const rows = arrivals === undefined ? sessionRows({ board: actionBoard, plan }) :
     visibleArrivals(state.arrivalMemos, arrivals.timing).map((memo) => ({ id: 'batch:' + memo.batchId }));
-  return useTodaySession({ state, rows, isReady: arrivals === undefined ? isReady : areArrivalsReady });
+  return useTodaySession({ state, rows, isReady: arrivals === undefined ? isReady : areArrivalsReady,
+    setUnavailableArrivalSearch: arrivals === undefined ? undefined : state.setUnavailableArrivalSearch });
 }
 
 function useRowFocus({ id, state, visible, isSettled }: {
@@ -145,6 +146,7 @@ function useTodayState(today: ReturnType<typeof useTodayData>) {
   const data = today.data;
   const [focus, setFocus] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [unavailableArrivalSearch, setUnavailableArrivalSearch] = useState<string | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
   const [isHelpOpen, setHelp] = useState(false);
   const [draft, setDraft] = useState<OpenForm | null>(null);
@@ -158,7 +160,8 @@ function useTodayState(today: ReturnType<typeof useTodayData>) {
     loadError: data === null ? today.loadError : '',
     refresh: today.refresh,
     retry: today.retry,
-    focus, setFocus, drawerId, setDrawerId, undo, setUndo, isHelpOpen, setHelp, draft, setDraft, saveError, setSaveError, notice, setNotice, isSaving, setSaving,
+    focus, setFocus, drawerId, setDrawerId, unavailableArrivalSearch, setUnavailableArrivalSearch, undo, setUndo, isHelpOpen, setHelp, draft, setDraft, saveError, setSaveError,
+    notice, setNotice, isSaving, setSaving,
   };
 }
 
@@ -197,6 +200,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
   return {
     board, asOf: state.asOf,
     arrivalMemos: state.arrivalMemos,
+    hasMissingArrival: state.unavailableArrivalSearch === route.search,
     pendingBatch: state.pendingBatch,
     onPendingBatchChanged: () => applyNextToday(state),
     actionBoard,

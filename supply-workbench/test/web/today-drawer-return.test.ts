@@ -61,6 +61,36 @@ it('在途待收关闭抽屉后焦点回到实际打开的批次', async () => {
   }
 });
 
+it('在途刷新后原批次已不在筛选范围，清除抽屉并说明去向', async () => {
+  emptyReads();
+  installMatchMedia();
+  installFetch();
+  const root = mount(memoryRouter(antdApp(element(LocationAndToday)), '/today?view=arrivals&timing=overdue&drawer=batch%3Abatch-1'));
+  const { line } = batchTodo(1);
+  if (line === null) throw new Error('缺少在途批次订单');
+  const memo: TodayPageResponse['arrivalMemos'][number] = {
+    batchId: 'batch-1', batchSeq: 1, line, warehouse: '上海仓', confirmedDate: localDate('2026-11-20'),
+    status: 'overdue', inTransitQty: 10, receivedQty: 0, unit: '件',
+  };
+  try {
+    const snapshot = pageBody(0);
+    await act(() => {
+      fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
+      fulfill({ urlPart: 'scope=mine', status: 200, body: { ...snapshot, arrivalMemos: [memo],
+        paging: { ...snapshot.paging, followUpCounts: { due: 0, scheduled: 1 } } } });
+    });
+    await waitFor(() => textOf('[role="dialog"]').includes('核对本批记录'));
+    await act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(() => { fulfill({ urlPart: 'scope=mine', status: 200, body: snapshot }); });
+    await waitFor(() => textOf('output') === 'view=arrivals&timing=overdue');
+    await waitFor(() => document.activeElement?.textContent === '该批次已不在当前待收范围。');
+  } finally {
+    act(() => { root.unmount(); });
+    resetDom();
+    emptyReads();
+  }
+});
+
 it('新工作范围尚未读完时，抽屉的本批复制暂停', async () => {
   emptyReads();
   installMatchMedia();

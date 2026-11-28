@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, URLSearchParams } from 'node:url';
-import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarLink } from './sidebar.ts';
 
 const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
@@ -380,8 +380,39 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
     await trigger.and(page.locator(':focus')).waitFor();
   }
   await copied.waitFor({ state: 'hidden' });
+  await checkReceiptPageRelocation(page, { trigger, record, source });
   await page.setViewportSize({ width: 320, height: 800 });
-  return { widths, batch, stayedOnToday: true, copiedOnlySelectedBatch: true, browserBackAndPageReturn: true, focusRestored: true };
+  return { widths, batch, stayedOnToday: true, copiedOnlySelectedBatch: true, browserBackAndPageReturn: true, focusRestored: true, relocatedPageFocus: true };
+}
+
+async function checkReceiptPageRelocation(page: Page, { trigger, record, source }: {
+  readonly trigger: Locator; readonly record: Locator; readonly source: string;
+}) {
+  const sourcePage = new URL(source).searchParams.get('page') ?? '1';
+  const appliedPage = sourcePage === '1' ? 2 : 1;
+  await trigger.click();
+  await record.click();
+  await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501');
+  const match = (url: URL) => url.pathname === '/api/v1/today' && url.searchParams.get('focusId') === 'batch:' + batch;
+  let relocatedReads = 0;
+  const relocate = async (route: Route) => {
+    const response = await route.fetch();
+    assert.ok(response.ok());
+    const body: { readonly items: readonly { readonly id: string }[]; readonly paging: { readonly page: number } } = await response.json();
+    assert.ok(body.items.some(({ id }) => id === 'batch:' + batch));
+    relocatedReads += 1;
+    await route.fulfill({ response, json: { ...body, paging: { ...body.paging, page: appliedPage } } });
+  };
+  await page.route(match, relocate);
+  try {
+    await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
+    await page.waitForURL((url) => url.searchParams.get('page') === String(appliedPage) && url.searchParams.get('drawer') === 'batch:' + batch);
+    await record.and(page.locator(':focus')).waitFor();
+    assert.ok(relocatedReads > 0);
+  } finally {
+    await page.unroute(match, relocate);
+  }
+  await page.goto(source);
 }
 
 function arrivalMemos(page: Page): Locator {

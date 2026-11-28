@@ -87,11 +87,11 @@ function homeBack(input: BackSource): DetailBack | null {
 }
 
 function todayBatchDrawerBack({ today, focusBatch, state }: BackSource): DetailBack | null {
-  if (today == null || !today.startsWith('?') || focusBatch == null) return null;
+  if (typeof today !== 'string' || !today.startsWith('?') || typeof focusBatch !== 'string') return null;
   const query = new URLSearchParams(today);
   if (query.get('drawer') !== 'batch:' + focusBatch) return null;
   const to = '/today' + today;
-  const label = query.get('view') === 'arrivals' ? '返回在途待收' : '返回个人工作台';
+  const label = query.get('view') === 'arrivals' ? '返回在途待收' : todayActionBackLabel(query);
   const origin = detailReturnState(state, { detailPath: to, sourceLink: todayBatchRecordFocus(focusBatch) });
   return { to, label, ...(origin === undefined ? {} : { state: origin }) };
 }
@@ -114,9 +114,14 @@ function actionBack(query: URLSearchParams, state: object): DetailBack {
   const pending = 'todayPendingId' in state && typeof state.todayPendingId === 'string' ? state.todayPendingId : null;
   const to = query.size === 0 ? '/today' : '/today?' + query;
   if (pending !== null) return { to, label: '返回待建批次', state: { todayPendingId: pending } };
-  const label = ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '') ? '返回今日排期' : '返回个人工作台';
+  const label = todayActionBackLabel(query);
   const arrival = 'todayArrivalId' in state && typeof state.todayArrivalId === 'string' ? state.todayArrivalId : null;
   return arrival === null ? { to, label } : { to, label, state: { todayArrivalId: arrival } };
+}
+
+function todayActionBackLabel(query: URLSearchParams): string {
+  const isSchedule = query.get('view') === 'schedule' || ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '');
+  return isSchedule ? '返回今日排期' : '返回个人工作台';
 }
 
 export function readReturningLine(state: unknown): string | null {

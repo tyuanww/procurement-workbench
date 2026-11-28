@@ -1,6 +1,7 @@
 import { isPlanGroupMode, readGroup, type ArrivalsView, type GroupMode, type NoteRef, type OpenForm, type Target } from '../../features/today/index.js';
 import { startTransition, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useSearchParams } from 'react-router';
+import { preserveDetailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 import { actionPageParams, type WorkspaceView } from './action-query.js';
 import { openQuick } from './today-open.js';
@@ -84,38 +85,50 @@ export function useTodaySession(input: {
   readonly state: TodaySessionState;
   readonly rows: readonly { readonly id: string }[];
   readonly isReady: boolean;
+  readonly setUnavailableArrivalSearch?: ((search: string | null) => void) | undefined;
 }): (keepDrawerId: string | null, selection?: URLSearchParams) => void {
   const [params, setParams] = useSearchParams();
   const search = params.toString();
   const syncedSearch = useRef<string | null>(null);
   const draftKind = input.state.draft?.kind ?? null;
   const drawerId = input.state.drawerId;
+  const hasMissingArrival = missingArrivalDrawer({ search, rows: input.rows, isArrivals: input.setUnavailableArrivalSearch !== undefined });
   useEffect(() => {
     if (!input.isReady) return;
     const wanted = writeTodaySession({ search, session: { drawerId, draftKind } });
-    if (wanted === search) {
+    if (!hasMissingArrival && wanted === search) {
       syncedSearch.current = search;
       return;
     }
-    if (syncedSearch.current === search) {
+    if (!hasMissingArrival && syncedSearch.current === search) {
       syncedSearch.current = wanted;
       setParams(new URLSearchParams(wanted));
       return;
     }
     const session = validTodaySession({ session: readTodaySession(search), rows: input.rows });
     syncedSearch.current = writeTodaySession({ search, session });
+    if (hasMissingArrival) input.setUnavailableArrivalSearch?.(syncedSearch.current);
     restore({ session, search, state: input.state, setParams });
-  }, [search, input.isReady, drawerId, draftKind]);
+  }, [search, input.isReady, drawerId, draftKind, hasMissingArrival]);
 
   return (keepDrawerId, selection) => {
     const session: TodaySession = { drawerId: keepDrawerId, draftKind: null };
     // 路由在过渡中更新。一起提交关闭状态，避免同步逻辑重复写入浏览器历史。
     startTransition(() => {
+      input.setUnavailableArrivalSearch?.(null);
       applySession({ session, state: input.state });
       const shouldClearFocus = selection === undefined && (keepDrawerId ?? drawerId)?.startsWith('batch:') === true;
       setParams((current) => sessionSearch({ current: selection ?? current, session, shouldClearFocus }));
     });
   };
+}
+
+function missingArrivalDrawer({ search, rows, isArrivals }: {
+  readonly search: string; readonly rows: readonly { readonly id: string }[]; readonly isArrivals: boolean;
+}): boolean {
+  if (!isArrivals) return false;
+  const { drawerId } = readTodaySession(search);
+  return drawerId?.startsWith('batch:') === true && !rows.some(({ id }) => id === drawerId);
 }
 
 function sessionSearch({ current, session, shouldClearFocus }: {
@@ -173,10 +186,11 @@ export function useAppliedPage({ loadedPage, requested, search, setParams }: {
   readonly search: string;
   readonly setParams: ReturnType<typeof useSearchParams>[1];
 }): void {
+  const location = useLocation();
   useEffect(() => {
     if (loadedPage === undefined || loadedPage === requested) return;
-    setParams(actionPageParams(search, loadedPage), { replace: true });
-  }, [loadedPage, requested, search, setParams]);
+    setParams(actionPageParams(search, loadedPage), { replace: true, state: preserveDetailReturnState(location) });
+  }, [loadedPage, requested, search, setParams, location]);
 }
 
 export function pendingReturnId(state: unknown): string | null {
