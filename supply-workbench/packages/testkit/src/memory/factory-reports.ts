@@ -31,8 +31,8 @@ export function factoryReportRepository(box: MemoryBox) {
       return candidates.flatMap((candidate) => {
         const row = box.current.factoryReports.get(candidate.id);
         if (row?.kind !== candidate.kind || row.factoryPartyId !== candidate.factoryPartyId || row.linkStatus === 'manual') return [];
-        const po = (row.inTransit ?? row.demand)?.poNorm;
-        if (po === undefined || po === null || po === '') return [];
+        const po = (row.inTransit ?? row.demand)?.poNorm ?? '';
+        if (po === '') return [];
         return reportCodes(row).some((code) => requested.has(code)) ? [row] : [];
       });
     },
