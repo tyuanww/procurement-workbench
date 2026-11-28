@@ -422,14 +422,35 @@ async function readSources(page, role) {
 
 
 async function readGeneratedDemand(page, fixture, role) {
+  await page.addInitScript(() => {
+    const events = [];
+    window.readerEntryEvents = events;
+    for (const type of ['focusin', 'keydown', 'pointerdown', 'input', 'click', 'wheel']) {
+      document.addEventListener(type, event => {
+        const element = event.target;
+        if (events.length < 80) events.push({
+          type, key: event.key, code: event.code, tag: element?.tagName,
+          label: element?.getAttribute?.('aria-label'), atMs: Math.round(performance.now()),
+        });
+      }, { capture: true, passive: true });
+    }
+  });
   await visit(page, '/lines/' + encodeURIComponent(fixture.lineId) + '?focusBatch=' + fixture.batchId, role);
   const trigger = page.getByRole('button', { name: '回查第 2 批原表', exact: true });
   const group = page.getByRole('region', { name: '工厂需求表 · 本批生成来源', exact: true });
   const sourceRow = /batch-demand-synthetic\.xlsx.*09月排产包材原料需求表.*第\s*4\s*行/u;
   const column = /数量.*第\s*13\s*列/u;
   await step(role, 'expand the generated batch 2 source', 'The application focuses batch 2; Playwright focuses its disclosure and sends Enter; NVDA+Tab reports the disclosure', async record => {
-    await page.waitForFunction(() => document.activeElement?.matches('li[tabindex="-1"]') &&
-      document.activeElement.textContent?.includes('回查第 2 批原表'));
+    try {
+      await page.waitForFunction(() => document.activeElement?.matches('li[tabindex="-1"]') &&
+        document.activeElement.textContent?.includes('回查第 2 批原表'));
+    } finally {
+      record.page = await page.evaluate(() => ({
+        activeTag: document.activeElement?.tagName, activeLabel: document.activeElement?.getAttribute('aria-label'),
+        selectedBatch: [...document.querySelectorAll('li[tabindex="-1"]')].some(row => row.textContent.includes('回查第 2 批原表')),
+        events: window.readerEntryEvents,
+      }));
+    }
     await trigger.focus();
     await reportFocus(record, /回查第\s*2\s*批原表/u);
     await trigger.press('Enter');
