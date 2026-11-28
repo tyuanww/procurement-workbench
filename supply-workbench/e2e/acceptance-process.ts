@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 
 type Outcome = {
@@ -10,6 +11,8 @@ type Outcome = {
 
 const acceptanceTimeout = 360_000;
 const treeTimeout = 5_000;
+const sampleInterval = 250;
+const sampleTimeout = 500;
 
 export function runAcceptanceProcess(env: typeof process.env): Promise<Outcome> {
   const child = spawn(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
@@ -20,46 +23,58 @@ export function runAcceptanceProcess(env: typeof process.env): Promise<Outcome> 
 
 export async function waitForAcceptanceProcess(child: ChildProcess, timeout: number): Promise<Outcome> {
   if (hasExited(child)) return { status: child.exitCode, signal: child.signalCode };
+  const cleanupErrors: unknown[] = [];
   const finished = new Promise<Outcome>((resolve) => {
     child.once('exit', (status, signal) => resolve({ status, signal }));
-    child.once('error', (error) => resolve({ status: null, signal: null, error }));
+    child.on('error', (error) => {
+      if (child.pid === undefined) resolve({ status: null, signal: null, error });
+      else cleanupErrors.push(error);
+    });
   });
   const timer = new globalThis.AbortController();
+  const limit = delay<'timeout'>(timeout, 'timeout', { signal: timer.signal, ref: false });
+  const tree = process.platform === 'win32' ? undefined : trackUnixTree(child);
   try {
-    const outcome = await Promise.race([finished, delay<'timeout'>(timeout, 'timeout', { signal: timer.signal, ref: false })]);
-    if (outcome !== 'timeout') return outcome;
-    const cleanupErrors = terminateTree(child);
+    const outcome = await Promise.race([finished, limit]);
+    tree?.stop();
+    if (outcome !== 'timeout') {
+      if (outcome.status === 0) return outcome;
+      if (tree !== undefined) terminateUnixTree(child, tree, cleanupErrors);
+      return { ...outcome, ...(cleanupErrors.length ? { cleanupErrors } : {}) };
+    }
+    if (tree === undefined) terminateWindowsTree(child, cleanupErrors);
+    else terminateUnixTree(child, tree, cleanupErrors);
     const stopped = await Promise.race([finished, delay<'timeout'>(treeTimeout, 'timeout', { signal: timer.signal, ref: false })]);
     if (stopped === 'timeout') cleanupErrors.push(new Error('Timed out waiting for the browser acceptance process to exit'));
     const result = stopped === 'timeout' ? { status: null, signal: null } : stopped;
     return { ...result, error: new Error(`Browser acceptance subprocess ETIMEDOUT after ${timeout}ms`), cleanupErrors };
   } finally {
+    tree?.stop();
     timer.abort();
   }
 }
 
-function terminateTree(child: ChildProcess): unknown[] {
-  const errors: unknown[] = [];
-  if (child.pid === undefined || hasExited(child)) return errors;
+function terminateWindowsTree(child: ChildProcess, errors: unknown[]): void {
+  if (child.pid === undefined || hasExited(child)) return;
   try {
-    if (process.platform === 'win32') {
-      const killed = spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
-        timeout: treeTimeout, killSignal: 'SIGKILL', windowsHide: true, encoding: 'utf8',
-      });
-      if (killed.error) throw killed.error;
-      if (killed.status !== 0) throw new Error(`taskkill could not stop the browser acceptance tree: ${(killed.stderr || killed.stdout).trim()}`);
-    } else {
-      terminateUnixTree(child, child.pid);
-    }
+    const killed = spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      timeout: treeTimeout, killSignal: 'SIGKILL', windowsHide: true, encoding: 'utf8',
+    });
+    if (killed.error) throw killed.error;
+    if (killed.status !== 0) throw new Error(`taskkill could not stop the browser acceptance tree: ${(killed.stderr || killed.stdout).trim()}`);
   } catch (error) {
     errors.push(error);
-    try {
-      if (!hasExited(child)) child.kill('SIGKILL');
-    } catch (killError) {
-      errors.push(killError);
-    }
+    killRoot(child, errors);
   }
-  return errors;
+}
+
+function killRoot(child: ChildProcess, errors: unknown[]): void {
+  if (child.pid === undefined || hasExited(child)) return;
+  try {
+    if (!child.kill('SIGKILL')) errors.push(new Error('Unable to signal the browser acceptance root process'));
+  } catch (error) {
+    errors.push(error);
+  }
 }
 
 function hasExited(child: ChildProcess): boolean {
@@ -68,52 +83,50 @@ function hasExited(child: ChildProcess): boolean {
 
 type ProcessIdentity = { readonly pid: number; readonly parent: number; readonly signature: string };
 
-function terminateUnixTree(child: ChildProcess, pid: number): void {
-  const root = processes(treeTimeout, pid).find((row) => row.pid === pid && row.parent === process.pid);
-  if (root === undefined) throw new Error('Unable to verify the browser acceptance root process');
-  if (!child.kill('SIGSTOP')) return;
-  const frozen = new Map<number, ProcessIdentity>();
-  try {
-    const deadline = Date.now() + treeTimeout;
-    for (;;) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new Error('Timed out identifying the browser acceptance descendants');
-      const descendants = descendantsOf(root, processes(remaining));
-      const pending = descendants.filter((row) => frozen.get(row.pid)?.signature !== row.signature);
-      if (pending.length === 0) break;
-      for (const row of pending) {
-        if (signalProcess(row, 'SIGSTOP', deadline)) frozen.set(row.pid, row);
-      }
+function trackUnixTree(child: ChildProcess) {
+  let known: readonly ProcessIdentity[] = [];
+  let root: ProcessIdentity | undefined;
+  let sampleError: unknown;
+  const sample = (timeout = sampleTimeout) => {
+    try {
+      const snapshot = processes(timeout);
+      if (root === undefined && !hasExited(child)) root = snapshot.find((row) => row.pid === child.pid && row.parent === process.pid);
+      known = trackedProcesses(root, known, snapshot);
+    } catch (error) {
+      sampleError ??= error;
     }
-  } finally {
-    terminateFrozen(root, [...frozen.values()].reverse());
-  }
+  };
+  sample();
+  const interval = globalThis.setInterval(() => sample(), sampleInterval);
+  interval.unref();
+  return { sample, stop: () => globalThis.clearInterval(interval), descendants: () => known, sampleError: () => sampleError };
 }
 
-function terminateFrozen(root: ProcessIdentity, frozen: readonly ProcessIdentity[]): void {
-  const deadline = Date.now() + treeTimeout;
-  const errors: unknown[] = [];
-  for (const entry of [...frozen, root]) {
+function terminateUnixTree(child: ChildProcess, tree: ReturnType<typeof trackUnixTree>, errors: unknown[]): void {
+  tree.sample();
+  killRoot(child, errors);
+  tree.sample();
+  const sampleError = tree.sampleError();
+  if (sampleError !== undefined) errors.push(sampleError);
+  const deadline = performance.now() + treeTimeout;
+  for (const entry of tree.descendants()) {
     try {
-      signalProcess(entry, 'SIGKILL', deadline);
+      signalTrackedProcess(entry, deadline);
     } catch (error) {
       errors.push(error);
     }
   }
-  if (errors.length) throw new AggregateError(errors, 'Unable to terminate every isolated browser acceptance process');
 }
 
-function signalProcess(entry: ProcessIdentity, signal: 'SIGSTOP' | 'SIGKILL', deadline: number): boolean {
-  const remaining = deadline - Date.now();
+function signalTrackedProcess(entry: ProcessIdentity, deadline: number): void {
+  const remaining = Math.floor(deadline - performance.now());
   if (remaining <= 0) throw new Error(`Timed out verifying acceptance process ${entry.pid}`);
   const current = processes(remaining, entry.pid).find((row) => row.pid === entry.pid);
-  if (current?.parent !== entry.parent || current.signature !== entry.signature) return false;
+  if (current?.signature !== entry.signature) return;
   try {
-    process.kill(entry.pid, signal);
-    return true;
+    process.kill(entry.pid, 'SIGKILL');
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
-    throw error;
+    if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
   }
 }
 
@@ -132,15 +145,22 @@ function processes(timeout: number, pid?: number): ProcessIdentity[] {
   });
 }
 
-function descendantsOf(root: ProcessIdentity, snapshot: readonly ProcessIdentity[]): ProcessIdentity[] {
-  if (!snapshot.some((row) => row.pid === root.pid && row.parent === root.parent && row.signature === root.signature)) return [];
+function trackedProcesses(root: ProcessIdentity | undefined, known: readonly ProcessIdentity[], snapshot: readonly ProcessIdentity[]): ProcessIdentity[] {
+  const live = new Map(snapshot.map((entry) => [entry.pid, entry]));
   const children = new Map<number, ProcessIdentity[]>();
   for (const entry of snapshot) {
     const siblings = children.get(entry.parent) ?? [];
     siblings.push(entry);
     children.set(entry.parent, siblings);
   }
-  const tree = [root];
-  for (const node of tree) tree.push(...(children.get(node.pid) ?? []));
-  return tree.slice(1);
+  const verified = new Map<number, ProcessIdentity>();
+  for (const prior of root === undefined ? known : [root, ...known]) {
+    const current = live.get(prior.pid);
+    if (current?.signature === prior.signature) verified.set(current.pid, current);
+  }
+  for (const node of verified.values()) {
+    for (const member of children.get(node.pid) ?? []) verified.set(member.pid, member);
+  }
+  if (root !== undefined) verified.delete(root.pid);
+  return [...verified.values()];
 }
