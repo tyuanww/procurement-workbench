@@ -11,8 +11,8 @@ import {
 import type { Actor } from '../../shared/actor.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
-import { NotFoundError } from '../../shared/errors.js';
-import { resolveMaterialLine } from './demand-line.js';
+import { lockOrderLines, requireLockedOrderLine } from '../../shared/locked-order-lines.js';
+import { resolveMaterialLine, sameMaterial, type MaterialIdentity } from './demand-line.js';
 import { commandContext, persistBatch } from './persist-batch.js';
 
 const NO_SLOT = -1;
@@ -37,7 +37,7 @@ type GenerationEvidence = {
   readonly created: readonly CreatedSlot[];
 };
 
-type GenerateInput = {
+export type GenerateInput = {
   readonly tx: UnitOfWorkStores;
   readonly actor: Actor;
   readonly at: string;
@@ -50,12 +50,15 @@ type DemandSnapshot = Awaited<ReturnType<UnitOfWorkStores['factoryReports']['get
 
 type PreparedDemand = {
   readonly lineId: OrderLineId;
+  readonly material: MaterialIdentity;
   readonly lineCreated: boolean;
   readonly rowId: string;
   readonly version: string | null;
   readonly factoryPartyId: EntityId;
   readonly candidates: readonly BatchCandidate[];
 };
+
+export class DemandMaterialChanged extends Error {}
 
 export async function generateDemandRows(input: GenerateInput, sources: readonly DemandSnapshot[]): Promise<RowOutcome[]> {
   const rows = [];
@@ -65,13 +68,12 @@ export async function generateDemandRows(input: GenerateInput, sources: readonly
     rows.push(row);
     if ('lineId' in row) lineIds.add(row.lineId);
   }
-  const lines = new Map<OrderLineId, OrderLine>();
-  for (const id of [...lineIds].sort()) lines.set(id, await input.tx.orderLines.lock(id));
+  const lines = await lockOrderLines(input.tx.orderLines, [...lineIds]);
   const outcomes = [];
   for (const row of rows) {
     if ('lineId' in row) {
-      const line = lines.get(row.lineId);
-      if (line === undefined) throw new NotFoundError('订单行', row.lineId);
+      const line = requireLockedOrderLine(lines, row.lineId);
+      if (!sameMaterial(line, row.material)) throw new DemandMaterialChanged();
       outcomes.push(await generatePreparedRow(input, { ...row, line }));
     } else {
       outcomes.push(row);
@@ -107,7 +109,7 @@ async function prepareDemandRow(input: GenerateInput, { row, version }: DemandSn
       batches: 0,
       skipped: candidates.map((slot) => skip({ rowId: row.id, slotIndex: slot.slotIndex, reason: line.reason })),
     };
-  return { rowId: row.id, version, lineId: line.lineId, lineCreated: line.created, factoryPartyId: row.factoryPartyId, candidates };
+  return { rowId: row.id, version, lineId: line.lineId, material: line.material, lineCreated: line.created, factoryPartyId: row.factoryPartyId, candidates };
 }
 
 async function generatePreparedRow(input: GenerateInput, row: PreparedDemand & { readonly line: OrderLine }): Promise<RowOutcome> {

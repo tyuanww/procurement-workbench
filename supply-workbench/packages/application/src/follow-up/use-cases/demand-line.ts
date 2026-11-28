@@ -2,8 +2,10 @@ import type { EntityId, FactoryDemandFacts, OrderLine, OrderLineId } from '@sw/d
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { createPurchaseOrder, findPurchaseOrders } from './purchase-order-ref.js';
 
-export type MaterialLine =
-  { readonly lineId: OrderLineId; readonly created: boolean } | { readonly reason: string };
+export type MaterialIdentity = { readonly purchaseOrderId: EntityId; readonly itemCode: string };
+
+type MaterialLine =
+  { readonly lineId: OrderLineId; readonly material: MaterialIdentity; readonly created: boolean } | { readonly reason: string };
 
 type ResolveInput = {
   readonly demand: FactoryDemandFacts;
@@ -35,12 +37,14 @@ async function lineOnOrder(
   input: ResolveInput & { readonly itemCode: string; readonly purchaseOrderId: EntityId },
 ): Promise<MaterialLine> {
   const matches = (await tx.orderLines.listByPurchaseOrder(input.purchaseOrderId)).filter((line) =>
-    sameMaterial(line, input.itemCode),
+    sameMaterial(line, input),
   );
   const open = matches.filter((line) => line.cancelledAt === null);
   if (open.length > 1) return { reason: '匹配到多条订单行' };
   const found = open[0];
-  if (found !== undefined) return { lineId: found.id, created: false };
+  if (found !== undefined) return {
+    lineId: found.id, material: { purchaseOrderId: input.purchaseOrderId, itemCode: input.itemCode }, created: false,
+  };
   if (matches.length > 0) return { reason: '订单行已取消' };
   return createLine(tx, { ...input, purchaseOrderId: input.purchaseOrderId });
 }
@@ -62,11 +66,11 @@ async function createLine(
     }));
   const lineId = input.nextOrderLineId();
   await tx.orderLines.save(materialLine({ ...input, lineId, purchaseOrderId, name }));
-  return { lineId, created: true };
+  return { lineId, material: { purchaseOrderId, itemCode: input.itemCode }, created: true };
 }
 
-function sameMaterial(line: OrderLine, itemCode: string): boolean {
-  return line.lane === 'material' && line.itemCodeRaw === itemCode;
+export function sameMaterial(line: OrderLine, identity: MaterialIdentity): boolean {
+  return line.lane === 'material' && line.purchaseOrderId === identity.purchaseOrderId && line.itemCodeRaw === identity.itemCode;
 }
 
 function materialLine(
