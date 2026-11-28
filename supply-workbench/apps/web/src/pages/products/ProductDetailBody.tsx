@@ -21,6 +21,7 @@ import { ContentTabs, ViewSwitch } from '../../shared/ui/view-switch.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { space } from '../../theme/tokens.js';
 import { ProductVariantTag } from './product-cards.js';
+import { ProductPurchaseDrawer, ProductPurchaseTrigger, useProductPurchaseSelection } from './ProductPurchaseDrawer.js';
 import { OwnerNameForm } from './product-owner-editor.js';
 
 type ProductPanelLoad<T> =
@@ -172,11 +173,13 @@ function PurchasesPanel(props: {
   readonly purchases: ProductPurchases;
   readonly patch: ProductDetailInput['patch'];
 }) {
+  const selection = useProductPurchaseSelection();
   const options = Object.entries(props.purchases.byStage).map(([value, count]) => ({
     value, label: `${lineStageText(value)} ${count} 行`,
   }));
   const stage = options.find(option => option.value === props.stage)?.value ?? '';
   const rows = props.purchases.rows.filter(({ orderLine }) => !stage || orderLine.stage === stage);
+  const selected = rows.find(({ orderLine }) => orderLine.id === selection.lineId);
   return <div id="purchases" style={{ width: '100%' }}>
     <Flex align="center" wrap gap={space[2]}>
       <Select aria-label="采购阶段" value={stage} virtual={false} style={{ width: 152, maxWidth: '100%' }}
@@ -190,15 +193,16 @@ function PurchasesPanel(props: {
         {stage ? <Button onClick={() => props.patch({ stage: null })}>查看全部阶段</Button> : null}
       </Empty> }}
       columns={[
-        { title: '采购单 / 商品条码', key: 'order', render: (_, { orderLine, channelMatch }) => <div>
-          <ProductDrillLink to={`/lines/${encodeURIComponent(orderLine.id)}`} tabLabel="采购">{orderLine.po.poRaw ?? '查看订单行'}</ProductDrillLink>
-          {orderLine.nameRaw && <div className="dossier-note dossier-purchase-name">{orderLine.nameRaw}</div>}
-          <div className="dossier-note">{orderLine.barcodeRaw}</div>
-          {props.purchases.scope === 'all_channels' && <span className="dossier-note">{channelMatchLabel(channelMatch)}</span>}
+        { title: '采购单 / 商品条码', key: 'order', render: (_, row) => <div>
+          <ProductPurchaseTrigger row={row} onOpen={selection.select} />
+          {row.orderLine.nameRaw && <div className="dossier-note dossier-purchase-name">{row.orderLine.nameRaw}</div>}
+          <div className="dossier-note">{row.orderLine.barcodeRaw}</div>
+          {props.purchases.scope === 'all_channels' && <span className="dossier-note">{channelMatchLabel(row.channelMatch)}</span>}
         </div> },
         { title: '品名', key: 'sku', responsive: ['sm'], render: (_, { orderLine }) => orderLine.nameRaw ?? '—' },
         { title: '采购阶段', key: 'stage', width: 100, render: (_, { orderLine }) => <StatusTag status={orderLine.stage} /> },
       ]} />
+    {selected === undefined ? null : <ProductPurchaseDrawer key={selected.orderLine.id} row={selected} onClose={() => selection.select(null)} />}
   </div>;
 }
 

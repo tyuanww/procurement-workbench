@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { URLSearchParams } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarGroup } from './sidebar.ts';
+import { checkProductPurchaseEntry } from './product-purchase-acceptance.ts';
 
 const cleanser = '/products/ui-demo-cleanser';
 const cream = '/products/ui-demo-cream';
@@ -43,6 +44,7 @@ export async function checkFrontendCloseout({ page, origin, out }: {
   await checkProductArchive(page, out);
   await checkProductSearch(page, origin);
   await checkProductPackagingReturn(page, origin);
+  await checkProductPurchaseEntry(page, origin, out);
   return { collapsedIcons, actionBoard: ['催货', '缺确认日期', '待建批次'], arrivals: ['待收批次'], dailySchedule: ['今日', '逾期', '前置阻塞'],
     archive: { products: 3, exactPurchases: 2, allChannelPurchases: 4, stock: 320, bomParts: 2, noBom: true, searchRestored: true, packagingReturn: ['card', 'table'] },
     savedFollowUpView: true };
