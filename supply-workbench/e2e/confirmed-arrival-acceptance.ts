@@ -54,7 +54,7 @@ export async function checkConfirmedArrivalDownload({ page, devtools, browser, h
       [secondBatchId, po, '合成待催 3', '2', '我方仓库', '未确认', '', '', warehouse, lineId],
     ]);
     const roundTrip = await importOneConfirmedDate({ page, origin, book, secondBatchId, expectSourceFailure });
-    const pagination = await checkArrivalPagination(page, origin);
+    const pagination = await checkArrivalPagination(page, origin, expectSourceFailure);
     return { ...evidence, roundTrip, pagination };
   } finally {
     await browserDevtools.detach();
@@ -218,7 +218,7 @@ async function checkUnavailableArrivalSource({ page, secondSource, expectSourceF
   }
 }
 
-async function checkArrivalPagination(page: Page, origin: URL) {
+async function checkArrivalPagination(page: Page, origin: URL, expectSourceFailure: ExpectedSourceFailure) {
   const book = xlsx.utils.book_new();
   const rows = Array.from({ length: 21 }, (_, index) => [`hz09-fixture-batch-${index + 1}`, po, `分页合成 ${index + 1}`, 1, '我方仓库', '未确认', '', '', '', lineId]);
   xlsx.utils.book_append_sheet(book, xlsx.utils.aoa_to_sheet([headers, ...rows]), sheetName);
@@ -234,11 +234,11 @@ async function checkArrivalPagination(page: Page, origin: URL) {
   await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2');
   await preview.getByRole('cell', { name: '分页合成 21', exact: true }).waitFor();
   assert.equal(await pagination.evaluate((nav) => nav.contains(document.activeElement)), true, '翻页后焦点应留在确认到货日分页');
-  await checkArrivalSourcePage(page, preview);
-  return { rows: rows.length, nextPageFocus: true, staleSourcePageRecovered: true, unavailableSourceCanClear: true };
+  await checkArrivalSourcePage(page, preview, expectSourceFailure);
+  return { rows: rows.length, nextPageFocus: true, staleSourcePageRecovered: true, unavailableSourceCanClear: true, failedSourceCanClear: true };
 }
 
-async function checkArrivalSourcePage(page: Page, preview: ReturnType<Page['locator']>) {
+async function checkArrivalSourcePage(page: Page, preview: ReturnType<Page['locator']>, expectSourceFailure: ExpectedSourceFailure) {
   const trigger = preview.getByRole('row').filter({ hasText: '分页合成 21' }).getByRole('button', { name: /^查看来源/u });
   await trigger.press('Enter');
   const drawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
@@ -252,6 +252,16 @@ async function checkArrivalSourcePage(page: Page, preview: ReturnType<Page['loca
   await page.keyboard.press('Escape');
   await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2' && !url.searchParams.has('drawer'));
   await trigger.and(page.locator(':focus')).waitFor();
+
+  const rowsPath = '/api/v1' + correct.pathname + '/rows';
+  expectSourceFailure(rowsPath, 503);
+  await page.route((url) => url.pathname === rowsPath && url.searchParams.get('page') === '2',
+    (route) => route.fulfill({ status: 503, json: { error: { code: 'INTERNAL', message: '合成验收来源分页读取失败', details: {} } } }), { times: 1 });
+  await page.goto(stale.href);
+  await page.getByText('确认到货日预览没有读出来。', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '清除来源定位', exact: true }).press('Enter');
+  await page.waitForURL((url) => !url.searchParams.has('source') && !url.searchParams.has('drawer'));
+  await preview.getByRole('cell', { name: '分页合成 20', exact: true }).waitFor();
 
   stale.searchParams.set('source', JSON.stringify(['arrival', sheetName, 999]));
   await page.goto(stale.href);

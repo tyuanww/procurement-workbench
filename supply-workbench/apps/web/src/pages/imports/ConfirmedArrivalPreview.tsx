@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Skeleton, Table, Typography, type TableProps } from 'antd';
+import { Alert, Button, Card, Flex, Skeleton, Table, Typography, type TableProps } from 'antd';
 import { ConfirmedArrivalPayloadSchema, ImportRowViewSchema, listResponseSchema, type ImportBatchSummary, type ImportRowView } from '@sw/contracts';
 import { importActionLabel } from '@sw/domain';
 import { z } from 'zod';
@@ -154,7 +154,10 @@ function ArrivalResults({ load, source, onRetry }: {
 }) {
   if (load === null) return <div role="status" aria-label="正在读取确认到货日明细"><Skeleton active /></div>;
   if (load.kind === 'failed') return <Alert type="error" title="确认到货日预览没有读出来。"
-    action={<Button onClick={onRetry}>重试</Button>} />;
+    action={<Flex gap="small" wrap>
+      <Button onClick={onRetry}>重试</Button>
+      {source.sourceKey === null ? null : <Button onClick={source.close}>清除来源定位</Button>}
+    </Flex>} />;
   return (
     <div className="confirmed-arrival-preview">
       <style>{previewCss}</style>
