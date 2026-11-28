@@ -1,13 +1,13 @@
 import { Link } from 'react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Alert, Button, Card, Collapse, Flex, Select, Table, Tag, Typography } from 'antd';
 import type { TableProps } from 'antd';
 import { UNLINKED_PROCUREMENT, type ImportBatchSummary, type ProcurementPreviewSelection, type ProcurementReviewReason } from '@sw/contracts';
 import { isBatchImportSource } from '../../features/imports/index.js';
-import { apiErrorMessage } from '../../shared/api/client.js';
 import { ImportSourceButton, ImportSourceDrawer, sourceText, UnavailableImportSource, type ImportSourceRecord } from './ImportSourceDrawer.js';
 import { importPreviewKeys, importSourceKey, useImportSource, type ImportSourceState } from './import-source.js';
-import { componentSourceLineId, fetchProcurementPreview, procurementPreviewOa, rowSourceInOa, sourceKey, sourcePagePatch, sourcePageSizes, sourcePagination, switchPreviewOa, visibleProcurement, type ComponentRow, type FinishedSummary, type SourceTable } from './procurement-preview-model.js';
+import { componentSourceLineId, procurementPreviewOa, rowSourceInOa, sourceKey, sourcePagePatch, sourcePageSizes, sourcePagination, switchPreviewOa, visibleProcurement, type ComponentRow, type FinishedSummary, type SourceTable } from './procurement-preview-model.js';
+import { useProcurementPreviewLoad } from './procurement-preview-load.js';
 
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 const label = { active: '项目表', completed: '已完结表', direct: '编号关联', shared: '共用子件', group: '同 OA 分组', candidate: '仅商品码候选' } as const;
@@ -25,30 +25,15 @@ const reviewText: Record<ProcurementReviewReason, string> = {
   no_confirmed_finished_line: '缺少已确认的成品关联',
 };
 
-type Load = { readonly kind: 'ready'; readonly preview: ProcurementPreviewSelection } | { readonly kind: 'failed'; readonly message: string };
-
 export function ProcurementPreview({ summary }: { readonly summary: ImportBatchSummary }) {
   const { id, status } = summary;
   const source = useImportSource();
   const oa = procurementPreviewOa(source.params);
-  const [attempt, setAttempt] = useState(0);
-  const requestKey = JSON.stringify([status, oa, attempt]);
-  const [response, setResponse] = useState<{ readonly key: string; readonly load: Load }>();
-  const load = response?.key === requestKey ? response.load : null;
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetchProcurementPreview({ id, oa, signal: controller.signal }).then((preview) => {
-      if (controller.signal.aborted) return;
-      setResponse({ key: requestKey, load: preview === null ? { kind: 'failed', message: '这次导入没有可读取的关联预览' } : { kind: 'ready', preview } });
-    }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setResponse({ key: requestKey, load: { kind: 'failed', message: apiErrorMessage(error) ?? '读取关联预览失败' } });
-    });
-    return () => controller.abort();
-  }, [id, oa, requestKey]);
+  const { load, retry } = useProcurementPreviewLoad({ id, status, oa }, hasRowSource(source.sourceKey));
   if (load === null) return <Card title="采购事项关联预览" loading />;
   if (load.kind === 'failed') return <Card title="采购事项关联预览">
     <Alert type="error" title={load.message} action={<Flex gap="small" wrap>
-      <Button onClick={() => setAttempt((value) => value + 1)}>重试</Button>
+      <Button onClick={retry}>重试</Button>
       {oa === null && source.sourceKey === null ? null : <Button onClick={() => source.update(importPreviewKeys, true)}>重置采购预览</Button>}
     </Flex>} />
   </Card>;
