@@ -75,6 +75,10 @@ export function ConfirmedArrivalPreview({ summary }: { readonly summary: ImportB
   const readPage = arrivalSourcePage(source.sourceKey) ?? page;
   const { load, total, retry } = useArrivalRows({ id: summary.id, revision: summary.revision, page: readPage });
   const { selected, visiblePage, isOutside, isUnavailable, canShowPage } = arrivalSelection({ load, total, page, readPage, sourceKey: source.sourceKey });
+  const drawerSource = {
+    ...source,
+    close: () => source.update({ drawer: null, source: null, ...arrivalPagePatch(visiblePage) }, true),
+  };
   useEffect(() => {
     if (isOutside) changeArrivalPage(source, visiblePage);
   }, [isOutside, source, visiblePage]);
@@ -86,7 +90,7 @@ export function ConfirmedArrivalPreview({ summary }: { readonly summary: ImportB
         <ImportPagination label="确认到货日明细分页" page={visiblePage} pageSize={PAGE_SIZE} total={total}
           onChange={(value) => changeArrivalPage(source, value)} />
       </> : null}
-      <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
+      <ImportSourceDrawer source={drawerSource} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
     </Card>
   );
 }
@@ -136,7 +140,11 @@ function useArrivalRows({ id, revision, page }: Pick<ImportBatchSummary, 'id' | 
 }
 
 function changeArrivalPage(source: ImportSourceState, page: number) {
-  source.update({ [importSourceQuery.arrival]: page === 1 ? null : String(page) }, true);
+  source.update(arrivalPagePatch(page), true);
+}
+
+function arrivalPagePatch(page: number) {
+  return { [importSourceQuery.arrival]: page === 1 ? null : String(page) };
 }
 
 function ArrivalResults({ load, source, onRetry }: {

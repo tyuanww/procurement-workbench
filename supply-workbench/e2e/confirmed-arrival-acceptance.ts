@@ -158,11 +158,13 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId, expec
   await page.getByText('已提交 · 共 2 行 · 更新 1 行 · 跳过 1 行', { exact: true }).waitFor();
   const drawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
   const target = drawer.getByRole('link', { name: '查看关联要货批次', exact: true });
-  await batchRow(firstBatchId).getByRole('button', { name: /^查看来源/u }).press('Enter');
+  const firstSource = batchRow(firstBatchId).getByRole('button', { name: /^查看来源/u });
+  await firstSource.press('Enter');
   await drawer.getByText('这条记录仅供当前导入核对。', { exact: true }).waitFor();
   assert.equal(await target.count(), 0);
   await page.keyboard.press('Escape');
   await drawer.waitFor({ state: 'hidden' });
+  await firstSource.and(page.locator(':focus')).waitFor();
   const secondSource = batchRow(secondBatchId).getByRole('button', { name: /^查看来源/u });
   await secondSource.press('Enter');
   await target.waitFor();
@@ -248,6 +250,7 @@ async function checkArrivalSourcePage(page: Page, preview: ReturnType<Page['loca
   await drawer.getByText(`${sheetName} 第 22 行`, { exact: true }).waitFor();
   await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2' && url.searchParams.get('source') === correct.searchParams.get('source'));
   await page.keyboard.press('Escape');
+  await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2' && !url.searchParams.has('drawer'));
   await trigger.and(page.locator(':focus')).waitFor();
 
   stale.searchParams.set('source', JSON.stringify(['arrival', sheetName, 999]));
