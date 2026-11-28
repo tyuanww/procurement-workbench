@@ -6,11 +6,12 @@ export type AcceptanceSummary = { sha: string } & (
 );
 
 export function browserFailureLocation(error: unknown): string | undefined {
-  if (!(error instanceof Error)) return;
+  if (!(error instanceof Error)) return undefined;
   for (const line of error.stack?.split('\n').slice(1) ?? []) {
     const location = /^\s+at .*[/\\]e2e[/\\]([\w-]+\.ts:\d+:\d+)\)?\s*$/u.exec(line)?.[1];
     if (location) return `e2e/${location}`;
   }
+  return undefined;
 }
 
 export function acceptanceSummary(summary: AcceptanceSummary): string {
