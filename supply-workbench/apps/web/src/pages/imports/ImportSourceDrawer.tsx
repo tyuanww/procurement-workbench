@@ -91,15 +91,17 @@ type TargetLoad =
   | { readonly kind: 'failed'; readonly message: string }
   | { readonly kind: 'ready'; readonly destination: Destination };
 
-function ImportTarget({ target, source, sourceKey, isShown }: {
-  readonly target: Target;
+type ImportTargetOrigin = {
   readonly source: ImportSourceState;
   readonly sourceKey: string;
   readonly isShown: boolean;
-}) {
+};
+
+function ImportTarget({ target, ...origin }: ImportTargetOrigin & { readonly target: Target }) {
   const [load, setLoad] = useState<TargetLoad>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [request] = useState(target);
+  const resultRegion = useRef<HTMLElement>(null);
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
@@ -121,14 +123,24 @@ function ImportTarget({ target, source, sourceKey, isShown }: {
     });
     return () => controller.abort();
   }, [attempt, request]);
+  const retry = () => {
+    resultRegion.current?.focus({ preventScroll: true });
+    setLoad({ kind: 'loading' });
+    setAttempt((value) => value + 1);
+  };
+  return <section ref={resultRegion} tabIndex={-1} aria-label="关联记录">
+    <ImportTargetResult {...origin} load={load} onRetry={retry} />
+  </section>;
+}
+
+function ImportTargetResult({ load, onRetry, ...origin }: ImportTargetOrigin & {
+  readonly load: TargetLoad; readonly onRetry: () => void;
+}) {
   switch (load.kind) {
     case 'loading': return <div role="status" aria-label="正在核对关联记录"><Skeleton active paragraph={false} /></div>;
     case 'missing': return <Alert type="info" title="当前范围没有可查看的关联记录。" />;
-    case 'failed': return <Alert type="error" title="关联记录没有读出来。" description={load.message} action={<Button onClick={() => {
-      setLoad({ kind: 'loading' });
-      setAttempt((value) => value + 1);
-    }}>重试</Button>} />;
-    case 'ready': return <ImportTargetLink destination={load.destination} source={source} sourceKey={sourceKey} isShown={isShown} />;
+    case 'failed': return <Alert type="error" title="关联记录没有读出来。" description={load.message} action={<Button onClick={onRetry}>重试</Button>} />;
+    case 'ready': return <ImportTargetLink {...origin} destination={load.destination} />;
   }
 }
 

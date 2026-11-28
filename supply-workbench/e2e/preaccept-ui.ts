@@ -685,8 +685,7 @@ async function checkProcurementImport(page: Page): Promise<string> {
   const rowSource = component.getByRole('button', { name: /^查看来源/u });
   const sourceDrawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
   await checkDefaultProcurementSource({ page, rowSource, sourceDrawer, importPath });
-  await page.keyboard.press('Escape');
-  await rowSource.and(page.locator(':focus')).waitFor();
+  await checkProcurementGroupReturn(page, importPath);
   await page.screenshot({ path: join(out, 'procurement-preview.png'), animations: 'disabled' });
 
   await page.getByRole('button', { name: '确认导入', exact: true }).click();
@@ -740,6 +739,10 @@ async function checkProcurementImport(page: Page): Promise<string> {
   assert.equal(page.url(), sourceUrl);
   await sourceDrawer.getByRole('button', { name: '重试', exact: true }).press('Enter');
   await order.waitFor();
+  const retryRegion = sourceDrawer.getByRole('region', { name: '关联记录', exact: true });
+  await retryRegion.and(page.locator(':focus')).waitFor();
+  await page.keyboard.press('Tab');
+  await order.and(page.locator(':focus')).waitFor();
   await page.keyboard.press('Escape');
   await rowSource.and(page.locator(':focus')).waitFor();
   await page.setViewportSize({ width: 320, height: 667 });
@@ -800,12 +803,31 @@ async function checkDefaultProcurementSource({ page, rowSource, sourceDrawer, im
     await sourceDrawer.getByText(workbookName, { exact: true }).waitFor();
     const address = new URL(page.url());
     assert.equal(address.pathname, importPath);
-    assert.equal(address.searchParams.has('previewOa'), true);
+    assert.equal(address.searchParams.get('previewOa'), 'XPKA(CN)9901');
     assert.equal(await sourceDrawer.getByRole('link').count(), 0);
+    await page.keyboard.press('Escape');
+    await rowSource.and(page.locator(':focus')).waitFor();
     assert.deepEqual(previewReads, []);
   } finally {
     page.off('request', record);
   }
+}
+
+async function checkProcurementGroupReturn(page: Page, importPath: string) {
+  const finished = page.getByRole('table', { name: '总表成品明细' });
+  const readGroup = (oa: string) => page.waitForResponse((response) => {
+    const address = new URL(response.url());
+    return address.pathname === `/api/v1${importPath}/procurement` && address.searchParams.get('oa') === oa;
+  });
+  const switched = readGroup('XPKA(CN)9902');
+  await page.getByRole('combobox', { name: 'OA 需求编号' }).click();
+  await page.getByText(/^XPKA\(CN\)9902（\d+ 条）$/u).click();
+  assert.ok((await switched).ok());
+  await finished.getByText('采购订单总表 第 6 行', { exact: true }).waitFor();
+  const returned = readGroup('XPKA(CN)9901');
+  await page.goBack();
+  assert.ok((await returned).ok());
+  await finished.getByText('采购订单总表 第 2 行', { exact: true }).waitFor();
 }
 
 async function checkLocalImportSources({ page, importPath, drawer }: {

@@ -83,11 +83,9 @@ export function ConfirmedArrivalPreview({ summary }: { readonly summary: ImportB
   return (
     <Card title="确认到货日预览">
       {isUnavailable ? <UnavailableImportSource onClear={source.close} /> : null}
-      {canShowPage ? <>
-        <ArrivalResults load={isOutside ? null : load} source={source} onRetry={retry} />
-        <ImportPagination label="确认到货日明细分页" page={visiblePage} pageSize={ARRIVAL_SOURCE_PAGE_SIZE} total={total}
-          onChange={moveToPage} />
-      </> : null}
+      {canShowPage ? <ArrivalResults load={isOutside ? null : load} source={source} onRetry={retry} /> : null}
+      <ImportPagination label="确认到货日明细分页" page={visiblePage} pageSize={ARRIVAL_SOURCE_PAGE_SIZE} total={total}
+        onChange={moveToPage} />
       <ImportSourceDrawer source={drawerSource} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
     </Card>
   );

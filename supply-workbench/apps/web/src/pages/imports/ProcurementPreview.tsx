@@ -29,7 +29,7 @@ export function ProcurementPreview({ summary }: { readonly summary: ImportBatchS
   const { id, status } = summary;
   const source = useImportSource();
   const oa = procurementPreviewOa(source.params);
-  const { load, retry } = useProcurementPreviewLoad({ id, status, oa });
+  const { load, retry } = useProcurementPreviewLoad({ id, status, oa }, hasRowSource(source.sourceKey));
   if (load === null) return <Card title="采购事项关联预览" loading />;
   if (load.kind === 'failed') return <Card title="采购事项关联预览">
     <Alert type="error" title={load.message} action={<Flex gap="small" wrap>
