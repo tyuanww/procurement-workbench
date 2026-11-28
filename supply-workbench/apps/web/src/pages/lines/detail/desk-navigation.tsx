@@ -4,7 +4,7 @@ import { STUCK_BATCH_PARAM, STUCK_RETURN_PARAM, stuckOrderFocus, stuckReturnAddr
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday, deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
-import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
+import { legacyPersonalPath, TODAY_BATCH_RETURN_PARAM, todayArrivalsPath, todayBatchRecordFocus } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
@@ -20,7 +20,7 @@ export type DetailBack = { readonly to: string; readonly label: string; readonly
 type BackSource = {
   readonly progress: string | null; readonly delivery?: string | null; readonly home?: string | null; readonly schedule?: string | null;
   readonly deliveryEntry?: string | null;
-  readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null;
+  readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null; readonly today?: string | null;
 };
 
 export function readLineDetailBack({ lineId, params, state, canReadDashboard }: {
@@ -29,7 +29,8 @@ export function readLineDetailBack({ lineId, params, state, canReadDashboard }: 
   const stuck = canReadDashboard ? stuckBack(params.get(STUCK_RETURN_PARAM), state) : null;
   if (stuck !== null) return stuck;
   const focusBatch = params.get('focusBatch');
-  return lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,
+  const today = params.get(TODAY_BATCH_RETURN_PARAM);
+  return lineDetailBack({ lineId, state, focusBatch, today, todayBatch: today === 'arrivals' ? focusBatch : null,
     progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), deliveryEntry: params.get('deliveryEntry'), home: params.get(HOME_RISK_RETURN_PARAM),
     schedule: params.get('backToSchedule') });
 }
@@ -37,18 +38,25 @@ export function readLineDetailBack({ lineId, params, state, canReadDashboard }: 
 export function lineDetailBack(input: BackSource): DetailBack | null {
   const home = homeBack(input);
   if (home !== null) return home;
-  if (typeof input.delivery === 'string') {
-    const to = deliveryBackAddress(input.delivery);
-    const state = detailReturnState(input.state, input.deliveryEntry ? { detailPath: to, sourceLink: input.deliveryEntry } : to);
-    return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
-  }
+  const delivery = deliveryBack(input);
+  if (delivery !== null) return delivery;
   if (input.progress !== null) return legacyProgressBack(input.progress, input.state);
+  const batchDrawer = todayBatchDrawerBack(input);
+  if (batchDrawer !== null) return batchDrawer;
   const today = todayBack(input.state, input.todayBatch);
   if (today !== null) return today;
   if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
   const to = lineDeskAddress(input.state);
   if (to !== null) return { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
   return typeof input.schedule === 'string' ? scheduleBack(new URLSearchParams(input.schedule), input.state) : null;
+}
+
+function deliveryBack(input: BackSource): DetailBack | null {
+  if (typeof input.delivery !== 'string') return null;
+  const to = deliveryBackAddress(input.delivery);
+  const target = input.deliveryEntry ? { detailPath: to, sourceLink: input.deliveryEntry } : to;
+  const state = detailReturnState(input.state, target);
+  return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
 }
 
 function legacyProgressBack(search: string, state: unknown): DetailBack {
@@ -89,6 +97,16 @@ function homeBack(input: BackSource): DetailBack | null {
   return { to, label: '返回首页', ...(state === undefined ? {} : { state }) };
 }
 
+function todayBatchDrawerBack({ today, focusBatch, state }: BackSource): DetailBack | null {
+  if (typeof today !== 'string' || !today.startsWith('?') || typeof focusBatch !== 'string') return null;
+  const query = new URLSearchParams(today);
+  if (query.get('drawer') !== 'batch:' + focusBatch) return null;
+  const to = '/today' + today;
+  const label = query.get('view') === 'arrivals' ? '返回在途待收' : todayActionBackLabel(query);
+  const origin = detailReturnState(state, { detailPath: to, sourceLink: todayBatchRecordFocus(focusBatch) });
+  return { to, label, ...(origin === undefined ? {} : { state: origin }) };
+}
+
 function todayBack(state: unknown, batchId: string | null | undefined): DetailBack | null {
   if (typeof state !== 'object' || state === null) return null;
   if ('personalTodaySearch' in state && typeof state.personalTodaySearch === 'string') {
@@ -107,9 +125,14 @@ function actionBack(query: URLSearchParams, state: object): DetailBack {
   const pending = 'todayPendingId' in state && typeof state.todayPendingId === 'string' ? state.todayPendingId : null;
   const to = query.size === 0 ? '/today' : '/today?' + query;
   if (pending !== null) return { to, label: '返回待建批次', state: { todayPendingId: pending } };
-  const label = ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '') ? '返回今日排期' : '返回个人工作台';
+  const label = todayActionBackLabel(query);
   const arrival = 'todayArrivalId' in state && typeof state.todayArrivalId === 'string' ? state.todayArrivalId : null;
   return arrival === null ? { to, label } : { to, label, state: { todayArrivalId: arrival } };
+}
+
+function todayActionBackLabel(query: URLSearchParams): string {
+  const isSchedule = query.get('view') === 'schedule' || ['schedule', 'owner', 'supplier'].includes(query.get('group') ?? '');
+  return isSchedule ? '返回今日排期' : '返回个人工作台';
 }
 
 export function readReturningLine(state: unknown): string | null {

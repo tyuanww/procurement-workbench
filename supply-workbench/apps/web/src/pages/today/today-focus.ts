@@ -32,7 +32,7 @@ export function focusWorkspaceRow(id: string): HTMLElement | null {
   return row;
 }
 
-export function restoreWorkspaceLinkFocus(link: HTMLAnchorElement | null): void {
+export function restoreWorkspaceLinkFocus(link: HTMLElement | null): void {
   if (document.activeElement === document.body) link?.focus();
 }
 

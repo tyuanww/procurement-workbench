@@ -16,6 +16,7 @@ export type ActionPageControls = {
   readonly isSettled: boolean;
   readonly isCopying: boolean;
   readonly copyNotice: string;
+  readonly copyBatchId?: string | null;
   readonly copyPreview?: ChasePreview | null;
   readonly factoryId: string | null;
   readonly loadError: string;
@@ -29,6 +30,12 @@ export type ActionPageControls = {
 };
 
 export const actionDialogTarget: CSSProperties = { minBlockSize: 44, minInlineSize: 44 };
+
+export function batchCopy(page: ActionPageControls | undefined, id: string) {
+  if (page?.paging.chaseItemIds?.includes(id) !== true) return null;
+  return { label: '复制本批催单', disabled: !page.isSettled || page.isCopying,
+    notice: page.isSettled && page.copyBatchId === id ? page.copyNotice : '', run: () => page.onCopyChase({ kind: 'batch', id }) };
+}
 
 export const actionDialogStyles: ModalProps['styles'] = {
   close: { inlineSize: 44, blockSize: 44, insetInlineEnd: 12, insetBlockStart: 10 },

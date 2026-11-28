@@ -354,7 +354,7 @@ async function checkCalendarBesideResults(page: Page): Promise<void> {
 }
 
 async function checkArrivals(page: Page): Promise<void> {
-  await page.setViewportSize({ width: 320, height: 780 });
+  await page.setViewportSize({ width: 320, height: 667 });
   const tabs = page.getByRole('tablist', { name: '今日事项视图' });
   assert.deepEqual(await tabs.getByRole('tab').allTextContents(), ['行动板', '在途待收', '今日排期']);
   const arrivals = tabs.getByRole('tab', { name: /在途待收$/u });
@@ -377,12 +377,23 @@ async function checkFilteredArrivalReturn(page: Page): Promise<void> {
   const arrivalQuery = new URLSearchParams({ view: 'arrivals', timing: 'due_today', actionReturn });
   await page.goto(new URL('/today?' + arrivalQuery, page.url()).href);
   await page.getByRole('heading', { name: '今日应到', level: 1, exact: true }).waitFor();
-  const batch = page.getByRole('link', { name: /查看批次 UI-DEMO-004/u });
+  const batch = page.getByRole('button', { name: /查看批次 UI-DEMO-004/u });
   await batch.click();
+  const drawer = page.getByRole('dialog').filter({ hasText: 'UI-DEMO-004' });
+  await drawer.getByText(/收货方 ·/u).waitFor();
+  const record = drawer.getByRole('link', { name: '核对本批记录', exact: true });
+  await page.waitForURL(({ pathname, searchParams }) => pathname === '/today' && searchParams.get('drawer') === 'batch:ui-demo-batch-arrival');
+  const drawerUrl = page.url();
+  await record.click();
   await page.waitForURL((url) => url.pathname === '/lines/ui-demo-line-arrival' && url.searchParams.get('focusBatch') === 'ui-demo-batch-arrival');
+  await page.getByRole('region', { name: '批次', exact: true }).locator('li:focus').getByText(/待收 800 件/u).waitFor();
   await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
-  await page.waitForURL(({ searchParams }) => searchParams.get('timing') === 'due_today' && searchParams.get('actionReturn') === actionReturn);
+  await page.waitForURL(drawerUrl);
+  await record.and(page.locator(':focus')).waitFor();
   await page.getByRole('tab', { name: /在途待收$/u, selected: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await page.waitForURL((url) => url.search === '?' + arrivalQuery);
   await batch.and(page.locator(':focus')).waitFor();
   await page.getByRole('tab', { name: /行动板$/u }).click();
   await page.waitForURL((url) => url.search === '?' + actionReturn);

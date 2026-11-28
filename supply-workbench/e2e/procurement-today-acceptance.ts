@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, URLSearchParams } from 'node:url';
-import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarLink } from './sidebar.ts';
 
 const sample = new URL('../fixtures/demo/procurement-chase.sql', import.meta.url);
@@ -156,7 +156,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await order('HZ09-0501').getByText(/在途待收\s+25,000\s+件/).waitFor();
   assert.match((await sampleRows.first().getByRole('button', { name: /^查看详情/ }).getAttribute('aria-label')) ?? '', /HZ09-0001/);
   await checkBatchProgressChart(page, order('HZ09-0501'), out);
-  await checkInlineReceiptLink(page, order('HZ09-0501'));
+  const receiptDrawer = await checkInlineReceiptDrawer(page, order('HZ09-0501'), out);
   await order('HZ09-0501').getByRole('button', { name: /^更多操作 HZ09-0501/ }).click();
   await page.getByRole('menuitem', { name: '复制本批催单', exact: true }).click();
   await copied.waitFor();
@@ -183,7 +183,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.getByRole('group', { name: '行动摘要' }).getByRole('button', { name: /^在途待收/u }).press('Enter');
   await tabs.getByRole('tab', { name: '在途待收', selected: true }).and(page.locator(':focus')).waitFor();
   await page.getByText(/待收 25,000 件/).waitFor();
-  await checkTodayTabHistory({ page, sourceSearch, memo: memos.getByRole('link', { name: /查看批次 HZ09-0501/u }) });
+  await checkTodayTabHistory({ page, sourceSearch, memo: memos.getByRole('button', { name: /查看批次 HZ09-0501/u }) });
   const scheduled = await recordFollowUp(page, order('HZ09-0501'), '2099-01-11T10:00', '明早十点再联系供应商');
   assert.equal(scheduled.nextFollowUpAt, '2099-01-11T02:00:00.000Z');
   await page.getByRole('button', { name: /切换工作范围$/u }).click();
@@ -214,6 +214,7 @@ export async function checkChaseToday({ page, origin, out }: {
   await page.keyboard.press('Escape');
   await factoryDialog.waitFor({ state: 'hidden' });
   return { total: 501, lastPage: 11, allCopied: 501, factoryCopied: 500, oldDrawerLinkRestored: true, bulkFirst: 'HZ09-0501', batchCopied: 1, remainingAfterPartial: 5_000, inTransitAtEnd: 30_000,
+    receiptDrawer,
     followUp: await checkFollowUpReminder({ page, origin, row: order('HZ09-0501'), out }),
   };
 }
@@ -315,15 +316,117 @@ async function checkActionViewSwitch(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^查看详情 HZ09-0501/ }).waitFor();
 }
 
-async function checkInlineReceiptLink(page: Page, row: Locator): Promise<void> {
-  const receipt = row.getByRole('link', { name: /^核对收货 HZ09-0501/ });
-  const search = new URL(page.url()).search;
-  await receipt.click();
-  await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501' && url.searchParams.get('focusBatch') === batch);
-  await page.getByText(/待收 25,000 件/).first().waitFor();
-  await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
-  await page.waitForURL((url) => url.pathname === '/today' && url.search === search);
-  await receipt.and(page.locator(':focus')).waitFor();
+async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
+  const trigger = row.getByRole('button', { name: /^核对收货 HZ09-0501/ });
+  const source = page.url();
+  const dialog = page.getByRole('dialog').filter({ hasText: 'HZ09-0501' });
+  const record = dialog.getByRole('link', { name: '核对本批记录', exact: true });
+  const close = dialog.getByRole('button', { name: '关闭', exact: true });
+  const copied = page.locator('.ant-message').getByRole('status').filter({ hasText: '已复制 1 条催单' });
+  const widths = [1440, 320];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
+    if (width === 1440) await trigger.press('Enter');
+    else await trigger.click();
+    await page.waitForURL((url) => url.pathname === '/today' && url.searchParams.get('drawer') === 'batch:' + batch);
+    const drawerUrl = page.url();
+    await dialog.getByText(/收货方 ·/u).waitFor();
+    await dialog.getByRole('group', { name: '批次交付数量', exact: true }).getByText('25,000 件', { exact: true }).waitFor();
+    if (width === 320) await page.screenshot({ path: join(out, 'today-batch-record-mobile.png'), animations: 'disabled' });
+    if (width === 1440) {
+      await dialog.getByRole('button', { name: '登记收货', exact: true }).click();
+      await page.waitForURL((url) => url.searchParams.get('drawer') === 'batch:' + batch && url.searchParams.get('draft') === 'receipt');
+      assert.equal(Number(await dialog.getByRole('spinbutton', { name: '数量', exact: true }).inputValue()), 25_000);
+      await page.keyboard.press('Escape');
+      await page.waitForURL(drawerUrl);
+      await record.waitFor();
+    }
+    await copied.waitFor({ state: 'hidden' });
+    await page.evaluate(() => globalThis.navigator.clipboard.writeText('批次抽屉验收待写入'));
+    await dialog.getByRole('button', { name: '复制本批催单', exact: true }).click();
+    await copied.waitFor();
+    assert.deepEqual(purchaseOrders(await clipboardText(page)), ['HZ09-0501']);
+    assert.equal(page.url(), drawerUrl);
+    if (width === 320) {
+      const drawer = await dialog.boundingBox();
+      const closeBox = await close.boundingBox();
+      assert.ok(drawer && drawer.width === 320 && closeBox && closeBox.width >= 44 && closeBox.height >= 44);
+    }
+    if (width === 1440) await page.keyboard.press('Escape');
+    else await close.click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.waitForURL(source);
+    await trigger.and(page.locator(':focus')).waitFor();
+
+    await trigger.press('Enter');
+    await page.waitForURL(drawerUrl);
+    if (width === 1440) await record.press('Enter');
+    else await openReceiptRecordOnPhone(page, record);
+    await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501' && url.searchParams.get('focusBatch') === batch);
+    await page.getByText(/待收 25,000 件/u).first().waitFor();
+    if (width === 1440) await page.goBack();
+    else await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
+    await page.waitForURL(drawerUrl);
+    await record.and(page.locator(':focus')).waitFor();
+    await close.click();
+    await page.waitForURL(source);
+    await dialog.waitFor({ state: 'hidden' });
+    await trigger.and(page.locator(':focus')).waitFor();
+  }
+  await copied.waitFor({ state: 'hidden' });
+  await checkReceiptPageRelocation(page, { trigger, record, source });
+  await page.setViewportSize({ width: 320, height: 800 });
+  return { widths, batch, stayedOnToday: true, copiedOnlySelectedBatch: true, browserBackAndPageReturn: true, focusRestored: true, relocatedPageFocus: true };
+}
+
+async function openReceiptRecordOnPhone(page: Page, record: Locator) {
+  await record.scrollIntoViewIfNeeded();
+  const target = await record.elementHandle();
+  assert.ok(target);
+  try {
+    const visible = await page.waitForFunction((element) => {
+      const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+      if (left < 0 || top < 0 || right > window.innerWidth || bottom > window.innerHeight) return false;
+      const center = document.elementFromPoint(left + width / 2, top + height / 2);
+      return center !== null && element.contains(center);
+    }, target);
+    await visible.dispose();
+  } finally {
+    await target.dispose();
+  }
+  const box = await record.boundingBox();
+  assert.ok(box && box.width >= 44 && box.height >= 44, '窄屏批次入口的触控区域须达到 44×44');
+  await record.click();
+}
+
+async function checkReceiptPageRelocation(page: Page, { trigger, record, source }: {
+  readonly trigger: Locator; readonly record: Locator; readonly source: string;
+}) {
+  const sourcePage = new URL(source).searchParams.get('page') ?? '1';
+  const appliedPage = sourcePage === '1' ? 2 : 1;
+  await trigger.click();
+  await record.click();
+  await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501');
+  const match = (url: URL) => url.pathname === '/api/v1/today' && url.searchParams.get('focusId') === 'batch:' + batch;
+  let relocatedReads = 0;
+  const relocate = async (route: Route) => {
+    const response = await route.fetch();
+    assert.ok(response.ok());
+    const body: { readonly items: readonly { readonly id: string }[]; readonly paging: { readonly page: number } } = await response.json();
+    assert.ok(body.items.some(({ id }) => id === 'batch:' + batch));
+    relocatedReads += 1;
+    await route.fulfill({ response, json: { ...body, paging: { ...body.paging, page: appliedPage } } });
+  };
+  await page.route(match, relocate);
+  try {
+    await page.getByRole('link', { name: '返回个人工作台', exact: true }).click();
+    await page.waitForURL((url) => url.searchParams.get('page') === String(appliedPage) && url.searchParams.get('drawer') === 'batch:' + batch);
+    await record.and(page.locator(':focus')).waitFor();
+    assert.ok(relocatedReads > 0);
+  } finally {
+    await page.unroute(match, relocate);
+  }
+  await page.goto(source);
 }
 
 function arrivalMemos(page: Page): Locator {
@@ -358,6 +461,8 @@ async function checkTodayTabHistory({ page, sourceSearch, memo }: { readonly pag
   await page.waitForURL(scheduleUrl);
   await schedule.and(page.locator('[aria-selected="true"]')).waitFor();
   await page.getByRole('heading', { name: '今日排期', level: 1, exact: true }).waitFor();
+  await page.goto(arrivalUrl);
+  await checkEscapeBeforeDrawerPaint(page, memo, page.getByRole('dialog'), new URL(arrivalUrl));
   await action.click();
   await page.waitForURL(actionAt);
 }
@@ -411,7 +516,7 @@ export async function checkKeyboardReceipt({ page, origin, out }: {
   const today = new URL('/today?reasons=follow_up_due', origin);
   const row = page.getByRole('button', { name: /^查看详情 HZ09-0501/ });
   const memo = arrivalMemos(page);
-  const batchLink = memo.getByRole('link', { name: /HZ09-0501/ });
+  const batchButton = memo.getByRole('button', { name: /HZ09-0501/ });
   const partial = '合成收货单 A · 第一车';
   const remaining = '合成收货单 B · 第二车';
   await page.goto(today.href);
@@ -419,20 +524,26 @@ export async function checkKeyboardReceipt({ page, origin, out }: {
   await recordKeyboardReceipt(page, { before: 30_000, recv: 12_000, evidence: partial });
   await page.goto(new URL('/today?view=arrivals', origin).href);
   await memo.getByText(/待收 18,000 件 · 实收 12,000 件/).waitFor();
-  await batchLink.click();
+  await batchButton.click();
+  const dialog = page.getByRole('dialog').filter({ hasText: 'HZ09-0501' });
+  await dialog.getByText(/待收 18,000 件 · 实收 12,000 件/).waitFor();
+  await dialog.getByRole('link', { name: '核对本批记录', exact: true }).click();
   await page.getByText('未发 0 件 · 待收 18,000 件 · 实收 12,000 件', { exact: true }).waitFor();
   await page.getByText(/实收登记.*12,000 件.*合成收货单 A/).waitFor();
   await page.screenshot({ path: join(out, 'procurement-partial-receipt.png'), animations: 'disabled' });
   await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
   await page.getByRole('tab', { name: '在途待收', selected: true }).waitFor();
-  await batchLink.and(page.locator(':focus')).waitFor();
+  await dialog.getByRole('link', { name: '核对本批记录', exact: true }).and(page.locator(':focus')).waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await batchButton.and(page.locator(':focus')).waitFor();
 
   await page.goto(today.href);
   await row.waitFor();
   await recordKeyboardReceipt(page, { before: 18_000, recv: 18_000, evidence: remaining });
   await page.goto(new URL('/today?view=arrivals', origin).href);
   await page.getByRole('heading', { name: '待收批次', exact: true }).or(page.getByText('当前没有在途待收批次。', { exact: true })).waitFor();
-  assert.equal(await batchLink.count(), 0);
+  assert.equal(await batchButton.count(), 0);
   await page.goto(new URL('/lines/hz09-line-501?focusBatch=' + batch, origin).href);
   await page.getByText('未发 0 件 · 待收 0 件 · 实收 30,000 件', { exact: true }).waitFor();
   await page.getByText(/实收登记.*18,000 件.*合成收货单 B/).waitFor();
@@ -638,6 +749,7 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
     await dialog.waitFor({ state: 'hidden' });
     await page.waitForURL(listUrl.href);
   }
+  await checkEscapeBeforeDrawerPaint(page, detail, dialog, listUrl);
 
   await page.reload();
   await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批未发.*第\s*11\s*页/ }).waitFor();
@@ -658,5 +770,18 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
   await close.click();
   await page.waitForURL(listUrl.href);
   await dialog.waitFor({ state: 'hidden' });
-  return { settledEscape: true, browserHistoryRestored: true, quickEscapes: 3, filterOnReload: 'unshipped', pageOnReload: 11, draftLinkRestored: true, draftEscape: true, mouseClose: true };
+  return { settledEscape: true, browserHistoryRestored: true, quickEscapes: 3, escapeBeforePaint: true, filterOnReload: 'unshipped', pageOnReload: 11, draftLinkRestored: true, draftEscape: true, mouseClose: true };
+}
+
+async function checkEscapeBeforeDrawerPaint(page: Page, trigger: Locator, dialog: Locator, list: URL) {
+  const handled = await trigger.evaluate((element) => {
+    if (!('click' in element)) return false;
+    element.click();
+    const escape = new globalThis.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    element.dispatchEvent(escape);
+    return escape.defaultPrevented;
+  });
+  assert.ok(handled, '抽屉打开请求尚未渲染时也应受理 Esc');
+  await page.waitForURL(list.href);
+  await dialog.waitFor({ state: 'hidden' });
 }

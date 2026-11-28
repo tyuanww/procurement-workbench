@@ -18,10 +18,12 @@ export type ChasePreview = {
 
 export function useChaseCopy({ query, buyerName }: { readonly query: ActionQuery; readonly buyerName: string }) {
   const { message } = App.useApp();
+  const [copyBatchId, setCopyBatchId] = useState<string | null>(null);
   const [copyPreview, setCopyPreview] = useState<ChasePreview | null>(null);
   const request = useCopyRequest(actionChaseSearch(query, { kind: 'filtered' }), setCopyPreview);
 
   function onCopyChase(scope: ChaseScope): void {
+    setCopyBatchId(scope.kind === 'batch' ? scope.id : null);
     message.destroy(COPY_SUCCESS_KEY);
     const summaryScope = scope.kind === 'all' || scope.kind === 'filtered' ? scope.kind : null;
     void request.run(summaryScope === null ? 'copy' : 'preview', async (signal) => {
@@ -56,7 +58,7 @@ export function useChaseCopy({ query, buyerName }: { readonly query: ActionQuery
     setCopyPreview(null);
   }
 
-  return { isCopying: request.isCopying, copyNotice: request.notice, copyPreview, onCopyChase, onConfirmCopy, onCancelCopyPreview };
+  return { isCopying: request.isCopying, copyNotice: request.notice, copyBatchId, copyPreview, onCopyChase, onConfirmCopy, onCancelCopyPreview };
 }
 
 function useCopyRequest(path: string, clearPreview: (value: null) => void) {
