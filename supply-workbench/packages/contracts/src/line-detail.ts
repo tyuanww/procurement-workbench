@@ -67,7 +67,7 @@ export const OrderLineDetailSchema: z.ZodType<OrderLineDetail> = strictObject({
     slot: demandSourceSlot.pick({ index: true, dateRaw: true, qtyRaw: true, sourceColumns: true, originalCells: true }),
   }))),
   factoryReports: strictObject({
-    inTransit: z.array(report('in_transit', inTransitPayload)),
+    inTransit: z.array(report('in_transit', inTransitPayload).extend({ originalCells })),
     shipments: z.array(shipmentSourceReport),
     stock: z.array(report('stock', stockPayload)),
     schedule: z.array(report('schedule', schedulePayload)),
