@@ -1309,7 +1309,11 @@ async function openOrderSummary(page: Page) {
 async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
   const noBatch = page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true });
   const [list] = await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === 'GET' && url.pathname === '/api/v1/lines'
+        && matchesScope(url) && url.searchParams.get('stages') === 'no_batch';
+    }),
     noBatch.click(),
   ]);
   await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch' && matchesScope(url));
