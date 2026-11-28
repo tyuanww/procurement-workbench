@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
-import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
+import { BatchViewSchema, EntityIdSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
 import { deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/imports/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
@@ -34,7 +35,7 @@ function procurementReturnState(params: URLSearchParams, state: unknown) {
   if (home !== null) return detailReturnState(state, home);
   const delivery = params.get('backToDelivery');
   if (delivery !== null) return detailReturnState(state, deliveryBackAddress(delivery));
-  return params.has('backToSchedule') ? state : undefined;
+  return params.has('backToSchedule') || EntityIdSchema.safeParse(params.get('importBatchId')).success ? state : undefined;
 }
 
 function procurementDetailQuery(params: URLSearchParams): URLSearchParams {
@@ -43,6 +44,10 @@ function procurementDetailQuery(params: URLSearchParams): URLSearchParams {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
+  const batch = EntityIdSchema.safeParse(params.get('importBatchId')).data;
+  if (batch !== undefined) related.set('importBatchId', batch);
+  const source = importFollowUpScope(params);
+  if (source !== null) related.set(IMPORT_RETURN_PARAM, source.to);
   return related;
 }
 
