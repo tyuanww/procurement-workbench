@@ -31,7 +31,7 @@ export function LineDetailPage() {
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
   const todayBatch = params.get('backToToday') === 'arrivals' ? params.get('focusBatch') : null;
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), schedule: params.get('backToSchedule'), state, lineId: id, todayBatch })} />;
+  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), schedule: params.get('backToSchedule'), state, lineId: id, todayBatch })} />;
 }
 
 function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {

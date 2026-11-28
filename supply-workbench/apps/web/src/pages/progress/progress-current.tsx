@@ -1,11 +1,12 @@
 import { Alert, Button, Empty, Result, Skeleton, Table } from 'antd';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type Key, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { type OrderLineRow, type ProcurementStore } from '@sw/contracts';
 import { matchesProgressDrill, PROGRESS_STAYS, progressDrillKey, progressInsights, readProgressDrill, withProgressDrill, type ProgressDrill, type ProgressRow, type ProgressStay } from '../../features/progress/index.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { useCan } from '../../shared/actor.js';
 import { formatQuantity } from '../../shared/ui/format.js';
+import { useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 import { tablePagination } from '../../shared/ui/pagination.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { ArrivalMemos } from '../../features/today/index.js';
@@ -18,33 +19,38 @@ export { noteBatches, pagesFor } from './progress-load.js';
 import { ProgressBreakdown, ProgressFilters } from './progress-overview.js';
 export { ArrivalTag } from './progress-columns.js';
 import { progressColumns } from './progress-columns.js';
-import { matchingOa, scopedLineLink, StoreGapSummary, StoreOrderDetails } from './store-order.js';
+import { matchingOa, scopedLineLink, StoreGapSummary, StoreOrderDetails, type ProgressOrderOrigin } from './store-order.js';
 import { progressPagination, resetProgressPagination, withProgressPagination } from './store-query.js';
 
 type ProgressScope = { readonly store: ProcurementStore; readonly isMine: boolean };
 const emptyProgress: ProgressData = { rows: [], lines: new Map(), batchFacts: new Map(), arrivalMemos: [], actionNotice: '' };
 
-export function ProgressCurrent({ filters, ...scope }: ProgressScope & { readonly filters: ReactNode }) {
+export function ProgressCurrent({ filters, origin = 'progress', ...scope }: ProgressScope & {
+  readonly filters: ReactNode;
+  readonly origin?: ProgressOrderOrigin;
+}) {
   const { data, error, isLoaded, notes, now, retry } = useCurrentData(scope);
-  const { oa, stay, drill, setOa, setStay, setDrill, tableRef, ...table } = useCurrentFilter();
+  const { oa, stay, drill, setOa, setStay, setDrill, clearFilters, tableRef, ...table } = useCurrentFilter();
+  const isDelivery = origin === 'delivery';
   const oaRows = data.rows.filter((row) => matchingOa(data.lines.get(row.lineId), oa));
   const scopedRows = stay === null ? oaRows : oaRows.filter((row) => row.stay === stay);
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
   const insight = progressInsights(scopedRows);
   const emptyMessage = currentEmptyMessage({ drill, oa, stay });
   const shouldShowMatchCount = isLoaded && drill.kind !== 'all' && (error === '' || data.rows.length > 0);
+  useDetailReturnFocus(isDelivery && isLoaded);
   useProgressRowFocus({ tableRef, search: table.search, isLoaded });
   return (
     <>
       <ProgressFilters filters={filters} lines={data.rows.map((row) => data.lines.get(row.lineId))}
         oa={oa} stay={stay} drill={drill} overdue={isLoaded ? insight.overdue : null}
-        onOa={setOa} onStay={setStay} onDrill={setDrill} />
+        onOa={setOa} onStay={setStay} onDrill={setDrill} isDelivery={isDelivery} />
       {insight.total === 0 ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
-      <div ref={tableRef} role="region" aria-label="当前进度表" tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
+      <div ref={tableRef} role="region" aria-label={isDelivery ? '按店铺交付结果' : '当前进度表'} tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
         <SectionGroup title="订单清单" meta={<span role="status">{shouldShowMatchCount ? `匹配 ${formatQuantity(rows.length)} 行` : ''}</span>}>
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
-            <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} />
+            <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} origin={origin} clearFilters={clearFilters} />
           </ProgressBody>
         </SectionGroup>
       </div>
@@ -92,6 +98,13 @@ function useCurrentFilter() {
   const writePage = (nextPage: number, nextSize: number) => setParams(
     withProgressPagination(params, { page: nextPage, pageSize: nextSize }), { preventScrollReset: true },
   );
+  const writeExpanded = (keys: readonly Key[]) => {
+    const next = new URLSearchParams(params);
+    next.delete('openLine');
+    next.delete('focusLine');
+    for (const key of keys) next.append('openLine', String(key));
+    setParams(next, { replace: true, preventScrollReset: true });
+  };
   const writeFilters = (nextDrill: ProgressDrill, nextStay: ProgressStay | null) => {
     const next = withProgressDrill(resetProgressPagination(params), nextDrill);
     if (nextStay === null) next.delete('stay');
@@ -100,6 +113,12 @@ function useCurrentFilter() {
   };
   return {
     oa, stay, drill, tableRef, page, pageSize, search: params.toString(),
+    expanded: params.getAll('openLine'), setExpanded: writeExpanded,
+    clearFilters: () => {
+      const next = oaParams(withProgressDrill(resetProgressPagination(params), { kind: 'all' }), null);
+      next.delete('stay');
+      setParams(next, { preventScrollReset: true });
+    },
     setPage: (value: number) => writePage(value, pageSize),
     setPageSize: (value: number) => writePage(1, value),
     setOa: (value: string | null) => setParams(oaParams(resetProgressPagination(params), value), { preventScrollReset: true }),
@@ -184,6 +203,10 @@ type ProgressTableProps = {
   readonly batchFacts: ProgressData['batchFacts'];
   readonly search: string;
   readonly emptyMessage: string | null;
+  readonly origin: ProgressOrderOrigin;
+  readonly expanded: readonly string[];
+  readonly setExpanded: (keys: readonly Key[]) => void;
+  readonly clearFilters: () => void;
   readonly notes: Readonly<Record<string, string>>;
   readonly now: Date;
   readonly page: number;
@@ -192,35 +215,40 @@ type ProgressTableProps = {
   readonly setPageSize: (size: number) => void;
 };
 
-function EmptyProgress({ message }: { readonly message: string | null }) {
+function EmptyProgress({ message, clear }: { readonly message: string | null; readonly clear?: () => void }) {
   const canReadImports = useCan('imports.read');
-  return <Empty description={message ?? '所选范围没有进行中的成品订单行。'}>{message === null && canReadImports ? <Button href="/imports">去导入</Button> : null}</Empty>;
+  return <Empty description={message ?? '所选范围没有进行中的成品订单行。'}>
+    {message !== null && clear !== undefined ? <Button onClick={clear}>清空筛选</Button> : null}
+    {message === null && canReadImports ? <Button href="/imports">去导入</Button> : null}
+  </Empty>;
 }
 
 function ProgressTable(props: ProgressTableProps) {
-  const { lines, notes, now, search } = props;
+  const { lines, notes, now, search, origin } = props;
   const isPhone = useShellViewport().band === 'phone';
   const isNarrowPhone = isPhone && window.innerWidth <= 340;
   const lineOf = (lineId: string) => lines.get(lineId);
   const lineHref = (lineId: string, focusBatch?: string) => scopedLineLink(lineId, {
-    search, store: lineOf(lineId)?.storeProgress?.store, focusLine: lineId, ...(focusBatch === undefined ? {} : { focusBatch }),
+    search, store: lineOf(lineId)?.storeProgress?.store, focusLine: lineId, origin, ...(focusBatch === undefined ? {} : { focusBatch }),
   });
   const overdueHref = (row: ProgressRow) => {
     const due = lineOf(row.lineId)?.nextDue;
     return row.arrival.kind === 'overdue' && due != null ? lineHref(row.lineId, due.batchId) : undefined;
   };
   const note = (lineId: string) => <ProgressNote href={lineHref(lineId)} saved={notes[lineId]} />;
-  const expand = (row: ProgressRow) => <ProgressExpandedRow row={row} line={lineOf(row.lineId)} facts={props.batchFacts.get(row.lineId)} search={search} note={isPhone ? note(row.lineId) : null} />;
+  const expand = (row: ProgressRow) => <ProgressExpandedRow row={row} line={lineOf(row.lineId)} facts={props.batchFacts.get(row.lineId)} search={search} origin={origin} note={isPhone ? note(row.lineId) : null} />;
   return (
     <Table
       rowKey="lineId"
       size="small"
       dataSource={[...props.rows]}
-      locale={{ emptyText: <EmptyProgress message={props.emptyMessage} /> }}
-      expandable={{ expandedRowRender: expand, ...(isPhone ? { columnWidth: 34 } : {}) }}
+      locale={{ emptyText: <EmptyProgress message={props.emptyMessage} {...(origin === 'delivery' ? { clear: props.clearFilters } : {})} /> }}
+      expandable={{ expandedRowRender: expand, ...(isPhone ? { columnWidth: 34 } : {}),
+        ...(origin === 'delivery' ? { expandedRowKeys: props.expanded, onExpandedRowsChange: props.setExpanded } : {}),
+      }}
       {...(isPhone ? {} : { sticky: { offsetHeader: topBar } })}
       tableLayout="fixed"
-      columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineOf, lineHref, overdueHref, now }) : progressColumns({ lines, lineHref, overdueHref, note, now })}
+      columns={isPhone ? progressMobileColumns({ isNarrowPhone, lineOf, lineHref, overdueHref, now, showFullIdentity: origin === 'delivery' }) : progressColumns({ lines, lineHref, overdueHref, note, now })}
       pagination={tablePagination({
         page: Math.min(props.page, Math.max(1, Math.ceil(props.rows.length / props.pageSize))),
         pageSize: props.pageSize,
@@ -233,16 +261,17 @@ function ProgressTable(props: ProgressTableProps) {
   );
 }
 
-function ProgressExpandedRow({ row, line, facts, search, note }: {
+function ProgressExpandedRow({ row, line, facts, search, origin, note }: {
   readonly row: ProgressRow;
   readonly line: OrderLineRow | undefined;
   readonly facts: StoreBatchFacts | undefined;
   readonly search: string;
+  readonly origin: ProgressOrderOrigin;
   readonly note: ReactNode;
 }) {
   return <>
     {note === null ? null : progressMobileDetails({ row, line, note })}
     <StoreBatchQuantities facts={facts} />
-    <StoreOrderDetails line={line} search={search} />
+    <StoreOrderDetails line={line} search={search} origin={origin} />
   </>;
 }

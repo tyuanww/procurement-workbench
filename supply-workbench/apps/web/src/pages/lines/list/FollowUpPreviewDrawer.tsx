@@ -70,7 +70,7 @@ function PreviewFooter({ lineId, search, onClose }: Pick<FollowUpPreviewDrawerPr
 }
 
 export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail; readonly timeline: LineTimeline; readonly search?: string; readonly error?: string }) {
-  const { detail, timeline } = props;
+  const { detail, timeline, search = '' } = props;
   const line = detail.line;
   return (
     <div>
@@ -87,10 +87,10 @@ export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail;
       ]} />
       <Divider />
       <Typography.Title level={4}>订单行下一到货</Typography.Title>
-      <NextArrival detail={detail} search={props.search ?? ''} />
+      <NextArrival detail={detail} search={search} />
       <Divider />
       <Typography.Title level={4}>各批次交期与数量</Typography.Title>
-      <BatchSection detail={detail} />
+      <BatchSection detail={detail} search={search} />
       <Divider />
       <Typography.Title level={4}>时间线</Typography.Title>
       <TimelineSection events={timeline.events} />
@@ -111,7 +111,7 @@ function NextArrival({ detail, search }: { readonly detail: OrderLineDetail; rea
     return <Typography.Text type="secondary">{nextArrivalMissing(detail)}</Typography.Text>;
   }
   const batch = detail.batches.find(({ id }) => id === due.batchId);
-  const batchLink = batch === undefined ? null : <LineDetailLink href={`/lines/${encodeURIComponent(detail.line.id)}?focusBatch=${encodeURIComponent(batch.id)}`} search={search}>第 {batch.seq} 批</LineDetailLink>;
+  const batchLink = batch === undefined ? null : <LineDetailLink href={batchPreviewHref(batch)} search={search}>第 {batch.seq} 批</LineDetailLink>;
   return <Descriptions size="small" column={1} items={[
     { key: 'confirmed', label: '开放批次最早的采购确认到货日', children: due.dateBuyerConfirmed },
     ...(batchLink === null ? [] : [{ key: 'batch', label: '对应批次', children: batchLink }]),
@@ -126,13 +126,19 @@ function nextArrivalMissing(detail: OrderLineDetail): string {
   return '订单行暂无汇总日期，可在下方核对各批次的采购确认到货日。';
 }
 
-function BatchSection({ detail }: { readonly detail: OrderLineDetail }) {
+function batchPreviewHref(batch: OrderLineDetail['batches'][number]): string {
+  return `/lines/${encodeURIComponent(batch.orderLineId)}?focusBatch=${encodeURIComponent(batch.id)}`;
+}
+
+function BatchSection({ detail, search }: { readonly detail: OrderLineDetail; readonly search: string }) {
   if (detail.batches.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" />;
   const due = detail.line.nextDue;
   return <Flex vertical gap="small">
     {detail.batches.map((batch) => {
       const isNext = due?.batchId === batch.id && due.dateBuyerConfirmed !== null;
-      return <Descriptions key={batch.id} title={`第 ${batch.seq} 批 · ${batchStatusLabel(batch.status)}${isNext ? ' · 下一到货' : ''}`} size="small" column={{ xs: 1, sm: 3 }} items={[
+      return <Descriptions key={batch.id} title={`第 ${batch.seq} 批 · ${batchStatusLabel(batch.status)}${isNext ? ' · 下一到货' : ''}`}
+        extra={<LineDetailLink href={batchPreviewHref(batch)} search={search}>查看第 {batch.seq} 批</LineDetailLink>}
+        size="small" column={{ xs: 1, sm: 3 }} items={[
         { key: 'confirmed', label: '采购确认到货日', children: batch.dateBuyerConfirmed ?? '未填写' },
         ...(batch.dateFactoryRequired === null ? [] : [{ key: 'factory', label: '代工厂需求日', children: batch.dateFactoryRequired }]),
         ...(batch.dateSupplierPromised === null ? [] : [{ key: 'supplier', label: '供应商承诺日', children: batch.dateSupplierPromised }]),

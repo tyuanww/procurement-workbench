@@ -1,12 +1,13 @@
 import type { OrderLineRow, ProcurementStore } from '@sw/contracts';
 import { addDays, LINE_STAGES, type LocalDate } from '@sw/domain';
 import { fetchLines } from '../../shared/api/catalog.js';
+import { DELIVERY_RISK_REASONS, deliveryRiskReasons } from '../../features/follow-up/index.js';
 
 const ACTIVE_STAGES = LINE_STAGES.filter((stage) => stage !== 'done' && stage !== 'cancelled').join(',');
 const PAGE_SIZE = 200;
 const UNASSIGNED = 'unassigned';
 export const SIGNALS = {
-  overdue: '已逾期', late: '确认到货晚于需求', exception: '异常未关闭',
+  ...DELIVERY_RISK_REASONS, exception: '异常未关闭',
   missing: '待确认交期', unassigned: '待分配负责人', soon: '7 天内应到',
 } as const;
 const signalPriority = Object.keys(SIGNALS);
@@ -37,13 +38,9 @@ export async function loadWorkLines(store: ProcurementStore, signal: AbortSignal
 
 function dateSignals(line: OrderLineRow, period: { today: LocalDate; end: LocalDate }): Signal[] {
   const { today, end } = period;
-  const signals: Signal[] = [];
+  const signals: Signal[] = deliveryRiskReasons(line, today);
   const date = line.nextDue?.dateBuyerConfirmed;
-  const demand = line.nextDue?.dateFactoryRequired;
-  if (!date) return signals;
-  if (date < today) signals.push('overdue');
-  if (demand && demand < date) signals.push('late');
-  if (date >= today && date < end) signals.push('soon');
+  if (date && date >= today && date < end) signals.push('soon');
   return signals;
 }
 

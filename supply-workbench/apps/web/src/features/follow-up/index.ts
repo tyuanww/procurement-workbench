@@ -16,3 +16,5 @@ export type { CreateDraft, ReceiptDraft, RecordDraft, ShipDraft } from './record
 export { postManualBatch, postReceipt, postShipment } from './record-forms/commands.js';
 export { RecordForm } from './record-forms/RecordForm.js';
 export { RecordField, RecordFormLayout } from './record-forms/RecordFields.js';
+export { dailyDeliveryParams, DELIVERY_QUERY_PARAM, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, orderLensOf, switchOrderLens, type OrderLens } from './line-list/order-lens-query.js';
+export { DELIVERY_RISK_REASONS, deliveryRiskReasons } from './line-list/delivery-risk.js';

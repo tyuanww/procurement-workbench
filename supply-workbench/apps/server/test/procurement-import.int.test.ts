@@ -59,6 +59,19 @@ it('店铺按逐行已提交 OA 和每次观察的成品引用查询同一采购
     const first = await api.upload('original.xlsx', ORIGINAL);
     expect((await api.commit(first)).statusCode).toBe(200);
     await verifyStoreIsolation(api, ORIGINAL);
+    const scoped = listResponseSchema(OrderLineRowSchema).parse(await api.lines('store=dafuyan'));
+    const material = must(scoped.items.find((item) => item.po.poRaw === FIRST_PO));
+    const finished = must(scoped.items.find((item) => item.po.poRaw === 'PO20261117009001' && item.storeProgress?.materials.some(({ id }) => id === material.id)));
+    const otherStore = listResponseSchema(OrderLineRowSchema).parse(await api.lines('lane=finished&store=yiling'));
+    const other = must(otherStore.items[0]);
+    expect(other.po.poRaw).toBe(finished.po.poRaw);
+    const query = new URLSearchParams({ store: 'dafuyan' });
+    for (const id of [material.id, finished.id, other.id, 'missing-order-line']) query.append('lineIds', id);
+    const selected = listResponseSchema(OrderLineRowSchema).parse(await api.lines(query.toString()));
+    expect(new Set(selected.items.map(({ id }) => id))).toEqual(new Set([material.id, finished.id]));
+    expect(selected.page.total).toBe(2);
+    expect((await api.app.inject({ url: '/api/v1/lines?lineIds=', headers: { cookie: api.cookie } })).statusCode).toBe(400);
+    expect((await api.app.inject({ url: '/api/v1/lines?lineIds=' + encodeURIComponent(finished.id) })).statusCode).toBe(401);
   } finally {
     await opened.close();
   }

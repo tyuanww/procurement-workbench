@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { columnsOf, type LineColumnView } from './columns.js';
 
 const PAGE_CAP = 200;
-const DEFAULT_LANE = 'finished';
+const DEFAULT_LANE = 'all';
 const deskLaneSchema = z.union([LaneSchema, z.literal('all')]);
 export const DEFAULT_PAGE_SIZE = 50;
 const textField: z.ZodType<string> = z.string().min(1);
@@ -102,7 +102,7 @@ export function readDesk(search: string): DeskRead {
     isOverdue: record.isOverdue,
     page: Number(record.pageToken ?? 1),
     pageSize: pageSizeOf(record.pageSizeToken),
-    columns: columnsOf(lane === 'all' ? DEFAULT_LANE : lane),
+    columns: columnsOf(lane === 'all' ? 'finished' : lane),
     stageChoices: STAGE_CHOICES,
     requestQuery: requestOf({ ...record, lane }),
   };

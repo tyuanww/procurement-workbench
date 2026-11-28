@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
-import { businessToday } from '../../../features/follow-up/index.js';
+import { businessToday, deliveryBackAddress } from '../../../features/follow-up/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 
 export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
@@ -15,7 +15,12 @@ type PlanningReturnState = NonNullable<ReturnType<typeof detailReturnState>> & {
 export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string }
   | { readonly todayPendingId: string } | { readonly todayArrivalId: string } | PlanningReturnState };
 
-export function lineDetailBack(input: { readonly progress: string | null; readonly schedule?: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
+export function lineDetailBack(input: { readonly progress: string | null; readonly delivery?: string | null; readonly schedule?: string | null; readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null }): DetailBack | null {
+  if (typeof input.delivery === 'string') {
+    const to = deliveryBackAddress(input.delivery);
+    const state = detailReturnState(input.state, to);
+    return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
+  }
   if (input.progress !== null) return legacyProgressBack(input.progress, input.state);
   const today = todayBack(input.state, input.todayBatch);
   if (today !== null) return today;

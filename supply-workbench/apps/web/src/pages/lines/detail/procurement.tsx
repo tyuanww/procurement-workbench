@@ -3,6 +3,8 @@ import { Link, useLocation, useSearchParams } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
+import { deliveryBackAddress } from '../../../features/follow-up/index.js';
+import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
@@ -28,7 +30,7 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
 
 function procurementDetailQuery(params: URLSearchParams): string {
   const related = new URLSearchParams();
-  for (const key of ['store', 'backToProgress', 'backToSchedule']) {
+  for (const key of ['store', 'backToProgress', 'backToSchedule', 'backToDelivery']) {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
@@ -47,7 +49,10 @@ function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLi
   const [params] = useSearchParams();
   const { state } = useLocation();
   const query = procurementDetailQuery(params);
-  const returnState = params.has('backToSchedule') ? state : undefined;
+  const delivery = params.get('backToDelivery');
+  const returnState = delivery === null
+    ? (params.has('backToSchedule') ? state : undefined)
+    : detailReturnState(state, deliveryBackAddress(delivery));
   return (
     <ul>{lines.map((line) => (
       <li key={line.id}>

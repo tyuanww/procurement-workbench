@@ -146,8 +146,16 @@ describe('已修改状态', () => {
     expect(isViewModified({ search: `stage=no_batch&q=面膜&view=${view.id}`, view })).toBe(true);
     expect(isViewModified({ search: 'stage=no_batch', view: undefined })).toBe(false);
     expect(filterSignature('page=2&pageSize=50&density=middle&hide=po&view=x&q=面膜')).toBe('q=面膜');
-    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C&lane=finished');
+    expect(saveAddress('q=面膜&view=x&density=middle&page=2')).toBe('q=%E9%9D%A2%E8%86%9C&lane=all');
     expect(clearFiltersAddress('stage=no_batch&view=x&density=middle&hide=received&page=2').toString()).toBe('density=middle&hide=received');
+  });
+
+  it('保存和比较视图时将缺省线别视为全部线，保留明确保存的成品线', () => {
+    const view = { id: 'saved', label: '全部线', query: saveAddress('q=面膜') };
+    expect(isViewModified({ search: 'view=saved&q=面膜', view })).toBe(false);
+    expect(isViewModified({ search: 'view=saved&q=面膜&lane=finished', view })).toBe(true);
+    const finished = viewAddress({ search: 'lane=all', view: { ...view, query: saveAddress('lane=finished&q=面膜') } });
+    expect(readDesk(finished.toString()).lane).toBe('finished');
   });
 
   it('已修改时出现提示和清除，清除回到视图查询', () => {

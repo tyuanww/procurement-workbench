@@ -31,6 +31,7 @@ export const DevLoginRequestSchema = strictObject({
 export type DevLoginRequest = z.output<typeof DevLoginRequestSchema>;
 
 export const LinesQuerySchema = strictObject({
+  lineIds: optional(z.array(OrderLineIdSchema).min(1).max(100)),
   store: optional(ProcurementStoreSchema),
   lane: optional(LaneSchema),
   q: optional(z.string()),
