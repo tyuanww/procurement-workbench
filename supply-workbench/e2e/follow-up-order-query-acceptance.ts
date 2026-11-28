@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 
-export async function checkFollowUpOrderQuery({ page, origin, out, po, warehouse }: {
+export async function checkFollowUpOrderQuery({ page, origin, out, po, materialCode, warehouse }: {
   readonly page: Page;
   readonly origin: URL;
   readonly out: string;
   readonly po: string;
+  readonly materialCode: string;
   readonly warehouse: string;
 }) {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -19,6 +20,11 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, warehouse
   await order.waitFor();
   const orderPath = await order.getAttribute('href');
   assert.ok(orderPath?.startsWith('/lines/'));
+  await search.fill(materialCode);
+  await search.press('Enter');
+  await page.waitForURL((url) => url.searchParams.get('q') === materialCode);
+  await order.waitFor();
+  assert.equal(await order.getAttribute('href'), orderPath);
   const orderRoute = decodeURIComponent(orderPath);
   assert.equal(new URL(page.url()).searchParams.has('lane'), false);
 
@@ -53,21 +59,21 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, warehouse
     await batchDetails.getByRole('region', { name: '工厂表 · 本批已归属', exact: true })
       .getByText('本批暂无已归属的工厂出货原行。', { exact: true }).waitFor();
     await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
-    await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('q') === po);
+    await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('q') === materialCode);
     await page.waitForFunction((text) => document.activeElement?.textContent === text, po);
-    assert.equal(await search.inputValue(), po);
+    assert.equal(await search.inputValue(), materialCode);
   }
 
   await page.reload();
   await order.waitFor();
-  assert.equal(await search.inputValue(), po);
+  assert.equal(await search.inputValue(), materialCode);
   const lanes = page.getByRole('radiogroup', { name: '订单线别' });
   await lanes.getByRole('radio', { name: '成品线', exact: true }).press('Space');
-  await page.waitForURL((url) => url.searchParams.get('lane') === 'finished' && url.searchParams.get('q') === po);
+  await page.waitForURL((url) => url.searchParams.get('lane') === 'finished' && url.searchParams.get('q') === materialCode);
   await page.getByText(/没有符合条件的订单行/u).waitFor();
   assert.equal(await order.count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
-  return { po, batch: second.seq, widths: [1440, 320], sourceEvidence: true, returnFocus: true, explicitFinishedLane: true };
+  return { po, materialCode, batch: second.seq, widths: [1440, 320], sourceEvidence: true, returnFocus: true, explicitFinishedLane: true };
 }
 
 async function createBatch(page: Page, path: URL, receiverPartyId: string) {

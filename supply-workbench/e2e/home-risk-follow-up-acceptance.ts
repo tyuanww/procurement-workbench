@@ -37,6 +37,9 @@ export async function checkHomeRiskFollowUp({ page, origin, out, material, finis
     await risk.press('Enter');
     await drawer.waitFor();
     assert.equal(await risk.getAttribute('aria-expanded'), 'true');
+    const dialogId = await drawer.getAttribute('id');
+    assert.ok(dialogId);
+    assert.equal(await risk.getAttribute('aria-controls'), dialogId);
     assert.equal(new URL(page.url()).pathname, '/home');
     await drawer.getByText(/^达肤妍 · \d{4}-\d{2}-\d{2} · \d+ 件$/u).waitFor();
     await drawer.getByText('已逾期', { exact: true }).first().waitFor();
