@@ -254,8 +254,9 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   assertDashboardPeriod(manager, stuckUrl);
   await manager.setViewportSize({ width: 320, height: 780 });
   await manager.goto(stuckUrl.href);
-  await stuckTrigger.waitFor();
-  const firstBatch = await stuckTrigger.boundingBox();
+  const firstStuck = manager.getByRole('button', { name: /^查看卡点明细/u }).first();
+  await firstStuck.waitFor();
+  const firstBatch = await firstStuck.boundingBox();
   assert.ok(firstBatch && firstBatch.y >= 0 && firstBatch.y + firstBatch.height <= 780, '手机首屏应能查看第一批卡点');
   assert.equal(await manager.getByRole('radiogroup', { name: '期间', exact: true }).count(), 0);
   await openStuckSecondBatch(manager, stuckTrigger, stuck);

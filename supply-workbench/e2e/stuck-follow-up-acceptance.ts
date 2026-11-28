@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import { seedDemoFixture } from './procurement-today-acceptance.ts';
 
 const lineId = 'hz09-line-1';
 const confirmDate = '2024-11-16';
@@ -14,6 +15,7 @@ export async function addStuckSecondBatch(buyer: Page, origin: URL, warehouse: s
   const { id, seq } = await response.json();
   assert.equal(seq, 2);
   assert.ok(typeof id === 'string' && id !== '');
+  seedDemoFixture(new URL('../fixtures/demo/stuck-second-batch.sql', import.meta.url));
   return id;
 }
 
@@ -49,6 +51,7 @@ export async function openStuckSecondBatch(page: Page, trigger: Locator, drawer:
   try {
     await trigger.press('Enter');
     await drawer.getByText('第 2 批', { exact: true }).waitFor();
+    await drawer.getByText('交付等待方', { exact: true }).waitFor();
     assert.equal(reads, 0, '在看板查看批次抽屉时不读订单明细或时间线');
   } finally {
     page.off('request', track);
