@@ -7,6 +7,7 @@ import { canTransitionImport, importPresenceMatches, withLatestImportPresence } 
 import { auditOf } from '../../shared/audit.js';
 import { authorize } from '../../shared/authorize.js';
 import { ImportHasConflictsError, StateConflictError } from '../../shared/errors.js';
+import { retryOrderLineLock } from '../../shared/locked-order-lines.js';
 import { revisionOf, saveImportRevision } from './revision.js';
 import { refreshLineProjection } from '../../shared/line-projection.js';
 import { commitExecutors } from '../commit/index.js';
@@ -17,7 +18,7 @@ export const makeCommitImport =
   (deps: CommitImportDeps): CommitImport =>
   async (input, actor) => {
     authorize(actor, 'imports.write');
-    await deps.uow.run((tx) => commitBatch({ tx, input, actor, clock: deps.clock }));
+    await retryOrderLineLock(deps.uow, (tx) => commitBatch({ tx, input, actor, clock: deps.clock }));
     return { importBatchId: input.importBatchId };
   };
 

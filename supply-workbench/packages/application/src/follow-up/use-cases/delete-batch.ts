@@ -12,6 +12,7 @@ export const makeDeleteBatch =
     await deps.uow.run(async (tx) => {
       const loaded = await tx.batches.lockWithRecords(input.batchId);
       assertBatchDeletable(loaded);
+      await tx.orderLines.lock(loaded.batch.orderLineId);
       await tx.batches.remove(input.batchId);
       await refreshLineProjection(tx, [loaded.batch.orderLineId]);
       await tx.audit.record(auditOf({ action: 'batch.delete', subject: loaded.batch, ctx: { actor, at, before: loaded.batch, after: null, entity: '要货批次' } }));
