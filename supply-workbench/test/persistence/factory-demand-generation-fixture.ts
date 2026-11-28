@@ -15,6 +15,7 @@ import { placeholderStores } from '../../packages/persistence/src/repositories/i
 import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
+import { settingsRepository } from '../../packages/persistence/src/repositories/settings.js';
 import { createUnitOfWork } from '../../packages/persistence/src/unit-of-work.js';
 import { aFactoryStockRow, anActor, anOrderLine, aParty, aPurchaseOrder, FixedClock } from '../../packages/testkit/src/index.js';
 
@@ -41,6 +42,7 @@ export async function seedOtherFactoryReport(db: AppDatabase, { sample, kind }: 
 type Hooks = {
   readonly afterOriginRead?: () => Promise<void>;
   readonly afterDemandSave?: () => Promise<void>;
+  readonly afterLineLock?: (id: string) => Promise<void>;
   readonly afterFactoryLinkSave?: () => Promise<void>;
   readonly afterSnapshotCommit?: () => Promise<void>;
   readonly afterSourceFreeze?: () => Promise<void>;
@@ -70,7 +72,8 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
         },
       },
       parties: partyRepository(tx),
-      orderLines: orderLineRepository(tx),
+      orderLines: orderLinesWithHooks(tx, hooks),
+      settings: settingsRepository(tx),
       purchaseOrders: purchaseOrderRepository(tx),
       imports: importBatchRepository(tx),
       audit: auditWithHooks(tx, hooks),
@@ -106,11 +109,24 @@ function batchesWithHooks(tx: AppDatabase, hooks: Hooks) {
   };
 }
 
+function orderLinesWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const orders = orderLineRepository(tx);
+  return {
+    ...orders,
+    async lock(id: string) {
+      const line = await orders.lock(id);
+      await hooks.afterLineLock?.(id);
+      return line;
+    },
+  };
+}
+
 function sampleOf() {
   const token = randomUUID();
+  const poDigits = BigInt(`0x${token.replaceAll('-', '')}`).toString().slice(-14).padStart(14, '0');
   return {
     id: entityId(token), lineId: orderLineId(token), importId: entityId(`demand-test-${token}`), factoryId: entityId(`demand-factory-${token}`),
-    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `DEMAND-PO-${token}`,
+    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `PO${poDigits}`,
     buyer: { ...anActor('buyer'), id: entityId(`demand-buyer-${token}`) },
     reviewer: { ...anActor('reviewer'), id: entityId(`demand-reviewer-${token}`) },
   };
@@ -174,11 +190,11 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
-    delete from delivery_batches where origin_ref->>'rowId' = '${sample.id}';
+    delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other');
     delete from line_factory_links where order_line_id = '${sample.lineId}';
     delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
-    delete from purchase_orders where po_raw = '${sample.poRaw}';
-    delete from factory_material_demand_rows where id = '${sample.id}';
+    delete from purchase_orders where id = '${sample.orderId}' or po_norm in ('${sample.poRaw}', upper('ALT-${sample.id}'));
+    delete from factory_material_demand_rows where import_batch_id = '${sample.importId}';
     delete from factory_shipment_rows where id = '0-${sample.id}-report';
     delete from factory_in_transit_rows where id = '0-${sample.id}-report';
     delete from factory_stock_rows where id = '0-${sample.id}-report';
