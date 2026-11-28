@@ -143,10 +143,13 @@ async function checkRiskPageReturn({ page, daily, today, lineId, batchId }: {
       await results.getByText('2', { exact: true }).click();
       await target.waitFor();
       for (const fromButton of [true, false]) {
-        await target.press('Enter');
-        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
-        if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-        else await page.goBack();
+        if (fromButton && width === 1440) await returnWhileRiskDetailLoads(page, { target, lineId, batchId });
+        else {
+          await target.press('Enter');
+          await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
+          if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
+          else await page.goBack();
+        }
         await results.getByText('51 条订单行', { exact: true }).waitFor();
         assert.equal(new URL(page.url()).searchParams.get('page'), '2', '从订单详情返回应保留交期风险第 2 页');
         await target.and(page.locator(':focus')).waitFor();
@@ -163,6 +166,30 @@ async function checkRiskPageReturn({ page, daily, today, lineId, batchId }: {
   } finally {
     await page.unroute(riskListing, addSyntheticRows);
     await page.setViewportSize({ width: 1440, height: 900 });
+  }
+}
+
+async function returnWhileRiskDetailLoads(page: Page, { target, lineId, batchId }: {
+  readonly target: Locator; readonly lineId: string; readonly batchId: string;
+}) {
+  const pending = Promise.withResolvers<void>();
+  await page.route((url) => decodeURIComponent(url.pathname) === `/api/v1/lines/${lineId}`, async (route) => {
+    await pending.promise;
+    await route.continue();
+  }, { times: 1 });
+  try {
+    await target.press('Enter');
+    await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
+    const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
+    await back.focus();
+    assert.equal(await back.evaluate((link) => document.activeElement === link), true);
+    pending.resolve();
+    await page.getByRole('region', { name: '批次', exact: true }).waitFor();
+    await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
+    assert.equal(await back.evaluate((link) => document.activeElement === link), true, '批次加载后应保留返回链接的键盘焦点');
+    await page.keyboard.press('Enter');
+  } finally {
+    pending.resolve();
   }
 }
 
