@@ -7,7 +7,7 @@ import { businessToday, deliveryBackAddress, followUpAddress, useFollowUpSearch 
 import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/imports/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
-import { readImportBatchOriginState } from '../../imports/import-source.js';
+import { importFollowUpReturn, readImportBatchOriginState } from '../../imports/import-source.js';
 
 type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode };
 
@@ -51,11 +51,14 @@ type BackSource = {
   readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null;
 };
 
-export function readLineDetailBack({ lineId, params, state }: { readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown }) {
+export function readLineDetailBack({ lineId, params, state, canReadImports }: {
+  readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown; readonly canReadImports: boolean;
+}) {
   const focusBatch = params.get('focusBatch');
-  return lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,
+  const back = lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,
     progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), deliveryEntry: params.get('deliveryEntry'), home: params.get(HOME_RISK_RETURN_PARAM),
     schedule: params.get('backToSchedule') });
+  return back ?? (canReadImports ? importFollowUpReturn({ params, state }) : null) ?? importOrdersBack(params);
 }
 
 export function lineDetailBack(input: BackSource): DetailBack | null {
@@ -158,6 +161,13 @@ export function arrivalEvidenceLink({ arrivalId, params, state }: {
   const search = scoped ?? new URLSearchParams();
   search.set('arrival', arrivalId);
   return { to: followUpAddress('/lines', search), state: scoped === null ? undefined : readImportBatchOriginState(state) };
+}
+
+function importOrdersBack(params: URLSearchParams): DetailBack | null {
+  const search = arrivalDeskScope(params, undefined);
+  if (search === null) return null;
+  search.delete(IMPORT_RETURN_PARAM);
+  return { to: followUpAddress('/lines', search), label: '返回本批订单' };
 }
 
 function arrivalDeskScope(params: URLSearchParams, state: unknown): URLSearchParams | null {

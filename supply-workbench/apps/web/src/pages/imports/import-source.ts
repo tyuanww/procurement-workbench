@@ -53,7 +53,8 @@ export function importFollowUpReturn({ params, state, scoped = false }: {
   readonly state: unknown;
   readonly scoped?: boolean;
 }) {
-  const back = scoped ? importFollowUpScope(params) : importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
+  const back = scoped || params.has('importBatchId')
+    ? importFollowUpScope(params) : importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
   if (back === null) return null;
   const focus = detailReturnState(state, { detailPath: back.to, sourceLink: importSourceTriggerId(back.recordKey) });
   const origin = importBatchOrigin(state);

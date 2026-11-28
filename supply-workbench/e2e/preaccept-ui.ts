@@ -935,6 +935,16 @@ async function checkCopiedImportLine({ page, row, sourceUrl }: { readonly page: 
     await detached.waitForURL(sourceUrl);
     await detached.getByRole('dialog', { name: '核对本次导入来源' })
       .getByRole('link', { name: '查看本次实际关联的订单', exact: true }).and(detached.locator(':focus')).waitFor();
+    const conflicting = new URL(href, origin);
+    conflicting.searchParams.set('backToImport', '/imports/another-synthetic-batch?drawer=import-source&source=batch');
+    await detached.goto(conflicting.href);
+    await detached.getByRole('heading', { name: componentPo, exact: true }).waitFor();
+    const fallback = detached.getByRole('link', { name: '返回本批订单', exact: true });
+    await fallback.waitFor();
+    assert.equal(await detached.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+    await fallback.press('Enter');
+    await detached.waitForURL((url) => url.pathname === '/lines'
+      && url.searchParams.get('importBatchId') === conflicting.searchParams.get('importBatchId'));
   } finally {
     await detached.close();
   }
@@ -1003,7 +1013,15 @@ async function checkSharedImportScope(page: Page, importPath: string) {
     assert.equal(await page.getByRole('radiogroup', { name: '订单查法' }).count(), 0);
     assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
   }
-  return { importStatus: 403, scopedOrderCount: importOrderPos.length, deliverySwitchHidden: true };
+  const order = page.getByRole('link', { name: importOrderPos[0], exact: true });
+  const href = await order.getAttribute('href');
+  assert.ok(href);
+  await page.goto(new URL(href, origin).href);
+  await page.getByRole('heading', { name: importOrderPos[0], exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+  await page.getByRole('link', { name: '返回本批订单', exact: true }).press('Enter');
+  await assertImportOrdersAndExport(page);
+  return { importStatus: 403, scopedOrderCount: importOrderPos.length, deliverySwitchHidden: true, copiedDetailCanReturnToOrders: true };
 }
 
 async function checkImportedArrivalEvidence(page: Page, importPath: string) {
