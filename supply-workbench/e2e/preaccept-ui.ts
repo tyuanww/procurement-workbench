@@ -18,6 +18,7 @@ import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
 import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
+import { checkStuckRoundTrip } from './stuck-follow-up-acceptance.ts';
 import { checkRedReview } from './red-review-acceptance.ts';
 import { sidebarGroup, sidebarLink } from './sidebar.ts';
 
@@ -189,18 +190,19 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await stuckTrigger.press('Enter');
   const stuck = manager.getByRole('dialog', { name: '卡点批次明细', exact: true });
   await stuck.getByText('交付等待方', { exact: true }).waitFor();
-  assert.equal(manager.url(), stuckUrl.href);
+  const opened = new URL(manager.url());
+  const batchId = opened.searchParams.get('stuckBatch');
+  assert.ok(batchId);
+  opened.searchParams.delete('stuckBatch');
+  assert.equal(opened.href, stuckUrl.href);
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
+  await stuckTrigger.and(manager.locator(':focus')).waitFor();
   await stuckTrigger.click();
-  const orderLine = stuck.getByRole('link', { name: '打开订单行', exact: true });
-  const batchHref = new URL(await orderLine.getAttribute('href') ?? '', origin);
-  assert.match(batchHref.pathname, /^\/lines\/[^/]+$/);
-  assert.ok(batchHref.searchParams.get('focusBatch'));
-  await orderLine.click();
-  await manager.waitForURL(batchHref.href);
-  await manager.getByRole('region', { name: '批次', exact: true }).locator('li:focus').waitFor();
-  await manager.goto(stuckUrl.href);
+  await checkStuckRoundTrip(manager, stuck, batchId, false);
+  await checkStuckRoundTrip(manager, stuck, batchId, true);
+  await manager.keyboard.press('Escape');
+  await stuck.waitFor({ state: 'hidden' });
 
   const sidebar = manager.locator('aside');
   const suppliers = await sidebarLink(sidebar, '管理看板', '供应商表现');
@@ -232,6 +234,7 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   assert.equal(await manager.getByRole('radiogroup', { name: '期间', exact: true }).count(), 0);
   await stuckTrigger.click();
   await stuck.getByText('交付等待方', { exact: true }).waitFor();
+  await checkStuckRoundTrip(manager, stuck, batchId, false);
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
   await manager.setViewportSize({ width: 1440, height: 900 });
