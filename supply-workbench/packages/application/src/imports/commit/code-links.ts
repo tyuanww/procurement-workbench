@@ -82,8 +82,7 @@ async function ensureCode({ ctx, parsed, raw }: { readonly ctx: CommitContext; r
   const existing = (await ctx.tx.itemCodes.listByNorm(parsed.codeNorm)).find((row) => row.codeType === parsed.codeType);
   if (existing !== undefined) return existing.id;
   const id = entityId(codeKey(parsed));
-  await ctx.tx.itemCodes.save(newCode({ id, parsed, raw, at: ctx.at }));
-  return id;
+  return ctx.tx.itemCodes.insertIfAbsent(newCode({ id, parsed, raw, at: ctx.at }));
 }
 
 async function ensureLink({ ctx, pair, id, ids }: { readonly ctx: CommitContext; readonly pair: Pair; readonly id: EntityId; readonly ids: { readonly fromId: EntityId; readonly toId: EntityId } }): Promise<void> {

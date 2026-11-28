@@ -22,7 +22,7 @@ it.skipIf(url === undefined)('代工厂快照退休尚未提交时，保留业�
       await linkReport({ table: 'shipment', rowId: reportId, orderLineId: sample.lineId }, sample.reviewer);
       expect((await onlyLineDetail(main.db, sample.code)).line.factory?.id).toBe(sample.factoryId);
       const pending = gate();
-      const publish = makeCommitImport(writes(competing.db, { afterSnapshotCommit: pending.hold }))({ importBatchId }, sample.reviewer);
+      const publish = makeCommitImport(writes(competing.db, { beforeSnapshotTransactionCommit: pending.hold }))({ importBatchId }, sample.reviewer);
       try {
         await Promise.race([publish, pending.entered]);
         const generate = makeGenerateBatchesFromDemand(writes(main.db));

@@ -131,7 +131,7 @@ it.skipIf(url === undefined).each([true, false])('同工厂两份编码对照排
     try {
       const leftSaved = gate();
       const rightSaved = gate();
-      const hook = hasExistingCodes ? 'afterCodeLinkSave' : 'afterItemCodeSave';
+      const hook = hasExistingCodes ? 'afterCodeLinkSave' : 'afterItemCodeInsertAttempt';
       const publish = makeCommitImport(writes(main.db, { [hook]: leftSaved.hold }));
       const publishReordered = makeCommitImport(writes(competing.db, { [hook]: rightSaved.hold }));
       const publishing = publish({ importBatchId: first.id }, sample.reviewer);
@@ -168,8 +168,9 @@ it.skipIf(url === undefined)('不同处理上限的自动重联可以同时提�
     const ids = await seedTwoReportKinds(main.db, sample);
     try {
       const paused = gate();
-      const first = makeRelinkFactoryRows({ ...writes(main.db, { afterFactoryLinkSave: paused.hold }), links: scopedQueries(main.db, ids) });
-      const second = makeRelinkFactoryRows({ ...writes(competing.db), links: scopedQueries(competing.db, ids) });
+      const scope = { reports: ids, lines: [sample.lineId, `${sample.id}-other`] };
+      const first = makeRelinkFactoryRows({ ...writes(main.db, { afterFactoryLinkSave: paused.hold }), links: scopedQueries(main.db, scope) });
+      const second = makeRelinkFactoryRows({ ...writes(competing.db), links: scopedQueries(competing.db, scope) });
       const smaller = first({ limit: 1 }, sample.reviewer);
       let larger: ReturnType<typeof second> | undefined;
       try {
@@ -194,12 +195,15 @@ it.skipIf(url === undefined)('不同处理上限的自动重联可以同时提�
   });
 }, 15000);
 
-function scopedQueries(db: AppDatabase, ids: readonly string[]) {
+function scopedQueries(db: AppDatabase, { reports, lines }: { readonly reports: readonly string[]; readonly lines: readonly string[] }) {
   const queries = factoryLinkQueries(db);
   return {
     ...queries,
+    async listOrderLineRefs() {
+      return (await queries.listOrderLineRefs()).filter((line) => lines.includes(line.orderLineId));
+    },
     async listFactoryRowRefs() {
-      return (await queries.listFactoryRowRefs()).filter((row) => ids.includes(row.rowId));
+      return (await queries.listFactoryRowRefs()).filter((row) => reports.includes(row.rowId));
     },
   };
 }
