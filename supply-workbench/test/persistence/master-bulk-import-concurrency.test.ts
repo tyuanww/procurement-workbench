@@ -58,6 +58,13 @@ it.skipIf(url === undefined)('批量建物料不能使用拿锁之后由工厂�
     const toId = entityId('code:pack_30:' + codes[1]);
     const imports = importBatchRepository(main.db);
     const codeRepo = itemCodeRepository(main.db);
+    const existing = code(sample.id + '-existing', sample.code + '-existing');
+    await codeRepo.save(existing);
+    const bulkAuditCount = async () => {
+      const result = await main.exec(`select count(*)::int as count from audit_log
+        where actor_user_id = '${sample.reviewer.id}' and action = 'code.bulk-create'`);
+      return rowsFrom(result)[0]?.count;
+    };
     await imports.save({
       ...parsedBatch(await imports.get(sample.importId), { id: batchId, template: 'factory-progress-v1' }),
       fileMeta: { codeLinks: [{ fromCodeRaw: codes[0], toCodeRaw: codes[1], sheetName: '合成编码对照', rowNo: 2 }] },
@@ -79,7 +86,7 @@ it.skipIf(url === undefined)('批量建物料不能使用拿锁之后由工厂�
         };
       }),
     });
-    const reviewing = settled(bulk({ codeIds: [fromId] }, sample.reviewer));
+    const reviewing = settled(bulk({ codeIds: [existing.id, fromId] }, sample.reviewer));
     try {
       await Promise.race([paused.entered, reviewing.result]);
       expect(await codeRepo.find(fromId)).toBeUndefined();
@@ -89,21 +96,95 @@ it.skipIf(url === undefined)('批量建物料不能使用拿锁之后由工厂�
       paused.release();
       await expect(reviewing.result).rejects.toMatchObject({ code: 'NOT_FOUND' });
       expect(await codeRepo.get(fromId)).toMatchObject({ status: 'pending', itemId: null });
+      expect(await codeRepo.get(existing.id)).toMatchObject({ status: 'pending', itemId: null });
+      expect(await itemRows(main, existing.codeRaw)).toEqual([]);
+      expect(await bulkAuditCount()).toBe(0);
       const retry = composeMasterData({ db: main.db, clock, timeZone: 'Asia/Shanghai' });
       expect(await retry.bulkCreate({ codeIds: [fromId, fromId] }, sample.reviewer)).toEqual({ created: 1 });
     } finally {
       paused.release();
       await Promise.allSettled([reviewing.result]);
-      const itemId = (await codeRepo.find(fromId))?.itemId;
+      const items = [(await codeRepo.find(fromId))?.itemId, (await codeRepo.find(existing.id))?.itemId];
       await main.exec(`
         delete from code_links where from_code_id = '${fromId}';
-        delete from item_codes where id in ('${fromId}', '${toId}');
+        delete from item_codes where id in ('${fromId}', '${toId}', '${existing.id}');
         delete from import_batches where id = '${batchId}';
-        ${itemId == null ? '' : `delete from items where id = '${itemId}';`}
+        ${items.flatMap((id) => id == null ? [] : [`delete from items where id = '${id}';`]).join(' ')}
       `);
     }
   });
 }, 20000);
+
+it.skipIf(url === undefined)('批量回填只读一次候选，锁内重新匹配当前条码并保留输入优先级', async () => {
+  await withFixture(async ({ main, competing, sample }) => {
+    const seed = await poSample(main.db, { sample, isReverse: true });
+    const seeds = Array.from({ length: 30 }, (_, i) => code(`${sample.id}-extra-${i}`, `${sample.code}-${i}`));
+    const codes = itemCodeRepository(main.db);
+    for (const extra of seeds) await codes.save(extra);
+    const lines = orderLineRepository(main.db);
+    await lines.save({ ...await lines.get(seed.high), barcodeRaw: seed.first.codeRaw });
+    await lines.save({ ...await lines.get(seed.low), itemCodeRaw: seed.first.codeRaw, barcodeRaw: seed.second.codeRaw });
+    const scanned: string[] = [];
+    const waiting = gate();
+    const bulk = makeBulkCreateItems({ ...writes(main.db), uow: observedBulk(main.db, { waiting, scanned }) });
+    const review = settled(bulk({ codeIds: [seed.second.id, ...seeds.map(({ id }) => id), seed.first.id] }, sample.reviewer));
+    try {
+      await Promise.race([waiting.entered, review.result]);
+      const committed = orderLineRepository(competing.db);
+      await committed.save({ ...await committed.get(seed.high), barcodeRaw: seed.second.codeRaw, nameRaw: '锁后回看新原文' });
+      waiting.release();
+      expect(await review.result).toEqual({ created: 32 });
+      const selected = (await codes.get(seed.second.id)).itemId;
+      expect(selected).not.toBeNull();
+      expect(await lines.get(seed.high)).toMatchObject({ itemId: selected, barcodeRaw: seed.second.codeRaw, nameRaw: '锁后回看新原文' });
+      expect(await lines.get(seed.low)).toMatchObject({ itemId: selected, itemCodeRaw: seed.first.codeRaw, barcodeRaw: seed.second.codeRaw });
+      expect(scanned).toEqual(['全部订单一次']);
+    } finally {
+      waiting.release();
+      await Promise.allSettled([review.result]);
+      const ids = seeds.map(({ id }) => `'${id}'`).join(', ');
+      const removed = await main.exec(`delete from item_codes where id in (${ids}) returning item_id as id`);
+      for (const { id } of rowsFrom(removed)) if (typeof id === 'string') await main.exec(`delete from items where id = '${id}'`);
+      await cleanPoSample(main, seed);
+    }
+  });
+}, 20000);
+
+function observedBulk(db: AppDatabase, { waiting, scanned }: { readonly waiting: ReturnType<typeof gate>; readonly scanned: string[] }) {
+  return createUnitOfWork(db, (transaction) => {
+    const tx = requireDatabase(transaction);
+    const lines = orderLineRepository(tx);
+    return {
+      ...placeholderStores(), audit: auditRepository(tx), batches: deliveryBatchRepository(tx), procurement: procurementRepository(tx),
+      itemCodes: itemCodeRepository(tx), items: itemRepository(tx),
+      orderLines: {
+        ...lines,
+        async listAll() {
+          scanned.push('全部订单一次');
+          return await lines.listAll?.() ?? [];
+        },
+        async listByCodeNorm(norm) {
+          scanned.push('单编码 ' + norm);
+          return lines.listByCodeNorm(norm);
+        },
+        async lock(id) {
+          if (!waiting.hasEntered()) await waiting.hold();
+          return lines.lock(id);
+        },
+      },
+    };
+  });
+}
+
+async function itemRows(handle: AppHandle, name: string) {
+  const result = await handle.exec(`select id from items where display_name = '${name}'`);
+  return rowsFrom(result);
+}
+
+function rowsFrom(result: unknown): readonly Record<string, unknown>[] {
+  if (result !== null && typeof result === 'object' && 'rows' in result && Array.isArray(result.rows)) return result.rows;
+  throw new Error('预期 PostgreSQL 返回行集');
+}
 
 function procurementImport(db: AppDatabase, { paused, high }: { readonly paused: ReturnType<typeof gate>; readonly high: string }) {
   return createUnitOfWork(db, (transaction) => {

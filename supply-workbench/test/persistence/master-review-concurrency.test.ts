@@ -118,6 +118,36 @@ it.skipIf(url === undefined)('普通一号多名审核期间，无可重联的�
   });
 }, 15000);
 
+it.skipIf(url === undefined)('审核要回填物料并重联时，先生成的需求保留原表凭据', async () => {
+  await withReviewFixture(async (fixture, keys) => {
+    const { main, competing, sample } = fixture;
+    await seedLine({ db: main.db, sample, id: sample.lineId, fields: { itemId: null, nameRaw: '合成包材' } });
+    const reports = factoryReportRepository(main.db);
+    const demand = await reports.get(sample.id);
+    if (demand.demand === null) throw new Error('合成样本缺少需求');
+    const { poNorm } = await purchaseOrderRepository(main.db).get(sample.orderId);
+    await reports.save({ ...demand, demand: { ...demand.demand, poNorm } });
+    const code = reviewCode({ id: keys.left, codeRaw: sample.code, itemId: null });
+    await itemCodeRepository(main.db).save(code);
+    const waiting = gate();
+    const generate = makeGenerateBatchesFromDemand(writes(main.db, { afterLineLock: async (id) => {
+      if (id === sample.lineId && !waiting.hasEntered()) await waiting.hold();
+    } }));
+    const resolve = makeResolveMultiName(reviewWrites(competing.db, { nextId: keys.firstItem }));
+    const result = await overlap(fixture, {
+      paused: waiting,
+      first: async () => expect(await generate({ rowIds: [sample.id] }, sample.buyer))
+        .toEqual({ createdLines: 0, createdBatches: 1, skipped: [] }),
+      second: () => resolve({ codeId: code.id, mode: 'same_item', displayName: '合成包材' }, sample.reviewer),
+    });
+    expect(result).toEqual({ codeId: code.id });
+    expect(await orderLineRepository(main.db).get(sample.lineId)).toMatchObject({ itemId: keys.firstItem });
+    expect(await reports.get(sample.id)).toMatchObject({ linkStatus: 'linked', linkedOrderLineId: sample.lineId });
+    expect(Object.values((await onlyLineDetail(main.db, sample.code)).batchDemandSources ?? {}))
+      .toMatchObject([{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
+  });
+}, 15000);
+
 it.skipIf(url === undefined)('自动重联与主数据审核按相同表顺序锁住在途和需求', async () => {
   await withReviewFixture(async (fixture, keys) => {
     const { main, competing, sample } = fixture;
