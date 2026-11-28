@@ -8,7 +8,7 @@ import type { AppDatabase } from '../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../schema/factory.js';
 import { importBatches } from '../schema/archive.js';
 import { effectiveFactoryLinks } from '../queries/factory-links/line-association.js';
-import { activeFactoryBatchIds } from '../queries/factory-links/snapshot-scope.js';
+import { activeFactoryBatchIds, isActiveFactoryBatch } from '../queries/factory-links/snapshot-scope.js';
 import { batchDemandSourceOf, demandSourceOf, isAssociated } from '../queries/follow-up/payloads.js';
 import { numberOrNull } from '../mappers/number.js';
 import { entityId, orderLineIdOrNull } from '../mappers/id.js';
@@ -31,10 +31,13 @@ export function factoryReportRepository(db: AppDatabase): FactoryReportRepositor
     lockSnapshotOrders: (input) => lockSnapshotOrders(db, input),
     save: (entity) => saveReport(db, entity),
     async linkUnassignedTransit(rowId, lineId) {
-      const [transit] = await db.select({ factoryPartyId: factoryInTransitRows.factoryPartyId }).from(factoryInTransitRows)
-        .where(eq(factoryInTransitRows.id, rowId));
+      const [transit] = await db.select({
+        factoryPartyId: factoryInTransitRows.factoryPartyId, importBatchId: factoryInTransitRows.importBatchId,
+      }).from(factoryInTransitRows).where(eq(factoryInTransitRows.id, rowId));
       if (transit === undefined) return false;
+      const wasActive = await isActiveFactoryBatch(db, transit.importBatchId);
       await lockFactorySnapshotSource(db, { factoryPartyId: transit.factoryPartyId, kind: 'report' });
+      if (wasActive && !await isActiveFactoryBatch(db, transit.importBatchId)) return false;
       await lockFactoryOwnershipChange(db, [lineId]);
       const updated = await db.update(factoryInTransitRows)
         .set({ linkedOrderLineId: lineId, linkStatus: 'manual', linkReason: null })
