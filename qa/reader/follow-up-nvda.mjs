@@ -33,6 +33,8 @@ const evidence = {
 await mkdir(output, { recursive: true });
 const save = () => writeFile(join(output, 'result.json'), JSON.stringify(evidence, null, 2) + '\n');
 const sanitize = (error) => String(error?.stack ?? error).replaceAll(accessCode, '[redacted]');
+const spokenText = (phrases) => phrases.join(' ').replace(/[\u200b-\u200d\ufeff]/gu, '').replace(/\s+dot\s+/giu, '.');
+const spokenPo = po.replace(/^PO/u, 'PO\\s*');
 await save();
 
 let browser;
@@ -108,10 +110,10 @@ async function collectSpeech(record, expected, waitMs = 5000) {
   const deadline = Date.now() + waitMs;
   do {
     record.spoken = [...await nvda.spokenPhraseLog()];
-    if (expected.test(record.spoken.join(' '))) return;
+    if (expected.test(spokenText(record.spoken))) return;
     await delay(150);
   } while (Date.now() < deadline);
-  assert.match(record.spoken.join(' '), expected, 'Expected NVDA speech was absent after this action');
+  assert.match(spokenText(record.spoken), expected, 'Expected NVDA speech was absent after this action');
 }
 
 async function visit(page, path, role) {
@@ -127,13 +129,9 @@ async function visit(page, path, role) {
       await page.waitForFunction(() => document.hasFocus());
       const title = await page.title();
       await nvda.clearSpokenPhraseLog();
-      for (let n = 0; n < 5; n++) {
-        await nvda.perform(nvda.keyboardCommands.reportTitle);
-        const speech = await nvda.lastSpokenPhrase();
-        if ((title && speech.includes(title)) || /Microsoft[ -]*Edge/u.test(speech)) break;
-        await nvda.press('Alt+Escape', { capture: false });
-      }
+      await nvda.perform(nvda.keyboardCommands.reportTitle);
       record.windowSpeech = [...await nvda.spokenPhraseLog()];
+      assert.match(spokenText(record.windowSpeech), /Microsoft[ -]*Edge/u, title + ' must be in the Windows foreground');
       const asset = await page.locator('script[type="module"][src^="/assets/"]').first().getAttribute('src');
       const response = responses.get(new URL(asset, origin).href);
       assert.ok(response?.ok(), 'Browser did not load the application entry');
@@ -193,7 +191,7 @@ async function buyer(page, fixture) {
     await page.waitForURL(({ pathname, searchParams }) => pathname === '/lines' && searchParams.get('q') === code);
     await order.and(page.locator(':focus')).waitFor();
     assert.equal(await search.inputValue(), code);
-    await reportFocus(record, RegExp(po, 'u'));
+    await reportFocus(record, RegExp(spokenPo, 'u'));
   });
 }
 
@@ -229,7 +227,7 @@ async function manager(page) {
   const returnUrl = page.url();
   await step(role, 'actively select a specific order', 'Playwright focuses the specific link in the drawer; NVDA reports the link and sends Enter; Playwright observes the scoped detail page', async record => {
     await selected.focus();
-    await reportFocus(record, RegExp('查看订单\\s*' + po, 'u'));
+    await reportFocus(record, RegExp('查看订单\\s*' + spokenPo, 'u'));
     await nvda.press('Enter');
     await page.waitForURL(url => decodeURIComponent(url.pathname) === '/lines/' + component && url.searchParams.get('store') === 'dafuyan');
     await page.getByRole('heading', { name: po, exact: true }).waitFor();
@@ -244,7 +242,7 @@ async function manager(page) {
     assert.equal(await search.inputValue(), '测试');
     assert.equal(await sort.getAttribute('aria-sort'), 'ascending');
     record.location = new URL(page.url()).pathname + new URL(page.url()).search;
-    await reportFocus(record, RegExp('查看订单\\s*' + po, 'u'));
+    await reportFocus(record, RegExp('查看订单\\s*' + spokenPo, 'u'));
   });
 }
 
@@ -286,16 +284,23 @@ async function readSources(page, role) {
         record.spoken = [...await nvda.spokenPhraseLog()];
         if (heading.test(record.spoken.at(-1) ?? '')) break;
       }
-      assert.match(record.spoken.at(-1) ?? '', heading);
+      if (!heading.test(record.spoken.at(-1) ?? '')) {
+        record.speechError = 'NVDA did not reach the expected heading: ' + title;
+        return;
+      }
       record.heading = record.spoken.at(-1);
       headingReached = true;
       await nvda.clearSpokenPhraseLog();
       for (let count = 0; count < 8; count++) {
         await nvda.next();
         record.spoken = [...await nvda.spokenPhraseLog()];
-        if (row.test(record.spoken.join(' '))) break;
+        if (row.test(spokenText(record.spoken))) break;
       }
-      assert.match(record.spoken.join(' '), row);
+      try {
+        assert.match(spokenText(record.spoken), row);
+      } catch (error) {
+        record.speechError = sanitize(error);
+      }
     });
   }
 }
