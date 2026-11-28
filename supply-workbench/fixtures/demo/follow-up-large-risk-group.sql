@@ -1,7 +1,8 @@
 BEGIN;
 
 CREATE TEMP TABLE large_risk_group ON COMMIT DROP AS
-SELECT n, 'procurement-component:synthetic-follow-up-large-risk-material:' || lpad(n::text, 4, '0') AS line_id,
+SELECT n, 'procurement-component:synthetic-follow-up-large-risk-material:' || lpad(n::text, 4, '0') ||
+  CASE WHEN n % 3 = 0 THEN repeat('料', 40) ELSE '' END AS line_id,
   'SYN-RISK-' || lpad(n::text, 4, '0') AS po,
   (now() AT TIME ZONE 'Asia/Shanghai')::date - 2 AS confirmed
 FROM generate_series(1, 300) n;

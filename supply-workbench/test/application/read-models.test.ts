@@ -30,7 +30,7 @@ it('OrderLineDetail 的字段和 05 第 4.3 节及管理店铺扩展一致', () 
 
 it('BatchView 含 02 第 3.6 节字段和 05 第 4.4 节附加字段', () => {
   lock<BatchView>()([
-    'id', 'orderLineId', 'seq', 'plannedQty', 'receiverPartyId', 'dateFactoryRequired', 'dateSupplierPromised', 'dateBuyerConfirmed', 'firstConfirmedDate', 'confirmedBy', 'confirmedAt', 'status', 'statusChangedAt', 'origin', 'originRef', 'closedAt', 'closedReason', 'cancelledAt', 'cancelReason', 'shipments', 'receipts', 'deliveryNote', 'fulfillment', 'shippedQty', 'receivedQty', 'qtyVariance', 'noteStatus', 'overdueDays', 'daysInStage', 'dateChanges',
+    'id', 'orderLineId', 'seq', 'plannedQty', 'receiverPartyId', 'dateFactoryRequired', 'dateSupplierPromised', 'dateBuyerConfirmed', 'firstConfirmedDate', 'confirmedBy', 'confirmedAt', 'status', 'statusChangedAt', 'origin', 'originRef', 'closedAt', 'closedReason', 'cancelledAt', 'cancelReason', 'shipments', 'hasUnavailableShipmentSource', 'receipts', 'deliveryNote', 'fulfillment', 'shippedQty', 'receivedQty', 'qtyVariance', 'noteStatus', 'overdueDays', 'daysInStage', 'dateChanges',
   ]);
 });
 

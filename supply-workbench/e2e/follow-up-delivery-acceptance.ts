@@ -179,30 +179,65 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
     await page.goto(address.href);
-    const sources = [{ link: order, batchId: null }, { link: overdue, batchId: batches[0] }];
-    if (width === 1440) sources.push({ link: note, batchId: null });
-    for (const { link, batchId } of sources) {
+    const sources = [
+      { link: order, batchId: null, source: '订单主链接' },
+      { link: overdue, batchId: batches[0] ?? null, source: '逾期批次' },
+    ];
+    if (width === 1440) sources.push({ link: note, batchId: null, source: '订单备注' });
+    for (const { link, batchId, source } of sources) {
       for (const fromButton of [true, false]) {
-        await link.press('Enter');
-        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
-        if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-        else await page.goBack();
-        await page.waitForURL(address.href);
-        await link.and(page.locator(':focus')).waitFor();
+        await openDeliveryDetail(page, { link, lineId, batchId, source, width });
+        await returnToDailyDelivery(page, { address, fromButton, source, width, focus: link });
       }
     }
   }
-  await overdue.press('Enter');
+  await openDeliveryDetail(page, { link: overdue, lineId, batchId: batches[0] ?? null, source: '逾期批次', width: 1440 });
   for (const id of batches) {
     const saved = await page.request.patch(new URL(`/api/v1/batches/${encodeURIComponent(id)}`, daily).href,
       { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
     assert.ok(saved.ok(), await saved.text());
   }
-  await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-  await page.waitForURL(address.href);
-  await results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }).waitFor();
-  await results.and(page.locator(':focus')).waitFor();
+  await returnToDailyDelivery(page, { address, fromButton: true, source: '已移出逾期结果的批次', width: 1440, focus: results,
+    notice: results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }) });
   assert.equal(await row.count(), 0);
+}
+
+async function openDeliveryDetail(page: Page, { link, lineId, batchId, source, width }: {
+  readonly link: Locator; readonly lineId: string; readonly batchId: string | null;
+  readonly source: string; readonly width: number;
+}) {
+  const expectedPath = `/lines/${lineId}`;
+  try {
+    await link.press('Enter');
+    await page.waitForURL((url) => decodeURIComponent(url.pathname) === expectedPath && url.searchParams.get('focusBatch') === batchId,
+      { waitUntil: 'commit' });
+    await page.getByRole('region', { name: '批次', exact: true }).waitFor();
+  } catch (cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${width}px ${source}打开详情，预期路径 ${expectedPath}、批次 ${batchId}，当前地址 ${page.url()}\n${detail}`, { cause });
+  }
+}
+
+async function returnToDailyDelivery(page: Page, { address, fromButton, source, width, focus, notice }: {
+  readonly address: URL; readonly fromButton: boolean; readonly source: string; readonly width: number;
+  readonly focus: Locator; readonly notice?: Locator;
+}) {
+  try {
+    if (fromButton) {
+      const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
+      const href = await back.getAttribute('href');
+      assert.ok(href, '订单详情缺少返回地址');
+      const target = new URL(href, page.url());
+      assert.equal(target.href, address.href, `订单详情返回链接地址为 ${target.href}`);
+      await back.press('Enter');
+    } else await page.goBack({ waitUntil: 'commit' });
+    await page.waitForURL(address.href, { waitUntil: 'commit' });
+    await notice?.waitFor();
+    await focus.and(page.locator(':focus')).waitFor();
+  } catch (cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${width}px ${source} ${fromButton ? '显式返回' : '浏览器后退'}，预期 ${address.href}，当前地址 ${page.url()}\n${detail}`, { cause });
+  }
 }
 
 function rowDetails(requests: readonly URL[]): string[] {

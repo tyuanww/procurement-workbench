@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import { browserFailureLocation, failureMessage, writeAcceptanceJson } from './acceptance-diagnostics.ts';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkFollowUpDelivery } from './follow-up-delivery-acceptance.ts';
@@ -68,6 +69,8 @@ type AcceptanceResult = {
   readonly exceptions: { readonly role: Role; readonly text: string }[];
   result?: 'pass' | 'fail';
   failure?: string;
+  failureAt?: string;
+  cleanupFailure?: string;
 };
 const result: AcceptanceResult = { platform: process.platform, browser: browser.version(), channel, checks: {}, network: [], exceptions: [] };
 const expectedFailures: ExpectedFailure[] = [];
@@ -81,14 +84,32 @@ try {
   assert.deepEqual(result.exceptions, []);
   result.result = 'pass';
 } catch (error) {
+  recordFailure(error);
+  await saveResult().catch((saveError: unknown) => console.error('Unable to persist the acceptance failure:', failureMessage(saveError)));
+}
+try {
+  await browser.close();
+} catch (error) {
   result.result = 'fail';
-  result.failure = error instanceof Error ? error.message : String(error);
+  result.cleanupFailure = failureMessage(error);
+  console.error('Unable to close the acceptance browser:', result.cleanupFailure);
   process.exitCode = 1;
 } finally {
-  await browser.close();
-  await writeFile(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+  await saveResult();
 }
-console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure }));
+console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure, failureAt: result.failureAt }));
+
+async function saveResult(): Promise<void> {
+  await writeAcceptanceJson(join(out, 'result.json'), result);
+}
+
+function recordFailure(error: unknown): void {
+  result.result = 'fail';
+  result.failure = failureMessage(error);
+  result.failureAt = browserFailureLocation(error);
+  console.error(JSON.stringify({ failure: result.failure, failureAt: result.failureAt }));
+  process.exitCode = 1;
+}
 
 async function procurementAcceptance(): Promise<void> {
   seedChaseSample();
