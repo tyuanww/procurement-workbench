@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { localDate } from '../../packages/domain/src/index.js';
 import { readDesk } from '../../apps/web/src/features/follow-up/index.js';
 import {
-  dailyDeliveryParams, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, switchOrderLens,
+  dailyDeliveryParams, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, switchOrderLens,
 } from '../../apps/web/src/features/follow-up/line-list/order-lens-query.js';
 import { deliveryRiskReasons } from '../../apps/web/src/features/follow-up/line-list/delivery-risk.js';
+import { followUpAddress, followUpParams } from '../../apps/web/src/features/follow-up/line-list/follow-up-address.js';
+import { followUpFeishuReturn } from '../../apps/web/src/features/follow-up/line-list/follow-up-login.js';
 import { clearFiltersAddress, saveAddress, viewAddress } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
 describe('跟进中心订单查法', () => {
@@ -56,5 +58,31 @@ describe('跟进中心订单查法', () => {
     expect(deliveryRiskReasons({ nextDue }, today)).toEqual(['overdue', 'late']);
     expect(deliveryRiskReasons({ nextDue: { ...nextDue, dateBuyerConfirmed: today } }, today)).toEqual(['late']);
     expect(deliveryRiskReasons({ nextDue: { ...nextDue, dateBuyerConfirmed: null } }, today)).toEqual([]);
+  });
+
+  it('数百条风险在新页面、下钻和切换查法时精确保留，HTTP 查询不带整组', () => {
+    const ids = Array.from({ length: 320 }, (_, index) => `procurement-component:synthetic-follow-up-risk:${index}`);
+    const date = localDate('2026-11-27');
+    const base = 'https://workbench.invalid';
+    const home = new URL(homeDeliveryRiskAddress({ store: 'dafuyan', date, ids, returnQuery: new URLSearchParams({ backToHome: 'store=dafuyan&drawer=risk' }) }), base);
+    expect(home.searchParams.getAll('riskLine')).toEqual([]);
+    const selected = followUpParams(home.search, home.hash);
+    expect(homeDeliveryRiskOf(selected)).toEqual({ kind: 'home-risk', store: 'dafuyan', date, ids });
+    expect(selected.get('backToHome')).toBe('store=dafuyan&drawer=risk');
+    selected.set('page', '6');
+
+    const detail = new URL(followUpAddress('/lines/material', new URLSearchParams({ store: 'dafuyan', backToDelivery: selected.toString() })), base);
+    expect(detail.searchParams.get('backToDelivery')).toBeNull();
+    const back = new URL(deliveryBackAddress(followUpParams(detail.search, detail.hash).get('backToDelivery') ?? ''), base);
+    expect(back.searchParams.get('page')).toBe('6');
+    expect(followUpParams(back.search, back.hash).getAll('riskLine')).toEqual(ids);
+
+    const switched = new URL(followUpAddress('/lines', switchOrderLens(selected, 'query')), base);
+    expect(switched.searchParams.get('deliveryQuery')).toBeNull();
+    expect(switchOrderLens(followUpParams(switched.search, switched.hash), 'delivery').getAll('riskLine')).toEqual(ids);
+    expect(followUpParams('?store=dafuyan', '#follow-up?store=yiling').get('store')).toBe('dafuyan');
+    const login = followUpFeishuReturn(detail.pathname + detail.search + detail.hash, 'd10c6d8b-f7e7-48c7-a086-02a4283f1072');
+    expect(login.returnTo.length).toBeLessThan(200);
+    expect(login.stored?.value).toBe(detail.pathname + detail.search + detail.hash);
   });
 });

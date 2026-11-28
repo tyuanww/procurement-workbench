@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
+import { Link, useInRouterContext, useLocation } from 'react-router';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
-import { businessToday, deliveryBackAddress } from '../../../features/follow-up/index.js';
+import { businessToday, deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { legacyPersonalPath, TODAY_BATCH_RETURN_PARAM, todayArrivalsPath, todayBatchRecordFocus } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 
@@ -18,6 +18,7 @@ export type DetailBack = { readonly to: string; readonly label: string; readonly
 
 type BackSource = {
   readonly progress: string | null; readonly delivery?: string | null; readonly home?: string | null; readonly schedule?: string | null;
+  readonly deliveryEntry?: string | null;
   readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null; readonly today?: string | null;
 };
 
@@ -25,7 +26,7 @@ export function readLineDetailBack({ lineId, params, state }: { readonly lineId:
   const focusBatch = params.get('focusBatch');
   const today = params.get(TODAY_BATCH_RETURN_PARAM);
   return lineDetailBack({ lineId, state, focusBatch, today, todayBatch: today === 'arrivals' ? focusBatch : null,
-    progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), home: params.get(HOME_RISK_RETURN_PARAM),
+    progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), deliveryEntry: params.get('deliveryEntry'), home: params.get(HOME_RISK_RETURN_PARAM),
     schedule: params.get('backToSchedule') });
 }
 
@@ -34,7 +35,7 @@ export function lineDetailBack(input: BackSource): DetailBack | null {
   if (home !== null) return home;
   if (typeof input.delivery === 'string') {
     const to = deliveryBackAddress(input.delivery);
-    const state = detailReturnState(input.state, to);
+    const state = detailReturnState(input.state, input.deliveryEntry ? { detailPath: to, sourceLink: input.deliveryEntry } : to);
     return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
   }
   if (input.progress !== null) return legacyProgressBack(input.progress, input.state);
@@ -131,12 +132,11 @@ export function readReturningLine(state: unknown): string | null {
 
 function lineDeskAddress(state: unknown): string | null {
   if (typeof state !== 'object' || state === null || !('lineDeskSearch' in state) || typeof state.lineDeskSearch !== 'string') return null;
-  const search = new URLSearchParams(state.lineDeskSearch).toString();
-  return search === '' ? '/lines' : `/lines?${search}`;
+  return followUpAddress('/lines', new URLSearchParams(state.lineDeskSearch));
 }
 
 export function useLineDetailSearchParams() {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const { state } = useLocation();
   return { params, setParams: (next: URLSearchParams) => setParams(next, { state }) };
 }

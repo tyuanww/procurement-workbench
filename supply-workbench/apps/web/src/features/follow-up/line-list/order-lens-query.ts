@@ -1,5 +1,6 @@
 import { LocalDateSchema, OrderLineIdSchema, ProcurementStoreSchema } from '@sw/contracts';
 import type { LocalDate, OrderLineId, ProcurementStore } from '@sw/domain';
+import { followUpAddress } from './follow-up-address.js';
 
 export type OrderLens = 'query' | 'delivery';
 export const DELIVERY_QUERY_PARAM = 'deliveryQuery';
@@ -73,10 +74,13 @@ export function homeDeliveryRiskOf(params: URLSearchParams): { kind: 'daily' } |
   return { kind: 'home-risk', store: store.data, date: date.data, ids: [...new Set(ids.flatMap((id) => id.success ? [id.data] : []))] };
 }
 
-export function homeDeliveryRiskAddress({ store, date, ids }: Omit<DeliveryRisk, 'ids'> & { readonly ids: readonly string[] }): string {
+export function homeDeliveryRiskAddress({ store, date, ids, returnQuery }: Omit<DeliveryRisk, 'ids'> & {
+  readonly ids: readonly string[]; readonly returnQuery?: URLSearchParams;
+}): string {
   const params = new URLSearchParams({ lens: 'delivery', store, [RISK_DATE]: date });
   for (const id of new Set(ids)) params.append(RISK_LINE, id);
-  return `/lines?${params}`;
+  if (returnQuery !== undefined) for (const [key, value] of returnQuery) params.append(key, value);
+  return followUpAddress('/lines', params);
 }
 
 export function dailyDeliveryParams(params: URLSearchParams): URLSearchParams {
@@ -88,5 +92,5 @@ export function dailyDeliveryParams(params: URLSearchParams): URLSearchParams {
 export function deliveryBackAddress(search: string): string {
   const params = new URLSearchParams(search);
   params.set('lens', 'delivery');
-  return `/lines?${params}`;
+  return followUpAddress('/lines', params);
 }
