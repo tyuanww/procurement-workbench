@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Descriptions, Flex, Typography } from 'antd';
 import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
@@ -37,35 +37,29 @@ function ImportBatchContent({ id }: { readonly id: string }) {
   const [reasons, setReasons] = useState<readonly string[]>([]);
   const canImport = useCanWrite('imports.write');
   const canWriteRecords = useCanWrite('records.write');
-  if (load.kind !== 'ready') {
-    return (
-      <WorkbenchPage title="导入批次" action={back}>
-        {load.kind === 'loading' ? <p role="status">正在读取导入批次</p> : (
-          <Alert type="error" title={load.message} action={<Button onClick={retry}>重试</Button>} />
-        )}
-      </WorkbenchPage>
-    );
-  }
+  const browserTitle = load.kind === 'ready' ? `导入批次 · ${load.summary.file.originalName}` : '导入批次';
   return (
-    <ImportBatchReady
-      id={id}
-      back={back}
-      search={search.toString()}
-      setSearch={(value) => setParams(value, { state })}
-      summary={load.summary}
-      request={request}
-      setSummary={setSummary}
-      setRequest={setRequest}
-      reasons={reasons}
-      setReasons={setReasons}
-      canImport={canImport && (load.summary.template !== 'batch-confirmed-arrival-v1' || canWriteRecords)}
-    />
+    <WorkbenchPage title="导入批次" browserTitle={browserTitle} action={back}>
+      {load.kind === 'ready' ? <ImportBatchReady
+        id={id}
+        search={search.toString()}
+        setSearch={(value) => setParams(value, { state })}
+        summary={load.summary}
+        request={request}
+        setSummary={setSummary}
+        setRequest={setRequest}
+        reasons={reasons}
+        setReasons={setReasons}
+        canImport={canImport && (load.summary.template !== 'batch-confirmed-arrival-v1' || canWriteRecords)}
+      /> : load.kind === 'loading' ? <p role="status">正在读取导入批次</p> : (
+        <Alert type="error" title={load.message} action={<Button onClick={retry}>重试</Button>} />
+      )}
+    </WorkbenchPage>
   );
 }
 
 type ImportBatchReadyProps = {
   readonly id: string;
-  readonly back: ReactNode;
   readonly search: string;
   readonly setSearch: (value: URLSearchParams) => void;
   readonly summary: ImportBatchSummary;
@@ -84,7 +78,7 @@ function ImportBatchReady(props: ImportBatchReadyProps) {
   const isReplay = summary.procurementReplayOf !== undefined;
   const canEdit = props.canImport && summary.status === 'parsed' && !isReplay;
   return (
-    <WorkbenchPage title="导入批次" browserTitle={`导入批次 · ${summary.file.originalName}`} action={props.back}>
+    <>
       <ImportWorkflow stage={summary.status} />
       <Flex vertical gap={space[3]}>
         <BatchOverview summary={summary} />
@@ -97,7 +91,7 @@ function ImportBatchReady(props: ImportBatchReadyProps) {
       {canEdit && !isArrival ? <ImportConflictPortal id={id} summary={summary} setSummary={props.setSummary}
         isOpen={readImportConflictDrawer(props.search)}
         onClose={() => props.setSearch(writeImportConflictDrawer({ search: props.search, isOpen: false }))} /> : null}
-    </WorkbenchPage>
+    </>
   );
 }
 
