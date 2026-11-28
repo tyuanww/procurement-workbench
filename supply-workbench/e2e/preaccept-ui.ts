@@ -244,6 +244,17 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   await manager.waitForURL(stuckUrl.href);
   await stuckTrigger.and(manager.locator(':focus')).waitFor();
   await manager.setViewportSize({ width: 1440, height: 900 });
+  await openStuckSecondBatch(manager, stuckTrigger, stuck);
+  const batchLink = stuck.getByRole('link', { name: '核对本批记录', exact: true });
+  await batchLink.press('Enter');
+  await manager.waitForURL(sharedOrder.href);
+  const removed = await buyer.request.delete(new URL(`/api/v1/batches/${batchId}`, origin).href);
+  assert.equal(removed.status(), 204, '清理看板新增的合成批次');
+  await manager.getByRole('link', { name: '返回管理看板', exact: true }).press('Enter');
+  await manager.waitForURL(opened.href);
+  const list = manager.getByRole('region', { name: '卡点明细', exact: true });
+  await list.getByText('原批次已不在当前卡点清单，原筛选已保留。', { exact: true }).waitFor();
+  await list.and(manager.locator(':focus')).waitFor();
   return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], focusedStuckBatch: true, phoneWidth: 320 };
 }
 

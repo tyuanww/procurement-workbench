@@ -48,7 +48,7 @@ export function StuckPanel(props: {
   const { data, query, onSearch, isUpdating } = props;
   const isPhone = useShellViewport().band === 'phone';
   const listRef = useRef<HTMLElement>(null);
-  const { batchId, select } = useStuckSelection(listRef);
+  const { batchId, select } = useStuckSelection(listRef, query.page, isUpdating ? undefined : data.page);
   const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
   const filterList = (patch: DashboardPatch) => {
     onSearch(patch);
@@ -59,7 +59,7 @@ export function StuckPanel(props: {
     <CauseFilter counts={data.causeCounts} cause={query.cause} onSearch={filterList} />
   </Flex>;
   const selection = <StuckSelection batchId={batchId} data={data} rows={stuck.rows} now={props.now}
-    isUpdating={isUpdating} listRef={listRef} onClose={() => select(null)} />;
+    isUpdating={isUpdating || (batchId !== null && data.page !== query.page)} listRef={listRef} onClose={() => select(null)} />;
   return (
     <Flex vertical gap={space[3]}>
       {isPhone ? <Collapse size="small" items={[{ key: 'filters', label: '卡点指标与原因筛选', children: filters }]} /> : filters}

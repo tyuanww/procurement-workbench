@@ -21,27 +21,38 @@ export function stuckTriggerId(batchId: string) {
   return `stuck-batch:${batchId}`;
 }
 
-export function useStuckSelection(list: RefObject<HTMLElement | null>) {
+export function useStuckSelection(list: RefObject<HTMLElement | null>, requestedPage: number, displayedPage: number | undefined) {
   const [params, setParams] = useSearchParams();
   const batchId = params.get(STUCK_BATCH_PARAM);
-  const last = useRef(batchId);
+  const dismissed = useRef<string | null>(null);
   useEffect(() => {
-    const prior = last.current;
-    last.current = batchId;
+    const prior = dismissed.current;
+    dismissed.current = null;
     if (prior === null || batchId !== null) return;
     const frame = window.requestAnimationFrame(() => (document.getElementById(stuckTriggerId(prior)) ?? list.current)?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [batchId, list]);
+  useEffect(() => {
+    if (batchId === null || displayedPage === undefined || displayedPage === requestedPage) return;
+    const next = new URLSearchParams(params);
+    setStuckPage(next, displayedPage);
+    setParams(next, { replace: true, preventScrollReset: true });
+  }, [batchId, displayedPage, params, requestedPage, setParams]);
   return { batchId, select(id: string | null, displayedPage?: number) {
+    if (id === null) dismissed.current = batchId;
     setParams((previous) => {
       const next = new URLSearchParams(previous);
       if (id === null) next.delete(STUCK_BATCH_PARAM);
       else next.set(STUCK_BATCH_PARAM, id);
-      if (displayedPage === 1) next.delete('page');
-      else if (displayedPage !== undefined) next.set('page', String(displayedPage));
+      if (displayedPage !== undefined) setStuckPage(next, displayedPage);
       return next;
     }, { replace: true, preventScrollReset: true });
   } };
+}
+
+function setStuckPage(params: URLSearchParams, page: number) {
+  if (page === 1) params.delete('page');
+  else params.set('page', String(page));
 }
 
 export function StuckSelection({ batchId, data, rows, now, isUpdating, listRef, onClose }: {

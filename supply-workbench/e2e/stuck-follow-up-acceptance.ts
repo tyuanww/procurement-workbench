@@ -24,10 +24,11 @@ export async function checkStuckRoundTrip(page: Page, drawer: Locator, batchId: 
   const target = new URL(await order.getAttribute('href') ?? '', before);
   assert.equal(target.pathname, `/lines/${lineId}`);
   assert.equal(target.searchParams.get('focusBatch'), batchId);
-  const reads = readPaths.map((path) => page.waitForRequest((request) => request.method() === 'GET' && new URL(request.url()).pathname === path));
-  await order.press('Enter');
-  await page.waitForURL(target.href);
-  await Promise.all(reads);
+  await Promise.all([
+    ...readPaths.map((path) => page.waitForRequest((request) => request.method() === 'GET' && new URL(request.url()).pathname === path)),
+    page.waitForURL(target.href),
+    order.press('Enter'),
+  ]);
   await page.getByRole('region', { name: '批次', exact: true }).locator('li:focus').getByText(secondBatchTitle).waitFor();
   for (const name of ['新增批次', '保存确认日', '登记发货', '登记收货']) {
     assert.equal(await page.getByRole('button', { name, exact: true }).count(), 0);
