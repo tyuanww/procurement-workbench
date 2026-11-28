@@ -16,6 +16,7 @@ export function itemCodeRepository(box: MemoryBox) {
   const repo = idRepository(() => box.current.itemCodes, '编码');
   return {
     ...repo,
+    lock: repo.get,
     async listByNorm(codeNorm: string) {
       return [...box.current.itemCodes.values()].filter((row) => row.codeNorm === codeNorm);
     },

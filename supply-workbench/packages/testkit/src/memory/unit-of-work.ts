@@ -23,12 +23,13 @@ import {
 } from './services.js';
 
 export function storesOf(box: MemoryBox): UnitOfWorkStores {
+  const items = idRepository(() => box.current.items, '物料');
   return {
     users: userRepository(box),
     settings: settingsRepository(box),
     parties: idRepository(() => box.current.parties, '主体'),
     aliases: aliasRepository(box),
-    items: idRepository(() => box.current.items, '物料'),
+    items: { ...items, lock: items.get },
     itemCodes: itemCodeRepository(box),
     itemNames: itemNameRepository(box),
     codeLinks: codeLinkRepository(box),
