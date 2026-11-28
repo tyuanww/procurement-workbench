@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router';
+import { Result } from 'antd';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import { NAV_ROUTES, PAGE_MANIFEST, type PageManifestEntry } from './page-manifest.js';
 import type { SessionUser } from '@sw/contracts';
 import { ActorRoles } from '../shared/actor.js';
@@ -46,10 +47,12 @@ function SignedInRoutes({ user }: { readonly user: SessionUser }) {
   );
 }
 
-function FollowUpLoginReturn({ storageKey, to }: { readonly storageKey: string; readonly to: string }) {
+function FollowUpLoginReturn({ storageKey, to }: { readonly storageKey: string; readonly to: string | null }) {
   useEffect(() => {
     try { window.sessionStorage.removeItem(storageKey); } catch { /* Storage can be disabled. */ }
   }, [storageKey]);
+  if (to === null) return <Result status="warning" title="登录成功，暂时无法恢复这组订单"
+    subTitle="请在当前浏览器重新打开原来的订单链接。" extra={<Link to="/">回到工作台</Link>} />;
   return <Navigate to={to} replace />;
 }
 

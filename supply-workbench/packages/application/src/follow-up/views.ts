@@ -74,6 +74,7 @@ export type BatchView = {
   readonly cancelledAt: string | null;
   readonly cancelReason: string | null;
   readonly shipments: readonly ShipmentView[];
+  readonly hasUnavailableShipmentSource?: boolean;
   readonly receipts: readonly ReceiptView[];
   readonly deliveryNote: DeliveryNoteView | null;
   readonly fulfillment?: BatchFulfillment;

@@ -279,6 +279,9 @@ jobs:
             echo 'Required web smoke is missing' >&2
             exit 1
           fi
+      - name: Build workspace for procurement browser acceptance
+        if: needs.plan.outputs.full == 'true'
+        run: pnpm build
       - name: Run procurement browser acceptance against isolated PostgreSQL
         if: needs.plan.outputs.full == 'true'
         env:
@@ -286,12 +289,16 @@ jobs:
           ACCEPT_BROWSER: chrome
         run: |
           set -euo pipefail
-          if ! command -v pg_config >/dev/null || [ ! -x "$(pg_config --bindir)/initdb" ]; then
+          if ! pgbin=$(pg_config --bindir 2>/dev/null) || [ ! -x "$pgbin/initdb" ]; then
             sudo apt-get update
             sudo apt-get install -y postgresql
+            pgbin=$(pg_config --bindir)
           fi
-          export PGBIN="$(pg_config --bindir)"
-          pnpm build
+          if [ ! -x "$pgbin/initdb" ]; then
+            printf 'PostgreSQL initdb was not found in %s\n' "$pgbin" >&2
+            exit 1
+          fi
+          export PGBIN="$pgbin"
           pnpm exec node --experimental-strip-types e2e/native-acceptance.ts "$TESTED_SHA" "$RUNNER_TEMP/linux-acceptance"
       - name: Upload procurement browser and runner evidence
         if: always() && needs.plan.outputs.full == 'true'

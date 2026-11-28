@@ -32,19 +32,23 @@ export function LoginPage() {
 function FeishuLogin({ returnTo }: { readonly returnTo: string }) {
   const [token] = useState(() => window.crypto.randomUUID());
   const [hasStorageError, setStorageError] = useState(false);
-  const target = followUpFeishuReturn(returnTo, token);
+  const { returnTo: destination, stored } = followUpFeishuReturn(returnTo, token);
+  const href = feishuStartHref(destination);
+  const login = stored === undefined
+    ? <Button type="primary" href={href} block>使用飞书登录</Button>
+    : <Button type="primary" block onClick={() => {
+      try {
+        window.sessionStorage.setItem(stored.key, stored.value);
+      } catch {
+        setStorageError(true);
+        return;
+      }
+      window.location.assign(href);
+    }}>使用飞书登录</Button>;
   return <>
     <Typography.Paragraph type="secondary">使用企业飞书账号登录。</Typography.Paragraph>
     {hasStorageError ? <Alert type="error" title="浏览器无法在登录后恢复这组订单。请先允许当前站点使用会话存储。" /> : null}
-    <Button type="primary" href={feishuStartHref(target.returnTo)} block onClick={(event) => {
-      if (target.stored === undefined) return;
-      try {
-        window.sessionStorage.setItem(target.stored.key, target.stored.value);
-      } catch {
-        event.preventDefault();
-        setStorageError(true);
-      }
-    }}>使用飞书登录</Button>
+    {login}
   </>;
 }
 
