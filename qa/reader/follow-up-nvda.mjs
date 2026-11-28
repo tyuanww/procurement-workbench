@@ -173,9 +173,10 @@ async function buyer(page, fixture) {
   const role = 'buyer';
   await visit(page, '/lines', role);
   const search = page.getByPlaceholder('搜索单号 / 品名 / 编码');
-  const orderPath = '/lines/' + encodeURIComponent(component);
+  const orderPath = '/lines/' + component;
+  const orderUrls = [orderPath, '/lines/' + encodeURIComponent(component)];
   const order = page.getByRole('link', { name: po, exact: true })
-    .and(page.locator(`a[href="${orderPath}"], a[href^="${orderPath}?"]`));
+    .and(page.locator(orderUrls.map(path => `a[href="${path}"], a[href^="${path}?"]`).join(', ')));
   const preview = page.getByRole('row').filter({ has: order }).getByRole('button', { name: '预览', exact: true });
   const batch = page.getByRole('dialog', { name: po + ' 预览', exact: true })
     .getByRole('link', { name: '查看第 2 批', exact: true });
@@ -233,9 +234,11 @@ async function buyer(page, fixture) {
     const row = items.find(item => item.id === component);
     assert.ok(row, 'Search did not return the expected material row');
     assert.equal(row.itemCodeRaw, code);
+    record.row = { id: row.id, po, itemCode: row.itemCodeRaw };
     await page.waitForURL(({ searchParams }) => searchParams.get('q') === term && !searchParams.has('lane'));
     await order.waitFor();
-    record.row = { id: row.id, po, itemCode: row.itemCodeRaw, href: await order.getAttribute('href') };
+    record.row.href = await order.getAttribute('href');
+    assert.equal(decodeURIComponent(new URL(record.row.href, origin).pathname), orderPath);
   }
 }
 
