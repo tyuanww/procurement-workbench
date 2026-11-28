@@ -120,6 +120,34 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await outside.waitFor();
   await focusedBatch.waitFor();
   assert.equal(await related.locator('a:focus').count(), 0);
+  const component = page.getByRole('heading', { name: 'FS-COMPONENT', exact: true });
+  await page.goForward();
+  await component.waitFor();
+  await page.goBack();
+  await page.waitForURL(batchAddress);
+  await outside.and(page.locator(':focus')).waitFor();
+
+  await page.goForward();
+  await component.waitFor();
+  const isOriginalDetail = (url: URL) => url.pathname === '/api/v1/lines/scope-line-manual';
+  let resumeRead: () => void = () => undefined;
+  const paused = new Promise<void>((resolve) => { resumeRead = resolve; });
+  await page.route(isOriginalDetail, async (route) => {
+    await paused;
+    await route.continue().catch(() => undefined);
+  }, { times: 1 });
+  try {
+    await Promise.all([page.waitForRequest((request) => isOriginalDetail(new URL(request.url()))), page.goBack()]);
+    await page.waitForURL(batchAddress);
+    await page.goForward();
+    await component.waitFor();
+  } finally {
+    resumeRead();
+    await page.unroute(isOriginalDetail);
+  }
+  await page.goBack();
+  await page.waitForURL(batchAddress);
+  await outside.and(page.locator(':focus')).waitFor();
 }
 
 function afterFocusEffects(page: Page) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type MouseEvent, type RefObject } from 'react';
 import { createPath, useLocation, useNavigationType } from 'react-router';
 import { z } from 'zod';
 import { browserEntryIndex, usePreviousBrowserEntry } from './browser-entry-history.js';
@@ -82,8 +82,7 @@ function useArrivalOrigin(sourceLinkPrefix: string) {
   const routeOrigin = matchesReturnRoute(candidate, { address: createPath(location), sourceLinkPrefix });
   const index = browserEntryIndex(key);
   const isDirectBack = index !== undefined && previous?.index === index + 1 && previous.address === popOrigin?.destination;
-  const matching = navigation === 'POP' && !isDirectBack ? undefined : routeOrigin;
-  return { key, navigation, routeOrigin, matching };
+  return { key, origin: navigation === 'POP' && !isDirectBack ? undefined : routeOrigin };
 }
 
 function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceLinkPrefix }: {
@@ -93,24 +92,15 @@ function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceL
 }
 
 export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailReturnFocus {
-  const { key, navigation, routeOrigin, matching } = useArrivalOrigin(sourceLinkPrefix);
-  const [visit, setVisit] = useState({ key, origin: matching });
+  const { key, origin } = useArrivalOrigin(sourceLinkPrefix);
   const restored = useRef<string | null>(null);
-  if (visit.key !== key) setVisit({ key, origin: matching });
-  const origin = visit.key === key ? visit.origin : matching;
-
-  useLayoutEffect(() => {
-    if (navigation !== 'POP' || routeOrigin === undefined || historyOrigin(key)?.sourceLink !== routeOrigin.sourceLink) return;
-    const historyState = { ...window.history.state };
-    Reflect.deleteProperty(historyState, historyMarker);
-    window.history.replaceState(historyState, '');
-  }, [key, navigation, routeOrigin]);
-
   const restore = useCallback((fallback: HTMLElement | null) => {
     if (origin === undefined || restored.current === key) return;
-    restored.current = key;
     const target = findReturnTarget(origin, undefined) ?? fallback;
-    if (target !== null && canRestoreFocus(target, false)) target.focus();
+    if (target === null) return;
+    // Limit focus changes to this visit. A later Back can reuse the same history entry.
+    restored.current = key;
+    if (canRestoreFocus(target, false)) target.focus();
   }, [key, origin]);
   return { hasOrigin: origin !== undefined, restore };
 }
