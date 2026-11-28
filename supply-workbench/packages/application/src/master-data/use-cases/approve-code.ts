@@ -16,7 +16,7 @@ export const makeApproveCode =
     authorize(actor, 'master.review');
     const at = deps.clock.now();
     await deps.uow.run(async (tx) => {
-      const code = await tx.itemCodes.get(input.codeId);
+      const code = await tx.itemCodes.lock(input.codeId);
       const itemId = await itemFor(tx, { ids: deps.ids, input, at });
       await tx.itemCodes.save({ ...code, itemId, status: 'approved', updatedAt: at });
       const lineIds = await backfillItem(tx, { codeNorm: code.codeNorm, itemId, at });

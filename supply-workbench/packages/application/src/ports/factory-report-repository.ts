@@ -30,4 +30,6 @@ export interface FactoryReportRepository {
    * 出货和库存的编码不在冻结事实上，不从 raw 猜。
    */
   listByCodeNorm(codeNorm: string): Promise<readonly FactoryReportRow[]>;
+  /** 自动重联先按固定顺序锁定相关在途和需求行，返回仍可自动处理的当前行。 */
+  lockRelinkRows(codeNorms: readonly string[]): Promise<readonly FactoryReportRow[]>;
 }

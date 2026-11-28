@@ -2,7 +2,7 @@ import type { ApproveCodeLink, ApproveCodeLinkDeps } from '../boundary.js';
 import { auditOf } from '../../shared/audit.js';
 import { authorize } from '../../shared/authorize.js';
 import { refreshLineProjection } from '../../shared/line-projection.js';
-import { relinkByCodes } from './relink-rows.js';
+import { relinkRows } from './relink-rows.js';
 import { reviewed } from './reviewed.js';
 
 export const makeApproveCodeLink =
@@ -15,7 +15,8 @@ export const makeApproveCodeLink =
       const left = await tx.itemCodes.get(link.fromCodeId);
       const right = await tx.itemCodes.get(link.toCodeId);
       await tx.codeLinks.save(reviewed(link, { actorId: actor.id, at, status: 'approved' }));
-      const lineIds = await relinkByCodes(tx, [left.codeNorm, right.codeNorm]);
+      const reports = await tx.factoryReports.lockRelinkRows([left.codeNorm, right.codeNorm]);
+      const lineIds = await relinkRows(tx, reports);
       if (lineIds.length > 0) await refreshLineProjection(tx, lineIds);
       await tx.audit.record(auditOf({ action: 'code-link.approve', subject: link, ctx: { actor, at, before: link, entity: '编码对照' } }));
     });

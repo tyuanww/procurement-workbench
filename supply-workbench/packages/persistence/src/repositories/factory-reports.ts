@@ -13,6 +13,7 @@ import { batchDemandSourceOf, demandSourceOf, isAssociated } from '../queries/fo
 import { numberOrNull } from '../mappers/number.js';
 import { entityId, orderLineIdOrNull } from '../mappers/id.js';
 import { comboColumns, demandColumns, scheduleColumns, shipmentColumns, stockColumns, suppliedColumns, transitColumns } from './factory-columns.js';
+import { lockReportsByCode, readReportsByCode } from './factory-relink.js';
 import { lockFactoryOwnershipChange, lockFactorySnapshotSource, tryLockFactoryOwnershipForEvidence } from './factory-ownership-lock.js';
 
 const CHUNK = 500;
@@ -39,7 +40,8 @@ export function factoryReportRepository(db: AppDatabase): FactoryReportRepositor
         .returning();
       return updated.length === 1;
     },
-    listByCodeNorm: (codeNorm) => listByCode(db, codeNorm),
+    listByCodeNorm: (codeNorm) => readReportsByCode(db, [codeNorm]).then(relinkReportViews),
+    lockRelinkRows: (codeNorms) => lockReportsByCode(db, codeNorms).then(relinkReportViews),
   };
 }
 
@@ -198,10 +200,11 @@ async function findLater(db: AppDatabase, id: string): Promise<FactoryReportRow 
 async function first<T>(query: Promise<T[]>): Promise<T | undefined> {
   return (await query)[0];
 }
-async function listByCode(db: AppDatabase, codeNorm: string): Promise<FactoryReportRow[]> {
-  const transit = (await db.select().from(factoryInTransitRows)).filter((row) => sameCode(row.itemCodeRaw, codeNorm) || sameCode(row.barcodeRaw, codeNorm));
-  const demand = (await db.select().from(factoryMaterialDemandRows)).filter((row) => sameCode(row.itemCodeRaw, codeNorm));
-  return [...transit.map((row) => report({ row, kind: 'in_transit', shipment: null, demand: null, inTransit: transitFacts(row) })), ...demand.map((row) => report({ row, kind: 'demand', shipment: null, demand: demandFacts(row), inTransit: null }))];
+function relinkReportViews({ transit, demand }: Awaited<ReturnType<typeof readReportsByCode>>): FactoryReportRow[] {
+  return [
+    ...transit.map((row) => report({ row, kind: 'in_transit', shipment: null, demand: null, inTransit: transitFacts(row) })),
+    ...demand.map((row) => report({ row, kind: 'demand', shipment: null, demand: demandFacts(row), inTransit: null })),
+  ];
 }
 
 function stockInsert(entity: FactoryReportRow): typeof factoryStockRows.$inferInsert {
@@ -276,11 +279,6 @@ function dateOrNull(value: unknown): LocalDate | null {
   if (typeof value !== 'string' || value === '') return null;
   const parsed = parseLocalDate(value);
   return parsed.ok ? parsed.value : null;
-}
-
-function sameCode(raw: string | null, codeNorm: string): boolean {
-  if (raw === null || raw.trim() === '') return false;
-  return raw.normalize('NFKC').trim().toUpperCase() === codeNorm.normalize('NFKC').trim().toUpperCase();
 }
 
 function linkStatusOf(value: string): LinkStatus {

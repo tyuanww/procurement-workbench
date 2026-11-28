@@ -14,6 +14,7 @@ export const makeBulkCreateItems =
     const at = deps.clock.now();
     let created = 0;
     await deps.uow.run(async (tx) => {
+      await tx.itemCodes.lockMany(input.codeIds);
       const lineIds: string[] = [];
       for (const codeId of input.codeIds) {
         const made = await createFor(tx, { ids: deps.ids, codeId, actorId: actor.id, at });

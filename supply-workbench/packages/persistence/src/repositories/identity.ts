@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
 import { CODE_TYPES, REVIEW_STATUSES, type CodeLink, type ItemCode, type ItemName } from '@sw/domain';
 import type { CodeLinkRepository } from '../../../application/src/ports/code-link-repository.js';
@@ -20,6 +20,11 @@ export function itemCodeRepository(db: AppDatabase): ItemCodeRepository {
       const [row] = await db.select().from(itemCodes).where(eq(itemCodes.id, id)).for('update');
       if (row === undefined) throw new NotFoundError('编码', id);
       return toCode(row);
+    },
+    async lockMany(ids) {
+      if (ids.length === 0) return;
+      await db.select({ id: itemCodes.id }).from(itemCodes)
+        .where(sql`${itemCodes.id} = any(${sql.param(ids)}::text[])`).orderBy(itemCodes.id).for('update');
     },
     find: (id) => findCode(db, id),
     async save(entity) {

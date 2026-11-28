@@ -21,6 +21,11 @@ export function factoryReportRepository(box: MemoryBox) {
     async listByCodeNorm(codeNorm: string) {
       return [...box.current.factoryReports.values()].filter((row) => reportCodes(row).some((code) => code === codeNorm));
     },
+    async lockRelinkRows(codeNorms: readonly string[]) {
+      const requested = new Set(codeNorms);
+      return [...box.current.factoryReports.values()]
+        .filter((row) => row.linkStatus !== 'manual' && reportCodes(row).some((code) => requested.has(code)));
+    },
   };
 }
 

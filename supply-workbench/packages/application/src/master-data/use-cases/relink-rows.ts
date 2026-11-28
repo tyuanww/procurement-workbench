@@ -11,25 +11,14 @@ import {
 } from '@sw/domain';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 
-export async function relinkByCodes(tx: UnitOfWorkStores, codeNorms: readonly string[]): Promise<string[]> {
+export async function relinkRows(tx: UnitOfWorkStores, rows: readonly FactoryReportRow[]): Promise<string[]> {
+  if (rows.length === 0) return [];
   const links = await approvedLinks(tx);
   const lineIds: string[] = [];
-  for (const row of await rowsFor(tx, codeNorms)) {
+  for (const row of rows) {
     lineIds.push(...(await affectedLines({ tx, row, links })));
   }
   return lineIds;
-}
-
-async function rowsFor(tx: UnitOfWorkStores, norms: readonly string[]): Promise<FactoryReportRow[]> {
-  const seen = new Map<string, FactoryReportRow>();
-  for (const norm of norms) {
-    if (norm === '') continue;
-    for (const row of await tx.factoryReports.listByCodeNorm(norm)) {
-      if (row.linkStatus === 'manual') continue;
-      seen.set(row.id, row);
-    }
-  }
-  return [...seen.values()];
 }
 
 async function approvedLinks(tx: UnitOfWorkStores): Promise<ApprovedCodeLink[]> {

@@ -5,6 +5,8 @@ export interface ItemCodeRepository {
   get(id: string): Promise<ItemCode>;
   /** 在事务内锁定并返回编码。 */
   lock(id: string): Promise<ItemCode>;
+  /** 批量修改前按固定顺序锁定存在的编码。 */
+  lockMany(ids: readonly string[]): Promise<void>;
   /** 找不到返回 undefined。 */
   find(id: string): Promise<ItemCode | undefined>;
   /** 插入或按 id 覆盖。事务由 UnitOfWork.run 负责。 */
