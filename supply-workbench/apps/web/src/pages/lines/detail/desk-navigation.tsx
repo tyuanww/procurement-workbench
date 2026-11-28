@@ -225,6 +225,8 @@ function matchingLineDesk({ params, state, isImportMember }: {
 }): URLSearchParams | null {
   const desk = lineDeskParams(state);
   if (desk === null || (!isImportMember && params.has('importBatchId'))) return null;
+  const hasImportScope = [params, desk].some((query) => query.has('importBatchId') || query.has(IMPORT_RETURN_PARAM));
+  if (!hasImportScope) return desk;
   const current = lineDeskScopeKey(params);
   return current !== null && lineDeskScopeKey(desk) === current ? desk : null;
 }

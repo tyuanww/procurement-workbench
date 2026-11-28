@@ -68,7 +68,6 @@ export function readImportBatchOriginState(state: unknown): { readonly importBat
 export function importFollowUpReturn({ params, state, isVerifiedProcurement = false, confirmedArrival = false }: {
   readonly params: URLSearchParams;
   readonly state: unknown;
-  readonly scoped?: boolean;
   readonly isVerifiedProcurement?: boolean;
   readonly confirmedArrival?: boolean;
 }) {

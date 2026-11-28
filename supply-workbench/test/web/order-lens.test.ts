@@ -80,6 +80,13 @@ describe('跟进中心订单查法', () => {
     expect(back).toBeNull();
   });
 
+  it('普通订单详情沿用原来的列表筛选和焦点', () => {
+    const search = 'lane=all&q=完整单号&store=dafuyan';
+    const back = readLineDetailBack({ lineId: 'manual', params: new URLSearchParams(),
+      state: { lineDeskSearch: search }, canReadDashboard: false, canReadImports: true });
+    expect(back).toEqual({ to: '/lines?' + new URLSearchParams(search), label: '返回跟进中心', state: { lineDeskFocus: 'manual' } });
+  });
+
   it('明确的物料线、无效店铺及负责人筛选需要重新选择范围', () => {
     expect(deliveryStoreOf(switchOrderLens(new URLSearchParams('lane=material&store=dafuyan'), 'delivery'))).toBeNull();
     expect(deliveryStoreOf(new URLSearchParams('store=other'))).toBeNull();

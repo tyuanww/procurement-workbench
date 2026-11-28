@@ -38,7 +38,7 @@ export function LineListPage() {
   const hasImportBatch = importBatchOf(params) !== undefined;
   const lens = orderLensOf(params);
   const isVerifiedProcurement = useVerifiedProcurementImportReturn(params, canReadImports);
-  const back = canReadImports ? importFollowUpReturn({ params, state, scoped: true, isVerifiedProcurement }) : null;
+  const back = canReadImports ? importFollowUpReturn({ params, state, isVerifiedProcurement }) : null;
   return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}
     action={back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}>
     {hasImportBatch ? null : <div style={{ marginBottom: space[2] }}>
