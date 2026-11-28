@@ -19,7 +19,7 @@ import { matchesShortcut, searchShortcut, type Shortcut } from '../shared/hooks/
 import { bg } from '../theme/tokens.js';
 import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-frame.js';
 import { WorkspaceBreadcrumb } from './workspace-breadcrumb.js';
-import { SearchDialogFocus } from '../shared/hooks/browser-entry-history.js';
+import { SearchDialogFocus, useCanRestoreEntryFocus } from '../shared/hooks/browser-entry-history.js';
 
 export function Shell(props: {
   readonly view: ShellView & { readonly userId: string };
@@ -28,11 +28,12 @@ export function Shell(props: {
   const [frame, setFrame] = useState(() => initialFrame(viewport));
   const [search, setSearch] = useState<'open' | 'closing' | 'closed'>('closed');
   const searchOpener = useRef<Element | null>(null);
-  const [restoredTarget, setRestoredTarget] = useState<Element | null>(null);
+  const entryFocus = useCanRestoreEntryFocus();
+  const [searchReturn, setSearchReturn] = useState<{ readonly target: Element | null; readonly entry: typeof entryFocus } | null>(null);
   const openSearch = useCallback(() => {
     if (search !== 'closed') return;
     searchOpener.current = document.activeElement;
-    setRestoredTarget(null);
+    setSearchReturn(null);
     setSearch('open');
   }, [search]);
   useSearchShortcut(openSearch);
@@ -40,7 +41,7 @@ export function Shell(props: {
   if (synced !== frame) setFrame(synced);
   return (
     <Layout style={{ minHeight: '100vh', background: bg.page }}>
-      <SearchDialogFocus value={{ isBlocking: search !== 'closed', returnTarget: restoredTarget }}>
+      <SearchDialogFocus value={{ isBlocking: search !== 'closed', returnTarget: searchReturn?.entry === entryFocus ? searchReturn.target : null }}>
         <ShellColumns
           view={props.view}
           viewport={viewport}
@@ -52,7 +53,7 @@ export function Shell(props: {
       </SearchDialogFocus>
       <SearchLayer open={search === 'open'} onClose={() => setSearch('closing')}
         afterClose={() => {
-          setRestoredTarget(document.activeElement === searchOpener.current ? searchOpener.current : null);
+          setSearchReturn({ target: document.activeElement === searchOpener.current ? searchOpener.current : null, entry: entryFocus });
           setSearch(current => current === 'closing' ? 'closed' : current);
         }} />
     </Layout>

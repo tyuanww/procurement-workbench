@@ -128,6 +128,21 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await page.waitForURL(batchAddress);
   await outside.and(page.locator(':focus')).waitFor();
   await openBatchWithModifier(page, batchAddress);
+  await closeAnotherBatchWithHistory(page, batchAddress);
+}
+
+async function closeAnotherBatchWithHistory(page: Page, address: string) {
+  const batches = page.getByRole('region', { name: '批次', exact: true }).locator('li[tabindex="-1"]');
+  const first = batches.filter({ hasText: '回查第 1 批原表' });
+  const second = batches.filter({ hasText: '回查第 2 批原表' });
+  await second.getByRole('button', { name: '登记发货', exact: true }).click();
+  const drawer = page.getByRole('dialog');
+  await drawer.waitFor();
+  await page.goBack();
+  await page.waitForURL(address);
+  await drawer.waitFor({ state: 'hidden' });
+  await afterFocusEffects(page);
+  assert.equal(await first.and(page.locator(':focus')).count(), 0);
 }
 
 async function openBatchWithModifier(page: Page, address: string) {

@@ -32,9 +32,9 @@ export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, bloc
   const returnFocus = useContext(RelatedOrderReturn);
   const { isBlocking: isSearchBlockingFocus, returnTarget } = useContext(SearchDialogFocus);
   const navigation = useNavigationType();
-  const { key, pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const previous = usePreviousBrowserEntry();
-  const isDetailReentry = navigation === 'POP' && (previous?.pathname !== pathname || previous.key === key);
+  const isDetailReentry = navigation === 'POP' && (previous?.pathname !== pathname || !isRecordDrawerChange(previous.search, search));
   const canRestore = useCanRestoreEntryFocus();
   const handledVisit = useRef<typeof canRestore | null>(null);
   const entry = useRef<T>(null);
@@ -55,4 +55,16 @@ export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, bloc
     if (isEntry) focus();
   }, [focused, isSearchBlockingFocus, canRestore, isDetailReentry]);
   return entry;
+}
+
+function isRecordDrawerChange(before: string, after: string): boolean {
+  if (before === after) return false;
+  const previous = new URLSearchParams(before);
+  const current = new URLSearchParams(after);
+  if (!previous.has('drawer') && !current.has('drawer')) return false;
+  for (const key of ['drawer', 'batchId', 'reportId']) {
+    previous.delete(key);
+    current.delete(key);
+  }
+  return previous.toString() === current.toString();
 }

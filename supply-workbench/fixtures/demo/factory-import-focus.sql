@@ -19,7 +19,9 @@ FROM factory_stock_rows WHERE id='scope-stock-manual';
 INSERT INTO delivery_batches (id, created_at, updated_at, order_line_id, seq, planned_qty, planned_unit, receiver_party_id,
   date_buyer_confirmed, first_confirmed_date, status, status_changed_at, origin)
 VALUES ('scope-manual-batch-focus', now(), now(), 'scope-line-manual', 1, 3, '件', '0199f0a0-0000-7000-8000-000000000010',
-  '2026-11-29', '2026-11-29', 'confirmed', now(), 'manual');
+  '2026-11-29', '2026-11-29', 'confirmed', now(), 'manual'),
+  ('scope-manual-batch-drawer', now(), now(), 'scope-line-manual', 2, 3, '件', '0199f0a0-0000-7000-8000-000000000010',
+  '2026-12-01', '2026-12-01', 'confirmed', now(), 'manual');
 UPDATE order_lines SET stage='awaiting_shipment', next_due_batch_id='scope-manual-batch-focus', next_due_date='2026-11-29'
 WHERE id='scope-line-manual';
 COMMIT;
