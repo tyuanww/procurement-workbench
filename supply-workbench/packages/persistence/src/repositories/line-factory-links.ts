@@ -33,15 +33,34 @@ async function find(db: AppDatabase, orderLineIdValue: string): Promise<LineFact
 }
 
 async function save(db: AppDatabase, { entity, isPrelocked }: { readonly entity: LineFactoryLink; readonly isPrelocked: boolean }): Promise<boolean> {
-  const isNegative = entity.source !== 'manual' && entity.factoryPartyId === null;
-  const hasOwnershipChange = !isNegative || (await find(db, entity.orderLineId))?.factoryPartyId != null;
-  if (hasOwnershipChange && !isPrelocked) await lockFactoryOwnershipChange(db, [entity.orderLineId]);
+  if (isPrelocked) return saveLink(db, { entity, allowOwnerChange: true });
+  if (entity.source === 'manual') {
+    await lockFactoryOwnershipChange(db, [entity.orderLineId]);
+    return saveLink(db, { entity, allowOwnerChange: true });
+  }
+  const previous = await find(db, entity.orderLineId);
+  if (isManual(previous)) return false;
+  if (entity.factoryPartyId === null && (previous?.factoryPartyId ?? null) === null) {
+    if (await saveLink(db, { entity, allowOwnerChange: false })) return true;
+    if (isManual(await find(db, entity.orderLineId))) return false;
+  }
+  await lockFactoryOwnershipChange(db, [entity.orderLineId]);
+  return saveLink(db, { entity, allowOwnerChange: true });
+}
+
+function isManual(link: LineFactoryLink | undefined): boolean {
+  return link?.source === 'manual' || link?.status === 'manual';
+}
+
+async function saveLink(db: AppDatabase, { entity, allowOwnerChange }: {
+  readonly entity: LineFactoryLink; readonly allowOwnerChange: boolean;
+}): Promise<boolean> {
   const row = toRow(entity);
   const updated = await db.insert(lineFactoryLinks).values(row).onConflictDoUpdate({
     target: lineFactoryLinks.id,
     set: row,
     setWhere: sql`(${entity.source === 'manual'} or (${lineFactoryLinks.source} <> 'manual' and ${lineFactoryLinks.status} <> 'manual'))
-      and (${hasOwnershipChange} or ${lineFactoryLinks.factoryPartyId} is null)`,
+      and (${allowOwnerChange} or ${lineFactoryLinks.factoryPartyId} is null)`,
   }).returning();
   return updated.length > 0;
 }

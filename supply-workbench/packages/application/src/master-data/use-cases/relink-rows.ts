@@ -10,8 +10,23 @@ import {
   type OrderLineId,
 } from '@sw/domain';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
+import { compareFactoryReportWrites } from '../../shared/factory-report-order.js';
 
-export async function relinkRows(tx: UnitOfWorkStores, rows: readonly FactoryReportRow[]): Promise<string[]> {
+export async function prepareCodeRelink(tx: UnitOfWorkStores, codeNorms: readonly string[]): Promise<readonly FactoryReportRow[]> {
+  const sources = new Set<string>();
+  for (;;) {
+    const rows = (await rowsFor(tx, codeNorms)).filter((row) => linkFacts(row) !== null);
+    const pending = rows.flatMap((row) => sources.has(row.factoryPartyId) ? [] : [row.factoryPartyId]);
+    if (pending.length === 0) {
+      const locked = await tx.factoryReports.lockRelinkRows({ codeNorms, candidates: rows });
+      return locked.filter((row) => linkFacts(row) !== null).sort(compareFactoryReportWrites);
+    }
+    await tx.factoryReports.lockReportSources(pending);
+    for (const id of pending) sources.add(id);
+  }
+}
+
+export async function relinkPreparedRows(tx: UnitOfWorkStores, rows: readonly FactoryReportRow[]): Promise<string[]> {
   if (rows.length === 0) return [];
   const links = await approvedLinks(tx);
   const lineIds: string[] = [];
@@ -19,6 +34,18 @@ export async function relinkRows(tx: UnitOfWorkStores, rows: readonly FactoryRep
     lineIds.push(...(await affectedLines({ tx, row, links })));
   }
   return lineIds;
+}
+
+async function rowsFor(tx: UnitOfWorkStores, norms: readonly string[]): Promise<FactoryReportRow[]> {
+  const seen = new Map<string, FactoryReportRow>();
+  for (const norm of norms) {
+    if (norm === '') continue;
+    for (const row of await tx.factoryReports.listByCodeNorm(norm)) {
+      if (row.linkStatus === 'manual') continue;
+      seen.set(row.id, row);
+    }
+  }
+  return [...seen.values()];
 }
 
 async function approvedLinks(tx: UnitOfWorkStores): Promise<ApprovedCodeLink[]> {

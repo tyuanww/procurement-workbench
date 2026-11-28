@@ -9,12 +9,16 @@ import { requireDatabase } from '../../packages/persistence/src/require-database
 import { auditRepository } from '../../packages/persistence/src/repositories/audit-log.js';
 import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
+import { codeLinkRepository, itemCodeRepository } from '../../packages/persistence/src/repositories/identity.js';
 import { importBatchRepository } from '../../packages/persistence/src/repositories/import-batches.js';
 import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
 import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
+import { ownerAssignmentRepository } from '../../packages/persistence/src/repositories/owner-assignments.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
+import { settingsRepository } from '../../packages/persistence/src/repositories/settings.js';
+import { userRepository } from '../../packages/persistence/src/repositories/users.js';
 import { createUnitOfWork } from '../../packages/persistence/src/unit-of-work.js';
 import { aFactoryStockRow, anActor, anOrderLine, aParty, aPurchaseOrder, FixedClock } from '../../packages/testkit/src/index.js';
 
@@ -41,26 +45,25 @@ export async function seedOtherFactoryReport(db: AppDatabase, { sample, kind }: 
 type Hooks = {
   readonly afterOriginRead?: () => Promise<void>;
   readonly afterDemandSave?: () => Promise<void>;
+  readonly afterLineLock?: (id: string) => Promise<void>;
+  readonly afterLineSave?: (id: string) => Promise<void>;
   readonly afterFactoryLinkSave?: () => Promise<void>;
   readonly afterSnapshotCommit?: () => Promise<void>;
+  readonly afterSnapshotSourceLock?: () => Promise<void>;
+  readonly afterCodeLinkSave?: () => Promise<void>;
   readonly afterSourceFreeze?: () => Promise<void>;
 };
 
 export function writes(db: AppDatabase, hooks: Hooks = {}) {
   const uow = createUnitOfWork(db, (transaction) => {
     const tx = requireDatabase(transaction);
-    const reports = factoryReportRepository(tx);
     const factoryLinks = lineFactoryLinkRepository(tx);
     return {
       ...placeholderStores(),
       batches: batchesWithHooks(tx, hooks),
-      factoryReports: {
-        ...reports,
-        async save(row: Parameters<typeof reports.save>[0]) {
-          await reports.save(row);
-          await hooks.afterDemandSave?.();
-        },
-      },
+      factoryReports: reportsWithHooks(tx, hooks),
+      codeLinks: codeLinksWithHooks(tx, hooks),
+      itemCodes: itemCodeRepository(tx),
       factoryLinks: {
         ...factoryLinks,
         async save(row: Parameters<typeof factoryLinks.save>[0]) {
@@ -70,13 +73,42 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
         },
       },
       parties: partyRepository(tx),
-      orderLines: orderLineRepository(tx),
+      orderLines: orderLinesWithHooks(tx, hooks),
+      ownerAssignments: ownerAssignmentRepository(tx),
+      users: userRepository(tx),
+      settings: settingsRepository(tx),
       purchaseOrders: purchaseOrderRepository(tx),
       imports: importBatchRepository(tx),
       audit: auditWithHooks(tx, hooks),
     };
   });
   return { uow, clock, ids: systemIds() };
+}
+
+function reportsWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const repo = factoryReportRepository(tx);
+  return {
+    ...repo,
+    async save(row: Parameters<typeof repo.save>[0]) {
+      await repo.save(row);
+      await hooks.afterDemandSave?.();
+    },
+    async lockSnapshotSource(factoryPartyId: string) {
+      await repo.lockSnapshotSource(factoryPartyId);
+      await hooks.afterSnapshotSourceLock?.();
+    },
+  };
+}
+
+function codeLinksWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const repo = codeLinkRepository(tx);
+  return {
+    ...repo,
+    async save(link: Parameters<typeof repo.save>[0]) {
+      await repo.save(link);
+      await hooks.afterCodeLinkSave?.();
+    },
+  };
 }
 
 function auditWithHooks(tx: AppDatabase, hooks: Hooks) {
@@ -106,11 +138,28 @@ function batchesWithHooks(tx: AppDatabase, hooks: Hooks) {
   };
 }
 
+function orderLinesWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const orders = orderLineRepository(tx);
+  return {
+    ...orders,
+    async lock(id: string) {
+      const line = await orders.lock(id);
+      await hooks.afterLineLock?.(id);
+      return line;
+    },
+    async save(line: Parameters<typeof orders.save>[0]) {
+      await orders.save(line);
+      await hooks.afterLineSave?.(line.id);
+    },
+  };
+}
+
 function sampleOf() {
   const token = randomUUID();
+  const poDigits = BigInt(`0x${token.replaceAll('-', '')}`).toString().slice(-14).padStart(14, '0');
   return {
     id: entityId(token), lineId: orderLineId(token), importId: entityId(`demand-test-${token}`), factoryId: entityId(`demand-factory-${token}`),
-    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `DEMAND-PO-${token}`,
+    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `PO${poDigits}`,
     buyer: { ...anActor('buyer'), id: entityId(`demand-buyer-${token}`) },
     reviewer: { ...anActor('reviewer'), id: entityId(`demand-reviewer-${token}`) },
   };
@@ -154,12 +203,15 @@ async function seedDemand(db: AppDatabase, sample: Sample): Promise<void> {
   }));
 }
 
-export async function seedLine({ db, sample, id }: { readonly db: AppDatabase; readonly sample: Sample; readonly id: ReturnType<typeof orderLineId> }): Promise<void> {
+export async function seedLine({ db, sample, id, fields }: {
+  readonly db: AppDatabase; readonly sample: Sample; readonly id: ReturnType<typeof orderLineId>;
+  readonly fields?: Partial<ReturnType<typeof anOrderLine>>;
+}): Promise<void> {
   const parsed = parsePoCell(sample.poRaw).value;
   await purchaseOrderRepository(db).save(aPurchaseOrder({
     id: sample.orderId, poRaw: sample.poRaw, poNorm: parsed.poNorm, poFormat: parsed.poFormat, lane: 'material',
   }));
-  await orderLineRepository(db).save(anOrderLine({ id, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: sample.code }));
+  await orderLineRepository(db).save(anOrderLine({ ...fields, id, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: sample.code }));
 }
 
 export async function onlyLineDetail(db: AppDatabase, code: string) {
@@ -174,11 +226,13 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
-    delete from delivery_batches where origin_ref->>'rowId' = '${sample.id}';
+    delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}' or id in ('${sample.lineId}', '${sample.id}-other'));
+    delete from owner_assignments where subject_id in ('${sample.lineId}', '${sample.id}-other') or owner_user_id = '${sample.buyer.id}';
     delete from line_factory_links where order_line_id = '${sample.lineId}';
-    delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
-    delete from purchase_orders where po_raw = '${sample.poRaw}';
-    delete from factory_material_demand_rows where id = '${sample.id}';
+    delete from order_lines where item_code_raw = '${sample.code}' or id in ('${sample.lineId}', '${sample.id}-other');
+    delete from users where id = '${sample.buyer.id}';
+    delete from purchase_orders where id = '${sample.orderId}' or po_norm in ('${sample.poRaw}', upper('ALT-${sample.id}'));
+    delete from factory_material_demand_rows where import_batch_id = '${sample.importId}';
     delete from factory_shipment_rows where id = '0-${sample.id}-report';
     delete from factory_in_transit_rows where id = '0-${sample.id}-report';
     delete from factory_stock_rows where id = '0-${sample.id}-report';

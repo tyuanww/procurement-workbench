@@ -1,5 +1,6 @@
 import { normalizeText, type EntityId } from '@sw/domain';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
+import { lockOrderLines } from '../../shared/locked-order-lines.js';
 
 export async function backfillSupplier(tx: UnitOfWorkStores, input: { readonly normName: string; readonly partyId: EntityId; readonly at: string }): Promise<string[]> {
   const orderIds = await tx.purchaseOrders.backfillMissingSupplier(input);
@@ -25,8 +26,7 @@ export async function backfillItems(tx: UnitOfWorkStores, { items, at }: { reado
   }
 
   const changed: string[] = [];
-  for (const id of [...candidates.keys()].sort()) {
-    const line = await tx.orderLines.lock(id);
+  for (const [id, line] of await lockOrderLines(tx.orderLines, [...candidates.keys()])) {
     if (line.itemId !== null) continue;
     const currentCodes = [line.itemCodeRaw, line.barcodeRaw].filter((code) => code !== null).map(normalizeText);
     const match = candidates.get(id)?.find(({ codeNorm }) => currentCodes.includes(codeNorm));

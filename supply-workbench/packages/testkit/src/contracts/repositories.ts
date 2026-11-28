@@ -112,12 +112,23 @@ export function describeFactoryReportRepositoryContract(make: () => FactoryRepor
     await repo.save(row);
     for (const code of ['Ｋ１２３', ' k123 ', ' a  b ']) {
       expect((await repo.listByCodeNorm(code)).map(({ id }) => id)).toEqual([row.id]);
-      expect((await repo.lockRelinkRows([code])).map(({ id }) => id)).toEqual([row.id]);
+      expect((await repo.lockRelinkRows({ codeNorms: [code], candidates: [row] })).map(({ id }) => id)).toEqual([row.id]);
     }
     for (const code of ['A B', '　']) {
       expect(await repo.listByCodeNorm(code)).toEqual([]);
-      expect(await repo.lockRelinkRows([code])).toEqual([]);
+      expect(await repo.lockRelinkRows({ codeNorms: [code], candidates: [row] })).toEqual([]);
     }
+  });
+
+  it('按编码仍读出无独立采购单的需求，准备重联时略过', async () => {
+    const repo = make();
+    const row = aFactoryStockRow({
+      kind: 'demand',
+      demand: { role: 'material', blockMaterialPoRaw: 'P00012', poNorm: null, itemCodeRaw: 'Ｋ１２３', nameRaw: null, slots: [] },
+    });
+    await repo.save(row);
+    expect((await repo.listByCodeNorm('k123')).map(({ id }) => id)).toEqual([row.id]);
+    expect(await repo.lockRelinkRows({ codeNorms: ['k123'], candidates: [row] })).toEqual([]);
   });
 }
 

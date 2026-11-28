@@ -8,7 +8,7 @@ import { authorize } from '../../shared/authorize.js';
 import { refreshLineProjection } from '../../shared/line-projection.js';
 import { backfillItems } from './backfill.js';
 import { itemDraft } from './drafts.js';
-import { relinkRows } from './relink-rows.js';
+import { prepareCodeRelink, relinkPreparedRows } from './relink-rows.js';
 import { requireText } from './require-text.js';
 
 export const makeResolveMultiName =
@@ -18,12 +18,12 @@ export const makeResolveMultiName =
     const at = deps.clock.now();
     await deps.uow.run(async (tx) => {
       const code = await tx.itemCodes.lock(input.codeId);
+      const rows = await prepareCodeRelink(tx, [code.codeNorm]);
       const itemId = await ensureItem(tx, { ids: deps.ids, itemId: code.itemId, codeRaw: code.codeRaw, input, at });
       await applyDecision(tx, { itemId, input, at });
       if (code.itemId === null) await tx.itemCodes.save({ ...code, itemId, status: 'approved', updatedAt: at });
-      const reports = await tx.factoryReports.lockRelinkRows([code.codeNorm]);
       const filled = code.itemId === null ? await backfillItems(tx, { items: [{ codeNorm: code.codeNorm, itemId }], at }) : [];
-      const linked = await relinkRows(tx, reports);
+      const linked = await relinkPreparedRows(tx, rows);
       const lineIds = [...filled, ...linked];
       if (lineIds.length > 0) await refreshLineProjection(tx, lineIds);
       await tx.audit.record(auditOf({ action: 'code.resolve-names', subject: code, ctx: { actor, at, before: code, after: { itemId, mode: input.mode }, entity: '编码' } }));

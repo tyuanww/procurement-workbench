@@ -5,6 +5,7 @@ import { planFactoryLinks, type FactoryMatch } from '../matching.js';
 import { lineFactoryLinksOf, linkIdOf, linkOf } from '../../shared/factory-link.js';
 import type { LineFactoryLinkRepository } from '../repository.js';
 import type { FactoryRowMatchRef, OrderLineMatchRef } from '../views.js';
+import { compareFactoryReportWrites } from '../../shared/factory-report-order.js';
 import { authorize } from '../../shared/authorize.js';
 
 const DEFAULT_LIMIT = 20000;
@@ -26,8 +27,11 @@ export const makeRelinkFactoryRows =
     const matchedLines = new Set<string>();
     await deps.uow.run(async (tx) => {
       const write = { tx, at, links: lineFactoryLinksOf(tx), matchedLines, counters };
-      await write.links.lockOwnershipChanges(ownershipTargets({ plan, orderLines }));
-      for (const result of plan) await applyResult({ ...write, result });
+      const reports = plan.map(({ row }) => row);
+      await tx.factoryReports.lockReportSources(reports.map((row) => row.factoryPartyId));
+      const oldOwners = await tx.factoryReports.effectiveReportOwners(reports);
+      await write.links.lockOwnershipChanges([...oldOwners, ...ownershipTargets({ plan, orderLines })]);
+      for (const result of [...plan].sort(comparePlannedWrites)) await applyResult({ ...write, result });
       await writeUnlinkedLines({ links: write.links, orderLines, matchedLines, at });
     });
     const manualLines = orderLines.filter((line) => line.linkStatus === 'manual').length;
@@ -44,8 +48,20 @@ export const makeRelinkFactoryRows =
   };
 
 function ownershipTargets(input: { readonly plan: readonly FactoryMatch[]; readonly orderLines: readonly OrderLineMatchRef[] }): string[] {
-  const matched = input.plan.flatMap((result) => result.kind === 'matched' ? [result.line.orderLineId] : []);
-  return [...matched, ...input.orderLines.filter((line) => line.linkStatus === 'linked').map((line) => line.orderLineId)];
+  const matched = input.plan.flatMap((result) => result.kind === 'matched' && !isManualLine(result.line) ? [result.line.orderLineId] : []);
+  const recorded = input.orderLines.filter((line) => line.linkStatus === 'linked' && !isManualLine(line)).map((line) => line.orderLineId);
+  return [...matched, ...recorded];
+}
+
+function isManualLine(line: OrderLineMatchRef): boolean {
+  return line.linkStatus === 'manual' || line.linkSource === 'manual';
+}
+
+function comparePlannedWrites(left: FactoryMatch, right: FactoryMatch): number {
+  return compareFactoryReportWrites(
+    { id: left.row.rowId, kind: left.row.kind },
+    { id: right.row.rowId, kind: right.row.kind },
+  );
 }
 
 function emptyCounters(): Counters {

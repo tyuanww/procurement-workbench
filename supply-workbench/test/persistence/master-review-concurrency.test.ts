@@ -1,14 +1,16 @@
 import { expect, it } from 'vitest';
 import { systemIds } from '../../apps/server/src/system/ids.js';
 import { makeApproveCode, makeBulkCreateItems, makeResolveMultiName } from '../../packages/application/src/master-data/index.js';
+import { makeRelinkFactoryRows } from '../../packages/application/src/factory-links/index.js';
+import { makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
 import { entityId, type EntityId, type ItemCode } from '../../packages/domain/src/index.js';
 import {
-  auditRepository, codeLinkRepository, createUnitOfWork, factoryReportRepository, itemCodeRepository,
+  auditRepository, codeLinkRepository, createUnitOfWork, factoryReportRepository, factoryLinkQueries, itemCodeRepository,
   itemNameRepository, itemRepository, orderLineRepository, placeholderStores, purchaseOrderRepository,
   requireDatabase, deliveryBatchRepository, type AppDatabase,
 } from '../../packages/persistence/src/index.js';
 import { aFactoryStockRow, anItem } from '../../packages/testkit/src/index.js';
-import { blockedOnPostgres, clock, gate, seedLine, settled, url, wait, withFixture } from './factory-demand-generation-fixture.js';
+import { blockedOnPostgres, clock, gate, onlyLineDetail, rawCells, seedLine, settled, url, wait, withFixture, writes } from './factory-demand-generation-fixture.js';
 
 type Fixture = Parameters<Parameters<typeof withFixture>[0]>[0];
 
@@ -90,6 +92,66 @@ it.skipIf(url === undefined).each(['approve', 'bulk'] as const)('PostgreSQL 同�
     expect(await codes.get(firstCode.id)).toMatchObject({ itemId: keys.firstItem, status: 'approved' });
     expect(await codes.get(secondCode.id)).toMatchObject({ itemId: keys.secondItem, status: 'approved' });
     expect(await lines.get(sample.lineId)).toMatchObject({ itemId: keys.firstItem });
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('普通一号多名审核期间，无可重联的需求仍能保留生成原表', async () => {
+  await withReviewFixture(async ({ main, competing, sample }, keys) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const code = reviewCode({ id: keys.left, codeRaw: sample.code, itemId: keys.firstItem });
+    await itemRepository(main.db).save(anItem({ id: keys.firstItem, displayName: '待统一物料' }));
+    await itemCodeRepository(main.db).save(code);
+    expect((await factoryReportRepository(main.db).get(sample.id)).demand?.poNorm).toBeNull();
+    const paused = gate();
+    const resolve = makeResolveMultiName(reviewWrites(main.db, { nextId: keys.firstItem, afterAudit: paused.hold }));
+    const review = resolve({ codeId: code.id, mode: 'same_item', displayName: '统一名称' }, sample.reviewer);
+    try {
+      await Promise.race([paused.entered, review]);
+      const generate = makeGenerateBatchesFromDemand(writes(competing.db));
+      expect(await generate({ rowIds: [sample.id] }, sample.buyer)).toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
+      expect(Object.values((await onlyLineDetail(competing.db, sample.code)).batchDemandSources ?? {}))
+        .toMatchObject([{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
+    } finally {
+      paused.release();
+      await review;
+    }
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('自动重联与主数据审核按相同表顺序锁住在途和需求', async () => {
+  await withReviewFixture(async (fixture, keys) => {
+    const { main, competing, sample } = fixture;
+    await seedLine({ db: main.db, sample, id: sample.lineId, fields: { nameRaw: '合成包材', itemId: keys.firstItem } });
+    const code = reviewCode({ id: keys.left, codeRaw: sample.code, itemId: keys.firstItem });
+    await itemRepository(main.db).save(anItem({ id: keys.firstItem, displayName: '待确认物料' }));
+    await itemCodeRepository(main.db).save(code);
+    const reports = factoryReportRepository(main.db);
+    const demand = await reports.get(sample.id);
+    if (demand.demand === null) throw new Error('合成样本缺少需求');
+    const { poNorm } = await purchaseOrderRepository(main.db).get(sample.orderId);
+    await reports.save({ ...demand, demand: { ...demand.demand, poNorm } });
+    const transitId = entityId(`z-${sample.id}-transit`);
+    await reports.save(aFactoryStockRow({
+      id: transitId, importBatchId: sample.importId, factoryPartyId: sample.factoryId, fingerprint: transitId, kind: 'in_transit',
+      inTransit: { poRaw: sample.poRaw, poNorm, itemCodeRaw: code.codeNorm, nameRaw: '合成包材', barcodeRaw: null, qtyRequired: 50 },
+    }));
+    const paused = gate();
+    const bulkRelink = makeRelinkFactoryRows({
+      ...writes(main.db, { afterDemandSave: async () => { if (!paused.hasEntered()) await paused.hold(); } }),
+      links: factoryLinkQueries(main.db),
+    });
+    const review = makeResolveMultiName(reviewWrites(competing.db, { nextId: keys.firstItem }));
+    try {
+      expect(await overlap(fixture, {
+        paused,
+        first: async () => expect(await bulkRelink({ limit: 2 }, sample.reviewer)).toMatchObject({ factoryLinked: 1, conflicts: 1 }),
+        second: () => review({ codeId: code.id, mode: 'same_item', displayName: '合成包材' }, sample.reviewer),
+      })).toEqual({ codeId: code.id });
+      expect(await reports.get(transitId)).toMatchObject({ linkStatus: 'linked', linkedOrderLineId: sample.lineId });
+      expect(await reports.get(sample.id)).toMatchObject({ linkStatus: 'linked', linkedOrderLineId: sample.lineId });
+    } finally {
+      await main.exec(`delete from factory_in_transit_rows where id = '${transitId}'`);
+    }
   });
 }, 15000);
 

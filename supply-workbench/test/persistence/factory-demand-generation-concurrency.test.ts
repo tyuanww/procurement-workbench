@@ -1,21 +1,34 @@
 import { expect, it } from 'vitest';
-import { makeRelinkFactoryRows, makeSetLineFactoryLink } from '../../packages/application/src/factory-links/index.js';
-import { makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
+import { makeCancelLine, makeCreateBatch, makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
 import { makeLinkFactoryRow } from '../../packages/application/src/master-data/index.js';
 import { linkIdOf, linkOf } from '../../packages/application/src/shared/factory-link.js';
+import { entityId, localDate, orderLineId } from '../../packages/domain/src/index.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
-import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
-import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
-import { localDate, orderLineId } from '../../packages/domain/src/index.js';
-import type { AppDatabase } from '../../packages/persistence/src/client.js';
-import { factoryLinkQueries } from '../../packages/persistence/src/queries/factory-links/index.js';
 import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
-import { anOrderLine, aParty } from '../../packages/testkit/src/index.js';
-import { blockedOnPostgres, clock, gate, onlyLineDetail, rawCells, seedLine, seedOtherFactoryReport, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
+import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
+import { anOrderLine } from '../../packages/testkit/src/index.js';
+import {
+  url, clock, slot, rawCells, wait, withFixture,
+  seedLine, onlyLineDetail, blockedOnPostgres, gate, settled, writes,
+} from './factory-demand-generation-fixture.js';
 
-it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并发生成只提交一份凭据（目标订单已存在 %s）', async (existing) => {
+it.skipIf(url === undefined).each([
+  { existing: true, distinct: false }, { existing: false, distinct: false },
+  { existing: true, distinct: true }, { existing: false, distinct: true },
+])('真实 PostgreSQL 并发生成保留每个需求槽并连续编号（已有订单 $existing，不同需求行 $distinct）', async ({ existing, distinct }) => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
     if (existing) await seedLine({ db: main.db, sample, id: sample.lineId });
+    const otherId = distinct ? entityId(`${sample.id}-second`) : sample.id;
+    if (distinct) {
+      const reports = factoryReportRepository(main.db);
+      const original = await reports.get(sample.id);
+      if (original.demand === null) throw new Error('合成行缺少工厂需求');
+      const secondSlot = { ...slot, qty: 75 };
+      await reports.save({ ...original, id: otherId, fingerprint: otherId, rowNo: 5,
+        raw: { slots: [{ ...secondSlot, ...rawCells, qtyRaw: '075.00', sourceColumns: { date: 10, quantity: 11 } }] },
+        demand: { ...original.demand, blockMaterialPoRaw: ` ＰＯ${sample.poRaw.slice(2)} `, slots: [secondSlot] },
+      });
+    }
     const paused = gate();
     const first = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
     const second = makeGenerateBatchesFromDemand(writes(competing.db));
@@ -24,7 +37,7 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并
     let other: ReturnType<typeof second> | undefined;
     try {
       await Promise.race([paused.entered, holding]);
-      const running = settled(second(request, sample.buyer));
+      const running = settled(second({ rowIds: [otherId] }, sample.buyer));
       other = running.result;
       await expect.poll(() => running.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
     } finally {
@@ -32,12 +45,74 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并
       await Promise.allSettled(other === undefined ? [holding] : [holding, other]);
     }
     expect(await holding).toEqual({ createdLines: existing ? 0 : 1, createdBatches: 1, skipped: [] });
-    expect(await other).toEqual({ createdLines: 0, createdBatches: 0,
-      skipped: [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }] });
+    expect(await other).toEqual(distinct ? { createdLines: 0, createdBatches: 1, skipped: [] }
+      : { createdLines: 0, createdBatches: 0, skipped: [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }] });
     const detail = await onlyLineDetail(main.db, sample.code);
-    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
-    const sources = Object.values(detail.batchDemandSources ?? {});
-    expect(sources).toMatchObject([{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
+    const saved = [...detail.batches].sort((a, b) => a.seq - b.seq).map((batch) => {
+      const source = detail.batchDemandSources?.[batch.id];
+      return { seq: batch.seq, qty: batch.plannedQty, date: batch.dateFactoryRequired,
+        importId: source?.importBatchId, row: source?.rowNo, raw: source?.slot.originalCells };
+    });
+    const firstBatch = { seq: 1, qty: slot.qty, date: slot.date, importId: sample.importId, row: 4, raw: rawCells };
+    expect(saved).toEqual(distinct
+      ? [firstBatch, { ...firstBatch, seq: 2, row: 5, qty: 75, raw: { ...rawCells, qtyRaw: '075.00' } }]
+      : [firstBatch]);
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('需求批次与人工建批同时提交时按同一订单行连续编号', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const paused = gate();
+    const generate = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
+    const create = makeCreateBatch(writes(competing.db));
+    const generated = generate({ rowIds: [sample.id] }, sample.buyer);
+    let manual: ReturnType<typeof create> | undefined;
+    try {
+      await Promise.race([paused.entered, generated]);
+      const running = settled(create({ lineId: sample.lineId, receiverPartyId: sample.factoryId, plannedQty: 75 }, sample.buyer));
+      manual = running.result;
+      await expect.poll(() => running.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(manual === undefined ? [generated] : [generated, manual]);
+    }
+    await generated;
+    await manual;
+    const detail = await onlyLineDetail(main.db, sample.code);
+    expect([...detail.batches].sort((a, b) => a.seq - b.seq)).toMatchObject([
+      { seq: 1, plannedQty: 50, origin: 'from_factory_demand' }, { seq: 2, plannedQty: 75, origin: 'manual' },
+    ]);
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('订单取消先提交时，等待编号的工厂需求沿用已取消的跳过原因', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const deps = writes(main.db);
+    const paused = gate();
+    const cancel = makeCancelLine({ ...deps, uow: {
+      run: (work) => deps.uow.run(async (tx) => {
+        const result = await work(tx);
+        await paused.hold();
+        return result;
+      }),
+    } });
+    const cancelling = cancel({ lineId: sample.lineId, reason: '合成订单取消' }, sample.buyer);
+    const generate = makeGenerateBatchesFromDemand(writes(competing.db));
+    let generated: ReturnType<typeof generate> | undefined;
+    try {
+      await Promise.race([paused.entered, cancelling]);
+      generated = generate({ rowIds: [sample.id] }, sample.buyer);
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(generated === undefined ? [cancelling] : [cancelling, generated]);
+    }
+    await cancelling;
+    expect(await generated).toEqual({ createdLines: 0, createdBatches: 0,
+      skipped: [{ rowId: sample.id, slotIndex: 0, reason: '订单行已取消' }] });
+    expect((await onlyLineDetail(main.db, sample.code)).batches).toEqual([]);
   });
 }, 15000);
 
@@ -113,124 +188,6 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 未关联需
       .toMatchObject(conflict ? [] : [{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
   });
 }, 15000);
-
-it.skipIf(url === undefined).each([
-  { kind: 'shipment', table: 'shipment' },
-  { kind: 'in_transit', table: 'in-transit' },
-  { kind: 'stock', table: 'stock' },
-] as const)('代工厂手工关联的活动 $kind 上报也能证明订单归属', async ({ kind, table }) => {
-  await withFixture(async ({ main, sample }) => {
-    await seedLine({ db: main.db, sample, id: sample.lineId });
-    const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind });
-    await makeLinkFactoryRow(writes(main.db))({ table, rowId, orderLineId: sample.lineId }, sample.reviewer);
-    expect((await onlyLineDetail(main.db, sample.code)).line.factory?.id).toBe(factory.id);
-    await expectPlanWithoutSource(main.db, sample);
-  });
-}, 15000);
-
-it.skipIf(url === undefined).each(['insert', 'update', 'report'] as const)('真实 PostgreSQL 归属事务还在写 %s 时仍生成业务批次，原表待核对', async (path) => {
-  await withFixture(async ({ main, competing, sample }) => {
-    await seedLine({ db: main.db, sample, id: sample.lineId });
-    const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
-    const originalFactory = aParty({ id: sample.factoryId, isFactory: true });
-    await partyRepository(main.db).save(originalFactory);
-    if (path === 'update') {
-      await makeSetLineFactoryLink(writes(main.db))({ orderLineId: sample.lineId, factoryPartyId: originalFactory.id }, sample.reviewer);
-    }
-    const paused = gate();
-    const write = path === 'report'
-      ? makeLinkFactoryRow(writes(competing.db, { afterDemandSave: paused.hold }))({
-        table: 'stock', rowId, orderLineId: sample.lineId,
-      }, sample.reviewer)
-      : makeSetLineFactoryLink(writes(competing.db, { afterFactoryLinkSave: paused.hold }))({
-        orderLineId: sample.lineId, factoryPartyId: factory.id,
-      }, sample.reviewer);
-    void write.catch(() => undefined);
-    try {
-      await expect.poll(paused.hasEntered, wait).toBe(true);
-      const generated = settled(expectPlanWithoutSource(main.db, sample));
-      try {
-        await expect.poll(generated.isDone, wait).toBe(true);
-        await generated.result;
-      } finally {
-        paused.release();
-        await Promise.allSettled([generated.result]);
-      }
-    } finally {
-      paused.release();
-      await write;
-    }
-    const after = await onlyLineDetail(main.db, sample.code);
-    expect(after.line.factory?.id).toBe(factory.id);
-    expect(after.batchDemandSources).toEqual({});
-  });
-}, 15000);
-
-it.skipIf(url === undefined)('自动批量首挂只让受影响订单的凭据待核对', async () => {
-  await withFixture(async ({ main, competing, sample }) => {
-    await withFixture(async ({ sample: unaffected }) => {
-      await seedLine({ db: main.db, sample, id: sample.lineId });
-      await seedLine({ db: main.db, sample: unaffected, id: unaffected.lineId });
-      const { rowId, factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
-      await main.exec(`update factory_stock_rows set item_code_raw = '${sample.code}' where id = '${rowId}'`);
-      const paused = gate();
-      const relink = makeRelinkFactoryRows({
-        ...writes(competing.db, { afterFactoryLinkSave: paused.hold }),
-        links: factoryLinkQueries(competing.db),
-      })({ limit: 1 }, sample.reviewer);
-      try {
-        await Promise.race([relink, paused.entered]);
-        await expectPlanWithoutSource(main.db, sample);
-        const generate = makeGenerateBatchesFromDemand(writes(main.db));
-        expect(await generate({ rowIds: [unaffected.id] }, unaffected.buyer)).toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
-        const detail = await onlyLineDetail(main.db, unaffected.code);
-        expect(Object.values(detail.batchDemandSources ?? {})).toMatchObject([{ importBatchId: unaffected.importId, slot: { originalCells: rawCells } }]);
-      } finally {
-        paused.release();
-        await relink;
-      }
-      const detail = await onlyLineDetail(main.db, sample.code);
-      expect(detail.line.factory?.id).toBe(factory.id);
-      expect(detail.batchDemandSources).toEqual({});
-    });
-  });
-}, 15000);
-
-it.skipIf(url === undefined)('同单生成先确认原表时，之后的改挂不会覆盖历史凭据', async () => {
-  await withFixture(async ({ main, competing, applicationName, sample }) => {
-    await seedLine({ db: main.db, sample, id: sample.lineId });
-    const { factory } = await seedOtherFactoryReport(main.db, { sample, kind: 'stock' });
-    const paused = gate();
-    const generate = makeGenerateBatchesFromDemand(writes(main.db, { afterSourceFreeze: paused.hold }));
-    const generation = generate({ rowIds: [sample.id] }, sample.buyer);
-    let assignment: ReturnType<ReturnType<typeof makeSetLineFactoryLink>> | undefined;
-    try {
-      await Promise.race([generation, paused.entered]);
-      assignment = makeSetLineFactoryLink(writes(competing.db))({
-        orderLineId: sample.lineId, factoryPartyId: factory.id,
-      }, sample.reviewer);
-      void assignment.catch(() => undefined);
-      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
-    } finally {
-      paused.release();
-      await Promise.allSettled(assignment === undefined ? [generation] : [generation, assignment]);
-    }
-    expect(await generation).toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
-    await assignment;
-    const detail = await onlyLineDetail(main.db, sample.code);
-    expect(detail.line.factory?.id).toBe(factory.id);
-    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
-    expect(Object.values(detail.batchDemandSources ?? {})).toMatchObject([{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
-  });
-}, 15000);
-
-async function expectPlanWithoutSource(db: AppDatabase, sample: Sample): Promise<void> {
-  expect(await makeGenerateBatchesFromDemand(writes(db))({ rowIds: [sample.id] }, sample.buyer))
-    .toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
-  const detail = await onlyLineDetail(db, sample.code);
-  expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
-  expect(detail.batchDemandSources).toEqual({});
-}
 
 it.skipIf(url === undefined).each(['raw', 'normalized'] as const)('真实 PostgreSQL 重复 %s 槽索引只影响生成凭据', async (repeated) => {
   await withFixture(async ({ main, sample }) => {

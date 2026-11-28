@@ -20,7 +20,9 @@ export async function retireFactorySnapshot(input: { readonly tx: UnitOfWorkStor
     && item.template === 'factory-progress-v1' && item.status === 'committed'
     && (item.sourceKey ?? null) === source
     && (source === null ? item.factoryPartyId === input.batch.factoryPartyId : (item.supersededAt ?? null) === null));
-  await input.tx.factoryReports.lockSnapshotOrders([input.batch.id, ...active.map((item) => item.id)]);
+  await input.tx.factoryReports.lockSnapshotOrders({
+    incomingBatchId: input.batch.id, previousBatchIds: active.map((item) => item.id), onlyEffectivePrevious: source === null,
+  });
   if (source === null) return;
   for (const previous of active) {
     const next = { ...previous, revision: revisionOf(previous.revision) + 1, supersededAt: input.at, updatedAt: input.at };

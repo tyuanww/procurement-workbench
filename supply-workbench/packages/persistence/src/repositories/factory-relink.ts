@@ -1,35 +1,41 @@
 import { and, ne, sql } from 'drizzle-orm';
 import { normalizeFactoryReportCode } from '@sw/domain';
+import type { FactoryReportRepository } from '../../../application/src/ports/factory-report-repository.js';
 import type { AppDatabase } from '../client.js';
 import { factoryInTransitRows, factoryMaterialDemandRows } from '../schema/factory.js';
-import { lockFactorySnapshotSource } from './factory-ownership-lock.js';
 
 export function readReportsByCode(db: AppDatabase, codeNorms: readonly string[]) {
   return reportsByCode(db, relinkCodes(codeNorms));
 }
 
-export async function lockReportsByCode(db: AppDatabase, codeNorms: readonly string[]) {
+type RelinkInput = Parameters<FactoryReportRepository['lockRelinkRows']>[0];
+type RelinkTable = typeof factoryInTransitRows | typeof factoryMaterialDemandRows;
+
+export async function lockReportsByCode(db: AppDatabase, { codeNorms, candidates }: RelinkInput) {
   const codes = relinkCodes(codeNorms);
-  const candidates = await reportsByCode(db, codes);
-  const transit = candidates.transit.filter((row) => row.linkStatus !== 'manual');
-  const demand = candidates.demand.filter((row) => row.linkStatus !== 'manual');
-  const sources = new Set(transit.map((row) => row.factoryPartyId));
-  // 在途写入与快照发布都先锁来源。各审核事务再按表和行 ID 取锁。
-  for (const factoryPartyId of [...sources].sort()) {
-    await lockFactorySnapshotSource(db, { factoryPartyId, kind: 'report' });
-  }
-  const lockedTransit = transit.length === 0 ? [] : await db.select().from(factoryInTransitRows)
-    .where(relinkRowScope(factoryInTransitRows, transit.map((row) => row.id))).orderBy(factoryInTransitRows.id).for('update');
-  const lockedDemand = demand.length === 0 ? [] : await db.select().from(factoryMaterialDemandRows)
-    .where(relinkRowScope(factoryMaterialDemandRows, demand.map((row) => row.id))).orderBy(factoryMaterialDemandRows.id).for('update');
+  if (codes.size === 0) return { transit: [], demand: [] };
+  const transit = candidates.filter((row) => row.kind === 'in_transit');
+  const demand = candidates.filter((row) => row.kind === 'demand');
+  const transitTable = factoryInTransitRows;
+  const demandTable = factoryMaterialDemandRows;
+  const lockedTransit = transit.length === 0 ? [] : await db.select().from(transitTable)
+    .where(and(relinkRowScope(transitTable, transit), ne(transitTable.poNorm, '')))
+    .orderBy(sql`${transitTable.id} collate "C"`).for('update');
+  const lockedDemand = demand.length === 0 ? [] : await db.select().from(demandTable)
+    .where(and(relinkRowScope(demandTable, demand),
+      sql`jsonb_typeof(${demandTable.slots}->'poNorm') = 'string' and ${demandTable.slots}->>'poNorm' <> ''`))
+    .orderBy(sql`${demandTable.id} collate "C"`).for('update');
   return {
-    transit: lockedTransit.filter((row) => sources.has(row.factoryPartyId) && matchesReportCode(row, codes)),
+    transit: lockedTransit.filter((row) => matchesReportCode(row, codes)),
     demand: lockedDemand.filter((row) => matchesReportCode(row, codes)),
   };
 }
 
-function relinkRowScope(table: typeof factoryInTransitRows | typeof factoryMaterialDemandRows, ids: readonly string[]) {
-  return and(sql`${table.id} = any(${sql.param(ids)}::text[])`, ne(table.linkStatus, 'manual'));
+function relinkRowScope(table: RelinkTable, rows: RelinkInput['candidates']) {
+  const ids = rows.map(({ id }) => id);
+  const factories = rows.map(({ factoryPartyId }) => factoryPartyId);
+  return and(sql`(${table.id}, ${table.factoryPartyId}) in (select * from unnest(${sql.param(ids)}::text[], ${sql.param(factories)}::text[]))`,
+    ne(table.linkStatus, 'manual'));
 }
 
 async function reportsByCode(db: AppDatabase, codes: ReadonlySet<string>) {
