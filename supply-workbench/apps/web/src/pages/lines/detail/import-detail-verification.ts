@@ -1,8 +1,9 @@
 import { ConfirmedArrivalPayloadSchema, EntityIdSchema, ImportRowViewSchema, listResponseSchema } from '@sw/contracts';
 import { createContext, useEffect, useState } from 'react';
-import { fetchImportBatchSummary, IMPORT_RETURN_PARAM, importFollowUpBackAddress, useVerifiedProcurementImportReturn } from '../../../features/imports/index.js';
+import { fetchImportBatchSummary, IMPORT_RETURN_PARAM, importFollowUpBackAddress, procurementImportSourceOf, useImportReturnTemplate } from '../../../features/imports/index.js';
 import { apiGetWithSignal } from '../../../shared/api/client.js';
-import { ARRIVAL_SOURCE_PAGE_SIZE, readArrivalImportSource } from '../../imports/import-source.js';
+import { ARRIVAL_SOURCE_PAGE_SIZE, importSourceKey, readArrivalImportSource } from '../../imports/import-source.js';
+import { componentSourceLineId, fetchProcurementPreview, procurementPreviewOa, visibleProcurement } from '../../imports/procurement-preview-model.js';
 import { useRelatedImportMembers } from './related-procurement-navigation.js';
 
 export const LineImportMembership = createContext({ isImportMember: false, isCheckingImportMembership: false });
@@ -11,9 +12,34 @@ export function useDetailImportProof({ params, lineId, canReadImports }: {
   readonly params: URLSearchParams; readonly lineId: string; readonly canReadImports: boolean;
 }) {
   const membership = useImportLineMember({ params, lineId });
-  const isVerifiedProcurement = useVerifiedProcurementImportReturn(params, canReadImports && membership.isImportMember);
+  const importReturnTemplate = useImportReturnTemplate(params, canReadImports && membership.isImportMember);
+  const isProcurementSourceRow = useVerifiedProcurementRow({
+    address: importReturnTemplate === 'po-master-v1' ? params.get(IMPORT_RETURN_PARAM) : null, lineId,
+  });
   const isConfirmedArrival = useConfirmedArrivalReturn({ params, lineId, canReadImports });
-  return { ...membership, isVerifiedProcurement, confirmedArrival: isConfirmedArrival };
+  return { ...membership, importReturnTemplate, isProcurementSourceRow, confirmedArrival: isConfirmedArrival };
+}
+
+function useVerifiedProcurementRow({ address, lineId }: { readonly address: string | null; readonly lineId: string }): boolean {
+  const key = JSON.stringify([address, lineId]);
+  const [verified, setVerified] = useState<string>();
+  useEffect(() => {
+    const back = importFollowUpBackAddress(address);
+    if (back === null || procurementImportSourceOf(back.recordKey) === undefined) return;
+    const { id, to, recordKey } = back;
+    const oa = procurementPreviewOa(new URLSearchParams(to.slice(to.indexOf('?'))));
+    const abort = new AbortController();
+    void fetchProcurementPreview({ id, oa, signal: abort.signal }).then((preview) => {
+      if (abort.signal.aborted || preview?.submission?.originalBatchId !== id) return;
+      const { rows, related } = visibleProcurement(preview);
+      const finished = rows.find((row) => importSourceKey('finished', row.source) === recordKey);
+      const component = related.find(({ fact }) => importSourceKey('component', fact.source) === recordKey);
+      const target = component === undefined ? finished?.orderLineId : componentSourceLineId(component);
+      if (target === lineId) setVerified(key);
+    }, () => undefined);
+    return () => abort.abort();
+  }, [address, key, lineId]);
+  return verified === key;
 }
 
 export function useImportLineMember({ params, lineId, enabled = true }: {

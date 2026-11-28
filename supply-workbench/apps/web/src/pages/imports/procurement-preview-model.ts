@@ -1,10 +1,23 @@
 import { recognizedPoNumbers } from '@sw/domain';
-import { UNLINKED_PROCUREMENT, type ProcurementPreviewSelection } from '@sw/contracts';
+import { ProcurementPreviewSelectionSchema, UNLINKED_PROCUREMENT, type ProcurementPreviewSelection } from '@sw/contracts';
 import { isBatchImportSource } from '../../features/imports/index.js';
+import { apiGetWithSignal } from '../../shared/api/client.js';
 import { importSourceQuery, previewPage, type ImportSourceState } from './import-source.js';
 
 export const sourcePageSizes = { finished: 12, component: 16, candidate: 16 } as const;
 export type SourceTable = keyof typeof sourcePageSizes;
+
+export function procurementPreviewOa(params: URLSearchParams): string | null {
+  const oa = params.get(importSourceQuery.oa);
+  return oa === '~' ? '' : oa;
+}
+
+export function fetchProcurementPreview({ id, oa, signal }: {
+  readonly id: string; readonly oa: string | null; readonly signal: AbortSignal;
+}) {
+  const query = oa === null ? '' : `?${new URLSearchParams({ oa })}`;
+  return apiGetWithSignal({ path: `/api/v1/imports/${encodeURIComponent(id)}/procurement${query}`, schema: ProcurementPreviewSelectionSchema, signal });
+}
 
 export function sourcePagination({ source, table }: { readonly source: ImportSourceState; readonly table: SourceTable }) {
   const key = importSourceQuery[table];
@@ -53,6 +66,10 @@ export type ComponentRow = {
 };
 
 export type FinishedSummary = FinishedRow & { readonly statuses: readonly ComponentFact['status'][]; readonly orderLineId?: string };
+
+export function componentSourceLineId(row: ComponentRow): string | undefined {
+  return row.fact.status === 'active' ? row.observation?.materialLineId ?? undefined : undefined;
+}
 type VisibleProcurement = {
   readonly rows: readonly FinishedSummary[];
   readonly poCount: number;

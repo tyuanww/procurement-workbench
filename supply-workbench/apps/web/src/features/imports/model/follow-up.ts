@@ -1,5 +1,6 @@
 import { EntityIdSchema, ProcurementStoreSchema } from '@sw/contracts';
 import { matchPath } from 'react-router';
+import { z } from 'zod';
 
 export const IMPORT_RETURN_PARAM = 'backToImport';
 export const IMPORT_SOURCE_DRAWER = 'import-source';
@@ -7,6 +8,9 @@ export const BATCH_IMPORT_SOURCE = 'batch';
 export const PROCUREMENT_BATCH_IMPORT_SOURCE = 'procurement-batch';
 
 const shopSchema = ProcurementStoreSchema.exclude(['all']);
+const procurementSource = z.tuple([z.enum(['finished', 'component']), z.string(), z.number().int().positive()]);
+
+export type VerifiedImportReturnTemplate = 'factory-progress-v1' | 'po-master-v1';
 
 export function isBatchImportSource(key: string | null): boolean {
   return key === BATCH_IMPORT_SOURCE || key === PROCUREMENT_BATCH_IMPORT_SOURCE;
@@ -15,27 +19,30 @@ export function isBatchImportSource(key: string | null): boolean {
 export function importFollowUpCandidate(params: URLSearchParams) {
   const back = importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
   if (back === null || params.get('importBatchId') !== back.id) return null;
+  if (!isBatchImportSource(back.recordKey) && procurementImportSourceOf(back.recordKey) === undefined) return null;
+  return back;
+}
+
+export function importFollowUpScope(params: URLSearchParams, { template, isProcurementSourceRow = false }: {
+  readonly template: VerifiedImportReturnTemplate | null | undefined;
+  readonly isProcurementSourceRow?: boolean;
+}): ReturnType<typeof importFollowUpBackAddress> {
+  const back = importFollowUpCandidate(params);
+  if (back === null || template == null) return null;
   const store = shopSchema.safeParse(params.get('store')).data;
   const sourceQuery = new URLSearchParams(back.to.slice(back.to.indexOf('?')));
   const sourceStore = shopSchema.safeParse(sourceQuery.get('store')).data;
-  if (back.recordKey === PROCUREMENT_BATCH_IMPORT_SOURCE) {
-    return store === undefined ? { ...back, needsProcurementVerification: true } : null;
-  }
-  if (store === sourceStore || (store === undefined && !isBatchImportSource(back.recordKey))) {
-    return { ...back, needsProcurementVerification: false };
-  }
-  return store === undefined ? { ...back, needsProcurementVerification: true } : null;
+  if (template === 'factory-progress-v1') return back.recordKey === BATCH_IMPORT_SOURCE && store === sourceStore ? back : null;
+  if (store !== undefined) return null;
+  return isBatchImportSource(back.recordKey) || isProcurementSourceRow ? back : null;
 }
 
-export function importFollowUpScope(params: URLSearchParams, isVerifiedProcurement = false): ReturnType<typeof importFollowUpBackAddress> {
-  const candidate = importFollowUpCandidate(params);
-  if (candidate === null || (candidate.needsProcurementVerification && !isVerifiedProcurement)) return null;
-  const { id, to, recordKey } = candidate;
-  if (!candidate.needsProcurementVerification || recordKey === PROCUREMENT_BATCH_IMPORT_SOURCE) return { id, to, recordKey };
-  const separator = to.indexOf('?');
-  const sourceQuery = new URLSearchParams(to.slice(separator));
-  sourceQuery.set('source', PROCUREMENT_BATCH_IMPORT_SOURCE);
-  return { id, to: `${to.slice(0, separator)}?${sourceQuery}`, recordKey: PROCUREMENT_BATCH_IMPORT_SOURCE };
+export function procurementImportSourceOf(key: string) {
+  try {
+    return procurementSource.safeParse(JSON.parse(key)).data;
+  } catch {
+    return undefined;
+  }
 }
 
 export function importFollowUpBackAddress(value: string | null): { readonly id: string; readonly to: string; readonly recordKey: string } | null {
@@ -51,7 +58,9 @@ export function importFollowUpBackAddress(value: string | null): { readonly id: 
 
 function importRouteId(pathname: string): string | undefined {
   try {
-    const path = pathname.replace(/^\/[^/]+/u, (section) => decodeURIComponent(section));
+    const segment = /^\/[^/]+/u.exec(pathname)?.[0];
+    if (segment === undefined || decodeURIComponent(segment).toLowerCase() !== '/imports') return undefined;
+    const path = '/imports' + pathname.slice(segment.length);
     const encoded = matchPath('/imports/:id', path)?.params.id;
     if (encoded === undefined || /[\\\s]/u.test(encoded)) return undefined;
     const id = decodeURIComponent(encoded);

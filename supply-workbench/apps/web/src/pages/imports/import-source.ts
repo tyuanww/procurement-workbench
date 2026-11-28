@@ -1,6 +1,6 @@
 import { useLocation, useSearchParams } from 'react-router';
 import { z } from 'zod';
-import { BATCH_IMPORT_SOURCE, IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, PROCUREMENT_BATCH_IMPORT_SOURCE, importFollowUpBackAddress, importFollowUpScope } from '../../features/imports/index.js';
+import { BATCH_IMPORT_SOURCE, IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, PROCUREMENT_BATCH_IMPORT_SOURCE, importFollowUpBackAddress, importFollowUpScope, type VerifiedImportReturnTemplate } from '../../features/imports/index.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 
@@ -65,14 +65,15 @@ export function readImportBatchOriginState(state: unknown): { readonly importBat
   return { importBatchOrigin: state.importBatchOrigin };
 }
 
-export function importFollowUpReturn({ params, state, isVerifiedProcurement = false, confirmedArrival = false }: {
+export function importFollowUpReturn({ params, state, template, isProcurementSourceRow = false, confirmedArrival = false }: {
   readonly params: URLSearchParams;
   readonly state: unknown;
-  readonly isVerifiedProcurement?: boolean;
+  readonly template: VerifiedImportReturnTemplate | null | undefined;
+  readonly isProcurementSourceRow?: boolean;
   readonly confirmedArrival?: boolean;
 }) {
   const back = confirmedArrival && !params.has('importBatchId')
-    ? importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM)) : importFollowUpScope(params, isVerifiedProcurement);
+    ? importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM)) : importFollowUpScope(params, { template, isProcurementSourceRow });
   if (back === null) return null;
   const focus = detailReturnState(state, { detailPath: back.to, sourceLink: importSourceTriggerId(back.recordKey) });
   const origin = importBatchOrigin(state);

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { presetViews, readDesk } from '../../apps/web/src/features/follow-up/index.js';
-import { importFollowUpScope } from '../../apps/web/src/features/imports/index.js';
+import { importFollowUpScope, type VerifiedImportReturnTemplate } from '../../apps/web/src/features/imports/index.js';
 import { LineTable } from '../../apps/web/src/pages/lines/list/LineListPage.js';
 import { LineViewBar, clearFiltersAddress, exportAddress, filterSignature, isViewModified, readDensity, readHiddenColumns, saveAddress, toggleColumn, viewAddress, visibleColumns } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
@@ -154,12 +154,12 @@ describe('已修改状态', () => {
   it('按路由规则接受导入批次大小写、尾斜杠与编码标识', () => {
     const query = '?drawer=import-source&source=batch';
     const scope = (route: string, id = 'batch+a=b') =>
-      importFollowUpScope(new URLSearchParams({ importBatchId: id, backToImport: route + query }));
+      importFollowUpScope(new URLSearchParams({ importBatchId: id, backToImport: route + query }), { template: 'factory-progress-v1' });
     for (const route of ['/imports/batch%2Ba%3Db', '/Imports/batch%2Ba%3Db', '/imports/batch%2Ba%3Db//', '/imports/batch+a=b/']) {
       expect(scope(route)).toEqual({ id: 'batch+a=b', to: route + query, recordKey: 'batch' });
     }
     expect(scope('/imports/batch%2Ba%3Db/', 'different')).toBeNull();
-    for (const route of ['/imports/%2Fetc', '/imports/%2E%2E', '/imports/%5Cwrong', '/imports/%ZZ', '//host/imports/batch+a=b']) {
+    for (const route of ['/imports/%2Fetc', '/imports/%2E%2E', '/imports/%5Cwrong', '/imports/%ZZ', '//host/imports/batch+a=b', '/imports%2Fbatch+a=b']) {
       expect(scope(route)).toBeNull();
     }
   });
@@ -168,7 +168,7 @@ describe('已修改状态', () => {
     const source = '/imports/batch-a?drawer=import-source&source=batch';
     const scope = (route: string) => importFollowUpScope(new URLSearchParams({
       importBatchId: 'batch-a', store: 'dafuyan', backToImport: route,
-    }));
+    }), { template: 'factory-progress-v1' });
     expect(scope(source + '&store=dafuyan')?.to).toBe(source + '&store=dafuyan');
     expect(scope(source + '&store=yiling')).toBeNull();
     expect(scope(source)).toBeNull();
@@ -176,10 +176,12 @@ describe('已修改状态', () => {
 
   it('整批工厂来源比较实际店铺，采购来源通过专用抽屉区分历史店铺', () => {
     const base = '/imports/batch-a?drawer=import-source';
-    const scope = (source: string, { store, isVerifiedProcurement = false }: { store?: string | undefined; isVerifiedProcurement?: boolean } = {}) => {
+    const scope = (source: string, { store, template = 'factory-progress-v1' }: {
+      readonly store?: string | undefined; readonly template?: VerifiedImportReturnTemplate | null;
+    } = {}) => {
       const params = new URLSearchParams({ importBatchId: 'batch-a', backToImport: base + source });
       if (store !== undefined) params.set('store', store);
-      return importFollowUpScope(params, isVerifiedProcurement);
+      return importFollowUpScope(params, { template });
     };
     for (const value of [undefined, 'invalid-store', 'all']) {
       expect(scope('&source=batch&store=yiling', { store: value })).toBeNull();
@@ -187,10 +189,12 @@ describe('已修改状态', () => {
       expect(scope('&source=batch', { store: value })).not.toBeNull();
     }
     expect(scope('&source=batch&template=po-master-v1&store=yiling')).toBeNull();
-    expect(scope('&source=batch&store=yiling', { isVerifiedProcurement: true })?.recordKey).toBe('procurement-batch');
+    expect(scope('&source=batch&store=yiling', { template: 'po-master-v1' })?.recordKey).toBe('batch');
+    expect(scope('&source=batch&store=yiling', { template: 'po-master-v1', store: 'yiling' })).toBeNull();
+    expect(scope('&source=batch&store=yiling', { template: null, store: 'yiling' })).toBeNull();
     expect(scope('&source=procurement-batch&store=yiling')).toBeNull();
-    expect(scope('&source=procurement-batch&store=yiling', { isVerifiedProcurement: true })?.to).toBe(base + '&source=procurement-batch&store=yiling');
-    expect(scope('&source=procurement-batch&store=yiling', { store: 'yiling', isVerifiedProcurement: true })).toBeNull();
+    expect(scope('&source=procurement-batch&store=yiling', { template: 'po-master-v1' })?.to).toBe(base + '&source=procurement-batch&store=yiling');
+    expect(scope('&source=procurement-batch&store=yiling', { store: 'yiling', template: 'po-master-v1' })).toBeNull();
   });
 
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {
