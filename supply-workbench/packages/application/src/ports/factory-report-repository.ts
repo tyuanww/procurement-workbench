@@ -17,6 +17,10 @@ export interface FactoryReportRepository {
   }): Promise<ReadonlyMap<number, BatchDemandSource>>;
   /** 找不到返回 undefined。 */
   find(id: string): Promise<FactoryReportRow | undefined>;
+  /** 发布时先锁同厂快照来源，防止上报改挂改变继承和退休范围。 */
+  lockSnapshotSource(factoryPartyId: string): Promise<void>;
+  /** 快照发布、退休涉及的已关联订单。 */
+  lockSnapshotOrders(importBatchIds: readonly string[]): Promise<void>;
   /** 插入或按 id 覆盖。事务由 UnitOfWork.run 负责。 */
   save(entity: FactoryReportRow): Promise<void>;
   /** 只关联仍未创建订单的在途行。并发认领失败时返回 false。 */

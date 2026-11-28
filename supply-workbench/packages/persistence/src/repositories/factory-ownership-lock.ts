@@ -1,16 +1,25 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { AppDatabase } from '../client.js';
+import { factoryOwnershipGuards } from '../schema/orders.js';
 
 export async function lockFactoryOwnershipChange(db: AppDatabase, orderLineIds: readonly (string | null)[]): Promise<void> {
-  const ids = [...new Set(orderLineIds)].filter((id) => id !== null).sort();
-  for (const id of ids) await db.execute(sql`select pg_advisory_xact_lock(${ownershipKey(id)})`);
+  const ids = [...new Set(orderLineIds)].filter((id) => id !== null);
+  if (ids.length === 0) return;
+  await db.select({ id: factoryOwnershipGuards.orderLineId }).from(factoryOwnershipGuards)
+    .where(sql`${factoryOwnershipGuards.orderLineId} = any(${sql.param(ids)}::text[])`)
+    .orderBy(factoryOwnershipGuards.orderLineId).for('key share');
 }
 
 export async function tryLockFactoryOwnershipForEvidence(db: AppDatabase, orderLineId: string): Promise<boolean> {
-  const result = await db.execute<{ locked: boolean }>(sql`select pg_try_advisory_xact_lock_shared(${ownershipKey(orderLineId)}) as locked`);
-  return result.rows[0]?.locked === true;
+  // 写入彼此兼容。只有生成完成业务写入后才尝试排他读取凭据。
+  const [locked] = await db.select({ id: factoryOwnershipGuards.orderLineId }).from(factoryOwnershipGuards)
+    .where(eq(factoryOwnershipGuards.orderLineId, orderLineId)).for('update', { skipLocked: true });
+  return locked !== undefined;
 }
 
-function ownershipKey(orderLineId: string) {
-  return sql`hashtextextended('supply.follow-up.factory-ownership:' || ${orderLineId}, 0)`;
+export async function lockFactorySnapshotSource(db: AppDatabase, { factoryPartyId, kind }: {
+  readonly factoryPartyId: string; readonly kind: 'publish' | 'report';
+}): Promise<void> {
+  const key = sql`hashtextextended('supply.follow-up.factory-snapshot:' || ${factoryPartyId}, 0)`;
+  await db.execute(kind === 'publish' ? sql`select pg_advisory_xact_lock(${key})` : sql`select pg_advisory_xact_lock_shared(${key})`);
 }

@@ -14,8 +14,14 @@ export async function findFactorySnapshotReplay(input: { readonly tx: UnitOfWork
 }
 
 export async function retireFactorySnapshot(input: { readonly tx: UnitOfWorkStores; readonly batch: ImportBatch; readonly at: string }): Promise<void> {
-  if (input.batch.template !== 'factory-progress-v1' || input.batch.sourceKey === null || input.batch.sourceKey === undefined) return;
-  const active = (await input.tx.imports.list()).filter((item) => item.id !== input.batch.id && item.status === 'committed' && item.sourceKey === input.batch.sourceKey && (item.supersededAt ?? null) === null);
+  if (input.batch.template !== 'factory-progress-v1') return;
+  const source = input.batch.sourceKey ?? null;
+  const active = (await input.tx.imports.list()).filter((item) => item.id !== input.batch.id
+    && item.template === 'factory-progress-v1' && item.status === 'committed'
+    && (item.sourceKey ?? null) === source
+    && (source === null ? item.factoryPartyId === input.batch.factoryPartyId : (item.supersededAt ?? null) === null));
+  await input.tx.factoryReports.lockSnapshotOrders([input.batch.id, ...active.map((item) => item.id)]);
+  if (source === null) return;
   for (const previous of active) {
     const next = { ...previous, revision: revisionOf(previous.revision) + 1, supersededAt: input.at, updatedAt: input.at };
     await saveImportRevision({ repo: input.tx.imports, next, expectedRevision: revisionOf(previous.revision) });

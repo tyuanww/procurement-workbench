@@ -26,6 +26,7 @@ export const makeRelinkFactoryRows =
     const matchedLines = new Set<string>();
     await deps.uow.run(async (tx) => {
       const write = { tx, at, links: lineFactoryLinksOf(tx), matchedLines, counters };
+      await write.links.lockOwnershipChanges(ownershipTargets({ plan, orderLines }));
       for (const result of plan) await applyResult({ ...write, result });
       await writeUnlinkedLines({ links: write.links, orderLines, matchedLines, at });
     });
@@ -41,6 +42,11 @@ export const makeRelinkFactoryRows =
       byBasis: counters.byBasis,
     };
   };
+
+function ownershipTargets(input: { readonly plan: readonly FactoryMatch[]; readonly orderLines: readonly OrderLineMatchRef[] }): string[] {
+  const matched = input.plan.flatMap((result) => result.kind === 'matched' ? [result.line.orderLineId] : []);
+  return [...matched, ...input.orderLines.filter((line) => line.linkStatus === 'linked').map((line) => line.orderLineId)];
+}
 
 function emptyCounters(): Counters {
   return { factoryLinked: 0, factoryManual: 0, factoryUnlinked: 0, conflicts: 0, byBasis: { po: 0, item_code: 0, barcode: 0 } };
