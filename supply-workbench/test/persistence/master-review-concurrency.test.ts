@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { systemIds } from '../../apps/server/src/system/ids.js';
-import { makeBulkCreateItems, makeResolveMultiName } from '../../packages/application/src/master-data/index.js';
+import { makeApproveCode, makeBulkCreateItems, makeResolveMultiName } from '../../packages/application/src/master-data/index.js';
 import { entityId, type EntityId, type ItemCode } from '../../packages/domain/src/index.js';
 import {
   auditRepository, codeLinkRepository, createUnitOfWork, factoryReportRepository, itemCodeRepository,
@@ -60,6 +60,36 @@ it.skipIf(url === undefined)('PostgreSQL 批量建物料和一号多名审核并
     expect(await codes.get(code.id)).toMatchObject({ itemId: keys.firstItem, status: 'approved' });
     expect(await orderLineRepository(main.db).get(sample.lineId)).toMatchObject({ itemId: keys.firstItem });
     expect(await itemRepository(main.db).find(keys.secondItem)).toBeUndefined();
+  });
+}, 15000);
+
+it.skipIf(url === undefined).each(['approve', 'bulk'] as const)('PostgreSQL 同一订单行的品号和条码分别审核时保留先提交的物料（%s）', async (flow) => {
+  await withReviewFixture(async (fixture, keys) => {
+    const { main, competing, sample } = fixture;
+    const firstCode = reviewCode({ id: keys.left, codeRaw: sample.code, itemId: null });
+    const secondCode = reviewCode({ id: keys.right, codeRaw: `BARCODE-${sample.id}`, itemId: null, codeType: 'barcode_69' });
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const lines = orderLineRepository(main.db);
+    await lines.save({ ...await lines.get(sample.lineId), itemId: null, barcodeRaw: secondCode.codeRaw });
+    const codes = itemCodeRepository(main.db);
+    await codes.save(firstCode);
+    await codes.save(secondCode);
+
+    const paused = gate();
+    const first = reviewWrites(main.db, { nextId: keys.firstItem, afterAudit: paused.hold });
+    const second = reviewWrites(competing.db, { nextId: keys.secondItem });
+    await overlap<unknown>(fixture, {
+      paused,
+      first: () => flow === 'approve'
+        ? makeApproveCode(first)({ codeId: firstCode.id, createItem: { displayName: '品号物料', kind: 'unknown' } }, sample.reviewer)
+        : makeBulkCreateItems(first)({ codeIds: [firstCode.id] }, sample.reviewer),
+      second: () => flow === 'approve'
+        ? makeBulkCreateItems(second)({ codeIds: [secondCode.id] }, sample.reviewer)
+        : makeResolveMultiName(second)({ codeId: secondCode.id, mode: 'same_item', displayName: '条码物料' }, sample.reviewer),
+    });
+    expect(await codes.get(firstCode.id)).toMatchObject({ itemId: keys.firstItem, status: 'approved' });
+    expect(await codes.get(secondCode.id)).toMatchObject({ itemId: keys.secondItem, status: 'approved' });
+    expect(await lines.get(sample.lineId)).toMatchObject({ itemId: keys.firstItem });
   });
 }, 15000);
 

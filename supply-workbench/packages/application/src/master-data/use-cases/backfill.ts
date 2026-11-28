@@ -1,4 +1,4 @@
-import type { EntityId } from '@sw/domain';
+import { normalizeText, type EntityId } from '@sw/domain';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 
 export async function backfillSupplier(tx: UnitOfWorkStores, input: { readonly normName: string; readonly partyId: EntityId; readonly at: string }): Promise<string[]> {
@@ -11,13 +11,28 @@ export async function backfillSupplier(tx: UnitOfWorkStores, input: { readonly n
   return lineIds;
 }
 
-export async function backfillItem(tx: UnitOfWorkStores, input: { readonly codeNorm: string; readonly itemId: EntityId; readonly at: string }): Promise<string[]> {
-  const lines = await tx.orderLines.listByCodeNorm(input.codeNorm);
+export type ItemBackfill = { readonly codeNorm: string; readonly itemId: EntityId };
+
+export async function backfillItems(tx: UnitOfWorkStores, { items, at }: { readonly items: readonly ItemBackfill[]; readonly at: string }): Promise<string[]> {
+  const candidates = new Map<string, ItemBackfill[]>();
+  for (const item of items) {
+    for (const line of await tx.orderLines.listByCodeNorm(item.codeNorm)) {
+      if (line.itemId !== null) continue;
+      const matches = candidates.get(line.id);
+      if (matches === undefined) candidates.set(line.id, [item]);
+      else matches.push(item);
+    }
+  }
+
   const changed: string[] = [];
-  for (const line of lines) {
+  for (const id of [...candidates.keys()].sort()) {
+    const line = await tx.orderLines.lock(id);
     if (line.itemId !== null) continue;
-    await tx.orderLines.save({ ...line, itemId: input.itemId, updatedAt: input.at });
-    changed.push(line.id);
+    const currentCodes = [line.itemCodeRaw, line.barcodeRaw].filter((code) => code !== null).map(normalizeText);
+    const match = candidates.get(id)?.find(({ codeNorm }) => currentCodes.includes(codeNorm));
+    if (match === undefined) continue;
+    await tx.orderLines.save({ ...line, itemId: match.itemId, updatedAt: at });
+    changed.push(id);
   }
   return changed;
 }

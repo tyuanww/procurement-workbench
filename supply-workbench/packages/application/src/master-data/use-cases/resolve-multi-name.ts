@@ -6,7 +6,7 @@ import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
 import { authorize } from '../../shared/authorize.js';
 import { refreshLineProjection } from '../../shared/line-projection.js';
-import { backfillItem } from './backfill.js';
+import { backfillItems } from './backfill.js';
 import { itemDraft } from './drafts.js';
 import { relinkRows } from './relink-rows.js';
 import { requireText } from './require-text.js';
@@ -22,7 +22,7 @@ export const makeResolveMultiName =
       await applyDecision(tx, { itemId, input, at });
       if (code.itemId === null) await tx.itemCodes.save({ ...code, itemId, status: 'approved', updatedAt: at });
       const reports = await tx.factoryReports.lockRelinkRows([code.codeNorm]);
-      const filled = code.itemId === null ? await backfillItem(tx, { codeNorm: code.codeNorm, itemId, at }) : [];
+      const filled = code.itemId === null ? await backfillItems(tx, { items: [{ codeNorm: code.codeNorm, itemId }], at }) : [];
       const linked = await relinkRows(tx, reports);
       const lineIds = [...filled, ...linked];
       if (lineIds.length > 0) await refreshLineProjection(tx, lineIds);
