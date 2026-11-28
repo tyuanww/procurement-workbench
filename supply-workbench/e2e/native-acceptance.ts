@@ -74,6 +74,7 @@ let pgStarted = false;
 let app: ReturnType<typeof fork> | undefined;
 let appExit: Promise<unknown[]> | undefined;
 const browserAcceptanceStage = '执行采购浏览器验收';
+const cleanupStage = '清理隔离服务与数据库';
 let stage = '准备合成样本与浏览器';
 let failure: { readonly stage: string; readonly error: unknown } | undefined;
 try {
@@ -143,47 +144,70 @@ try {
   });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
   if (result.error) throw result.error;
-  const signal = result.signal === null ? '' : ` (${result.signal})`;
-  assert.equal(result.status, 0, `Procurement browser acceptance failed${signal}`);
+  const outcome = result.signal ?? `exit status ${result.status}`;
+  assert.equal(result.status, 0, `Procurement browser acceptance failed (${outcome})`);
   stage = '核对浏览器实际加载的入口';
   await verifyServedEntry(evidence.entry);
 } catch (error) {
   failure = { stage, error };
 }
 
+const cleanupErrors: string[] = [];
+function recordCleanup(error: unknown): void {
+  const message = failureMessage(error);
+  cleanupErrors.push(message);
+  console.error('Unable to clean up isolated acceptance:', message);
+  failure ??= { stage: cleanupStage, error };
+}
 try {
   if (app?.exitCode === null && app.signalCode === null) {
     app.kill();
     await appExit;
   }
-  if (failure !== undefined) {
-    for (const file of [pgLog, appLog]) {
-      const log = await readFile(file, 'utf8').catch(() => '');
-      if (log.trim()) console.error(log.split('\n').slice(-25).join('\n').trim());
-    }
-  }
-  if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
-  await rm(working, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 } catch (error) {
-  if (failure === undefined) failure = { stage: '清理隔离服务与数据库', error };
-  else evidence.cleanupError = failureMessage(error);
+  recordCleanup(error);
 }
+try {
+  if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
+} catch (error) {
+  recordCleanup(error);
+}
+if (failure !== undefined) {
+  for (const file of [pgLog, appLog]) {
+    const log = await readFile(file, 'utf8').catch(() => '');
+    if (log.trim()) console.error(log.split('\n').slice(-25).join('\n').trim());
+  }
+}
+if (!cleanupErrors.length) {
+  try {
+    await rm(working, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (error) {
+    recordCleanup(error);
+  }
+}
+if (cleanupErrors.length) evidence.cleanupError = cleanupErrors.join('\n');
 
 if (failure !== undefined) {
   const error = failureMessage(failure.error);
   evidence.result = 'fail';
   evidence.error = error;
   evidence.failureStage = failure.stage;
-  await writeEvidence();
+  await writeEvidence().catch((error: unknown) => console.error('Unable to save acceptance evidence:', failureMessage(error)));
   const browser: unknown = process.env.GITHUB_STEP_SUMMARY && failure.stage === browserAcceptanceStage
     ? await readFile(join(evidenceDir, 'preaccept', 'result.json'), 'utf8').then(JSON.parse).catch(() => undefined)
     : undefined;
-  const cleanup = evidence.cleanupError === undefined ? {} : { cleanupError: evidence.cleanupError };
+  const additionalCleanup = failure.stage === cleanupStage ? cleanupErrors.slice(1) : cleanupErrors;
+  const cleanup = additionalCleanup.length ? { cleanupError: additionalCleanup.join('\n') } : {};
   await writeSummary({ sha, result: 'fail', stage: failure.stage, browser, error, ...cleanup });
   throw failure.error;
 }
 evidence.result = 'pass';
-await writeEvidence();
+try {
+  await writeEvidence();
+} catch (error) {
+  await writeSummary({ sha, result: 'fail', stage: '保存验收证据', browser: undefined, error: failureMessage(error) });
+  throw error;
+}
 await writeSummary({ sha, result: 'pass' });
 
 async function writeSummary(summary: AcceptanceSummary): Promise<void> {

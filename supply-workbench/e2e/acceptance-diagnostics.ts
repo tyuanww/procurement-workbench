@@ -48,7 +48,11 @@ export function acceptanceSummary(summary: AcceptanceSummary): string {
         if (last && /^\w+$/u.test(last)) lines.push('', `最近记录的检查：\`${last}\``);
       }
     }
-    appendDiagnostic(lines, typeof browser?.failure === 'string' ? browser.failure : summary.error);
+    const browserError = typeof browser?.failure === 'string' ? browser.failure : undefined;
+    appendDiagnostic(lines, browserError);
+    if (summary.error !== undefined && summary.error !== browserError) {
+      appendDiagnostic(lines, browserError === undefined ? summary.error : '运行器错误：' + summary.error);
+    }
     const cleanupErrors = [browser?.cleanupFailure, summary.cleanupError].filter((value): value is string => typeof value === 'string');
     if (cleanupErrors.length) appendDiagnostic(lines, '清理失败：' + cleanupErrors.join('\n'));
     lines.push('', '完整错误见失败步骤日志。如已上传证据，打开 `run.json` 和 `preaccept/result.json`。');

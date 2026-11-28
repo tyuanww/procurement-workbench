@@ -86,8 +86,10 @@ try {
 try {
   await browser.close();
 } catch (error) {
-  if (result.result === 'fail') result.cleanupFailure = failureMessage(error);
-  else recordFailure(error);
+  result.result = 'fail';
+  result.cleanupFailure = failureMessage(error);
+  console.error('Unable to close the acceptance browser:', result.cleanupFailure);
+  process.exitCode = 1;
 } finally {
   await writeFile(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n');
 }
@@ -97,6 +99,7 @@ function recordFailure(error: unknown): void {
   result.result = 'fail';
   result.failure = failureMessage(error);
   result.failureAt = browserFailureLocation(error);
+  console.error(JSON.stringify({ failure: result.failure, failureAt: result.failureAt }));
   process.exitCode = 1;
 }
 

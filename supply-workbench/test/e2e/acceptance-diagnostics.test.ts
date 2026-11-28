@@ -53,6 +53,17 @@ describe('采购浏览器验收摘要', () => {
     expect(summary).toContain('结果：通过');
     expect(summary).not.toContain('失败');
   });
+
+  it('浏览器已写出断言时仍报告后续子进程超时', () => {
+    const summary = acceptanceSummary({
+      sha, result: 'fail', stage: '执行采购浏览器验收',
+      browser: { result: 'fail', failure: '找不到第 2 批' },
+      error: 'spawnSync node ETIMEDOUT',
+    });
+
+    expect(summary).toContain('找不到第 2 批');
+    expect(summary).toContain('运行器错误：spawnSync node ETIMEDOUT');
+  });
 });
 
 it('浏览器包裹断言错误时保留原位置和原因', () => {
