@@ -48,7 +48,7 @@ export function StuckPanel(props: {
   const { data, query, onSearch, isUpdating } = props;
   const isPhone = useShellViewport().band === 'phone';
   const listRef = useRef<HTMLElement>(null);
-  const { batchId, select } = useStuckSelection(listRef, query.page, isUpdating ? undefined : data.page);
+  const { batchId, select } = useStuckSelection({ list: listRef, requestedPage: query.page, displayedPage: isUpdating ? undefined : data.page });
   const stuck = stuckView({ items: data.items, distribution: data.distribution, stage: query.stage, bucket: query.bucket });
   const filterList = (patch: DashboardPatch) => {
     onSearch(patch);

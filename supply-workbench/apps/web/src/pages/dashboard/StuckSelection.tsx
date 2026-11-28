@@ -21,7 +21,11 @@ export function stuckTriggerId(batchId: string) {
   return `stuck-batch:${batchId}`;
 }
 
-export function useStuckSelection(list: RefObject<HTMLElement | null>, requestedPage: number, displayedPage: number | undefined) {
+export function useStuckSelection({ list, requestedPage, displayedPage }: {
+  readonly list: RefObject<HTMLElement | null>;
+  readonly requestedPage: number;
+  readonly displayedPage: number | undefined;
+}) {
   const [params, setParams] = useSearchParams();
   const batchId = params.get(STUCK_BATCH_PARAM);
   const dismissed = useRef<string | null>(null);
