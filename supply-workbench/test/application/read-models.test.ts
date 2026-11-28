@@ -25,7 +25,7 @@ it('OrderLineRow 的字段和 05 第 4.3 节及管理店铺扩展一致', () => 
 });
 
 it('OrderLineDetail 的字段和 05 第 4.3 节及管理店铺扩展一致', () => {
-  lock<OrderLineDetail>()(['pendingBuyerName', 'ownerUndo', 'line', 'po', 'codes', 'snapshot', 'batches', 'sourceFiles', 'archivedShipmentSources', 'factoryReports', 'exceptions', 'followUps', 'procurement', 'procurementSchedule']);
+  lock<OrderLineDetail>()(['pendingBuyerName', 'ownerUndo', 'line', 'po', 'codes', 'snapshot', 'batches', 'sourceFiles', 'archivedShipmentSources', 'batchDemandSources', 'factoryReports', 'exceptions', 'followUps', 'procurement', 'procurementSchedule']);
 });
 
 it('BatchView 含 02 第 3.6 节字段和 05 第 4.4 节附加字段', () => {

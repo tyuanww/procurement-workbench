@@ -10,23 +10,24 @@ import { MissingValue, StatusTag } from '../../shared/ui/widgets.js';
 import { fontSize, space } from '../../theme/tokens.js';
 import { materialRiskState, ProgressNextAction } from './progress-material-risk.js';
 import type { StoreBatchFacts } from './progress-batch-facts.js';
+import type { ProgressOrderLinkProps } from './delivery-detail-link.js';
 
 export function progressMobileColumns(input: {
   readonly now: Date;
   readonly isNarrowPhone: boolean;
   readonly showFullIdentity?: boolean;
-  readonly lineHref: (lineId: string) => string;
+  readonly lineLink: (lineId: string) => ProgressOrderLinkProps;
   readonly lineOf: (lineId: string) => OrderLineRow | undefined;
-  readonly overdueHref: (row: ProgressRow) => string | undefined;
+  readonly overdueLink: (row: ProgressRow) => ProgressOrderLinkProps | undefined;
 }): TableColumnsType<ProgressRow> {
   const widths = input.isNarrowPhone
     ? { stage: 48, days: 42, arrival: 64 }
     : { stage: 58, days: 42, arrival: 70 };
   return [
-    { title: '单号 / 品名', key: 'identity', rowScope: 'row', render: (_value, row) => <MobileProduct row={row} line={input.lineOf(row.lineId)} href={input.lineHref(row.lineId)} showFullIdentity={input.showFullIdentity === true} /> },
+    { title: '单号 / 品名', key: 'identity', rowScope: 'row', render: (_value, row) => <MobileProduct row={row} line={input.lineOf(row.lineId)} link={input.lineLink(row.lineId)} showFullIdentity={input.showFullIdentity === true} /> },
     { title: '阶段', dataIndex: 'stageLabel', width: widths.stage, render: (_value, row) => <MobileStage row={row} /> },
     { title: <span style={{ whiteSpace: 'nowrap' }}>停留</span>, width: widths.days, align: 'right', render: (_value, row) => <span style={{ whiteSpace: 'nowrap' }}>{row.dayText}</span> },
-    { title: '确认日', width: widths.arrival, render: (_value, row) => progressArrivalDate({ arrival: row.arrival, now: input.now, href: input.overdueHref(row), isPhone: true }) },
+    { title: '确认日', width: widths.arrival, render: (_value, row) => progressArrivalDate({ arrival: row.arrival, now: input.now, link: input.overdueLink(row), isPhone: true }) },
   ];
 }
 
@@ -39,17 +40,17 @@ function MobileStage({ row }: { readonly row: ProgressRow }) {
   </>;
 }
 
-function MobileProduct({ row, line, href, showFullIdentity }: {
+function MobileProduct({ row, line, link, showFullIdentity }: {
   readonly row: ProgressRow;
   readonly line: OrderLineRow | undefined;
-  readonly href: string;
+  readonly link: ProgressOrderLinkProps;
   readonly showFullIdentity: boolean;
 }) {
   const barcode = comparableBarcode(line?.barcodeRaw ?? '');
   const base = barcodeBase(barcode);
   const suffix = barcode.slice(base.length);
   return (
-    <Link to={href} aria-label={`${row.po} ${row.title}${suffix === '' ? '' : ` 渠道规格 ${suffix}`}`} style={{ display: 'block', minWidth: 0 }}>
+    <Link {...link} aria-label={`${row.po} ${row.title}${suffix === '' ? '' : ` 渠道规格 ${suffix}`}`} style={{ display: 'block', minWidth: 0 }}>
       {showFullIdentity ? <span style={{ display: 'block', overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{row.po}</span> : <span title={row.po} style={{ display: 'flex', fontVariantNumeric: 'tabular-nums' }}>
         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.po.slice(0, -4)}</span>
         <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{row.po.slice(-4)}</span>
@@ -62,11 +63,11 @@ function MobileProduct({ row, line, href, showFullIdentity }: {
   );
 }
 
-export function progressArrivalDate(input: { readonly arrival: ProgressArrival; readonly now: Date; readonly href?: string | undefined; readonly isPhone?: boolean }) {
+export function progressArrivalDate(input: { readonly arrival: ProgressArrival; readonly now: Date; readonly link: ProgressOrderLinkProps | undefined; readonly isPhone?: boolean }) {
   if (input.arrival.kind === 'missing') return <MissingValue reason="not_provided" />;
   const date = arrivalTableDate({ arrival: input.arrival, now: input.now });
-  if (input.href === undefined) return <Tooltip title={input.arrival.dateText}><span style={{ overflowWrap: 'anywhere' }}>{date}</span></Tooltip>;
-  return <Tooltip title={input.arrival.dateText}><Link to={input.href} aria-label={`查看逾期批次，采购确认到货日 ${input.arrival.dateText}`} style={{ overflowWrap: 'anywhere' }}>
+  if (input.link === undefined) return <Tooltip title={input.arrival.dateText}><span style={{ overflowWrap: 'anywhere' }}>{date}</span></Tooltip>;
+  return <Tooltip title={input.arrival.dateText}><Link {...input.link} aria-label={`查看逾期批次，采购确认到货日 ${input.arrival.dateText}`} style={{ overflowWrap: 'anywhere' }}>
     {date}
     {input.isPhone === true ? <Typography.Text type="danger" style={{ display: 'block', fontSize: fontSize.meta }}>逾期</Typography.Text> : null}
   </Link></Tooltip>;

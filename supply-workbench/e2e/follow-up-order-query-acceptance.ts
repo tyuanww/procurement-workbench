@@ -25,9 +25,12 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, warehouse
   const batchPath = new URL('/api/v1' + orderPath + '/batches', origin);
   const second = await createBatch(page, batchPath, warehouse);
   assert.equal(second.seq, 2);
+  const searchAddress = page.url();
 
   for (const { width, height } of [{ width: 1440, height: 900 }, { width: 320, height: 667 }]) {
     await page.setViewportSize({ width, height });
+    if (width === 320) await page.goto(searchAddress);
+    await order.waitFor();
     const preview = page.getByRole('row').filter({ has: order }).getByRole('button', { name: '预览', exact: true });
     await preview.press('Enter');
     const dialog = page.getByRole('dialog', { name: po + ' 预览', exact: true });

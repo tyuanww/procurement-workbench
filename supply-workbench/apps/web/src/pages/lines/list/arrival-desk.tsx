@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link } from 'react-router';
 import { Alert, Button, Card, Drawer, Empty, Flex, Pagination, Skeleton, Typography } from 'antd';
 import { ArrivalDetailSchema, ArrivalListSchema, ArrivalSchema, type Arrival, type ArrivalCandidate, type RegisterArrivalInput, type ReviseArrivalInput } from '@sw/contracts';
 import { loadPartyOptions } from '../../../features/master-data/index.js';
+import { useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { useCanWrite } from '../../../shared/actor.js';
 import { ApiError, apiErrorMessage, apiGet, apiGetWithSignal, apiSend } from '../../../shared/api/client.js';
 import { writeUrlState } from '../../../shared/hooks/url-state.js';
@@ -13,7 +14,7 @@ const base = '/api/v1/receipts/arrivals';
 const invalidFields = '请检查凭据字段与数量，数量须大于 0，最多 4 位小数。';
 
 export function ArrivalDesk({ userId, onMutated }: { readonly userId: string; readonly onMutated: () => void }) {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const canWrite = useCanWrite('records.write');
   const isAdmin = useCanWrite('admin');
   if (!canWrite) return null;
