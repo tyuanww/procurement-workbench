@@ -142,7 +142,7 @@ async function checkRiskPageReturn({ page, daily, today, lineId, batchId }: {
       await target.waitFor();
       for (const fromButton of [true, false]) {
         await target.press('Enter');
-        await page.waitForURL((url) => url.pathname === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
+        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
         if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
         else await page.goBack();
         await results.getByText('51 条订单行', { exact: true }).waitFor();
@@ -182,7 +182,7 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
     for (const { link, batchId } of sources) {
       for (const fromButton of [true, false]) {
         await link.press('Enter');
-        await page.waitForURL((url) => url.pathname === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
+        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
         if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
         else await page.goBack();
         await page.waitForURL(address.href);
