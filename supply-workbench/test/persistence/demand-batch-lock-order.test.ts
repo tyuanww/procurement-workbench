@@ -127,7 +127,7 @@ it.skipIf(url === undefined).each([
       await Promise.race([paused.entered, assigning]);
       const generation = settled(generate({ rowIds: [...pair.rowIds].reverse() }, sample.buyer));
       generated = generation.result;
-      const hasReachedExpectedState = prior ? generation.isDone : () => blockedOnPostgres(main, applicationName);
+      const hasReachedExpectedState = async () => prior ? generation.isDone() : blockedOnPostgres(main, applicationName);
       await expect.poll(hasReachedExpectedState, wait).toBe(true);
     } finally {
       paused.release();
