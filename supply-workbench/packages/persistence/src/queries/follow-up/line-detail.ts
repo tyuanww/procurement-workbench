@@ -19,7 +19,7 @@ import { procurementDetail } from './procurement.js';
 import { batchViews } from './batch-view.js';
 import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 import { toRow, loadRelations, type ListWorld } from './line-row.js';
-import { comboOf, demandSourceOf, isAssociated, scheduleOf, shipmentSourceOf, stockOf, transitOf } from './payloads.js';
+import { comboOf, demandSourceOf, isAssociated, scheduleOf, shipmentSourceOf, stockOf, transitSourceOf } from './payloads.js';
 
 const FOLLOW_UP_LIMIT = 50;
 const PURCHASE_SOURCE_FIELDS = ['po', 'nameRaw', 'barcodeRaw', 'qtyOrdered', 'firstDeliveryOn', 'shippedQtyReported', 'statusReported'];
@@ -134,7 +134,7 @@ async function reportsOf(db: AppDatabase, { lineId, activeIds }: { readonly line
     db.select().from(factoryPackagingComboRows).where(linkedTo({ lineId, activeIds, table: factoryPackagingComboRows })),
   ]);
   return {
-    inTransit: transit.filter((row) => isAssociated(row.linkStatus)).map(transitOf),
+    inTransit: transit.filter((row) => isAssociated(row.linkStatus)).map(transitSourceOf),
     shipments: shipment.filter((row) => isAssociated(row.linkStatus)).map(shipmentSourceOf),
     stock: stock.filter((row) => isAssociated(row.linkStatus)).map(stockOf),
     schedule: schedule.filter((row) => isAssociated(row.linkStatus)).flatMap((row) => { const view = scheduleOf(row); return view === undefined ? [] : [view]; }),
