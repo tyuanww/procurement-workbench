@@ -8,13 +8,13 @@ import { ActorRoles } from '../../apps/web/src/shared/actor.js';
 import { act, button, click, element, fulfill, installFetch, installMatchMedia, memoryRouter, mount, resetDom, textOf, waitFor } from './party-preview-dom.js';
 import { antdApp, batchTodo, LocationAndToday, pageBody } from './today-workspace-fixture.js';
 
-it('同批未发且到时核收只显示一次，主操作打开对应订单并保留跟进约定', async () => {
+it('同批未发且到时核收只显示一次，先打开本页核收抽屉并保留跟进约定', async () => {
   emptyReads();
   installMatchMedia();
   installFetch();
   const tree = element(ActorRoles, { roles: ['buyer'], children: element(LocationAndToday) });
   const root = mount(memoryRouter(antdApp(tree), '/today?view=board'));
-  const mixed = batchTodo(1);
+  const mixed = batchTodo(2);
   if (mixed.batch === null || mixed.line === null) throw new Error('缺少样例批次');
   const due = localDate('2026-11-20');
   const batch: TodoItemView = {
@@ -28,40 +28,40 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
         verifiedReceivedQty: 0, overShippedQty: 0, overReceivedQty: 0, receiptWithoutShipmentQty: 0, reviewCount: 0 } },
   };
   const arrivalMemos: TodayPageResponse['arrivalMemos'] = [{
-    batchId: mixed.batch.id, batchSeq: 1, line: mixed.line, warehouse: '上海仓',
+    batchId: mixed.batch.id, batchSeq: 2, line: mixed.line, warehouse: '上海仓',
     confirmedDate: due, status: 'overdue', inTransitQty: 300, receivedQty: 0, unit: '件',
   }];
   try {
     await act(() => {
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
-      fulfill({ urlPart: 'inbox=today', status: 200, body: { ...pageBody(1), items: [batch], arrivalMemos } });
+      fulfill({ urlPart: 'inbox=today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batch], arrivalMemos } });
     });
-    expect(document.querySelectorAll('.today-row')).toHaveLength(1);
+    expect(document.querySelectorAll('.today-row')).toHaveLength(2);
+    expect(document.querySelectorAll('[aria-label="核对收货"] .today-row')).toHaveLength(1);
     const receipt = document.querySelector('[aria-label="核对收货"] .today-row');
     if (receipt === null) throw new Error('没有核收卡片');
     const primary = receipt.querySelector('.today-action-primary');
-    if (primary === null) throw new Error('没有核收主操作');
+    if (!(primary instanceof HTMLButtonElement)) throw new Error('没有本页核收主操作');
     expect(receipt.textContent).toContain('未发 800 件');
     expect(receipt.textContent).toContain('在途待收 300 件');
-    expect(primary.getAttribute('href')).toBe('/lines/line?focusBatch=batch-1');
     expect(primary.textContent).toBe('核对收货');
     expect(receipt.textContent).not.toContain('复制本批催单');
     const facts = receipt.textContent ?? '';
-    expect(receipt.closest('article')?.getAttribute('aria-label')).toBe('PO · 同名样品 · 第 1 批');
-    expect(facts).toMatch(/到仓逾期.*同名样品.*PO · 第 1 批 · 样例工厂.*需求早于确认.*采购确认到仓日 (?:2026-)?11-20.*收货方 上海仓.*核对收货/);
+    expect(receipt.closest('article')?.getAttribute('aria-label')).toBe('PO · 同名样品 · 第 2 批');
+    expect(facts).toMatch(/到仓逾期.*同名样品.*PO · 第 2 批 · 样例工厂.*需求早于确认.*采购确认到仓日 (?:2026-)?11-20.*收货方 上海仓.*核对收货/);
     expect(receipt.querySelector('time[aria-label="2026-11-20 星期五"]')).not.toBeNull();
     expect(facts).not.toMatch(/仍待发|已发待收|下次跟进|回查最近一次催货记录/);
-    click(button('同名样品'));
+    click(primary);
     await waitFor(() => textOf('[role="dialog"]').includes('最近跟进 · 回查最近一次催货记录'));
     const detail = textOf('[role="dialog"]');
     expect(detail).toContain('收货方 · 上海仓');
     expect(detail).toContain('催货对象 · 样例工厂');
     expect(detail).toContain('下次跟进 · 2026-11-22');
     expect(detail).toContain('催货 · 样例工厂');
-    const drawer = document.querySelector('[role="dialog"]');
-    const receiptLink = drawer?.querySelector('a[aria-label="核对收货 PO · 同名样品 · 第 1 批"]');
-    expect(receiptLink?.getAttribute('href')).toBe(primary.getAttribute('href'));
-    expect(receiptLink?.classList.contains('ant-btn-variant-outlined')).toBe(true);
+    const address = readBatchRecordLink();
+    expect(address.pathname).toBe('/lines/line');
+    expect(address.searchParams.get('focusBatch')).toBe('batch-2');
+    expect(new URLSearchParams(address.searchParams.get('backToToday') ?? '').get('drawer')).toBe(batch.id);
     const ship = button('登记发货');
     expect(ship.classList.contains('ant-btn-variant-text')).toBe(true);
     click(ship);
@@ -72,6 +72,13 @@ it('同批未发且到时核收只显示一次，主操作打开对应订单并�
     emptyReads();
   }
 });
+
+function readBatchRecordLink() {
+  const drawer = document.querySelector('[role="dialog"]');
+  const link = [...(drawer?.querySelectorAll('a') ?? [])].find((anchor) => anchor.textContent === '核对本批记录');
+  if (link === undefined) throw new Error('没有核对本批记录入口');
+  return new URL(link.href);
+}
 
 it('工作台不显示混合总数，日历日期计数保留本人排期和待建首批', async () => {
   emptyReads();

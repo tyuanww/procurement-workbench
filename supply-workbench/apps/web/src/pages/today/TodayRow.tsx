@@ -216,7 +216,7 @@ function RowActions({ card, row, copy, isFactoryChase, onOpen, ...work }: Pick<R
   const { primary, identity } = card;
   const copyAction = primary.kind === 'copy' ? primary.action : isFactoryChase === true ? copy : null;
   return <Flex className="today-touch today-row-actions" align="center" gap={space[0]} wrap>
-    <RowWorkAction {...work} primary={primary} rowId={row.id} />
+    <RowWorkAction {...work} primary={primary} rowId={row.id} onOpen={onOpen} />
     {copyAction === null ? null : <Button {...(primary.kind === 'copy' ? mainButton : secondaryButton)} icon={<CopyOutlined aria-hidden />}
       disabled={copyAction.disabled} onClick={copyAction.run}>{copyAction.label}</Button>}
     {primary.kind === 'detail' ? <Button {...mainButton} onClick={onOpen} aria-label={`查看详情 ${identity}`}>查看详情</Button> : null}
@@ -224,10 +224,10 @@ function RowActions({ card, row, copy, isFactoryChase, onOpen, ...work }: Pick<R
   </Flex>;
 }
 
-function RowWorkAction({ primary, rowId, arrivalFocusId, assignmentOrder, onQuick }: Pick<RowProps,
-  'arrivalFocusId' | 'assignmentOrder' | 'onQuick'> & { readonly primary: PrimaryAction; readonly rowId: string }) {
+function RowWorkAction({ primary, rowId, arrivalFocusId, assignmentOrder, onOpen, onQuick }: Pick<RowProps,
+  'arrivalFocusId' | 'assignmentOrder' | 'onOpen' | 'onQuick'> & { readonly primary: PrimaryAction; readonly rowId: string }) {
   if (primary.kind === 'receipt') return <>
-    <ReceiptAction memo={primary.memo} isFocused={arrivalFocusId === primary.memo.batchId} />
+    <ReceiptAction memo={primary.memo} isFocused={arrivalFocusId === primary.memo.batchId} onOpen={onOpen} />
     {assignmentOrder === undefined ? null : <TodayOrderLink order={assignmentOrder} focusOwner returnRowId={rowId}>分配采购负责人</TodayOrderLink>}
   </>;
   if (primary.kind === 'assign') return <TodayOrderLink order={primary.order} primary focusOwner returnRowId={rowId}>分配采购负责人</TodayOrderLink>;

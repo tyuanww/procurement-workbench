@@ -27,9 +27,9 @@ export type {
   RowFace,
   TodayBoard,
 } from './model/types.js';
-export { ArrivalMemos } from './ArrivalMemos.js';
+export { ArrivalMemos, arrivalMemoButtonId } from './ArrivalMemos.js';
 
-export { TodayOrderLink, TodayReceiptLink, type TodayOrderRef, type ReceiptWork } from './TodayOrderLink.js';
+export { TODAY_BATCH_RETURN_PARAM, todayBatchRecordFocus, TodayOrderLink, TodayReceiptButton, type TodayOrderRef, type ReceiptWork } from './TodayOrderLink.js';
 export { TodayDrawer, actionIcon, type ActionDetail } from './TodayDrawer.js';
 export { confirmedDateBody, formErrors, noteDraft, openDraft, type NoteRef, type OpenForm, type Target, type Undo } from './TodayForms.js';
 export { toBoardItem } from './card.js';

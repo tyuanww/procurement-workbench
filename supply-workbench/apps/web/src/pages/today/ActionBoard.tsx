@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import { ACTION_LANES, type ActionDetail, type BoardGroup, type BoardRow, type QuickAction } from '../../features/today/index.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { fontSize } from '../../theme/tokens.js';
-import { ActionPagination, ActionResult, type ActionPageControls } from './ActionControls.js';
+import { ActionPagination, ActionResult, batchCopy, type ActionPageControls } from './ActionControls.js';
 import { ActionToolbar, type ActionToolbarProps } from './ActionToolbar.js';
 import type { ReceiptWork } from './TodayAgenda.js';
 import { TodaySplit } from './TodaySplit.js';
@@ -247,11 +247,6 @@ function groupCopy({ group, page, onCopy }: { readonly group: BoardGroup; readon
     label: `复制${factory.name}催单（${page.isFiltered ? '筛选结果' : '全部页'}）`, disabled: page.isCopying,
     run: () => page.onCopyChase({ kind: 'factory', id: factory.id }),
   };
-}
-
-function batchCopy(page: ActionBoardProps['page'], id: string): CopyAction | null {
-  if (page?.paging.chaseItemIds?.includes(id) !== true) return null;
-  return { label: '复制本批催单', disabled: page.isCopying, run: () => page.onCopyChase({ kind: 'batch', id }) };
 }
 
 type ActionRowsProps = Pick<ActionBoardProps, 'board' | 'focus' | 'fading' | 'page' | 'batchSeqOf' | 'receiptOf' | 'arrivalFocusId' | 'detailOf' | 'onOpen' | 'onQuick'> & {

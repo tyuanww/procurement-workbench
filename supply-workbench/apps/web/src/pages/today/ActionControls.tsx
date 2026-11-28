@@ -30,6 +30,11 @@ export type ActionPageControls = {
 
 export const actionDialogTarget: CSSProperties = { minBlockSize: 44, minInlineSize: 44 };
 
+export function batchCopy(page: ActionPageControls | undefined, id: string) {
+  if (page?.paging.chaseItemIds?.includes(id) !== true) return null;
+  return { label: '复制本批催单', disabled: page.isCopying, run: () => page.onCopyChase({ kind: 'batch', id }) };
+}
+
 export const actionDialogStyles: ModalProps['styles'] = {
   close: { inlineSize: 44, blockSize: 44, insetInlineEnd: 12, insetBlockStart: 10 },
   header: { paddingInlineEnd: 44 },

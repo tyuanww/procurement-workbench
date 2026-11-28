@@ -16,6 +16,7 @@ import { pendingBatchRowId } from './PendingBatches.js';
 import { useTodayKeys } from './use-today-keys.js';
 import { arrivalReturnId, pendingReturnId, screenView, useAppliedPage, useTodaySession } from './today-session.js';
 import { TodayScreen, type TodayScreenProps } from './TodayBoard.js';
+import { visibleArrivals } from './TodayArrivals.js';
 import { sessionRows, useTodayPlan } from './use-today-plan.js';
 import { useUndoMessage } from './use-undo-message.js';
 import { restoreTodayWrite, submitForm } from './today-writes.js';
@@ -108,13 +109,19 @@ function useScreenSession({ state, today, route, board, actionBoard, plan, isInt
   const actionPage = useTodayActionPage({ query, search, setParams, today, isSettled });
   useRowFocus({ id: query.focusId, state, visible,
     isSettled: rowsSettled({ isReady: isSettled || isPlanMode, isSchedule: isPlanMode, plan: plan.load.kind }) });
-  const closeSession = useTodaySession({
-    state,
-    rows: sessionRows({ board: actionBoard, plan }),
-    isReady: isSettled || (isPlanMode && query.focusId === null),
-  });
+  const closeSession = useScreenDrawer({ state, route, plan, actionBoard, isReady: isSettled || (isPlanMode && query.focusId === null),
+    areArrivalsReady: today.isLoadedForQuery });
   useTodayKeys({ state, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, canRecord });
   return { actionPage, closeSession, canRecord };
+}
+
+function useScreenDrawer({ state, route, plan, actionBoard, isReady, areArrivalsReady }: Pick<ScreenInput, 'state' | 'route' | 'plan' | 'actionBoard'> & {
+  readonly isReady: boolean; readonly areArrivalsReady: boolean;
+}) {
+  const arrivals = route.arrivalsView;
+  const rows = arrivals === undefined ? sessionRows({ board: actionBoard, plan }) :
+    visibleArrivals(state.arrivalMemos, arrivals.timing).map((memo) => ({ id: 'batch:' + memo.batchId }));
+  return useTodaySession({ state, rows, isReady: arrivals === undefined ? isReady : areArrivalsReady });
 }
 
 function useRowFocus({ id, state, visible, isSettled }: {

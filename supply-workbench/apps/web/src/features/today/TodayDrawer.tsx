@@ -1,15 +1,16 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EXCEPTION_TYPE_LABELS, EXCEPTION_TYPES } from '@sw/domain';
 import { Alert, Button, Drawer, Flex, Typography } from 'antd';
-import { CalendarOutlined, FormOutlined, InboxOutlined, SendOutlined } from '@ant-design/icons';
+import { CalendarOutlined, CopyOutlined, FormOutlined, InboxOutlined, SendOutlined } from '@ant-design/icons';
 import type { TodoItemView } from '@sw/contracts';
 import type { BatchFulfillment } from '@sw/domain';
 import { useCanWrite } from '../../shared/actor.js';
-import { formatDateTime } from '../../shared/ui/format.js';
+import { formatDateTime, formatQuantity } from '../../shared/ui/format.js';
 import { StatusTag } from '../../shared/ui/widgets.js';
 import { drawerWidth, space } from '../../theme/tokens.js';
-import { TodayOrderLink, TodayReceiptLink, type ReceiptWork, type TodayOrderRef } from './TodayOrderLink.js';
+import { arrivalStatusLabel } from './ArrivalMemos.js';
+import { TodayBatchRecordLink, TodayOrderLink, type ReceiptWork, type TodayOrderRef } from './TodayOrderLink.js';
 import type { BoardRow, QuickAction, RowFace } from './model/types.js';
 import { ActionForm, type OpenForm } from './TodayForms.js';
 import { BatchProgress } from './batch-progress.js';
@@ -26,6 +27,8 @@ type TodayDrawerProps = {
   readonly batchSeq?: number | undefined;
   readonly fulfillment?: BatchFulfillment | undefined;
   readonly receipt?: ReceiptWork | undefined;
+  readonly copy?: { readonly label: string; readonly disabled: boolean; readonly run: () => void } | null;
+  readonly returnFocusId?: string | undefined;
   readonly isOpen: boolean;
   readonly keyboard?: boolean;
   readonly draft: OpenForm | null;
@@ -42,27 +45,69 @@ type TodayDrawerProps = {
 export function TodayDrawer(props: TodayDrawerProps) {
   const canRecord = useCanWrite('records.write');
   const formId = useId();
+  const { isShown, afterOpenChange } = useTodayDrawerFocus(props);
   const draft = canRecord ? props.draft : null;
-  const isReceiptDetail = draft === null && props.receipt !== undefined;
+  const order = drawerOrder(props);
   return (
     <Drawer
       rootClassName="today-action-drawer"
       placement="right"
-      size={drawerWidth}
+      size={`min(${drawerWidth}px, 100vw)`}
       open={props.isOpen}
       onClose={props.onClose}
       keyboard={props.keyboard ?? false}
+      afterOpenChange={afterOpenChange}
+      closable={{ 'aria-label': '关闭' }}
       focusable={{ trap: true, focusTriggerAfterClose: true }}
-      title={drawerTitle(props.row, draft)}
-      extra={props.detail?.kind === 'order' && !isReceiptDetail ? <TodayOrderLink order={props.detail.order}>打开订单详情</TodayOrderLink> : null}
+      title={drawerTitle({ row: props.row, draft, receipt: props.receipt })}
+      extra={<OrderOnlyLink order={order} />}
       footer={draft === null ? null : <RecordFooter formId={formId} isSaving={props.isSaving} onCancel={props.onClose} />}
     >
       {props.saveError === '' ? null : <Alert style={{ marginBlockEnd: space[3] }} type="error" showIcon title={props.saveError} />}
       <DrawerContent {...props} draft={draft} canRecord={canRecord} />
+      <BatchRecord order={order} isOpen={props.isOpen && draft === null} isShown={isShown} />
       {draft === null ? null : <ActionForm key={draft.kind} id={formId} draft={draft} hadDate={props.hadDate} lane={props.lane} onChange={props.onDraft} onSubmit={props.onSubmit} />}
       <style>{drawerTouchCss}</style>
     </Drawer>
   );
+}
+
+function drawerOrder({ receipt, detail }: Pick<TodayDrawerProps, 'receipt' | 'detail'>) {
+  if (receipt !== undefined) return { lineId: receipt.line.id, batchId: receipt.batchId };
+  return detail?.kind === 'order' ? detail.order : undefined;
+}
+
+function BatchRecord({ order, isOpen, isShown }: {
+  readonly order: TodayOrderRef | undefined; readonly isOpen: boolean; readonly isShown: boolean;
+}) {
+  if (!isOpen || order?.batchId === undefined) return null;
+  return <div className="today-batch-record"><TodayBatchRecordLink lineId={order.lineId} batchId={order.batchId} isShown={isShown} /></div>;
+}
+
+function OrderOnlyLink({ order }: { readonly order: TodayOrderRef | undefined }) {
+  return order !== undefined && order.batchId === undefined ? <TodayOrderLink order={order}>打开订单详情</TodayOrderLink> : null;
+}
+
+function useTodayDrawerFocus({ isOpen, returnFocusId }: Pick<TodayDrawerProps, 'isOpen' | 'returnFocusId'>) {
+  const [isShown, setShown] = useState(false);
+  const returnFocus = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (isOpen) returnFocus.current = returnFocusId;
+  }, [isOpen, returnFocusId]);
+  return {
+    isShown,
+    afterOpenChange(isOpen: boolean) {
+      setShown(isOpen);
+      if (!isOpen && returnFocus.current !== undefined) restoreSourceFocus(returnFocus.current);
+    },
+  };
+}
+
+function restoreSourceFocus(id: string) {
+  window.requestAnimationFrame(() => {
+    const focused = document.activeElement;
+    if (focused === document.body || focused?.closest('.today-action-drawer') != null) document.getElementById(id)?.focus();
+  });
 }
 
 function DrawerContent(props: TodayDrawerProps & { readonly canRecord: boolean }) {
@@ -84,26 +129,38 @@ function ExceptionNote({ exception }: { readonly exception: NonNullable<Extract<
   return <Alert type="warning" showIcon title={type === undefined ? '已登记异常' : EXCEPTION_TYPE_LABELS[type]} description={exception.note} />;
 }
 
-function DrawerBatch({ row, batchSeq, draft, fulfillment, receipt, isOpen, canRecord, onQuick }: TodayDrawerProps & { readonly canRecord: boolean }) {
-  if (row === null) return null;
+function DrawerBatch({ row, batchSeq, draft, fulfillment, receipt, copy, isOpen, canRecord, onQuick }: TodayDrawerProps & { readonly canRecord: boolean }) {
+  if (row === null) return receipt === undefined ? null : <ArrivalContext memo={receipt} />;
   if (draft !== null) return <EditContext face={row.face} batchSeq={batchSeq} draftKind={draft.kind} />;
   const shouldShowProgress = isOpen && batchSeq !== undefined;
   return <>
     <DetailContext face={row.face} batchSeq={batchSeq} receipt={receipt} shouldShowQuantities={!shouldShowProgress || fulfillment === undefined} />
     {shouldShowProgress ? <BatchProgress facts={fulfillment} /> : null}
-    <DrawerActions receipt={receipt} actions={canRecord ? row.actions : []} onQuick={onQuick} />
+    <DrawerActions receipt={receipt} actions={canRecord ? row.actions : []} copy={copy ?? null} onQuick={onQuick} />
   </>;
 }
 
-function DrawerActions({ actions, receipt, onQuick }: Pick<TodayDrawerProps, 'receipt' | 'onQuick'> & {
+function DrawerActions({ actions, receipt, copy, onQuick }: Pick<TodayDrawerProps, 'receipt' | 'copy' | 'onQuick'> & {
   readonly actions: readonly QuickAction[];
 }) {
-  if (receipt === undefined && actions.length === 0) return null;
+  if (copy == null && actions.length === 0) return null;
+  const work = receipt === undefined ? actions : [...actions.filter(({ kind }) => kind === 'receipt'), ...actions.filter(({ kind }) => kind !== 'receipt')];
   return <Flex wrap gap="small" className="today-touch" style={{ marginBlock: 12 }}>
-    {receipt === undefined ? null : <TodayReceiptLink memo={receipt} />}
-    {actions.map((action, index) => <Button key={action.kind}
-      type={receipt === undefined ? (index === 0 ? 'primary' : 'default') : 'text'}
+    {work.map((action, index) => <Button key={action.kind}
+      type={receipt === undefined ? (index === 0 ? 'primary' : 'default') : (action.kind === 'receipt' ? 'primary' : 'text')}
       icon={actionIcon(action.kind)} onClick={() => onQuick(action.kind)}>{action.label}</Button>)}
+    {copy == null ? null : <Button icon={<CopyOutlined aria-hidden />} onClick={copy.run} disabled={copy.disabled}>{copy.label}</Button>}
+  </Flex>;
+}
+
+function ArrivalContext({ memo }: { readonly memo: ReceiptWork }) {
+  const identity = [memo.line.poRaw, memo.batchSeq == null ? null : `第 ${memo.batchSeq} 批`].filter(Boolean).join(' · ');
+  return <Flex vertical gap={space[1]} style={{ overflowWrap: 'anywhere' }}>
+    {identity === '' ? null : <Typography.Text type="secondary">{identity}</Typography.Text>}
+    <Typography.Text strong>{arrivalStatusLabel[memo.status]}</Typography.Text>
+    <Typography.Text>收货方 · {memo.warehouse ?? '未命名'}</Typography.Text>
+    <Typography.Text>采购确认到仓日 · {memo.confirmedDate ?? '未确认'}</Typography.Text>
+    <Typography.Text>待收 {formatQuantity(memo.inTransitQty)} {memo.unit} · 实收 {formatQuantity(memo.receivedQty)} {memo.unit}</Typography.Text>
   </Flex>;
 }
 
@@ -215,18 +272,20 @@ const draftTitle: Record<OpenForm['kind'], string> = {
   receipt: '登记收货', ship: '登记发货', date: '改确认日', note: '记跟进', exception: '标异常',
 };
 
-function drawerTitle(row: BoardRow | null, draft: OpenForm | null): string {
+function drawerTitle({ row, draft, receipt }: Pick<TodayDrawerProps, 'row' | 'draft' | 'receipt'>): string {
   if (draft !== null) return draftTitle[draft.kind];
-  if (row === null) return '今日事项';
+  if (row === null) return receipt?.line.nameRaw || '今日事项';
   if (row.face.productName !== '—') return row.face.productName;
   if (row.face.reason !== '') return row.face.reason;
   return '今日事项';
 }
 
 const drawerTouchCss = `
+  .today-action-drawer .today-batch-record > a { display: inline-flex; align-items: center; padding-block: 4px; }
   @media (max-width: 575px), (any-pointer: coarse) {
     .today-action-drawer .ant-drawer-header { padding-block: ${space[0]}px; }
     .today-action-drawer .ant-drawer-close,
+    .today-action-drawer .today-batch-record > a,
     .today-action-drawer .ant-drawer-extra > a { min-inline-size: 44px; min-block-size: 44px; }
     .today-action-drawer .ant-drawer-extra > a { display: inline-flex; align-items: center; }
   }
