@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { sidebarEntries, sidebarGroup, sidebarLink } from './sidebar.ts';
 
 const GROUP_LABEL = '导入与审核';
@@ -264,12 +264,33 @@ export async function checkImportFactoryDetail(page: Page, origin: URL) {
   await page.getByText(/代工厂进度 · 演示包装工厂/).waitFor();
   await batch.press('Enter');
   await page.getByText('演示包装工厂', { exact: true }).waitFor();
-  await page.getByRole('heading', { name: '提交结果', exact: true }).waitFor();
-  await page.reload();
-  await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
-  await page.waitForURL(source.href);
-  await batch.and(page.locator(':focus')).waitFor();
-  return { factory: '演示包装工厂', status: '已提交', historyFocus: true };
+  const ready = page.getByRole('heading', { name: '提交结果', exact: true });
+  await ready.waitFor();
+
+  const detailApi = '/api/v1' + new URL(page.url()).pathname;
+  const matchDetail = (url: URL) => url.pathname === detailApi;
+  const read = Promise.withResolvers<void>();
+  const holdRead = async (route: Route) => {
+    await read.promise;
+    await route.continue();
+  };
+  await page.route(matchDetail, holdRead);
+  try {
+    await page.reload();
+    await page.getByRole('status').filter({ hasText: '正在读取导入批次' }).waitFor();
+    const back = page.getByRole('link', { name: '返回导入中心', exact: true });
+    await back.focus();
+    read.resolve();
+    await ready.waitFor();
+    assert.equal(await back.evaluate((link) => link === document.activeElement), true);
+    await page.keyboard.press('Enter');
+    await page.waitForURL(source.href);
+    await batch.and(page.locator(':focus')).waitFor();
+  } finally {
+    read.resolve();
+    await page.unroute(matchDetail, holdRead);
+  }
+  return { factory: '演示包装工厂', status: '已提交', historyFocus: true, backFocusAfterReload: true };
 }
 
 async function checkReviewNavigation(page: Page, origin: URL, expectedEntries: number): Promise<void> {
