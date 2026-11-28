@@ -1,4 +1,5 @@
 import { useLocation, useSearchParams } from 'react-router';
+import { z } from 'zod';
 import { BATCH_IMPORT_SOURCE, IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, PROCUREMENT_BATCH_IMPORT_SOURCE, importFollowUpBackAddress, importFollowUpScope } from '../../features/imports/index.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
@@ -7,6 +8,22 @@ export const importSourceQuery = { oa: 'previewOa', finished: 'finishedPage', co
 export const importPreviewKeys = {
   drawer: null, source: null, candidates: null, ...Object.fromEntries(Object.values(importSourceQuery).map((key) => [key, null])),
 };
+
+export const ARRIVAL_SOURCE_PAGE_SIZE = 20;
+const arrivalSourceKeySchema = z.tuple([z.literal('arrival'), z.string(), z.number().int().positive()]);
+
+export function readArrivalImportSource(key: string | null) {
+  if (key === null) return undefined;
+  try {
+    const source = arrivalSourceKeySchema.safeParse(JSON.parse(key)).data;
+    if (source === undefined) return undefined;
+    const [, sheetName, rowNo] = source;
+    // The confirmation template retains original rows, starting at line two.
+    return { sheetName, rowNo, page: Math.max(1, Math.floor((rowNo - 2) / ARRIVAL_SOURCE_PAGE_SIZE) + 1) };
+  } catch {
+    return undefined;
+  }
+}
 
 export type SourceLocation = { readonly sheetName: string; readonly rowNo: number };
 
@@ -48,14 +65,15 @@ export function readImportBatchOriginState(state: unknown): { readonly importBat
   return { importBatchOrigin: state.importBatchOrigin };
 }
 
-export function importFollowUpReturn({ params, state, scoped = false, isVerifiedProcurement = false }: {
+export function importFollowUpReturn({ params, state, isVerifiedProcurement = false, confirmedArrival = false }: {
   readonly params: URLSearchParams;
   readonly state: unknown;
   readonly scoped?: boolean;
   readonly isVerifiedProcurement?: boolean;
+  readonly confirmedArrival?: boolean;
 }) {
-  const back = scoped || params.has('importBatchId')
-    ? importFollowUpScope(params, isVerifiedProcurement) : importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
+  const back = confirmedArrival && !params.has('importBatchId')
+    ? importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM)) : importFollowUpScope(params, isVerifiedProcurement);
   if (back === null) return null;
   const focus = detailReturnState(state, { detailPath: back.to, sourceLink: importSourceTriggerId(back.recordKey) });
   const origin = importBatchOrigin(state);

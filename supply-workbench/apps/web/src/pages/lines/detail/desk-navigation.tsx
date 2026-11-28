@@ -3,29 +3,36 @@ import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation } from 'react-router';
 import { STUCK_BATCH_PARAM, STUCK_RETURN_PARAM, stuckOrderFocus, stuckReturnAddress } from '../../../features/performance/index.js';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
+import { useCan } from '../../../shared/actor.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday, deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
-import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpCandidate, importFollowUpScope, useVerifiedProcurementImportReturnContext } from '../../../features/imports/index.js';
 import { legacyPersonalPath, TODAY_BATCH_RETURN_PARAM, todayArrivalsPath, todayBatchRecordFocus } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 import { importFollowUpReturn, readImportBatchOriginState } from '../../imports/import-source.js';
+import { useDetailImportProof } from './import-detail-verification.js';
 import { relatedOrderBack } from './related-procurement-navigation.js';
 
-type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode };
+type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode; readonly isVerifiedImport?: boolean | undefined };
 
 export function LineDetailLink(props: LineDetailLinkProps) {
   const search = new URLSearchParams(props.search);
-  const scope = importFollowUpScope(search);
+  const isRouted = useInRouterContext();
+  const isVerifiedProcurement = useVerifiedProcurementImportReturnContext();
+  const scope = importFollowUpScope(search, isVerifiedProcurement);
   const batch = EntityIdSchema.safeParse(search.get('importBatchId')).data;
-  const href = batch === undefined ? props.href : importDetailAddress({ href: props.href, search, batch, back: scope?.to });
-  return useInRouterContext() ? <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} /> : <a href={href}>{props.children}</a>;
+  const isUnverified = batch !== undefined && props.isVerifiedImport === false;
+  const href = batch === undefined ? props.href : importDetailAddress({ href: props.href, search,
+    batch: isUnverified ? undefined : batch, back: isUnverified || scope === null ? undefined : importFollowUpCandidate(search)?.to });
+  if (!isRouted) return <a href={href}>{props.children}</a>;
+  return isUnverified ? <Link to={href}>{props.children}</Link> : <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} />;
 }
 
 function importDetailAddress({ href, batch, back, search }: {
-  readonly href: string; readonly batch: string; readonly back: string | undefined; readonly search: URLSearchParams;
+  readonly href: string; readonly batch: string | undefined; readonly back: string | undefined; readonly search: URLSearchParams;
 }): string {
   const detail = new URL(href, 'https://workbench.invalid');
-  detail.searchParams.set('importBatchId', batch);
+  if (batch !== undefined) detail.searchParams.set('importBatchId', batch);
   if (back !== undefined) detail.searchParams.set(IMPORT_RETURN_PARAM, back);
   copyImportStore(search, detail.searchParams);
   return followUpAddress(detail.pathname, detail.searchParams);
@@ -39,7 +46,9 @@ function copyImportStore(from: URLSearchParams, to: URLSearchParams) {
 function RoutedLineDetailLink({ href, search, children, isScoped }: LineDetailLinkProps & { readonly isScoped: boolean }) {
   const { state } = useLocation();
   const origin = isScoped ? readImportBatchOriginState(state) : undefined;
-  return <Link to={href} state={{ lineDeskSearch: search, ...origin }}>{children}</Link>;
+  const originalLine = new URL(href, 'https://workbench.invalid').pathname.split('/').at(-1);
+  const lineDeskOriginId = originalLine === undefined ? undefined : decodeURIComponent(originalLine);
+  return <Link to={href} state={{ lineDeskSearch: search, lineDeskOriginId, ...origin }}>{children}</Link>;
 }
 
 type PlanningReturnState = NonNullable<ReturnType<typeof detailReturnState>> & { readonly scheduleTaskOrigin?: unknown };
@@ -50,21 +59,44 @@ export type DetailBack = { readonly to: string; readonly label: string; readonly
 type BackSource = {
   readonly progress: string | null; readonly delivery?: string | null; readonly home?: string | null; readonly schedule?: string | null;
   readonly deliveryEntry?: string | null;
-  readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null; readonly today?: string | null;
+  readonly state: unknown; readonly lineId: string; readonly desk?: URLSearchParams | null; readonly todayBatch?: string | null; readonly focusBatch?: string | null; readonly today?: string | null;
 };
 
-export function readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports }: {
+export function useLineDetailNavigation({ lineId, params }: { readonly lineId: string; readonly params: URLSearchParams }) {
+  const { state } = useLocation();
+  const canReadImports = useCan('imports.read');
+  const canReadDashboard = useCan('dashboard.read');
+  const proof = useDetailImportProof({ params, lineId, canReadImports });
+  return { back: readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports, proof }), membership: proof };
+}
+
+type ImportProof = Pick<ReturnType<typeof useDetailImportProof>, 'isImportMember' | 'isVerifiedProcurement' | 'confirmedArrival'>;
+
+export function readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports, proof }: {
   readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown;
   readonly canReadDashboard: boolean; readonly canReadImports: boolean;
+  readonly proof?: ImportProof;
 }) {
   const stuck = canReadDashboard ? stuckBack(params.get(STUCK_RETURN_PARAM), state) : null;
   if (stuck !== null) return stuck;
   const focusBatch = params.get('focusBatch');
   const today = params.get(TODAY_BATCH_RETURN_PARAM);
-  const back = lineDetailBack({ lineId, state, focusBatch, today, todayBatch: today === 'arrivals' ? focusBatch : null,
+  const desk = matchingLineDesk({ params, state, isImportMember: proof?.isImportMember === true });
+  const back = lineDetailBack({ lineId, state, desk, focusBatch, today, todayBatch: today === 'arrivals' ? focusBatch : null,
     progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), deliveryEntry: params.get('deliveryEntry'), home: params.get(HOME_RISK_RETURN_PARAM),
     schedule: params.get('backToSchedule') });
-  return relatedOrderBack(state) ?? back ?? (canReadImports ? importFollowUpReturn({ params, state }) : null) ?? importOrdersBack(params);
+  return relatedOrderBack(state) ?? back ?? importDetailBack({ params, state, desk, canReadImports, proof });
+}
+
+function importDetailBack({ params, state, desk, canReadImports, proof }: {
+  readonly params: URLSearchParams; readonly state: unknown; readonly desk: URLSearchParams | null;
+  readonly canReadImports: boolean; readonly proof: ImportProof | undefined;
+}) {
+  if (proof === undefined) return null;
+  const importState = desk === null && lineDeskParams(state) !== null ? undefined : state;
+  const source = canReadImports && (proof.isImportMember || proof.confirmedArrival)
+    ? importFollowUpReturn({ params, state: importState, isVerifiedProcurement: proof.isVerifiedProcurement, confirmedArrival: proof.confirmedArrival }) : null;
+  return source ?? (proof.isImportMember ? importOrdersBack(params) : null);
 }
 
 export function lineDetailBack(input: BackSource): DetailBack | null {
@@ -78,8 +110,8 @@ export function lineDetailBack(input: BackSource): DetailBack | null {
   const today = todayBack(input.state, input.todayBatch);
   if (today !== null) return today;
   if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
-  const to = lineDeskAddress(input.state);
-  if (to !== null) return { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId, ...readImportBatchOriginState(input.state) } };
+  const desk = lineDeskBack(input);
+  if (desk !== null) return desk;
   return typeof input.schedule === 'string' ? scheduleBack(new URLSearchParams(input.schedule), input.state) : null;
 }
 
@@ -172,9 +204,13 @@ export function readReturningLine(state: unknown): string | null {
   return state.lineDeskFocus;
 }
 
-function lineDeskAddress(state: unknown): string | null {
-  const params = lineDeskParams(state);
-  return params === null ? null : followUpAddress('/lines', params);
+function lineDeskBack(input: BackSource): DetailBack | null {
+  const { state } = input;
+  const params = input.desk === undefined ? lineDeskParams(state) : input.desk;
+  if (params === null) return null;
+  const original = typeof state === 'object' && state !== null && 'lineDeskOriginId' in state
+    && typeof state.lineDeskOriginId === 'string' ? state.lineDeskOriginId : input.lineId;
+  return { to: followUpAddress('/lines', params), label: '返回跟进中心', state: { lineDeskFocus: original, ...readImportBatchOriginState(state) } };
 }
 
 function lineDeskParams(state: unknown): URLSearchParams | null {
@@ -182,30 +218,57 @@ function lineDeskParams(state: unknown): URLSearchParams | null {
   return new URLSearchParams(state.lineDeskSearch);
 }
 
-export function arrivalEvidenceLink({ arrivalId, params, state }: {
-  readonly arrivalId: string; readonly params: URLSearchParams; readonly state: unknown;
+const shopSchema = ProcurementStoreSchema.exclude(['all']);
+
+function matchingLineDesk({ params, state, isImportMember }: {
+  readonly params: URLSearchParams; readonly state: unknown; readonly isImportMember: boolean;
+}): URLSearchParams | null {
+  const desk = lineDeskParams(state);
+  if (desk === null || (!isImportMember && params.has('importBatchId'))) return null;
+  const current = lineDeskScopeKey(params);
+  return current !== null && lineDeskScopeKey(desk) === current ? desk : null;
+}
+
+function lineDeskScopeKey(params: URLSearchParams): string | null {
+  const candidate = importFollowUpCandidate(params);
+  if (candidate === null && params.has(IMPORT_RETURN_PARAM)) return null;
+  const batch = EntityIdSchema.safeParse(params.get('importBatchId')).data;
+  const store = shopSchema.safeParse(params.get('store')).data;
+  const source = candidate === null ? null : normalizedImportSource(candidate);
+  return JSON.stringify([batch, store, source]);
+}
+
+function normalizedImportSource(candidate: NonNullable<ReturnType<typeof importFollowUpCandidate>>): string {
+  const query = new URLSearchParams(candidate.to.slice(candidate.to.indexOf('?')));
+  if (!shopSchema.safeParse(query.get('store')).success) query.delete('store');
+  query.sort();
+  return `${candidate.id}?${query}`;
+}
+
+export function arrivalEvidenceLink({ arrivalId, params, state, isImportMember = false }: {
+  readonly arrivalId: string; readonly params: URLSearchParams; readonly state: unknown; readonly isImportMember?: boolean;
 }) {
-  const scoped = arrivalDeskScope(params, state);
+  const desk = matchingLineDesk({ params, state, isImportMember });
+  const scoped = isImportMember ? desk ?? importDeskScope(params) : null;
   const search = scoped ?? new URLSearchParams();
   search.set('arrival', arrivalId);
-  return { to: followUpAddress('/lines', search), state: scoped === null ? undefined : readImportBatchOriginState(state) };
+  const shouldPreserveOrigin = scoped?.has(IMPORT_RETURN_PARAM) === true && (desk !== null || lineDeskParams(state) === null);
+  return { to: followUpAddress('/lines', search), state: shouldPreserveOrigin ? readImportBatchOriginState(state) : undefined };
 }
 
 function importOrdersBack(params: URLSearchParams): DetailBack | null {
-  const search = arrivalDeskScope(params, undefined);
+  const search = importDeskScope(params);
   if (search === null) return null;
   search.delete(IMPORT_RETURN_PARAM);
   return { to: followUpAddress('/lines', search), label: '返回本批订单' };
 }
 
-function arrivalDeskScope(params: URLSearchParams, state: unknown): URLSearchParams | null {
-  const desk = lineDeskParams(state);
-  if (desk !== null && EntityIdSchema.safeParse(desk.get('importBatchId')).success) return desk;
+function importDeskScope(params: URLSearchParams): URLSearchParams | null {
   const id = EntityIdSchema.safeParse(params.get('importBatchId'));
   if (!id.success) return null;
   const search = new URLSearchParams({ lane: 'all', importBatchId: id.data });
-  const scope = importFollowUpScope(params);
-  if (scope !== null) search.set(IMPORT_RETURN_PARAM, scope.to);
+  const candidate = importFollowUpCandidate(params);
+  if (candidate !== null) search.set(IMPORT_RETURN_PARAM, candidate.to);
   copyImportStore(params, search);
   return search;
 }

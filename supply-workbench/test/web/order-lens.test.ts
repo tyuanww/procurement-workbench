@@ -7,7 +7,7 @@ import {
 import { deliveryRiskReasons } from '../../apps/web/src/features/follow-up/line-list/delivery-risk.js';
 import { followUpAddress, followUpParams } from '../../apps/web/src/features/follow-up/line-list/follow-up-address.js';
 import { followUpFeishuReturn } from '../../apps/web/src/features/follow-up/line-list/follow-up-login.js';
-import { readLineDetailBack } from '../../apps/web/src/pages/lines/detail/desk-navigation.js';
+import { arrivalEvidenceLink, readLineDetailBack } from '../../apps/web/src/pages/lines/detail/desk-navigation.js';
 import { clearFiltersAddress, saveAddress, viewAddress } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
 describe('跟进中心订单查法', () => {
@@ -51,6 +51,33 @@ describe('跟进中心订单查法', () => {
     for (const to of ['/imports/batch-a', '/lines', '/lines/%2e%2e', 'https://external.invalid/lines/original', '//external.invalid/lines/original', '/\\external.invalid/lines/original']) {
       expect(readBack(to)).toBeNull();
     }
+  });
+
+  it('详情和到仓凭据从当前范围重建地址，不保留其他批次、店铺或来源的历史状态', () => {
+    const source = '/imports/batch-a?store=dafuyan&drawer=import-source&source=batch';
+    const params = new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', backToImport: source });
+    const proof = { isImportMember: true, isVerifiedProcurement: false, confirmedArrival: false };
+    const stale = [
+      new URLSearchParams({ importBatchId: 'batch-b', store: 'dafuyan' }),
+      new URLSearchParams({ importBatchId: 'batch-a', store: 'yiling' }),
+      new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', backToImport: source + '&arrivalPage=2' }),
+    ];
+    for (const saved of stale) {
+      saved.set('q', '原列表筛选');
+      const state = { lineDeskSearch: saved.toString(), importBatchOrigin: { stale: true } };
+      const back = readLineDetailBack({ lineId: 'manual', params, state, canReadDashboard: false, canReadImports: true, proof });
+      expect(back?.to).toBe(source);
+      const evidence = arrivalEvidenceLink({ arrivalId: 'receipt', params, state, isImportMember: true });
+      const evidenceQuery = new URL(evidence.to, 'https://workbench.invalid').searchParams;
+      expect(evidenceQuery.get('importBatchId')).toBe('batch-a');
+      expect(evidenceQuery.get('store')).toBe('dafuyan');
+      expect(evidenceQuery.get('backToImport')).toBe(source);
+      expect(evidenceQuery.has('q')).toBe(false);
+      expect(evidence.state).toBeUndefined();
+    }
+    params.delete('importBatchId');
+    const back = readLineDetailBack({ lineId: 'manual', params, state: null, canReadDashboard: false, canReadImports: true });
+    expect(back).toBeNull();
   });
 
   it('明确的物料线、无效店铺及负责人筛选需要重新选择范围', () => {

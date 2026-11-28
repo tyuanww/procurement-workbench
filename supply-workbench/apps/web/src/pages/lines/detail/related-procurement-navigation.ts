@@ -4,6 +4,7 @@ import { matchPath, type Location } from 'react-router';
 import { z } from 'zod';
 import { read } from '../../../shared/api/reads.js';
 
+const NO_IMPORT_MEMBERS: ReadonlySet<string> = new Set();
 const MAX_MEMBERS = 100;
 const MAX_QUERY_LENGTH = 3800;
 const relatedOrderOriginSchema = z.object({
@@ -22,9 +23,12 @@ export function useRelatedImportMembers(input: {
     const abort = new AbortController();
     void read({ name: 'lines', query, signal: abort.signal }).then(({ items }) => {
       if (!abort.signal.aborted) setResolved({ query, ids: new Set(items.map(({ id }) => id)) });
-    }, () => undefined);
+    }, () => {
+      if (!abort.signal.aborted) setResolved({ query, ids: NO_IMPORT_MEMBERS });
+    });
     return () => abort.abort();
   }, [query]);
+  if (query === null) return NO_IMPORT_MEMBERS;
   return resolved.query === query ? resolved.ids : undefined;
 }
 

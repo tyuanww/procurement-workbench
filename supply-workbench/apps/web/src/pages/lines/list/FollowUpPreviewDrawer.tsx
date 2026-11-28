@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Descriptions, Divider, Drawer, Empty, Flex, Skeleton, Timeline, Typography } from 'antd';
 import { batchStatusLabel, followUpKindLabel, isOpenBatch, lineStageLabel, type OrderLineId } from '@sw/domain';
-import type { LineTimeline, OrderLineDetail, TimelineEvent } from '@sw/contracts';
+import { ProcurementStoreSchema, type LineTimeline, type OrderLineDetail, type TimelineEvent } from '@sw/contracts';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
 import { timelineLineText } from '../../../features/follow-up/index.js';
 import { formatDateTime, formatQuantity } from '../../../shared/ui/format.js';
 import { drawerWide } from '../../../theme/tokens.js';
 import { LineDetailLink } from '../detail/desk-navigation.js';
+import { useImportLineMember } from '../detail/import-detail-verification.js';
 
 export type FollowUpPreviewDrawerProps = {
   readonly lineId: OrderLineId;
@@ -21,13 +22,16 @@ type PreviewState =
   | { readonly kind: 'failed'; readonly message: string };
 
 export function FollowUpPreviewDrawer(props: FollowUpPreviewDrawerProps) {
+  const params = new URLSearchParams(props.search);
+  const store = params.has('importBatchId') ? ProcurementStoreSchema.safeParse(params.get('store')).data : undefined;
+  const { isImportMember: isVerifiedImport } = useImportLineMember({ params, lineId: props.lineId, enabled: props.isOpen });
   const [state, setState] = useState<PreviewState>({ kind: 'loading' });
   useEffect(() => {
     if (!props.isOpen) return;
     const abort = new AbortController();
     setState({ kind: 'loading' });
     void Promise.all([
-      read({ name: 'line', id: props.lineId, signal: abort.signal }),
+      read({ name: 'line', id: props.lineId, ...(store === undefined ? {} : { store }), signal: abort.signal }),
       read({ name: 'lineTimeline', id: props.lineId, signal: abort.signal }),
     ]).then(([detail, timeline]) => {
       if (abort.signal.aborted) return;
@@ -39,9 +43,8 @@ export function FollowUpPreviewDrawer(props: FollowUpPreviewDrawerProps) {
       setState({ kind: 'failed', message: failureText(failure) });
     });
     return () => abort.abort();
-  }, [props.lineId, props.isOpen]);
+  }, [props.lineId, props.isOpen, store]);
 
-  const title = state.kind === 'ready' ? `${state.detail.po.poRaw ?? '无单号'} 预览` : '订单行预览';
   return (
     <Drawer
       placement="right"
@@ -50,27 +53,29 @@ export function FollowUpPreviewDrawer(props: FollowUpPreviewDrawerProps) {
       destroyOnHidden
       focusable={{ trap: true, focusTriggerAfterClose: false }}
       onClose={props.onClose}
-      title={title}
-      footer={<PreviewFooter {...props} />}
+      title={state.kind === 'ready' ? `${state.detail.po.poRaw ?? '无单号'} 预览` : '订单行预览'}
+      footer={<PreviewFooter {...props} isVerifiedImport={isVerifiedImport} />}
     >
       {state.kind === 'loading' ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
       {state.kind === 'failed' ? <Alert type="error" showIcon title={state.message} /> : null}
-      {state.kind === 'ready' ? <FollowUpPreviewFields detail={state.detail} timeline={state.timeline} search={props.search} /> : null}
+      {state.kind === 'ready' ? <FollowUpPreviewFields detail={state.detail} timeline={state.timeline} search={props.search} isVerifiedImport={isVerifiedImport} /> : null}
     </Drawer>
   );
 }
 
-function PreviewFooter({ lineId, search, onClose }: Pick<FollowUpPreviewDrawerProps, 'lineId' | 'search' | 'onClose'>) {
+type PreviewDetailScope = { readonly search: string; readonly isVerifiedImport?: boolean | undefined };
+
+function PreviewFooter({ lineId, search, isVerifiedImport, onClose }: Pick<FollowUpPreviewDrawerProps, 'lineId' | 'onClose'> & PreviewDetailScope) {
   return (
     <Flex align="center" justify="flex-end" gap={12} wrap>
-      <LineDetailLink href={`/lines/${encodeURIComponent(lineId)}`} search={search}>打开订单行详情</LineDetailLink>
+      <LineDetailLink href={`/lines/${encodeURIComponent(lineId)}`} search={search} isVerifiedImport={isVerifiedImport}>打开订单行详情</LineDetailLink>
       <Button onClick={onClose}>关闭</Button>
     </Flex>
   );
 }
 
-export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail; readonly timeline: LineTimeline; readonly search?: string; readonly error?: string }) {
-  const { detail, timeline, search = '' } = props;
+export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail; readonly timeline: LineTimeline; readonly search?: string; readonly isVerifiedImport?: boolean | undefined; readonly error?: string }) {
+  const { detail, timeline, search = '', isVerifiedImport } = props;
   const line = detail.line;
   return (
     <div>
@@ -87,10 +92,10 @@ export function FollowUpPreviewFields(props: { readonly detail: OrderLineDetail;
       ]} />
       <Divider />
       <Typography.Title level={4}>订单行下一到货</Typography.Title>
-      <NextArrival detail={detail} search={search} />
+      <NextArrival detail={detail} search={search} isVerifiedImport={isVerifiedImport} />
       <Divider />
       <Typography.Title level={4}>各批次交期与数量</Typography.Title>
-      <BatchSection detail={detail} search={search} />
+      <BatchSection detail={detail} search={search} isVerifiedImport={isVerifiedImport} />
       <Divider />
       <Typography.Title level={4}>时间线</Typography.Title>
       <TimelineSection events={timeline.events} />
@@ -105,13 +110,13 @@ function factoryText(line: OrderLineDetail['line']): string {
   return line.factory?.displayName ?? '未关联';
 }
 
-function NextArrival({ detail, search }: { readonly detail: OrderLineDetail; readonly search: string }) {
+function NextArrival({ detail, search, isVerifiedImport }: { readonly detail: OrderLineDetail } & PreviewDetailScope) {
   const due = detail.line.nextDue;
   if (due === null || due.dateBuyerConfirmed === null) {
     return <Typography.Text type="secondary">{nextArrivalMissing(detail)}</Typography.Text>;
   }
   const batch = detail.batches.find(({ id }) => id === due.batchId);
-  const batchLink = batch === undefined ? null : <LineDetailLink href={batchPreviewHref(batch)} search={search}>第 {batch.seq} 批</LineDetailLink>;
+  const batchLink = batch === undefined ? null : <LineDetailLink href={batchPreviewHref(batch)} search={search} isVerifiedImport={isVerifiedImport}>第 {batch.seq} 批</LineDetailLink>;
   return <Descriptions size="small" column={1} items={[
     { key: 'confirmed', label: '开放批次最早的采购确认到货日', children: due.dateBuyerConfirmed },
     ...(batchLink === null ? [] : [{ key: 'batch', label: '对应批次', children: batchLink }]),
@@ -130,14 +135,14 @@ function batchPreviewHref(batch: OrderLineDetail['batches'][number]): string {
   return `/lines/${encodeURIComponent(batch.orderLineId)}?focusBatch=${encodeURIComponent(batch.id)}`;
 }
 
-function BatchSection({ detail, search }: { readonly detail: OrderLineDetail; readonly search: string }) {
+function BatchSection({ detail, search, isVerifiedImport }: { readonly detail: OrderLineDetail } & PreviewDetailScope) {
   if (detail.batches.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无批次" />;
   const due = detail.line.nextDue;
   return <Flex vertical gap="small">
     {detail.batches.map((batch) => {
       const isNext = due?.batchId === batch.id && due.dateBuyerConfirmed !== null;
       return <Descriptions key={batch.id} title={`第 ${batch.seq} 批 · ${batchStatusLabel(batch.status)}${isNext ? ' · 下一到货' : ''}`}
-        extra={<LineDetailLink href={batchPreviewHref(batch)} search={search}>查看第 {batch.seq} 批</LineDetailLink>}
+        extra={<LineDetailLink href={batchPreviewHref(batch)} search={search} isVerifiedImport={isVerifiedImport}>查看第 {batch.seq} 批</LineDetailLink>}
         size="small" column={{ xs: 1, sm: 3 }} items={[
         { key: 'confirmed', label: '采购确认到货日', children: batch.dateBuyerConfirmed ?? '未填写' },
         ...(batch.dateFactoryRequired === null ? [] : [{ key: 'factory', label: '代工厂需求日', children: batch.dateFactoryRequired }]),

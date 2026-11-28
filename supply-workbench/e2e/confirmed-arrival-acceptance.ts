@@ -169,6 +169,7 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId, expec
   await secondSource.press('Enter');
   await target.waitFor();
   const sourceUrl = page.url();
+  const linkedOrder = new URL(await target.getAttribute('href') ?? '', origin);
   await target.press('Enter');
   await page.waitForURL((url) => url.pathname === `/lines/${lineId}` && url.searchParams.get('focusBatch') === secondBatchId);
   await page.getByRole('region', { name: '批次', exact: true }).getByRole('listitem')
@@ -180,6 +181,7 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId, expec
   await drawer.waitFor({ state: 'hidden' });
   await secondSource.and(page.locator(':focus')).waitFor();
   await checkUnavailableArrivalSource({ page, secondSource, expectSourceFailure });
+  await checkMismatchedArrivalReturn(page, linkedOrder);
 
   const outside = new URL(importUrl);
   outside.searchParams.set('arrivalPage', '9');
@@ -195,6 +197,17 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId, expec
   assert.deepEqual(actual, [[firstBatchId, '2025-01-01'], [secondBatchId, date]]);
   return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual, outOfRangePageRecovered: true,
     followUp: { focusBatch: secondBatchId, skippedStaysLocal: true, explicitBackFocus: true, drawerEscapeFocus: true, unavailableWithoutRetry: [404, 403] } };
+}
+
+async function checkMismatchedArrivalReturn(page: Page, linkedOrder: URL) {
+  linkedOrder.searchParams.set('focusBatch', firstBatchId);
+  const [rows] = await Promise.all([
+    page.waitForResponse((response) => /\/api\/v1\/imports\/[^/]+\/rows$/.test(new URL(response.url()).pathname)),
+    page.goto(linkedOrder.href),
+  ]);
+  assert.ok(rows.ok());
+  await page.getByRole('heading', { name: po, exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
 }
 
 async function checkUnavailableArrivalSource({ page, secondSource, expectSourceFailure }: {

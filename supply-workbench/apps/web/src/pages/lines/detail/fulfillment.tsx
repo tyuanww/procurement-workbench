@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Button, Input, Space, Tag, Typography } from 'antd';
 import { ReceiptViewSchema, ShipmentViewSchema, type BatchView, type ReceiptView, type ShipmentView } from '@sw/contracts';
@@ -7,6 +7,7 @@ import { useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { formatDateTime } from '../../../shared/ui/format.js';
 import { arrivalEvidenceLink } from './desk-navigation.js';
+import { LineImportMembership } from './import-detail-verification.js';
 
 const quantity = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
 const reviewLabels = {
@@ -68,7 +69,9 @@ export function FulfillmentRecords({ batch, canEdit, canViewArrival, onVerify, o
 function ArrivalEvidenceLink({ arrivalId }: { readonly arrivalId: string }) {
   const [params] = useFollowUpSearch();
   const { state } = useLocation();
-  return <Link {...arrivalEvidenceLink({ arrivalId, params, state })}>查看到仓凭据</Link>;
+  const { isImportMember, isCheckingImportMembership } = useContext(LineImportMembership);
+  if (isCheckingImportMembership) return null;
+  return <Link {...arrivalEvidenceLink({ arrivalId, params, state, isImportMember })}>查看到仓凭据</Link>;
 }
 
 function shipmentLabel(row: ShipmentView, linked: ReadonlyMap<string, boolean>): string {

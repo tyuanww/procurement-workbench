@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, EntityIdSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
 import { deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
-import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../../director-home/home-location.js';
+import { LineImportMembership } from './import-detail-verification.js';
 import { relatedOrderState, useRelatedImportMembers } from './related-procurement-navigation.js';
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
@@ -31,12 +32,14 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
   );
 }
 
-function procurementReturnState(params: URLSearchParams, state: unknown) {
+function procurementReturnState({ params, state, isImportMember }: {
+  readonly params: URLSearchParams; readonly state: unknown; readonly isImportMember: boolean;
+}) {
   const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
   if (home !== null) return detailReturnState(state, home);
   const delivery = params.get('backToDelivery');
   if (delivery !== null) return detailReturnState(state, deliveryBackAddress(delivery));
-  return params.has('backToSchedule') || EntityIdSchema.safeParse(params.get('importBatchId')).success ? state : undefined;
+  return params.has('backToSchedule') || isImportMember ? state : undefined;
 }
 
 function procurementDetailQuery(params: URLSearchParams): URLSearchParams {
@@ -59,11 +62,12 @@ type RelatedLine = NonNullable<OrderLineDetail['procurement']>['relatedLines'][n
 function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLine[] }) {
   const [params] = useFollowUpSearch();
   const location = useLocation();
-  const batch = EntityIdSchema.safeParse(params.get('importBatchId')).data;
+  const { isImportMember } = useContext(LineImportMembership);
+  const batch = isImportMember ? EntityIdSchema.safeParse(params.get('importBatchId')).data : undefined;
   const members = useRelatedImportMembers({ batch, store: params.get('store'), lines });
   const query = procurementDetailQuery(params);
   const scoped = procurementImportQuery({ query, params, batch });
-  const returnState = procurementReturnState(params, location.state);
+  const returnState = procurementReturnState({ params, state: location.state, isImportMember });
   const ordinaryState = relatedOrderState(location, batch !== undefined) ?? returnState;
   return (
     <ul>{lines.map((line) => {
@@ -81,7 +85,7 @@ function procurementImportQuery({ query, params, batch }: {
 }): URLSearchParams {
   const scoped = new URLSearchParams(query);
   if (batch !== undefined) scoped.set('importBatchId', batch);
-  const source = importFollowUpScope(params);
+  const source = importFollowUpCandidate(params);
   if (source !== null) scoped.set(IMPORT_RETURN_PARAM, source.to);
   return scoped;
 }

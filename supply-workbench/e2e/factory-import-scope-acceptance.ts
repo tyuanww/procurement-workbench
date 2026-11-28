@@ -28,6 +28,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkCopiedSourceWithNoStore(buyer, shared);
   await checkFactorySourceCannotBecomeProcurement(buyer, shared);
   await checkRelatedBatchMember(buyer, origin);
+  await checkDetachedFactoryDetail(buyer, shared);
   await checkEmptyFactorySource(buyer, origin);
   const denied = await manager.request.get(new URL(`/api/v1/imports/${scopeId}`, origin).href);
   assert.equal(denied.status(), 403);
@@ -38,7 +39,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
-    relatedOrdersKeepTrueScope: true };
+    relatedOrdersKeepTrueScope: true, detachedDetailChecksMembership: true };
 }
 
 function factoryRelatedComponent(page: Page) {
@@ -47,12 +48,40 @@ function factoryRelatedComponent(page: Page) {
 
 async function checkRelatedBatchMember(page: Page, origin: URL) {
   const purchaseBatch = 'scope-import-store-evidence';
-  await page.goto(new URL(`/lines?importBatchId=${purchaseBatch}&store=${currentStore}`, origin).href);
-  await page.getByRole('link', { name: 'FS-MANUAL', exact: true }).press('Enter');
+  await page.goto(new URL(`/lines?importBatchId=${purchaseBatch}&store=${currentStore}&q=FS-MANUAL`, origin).href);
+  const original = page.getByRole('link', { name: 'FS-MANUAL', exact: true });
+  await original.press('Enter');
   const related = factoryRelatedComponent(page).and(page.locator(`a[href*="importBatchId=${purchaseBatch}"]`));
   await related.press('Enter');
   await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get('store'), currentStore);
+  await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+  await original.and(page.locator(':focus')).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('q'), 'FS-MANUAL');
+}
+
+async function checkDetachedFactoryDetail(page: Page, shared: URL) {
+  const preview = new URL(shared);
+  preview.searchParams.set('drawer', 'preview');
+  preview.searchParams.set('lineId', 'scope-line-component');
+  await page.goto(preview.href);
+  const drawer = page.getByRole('dialog', { name: 'FS-COMPONENT 预览', exact: true });
+  const detail = drawer.getByRole('link', { name: '打开订单行详情', exact: true });
+  const ordinary = new URL(await detail.getAttribute('href') ?? '', shared);
+  assert.equal(ordinary.search, `?store=${currentStore}`);
+  ordinary.search = shared.search;
+  const [membership] = await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/v1/lines' && url.searchParams.get('lineIds') === 'scope-line-component';
+    }),
+    page.goto(ordinary.href),
+  ]);
+  assert.deepEqual((await membership.json()).items, []);
+  await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
+  for (const name of ['返回导入批次', '返回本批订单']) {
+    assert.equal(await page.getByRole('link', { name, exact: true }).count(), 0);
+  }
 }
 
 async function checkRelatedOutsideFactoryBatch(page: Page, origin: URL) {

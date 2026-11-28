@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Card, Collapse, Empty, Flex, Input, Result, Select, Skeleton, Space, Tag, Typography } from 'antd';
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
@@ -17,7 +17,8 @@ import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../feature
 import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
 import { BatchSources } from './batch-sources.js';
-import { orderScheduleAddress, readLineDetailBack, useLineDetailSearchParams } from './desk-navigation.js';
+import { orderScheduleAddress, readLineDetailBack, useLineDetailNavigation, useLineDetailSearchParams } from './desk-navigation.js';
+import { LineImportMembership } from './import-detail-verification.js';
 
 const MISSING_PO = '无单号';
 
@@ -30,11 +31,10 @@ export function LineDetailPage() {
   const { id = '' } = useParams();
   const [params] = useFollowUpSearch();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
-  const { state } = useLocation();
-  const canReadImports = useCan('imports.read');
-  const canReadDashboard = useCan('dashboard.read');
-  const back = readLineDetailBack({ lineId: id, params, state, canReadDashboard, canReadImports });
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
+  const { back, membership } = useLineDetailNavigation({ lineId: id, params });
+  return <LineImportMembership.Provider value={membership}>
+    <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />
+  </LineImportMembership.Provider>;
 }
 
 function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: ReturnType<typeof readLineDetailBack> }) {
