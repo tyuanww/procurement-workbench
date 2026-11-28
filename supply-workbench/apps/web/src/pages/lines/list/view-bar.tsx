@@ -1,4 +1,4 @@
-import { IMPORT_RETURN_PARAM } from '../../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
 import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
@@ -100,7 +100,6 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   else if (!next.has('lane')) next.set('lane', 'all');
   retainImportViewFilters(current, next);
   clearOrderLensParams(next);
-  copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });
@@ -113,7 +112,8 @@ export function clearFiltersAddress(search: string): URLSearchParams {
   const current = new URLSearchParams(search);
   copyParam({ from: current, to: next, key: 'lane' });
   copyParam({ from: current, to: next, key: 'importBatchId' });
-  copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
+  const source = importFollowUpCandidate(current);
+  if (source !== null) next.set(IMPORT_RETURN_PARAM, source.to);
   if (importBatchOf(current) !== undefined) copyParam({ from: current, to: next, key: 'store' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });

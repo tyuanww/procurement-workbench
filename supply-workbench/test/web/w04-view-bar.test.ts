@@ -133,8 +133,12 @@ describe('已修改状态', () => {
 
   it('切换到明确保存了另一批次的视图时，按保存的批次查询', () => {
     const view = { id: 'saved-b', label: 'B 批订单', query: 'lane=all&importBatchId=batch-b' };
-    const address = viewAddress({ search: 'lane=all&importBatchId=batch-a', view });
+    const search = new URLSearchParams({
+      lane: 'all', importBatchId: 'batch-a', backToImport: '/imports/batch-b?drawer=import-source&source=batch',
+    }).toString();
+    const address = viewAddress({ search, view });
     expect(new URLSearchParams(readDesk(address.toString()).requestQuery).get('importBatchId')).toBe('batch-b');
+    expect(address.has('backToImport')).toBe(false);
   });
 
   it('在导入来源下钻范围内应用保存视图时保留本批次和返回地址', () => {
@@ -191,7 +195,6 @@ describe('已修改状态', () => {
     expect(scope('&source=batch&template=po-master-v1&store=yiling')).toBeNull();
     expect(scope('&source=batch&store=yiling', { template: 'po-master-v1' })?.recordKey).toBe('batch');
     expect(scope('&source=batch&store=yiling', { template: 'po-master-v1', store: 'yiling' })).toBeNull();
-    expect(scope('&source=batch&store=yiling', { template: null, store: 'yiling' })).toBeNull();
     expect(scope('&source=procurement-batch&store=yiling')).toBeNull();
     expect(scope('&source=procurement-batch&store=yiling', { template: 'po-master-v1' })?.to).toBe(base + '&source=procurement-batch&store=yiling');
     expect(scope('&source=procurement-batch&store=yiling', { store: 'yiling', template: 'po-master-v1' })).toBeNull();

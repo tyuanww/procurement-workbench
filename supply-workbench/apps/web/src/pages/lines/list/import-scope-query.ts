@@ -3,15 +3,18 @@ import { clearOrderLensParams, importBatchOf } from '../../../features/follow-up
 import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
 
 export function retainImportViewFilters(current: URLSearchParams, next: URLSearchParams): void {
+  next.delete(IMPORT_RETURN_PARAM);
   const savedBatch = importBatchOf(next);
   if (savedBatch === undefined) next.delete('store');
   const currentBatch = importBatchOf(current);
   if (currentBatch === undefined) return;
   const store = ProcurementStoreSchema.safeParse(current.get('store')).data;
-  if (store !== undefined || importFollowUpCandidate(current) !== null) {
+  const source = importFollowUpCandidate(current);
+  if (store !== undefined || source !== null) {
     next.set('importBatchId', currentBatch);
     if (store === undefined) next.delete('store');
     else next.set('store', store);
+    if (source !== null) next.set(IMPORT_RETURN_PARAM, source.to);
   } else if (savedBatch === undefined) {
     next.set('importBatchId', currentBatch);
   }

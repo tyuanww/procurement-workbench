@@ -58,9 +58,8 @@ export function importFollowUpBackAddress(value: string | null): { readonly id: 
 
 function importRouteId(pathname: string): string | undefined {
   try {
-    const segment = /^\/[^/]+/u.exec(pathname)?.[0];
-    if (segment === undefined || decodeURIComponent(segment).toLowerCase() !== '/imports') return undefined;
-    const path = '/imports' + pathname.slice(segment.length);
+    const path = pathname.replace(/^\/[^/]+/u, (segment) =>
+      decodeURIComponent(segment).toLowerCase() === '/imports' ? '/imports' : segment);
     const encoded = matchPath('/imports/:id', path)?.params.id;
     if (encoded === undefined || /[\\\s]/u.test(encoded)) return undefined;
     const id = decodeURIComponent(encoded);

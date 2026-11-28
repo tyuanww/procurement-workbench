@@ -968,9 +968,43 @@ async function checkCopiedImportLine({ page, row, sourceUrl }: { readonly page: 
     await fallback.press('Enter');
     await detached.waitForURL((url) => url.pathname === '/lines'
       && url.searchParams.get('importBatchId') === conflicting.searchParams.get('importBatchId'));
+    await checkRejectedProcurementSources({ detached, copied: new URL(href, origin), sourceUrl });
   } finally {
     await detached.close();
   }
+}
+
+async function checkRejectedProcurementSources({ detached, copied, sourceUrl }: {
+  readonly detached: Page; readonly copied: URL; readonly sourceUrl: string;
+}) {
+  const canonical = new URL(sourceUrl);
+  const summaryPath = '/api/v1' + canonical.pathname;
+  const show = detached.getByRole('link', { name: '返回导入批次', exact: true });
+  const missingSource = new URL(canonical);
+  missingSource.searchParams.set('source', JSON.stringify(['component', '合成的不存在的来源页', 999]));
+  copied.searchParams.set('backToImport', missingSource.pathname + missingSource.search);
+  const [preview] = await Promise.all([
+    detached.waitForResponse((response) => new URL(response.url()).pathname === summaryPath + '/procurement'),
+    detached.goto(copied.href),
+  ]);
+  assert.ok(preview.ok(), '真实采购预览须完成复查');
+  await detached.getByRole('link', { name: '返回本批订单', exact: true }).waitFor();
+  assert.equal(await show.count(), 0);
+
+  canonical.searchParams.set('source', 'batch');
+  canonical.searchParams.set('store', 'dafuyan');
+  const wrongStore = new URL('/lines', copied);
+  wrongStore.searchParams.set('importBatchId', copied.searchParams.get('importBatchId') ?? '');
+  wrongStore.searchParams.set('store', 'dafuyan');
+  wrongStore.searchParams.set('backToImport', canonical.pathname + canonical.search);
+  const [summary] = await Promise.all([
+    detached.waitForResponse((response) => new URL(response.url()).pathname === summaryPath),
+    detached.goto(wrongStore.href),
+  ]);
+  assert.ok(summary.ok());
+  assert.equal((await summary.json()).template, 'po-master-v1');
+  await detached.getByRole('region', { name: '订单查询结果', exact: true }).waitFor();
+  assert.equal(await show.count(), 0);
 }
 
 async function checkImportScopeRouteForms({ page, importPath, importBatchId, savedView }: {
