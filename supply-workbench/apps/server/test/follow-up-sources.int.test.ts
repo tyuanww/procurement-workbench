@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { BatchViewSchema, ShipmentViewSchema } from '@sw/contracts';
+import { BatchViewSchema, OrderLineDetailSchema, ShipmentViewSchema } from '@sw/contracts';
 import { schema, type AppDatabase } from '@sw/persistence';
 import { must, openProcurementImport, procurementImportClient } from './helpers/procurement-import.js';
+import { loginAs } from './helpers/server.js';
 
 const buyerId = '0199f0a0-0000-7000-8000-000000000002';
 const warehouse = '0199f0a0-0000-7000-8000-000000000010';
@@ -48,6 +49,59 @@ it('原表回查保留采购行、工厂需求原列与已采纳出货的历史�
       headers: { cookie: client.cookie }, payload: { reason: '合成测试作废旧归属' } });
     expect(voided.statusCode, voided.body).toBe(200);
     expect((await client.detail(component)).archivedShipmentSources).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
+it('已采纳出货重挂后仅提示原批次暂无法核对，发货数量和原表访问范围保持', async () => {
+  const { app, handle, close } = await openProcurementImport({ isLocal: true });
+  try {
+    const client = await procurementImportClient(app, handle);
+    const workbook = new URL('../../../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url);
+    const imported = await client.upload('采购合成.xlsx', await readFile(workbook));
+    const committed = await client.commit(imported);
+    expect(committed.statusCode, committed.body).toBe(200);
+    const component = 'procurement-component:PO20261117009103:99010003';
+    const preview = await client.preview(imported);
+    const otherLine = must(preview.submission?.finished.find((row) => row.rowNo === 2)?.orderLineId);
+    const first = await createBatch({ client, lineId: component, date: '2026-11-24' });
+    const second = await createBatch({ client, lineId: component, date: '2026-11-27' });
+    await insertSources(handle.db, component);
+
+    const adoption = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/shipment-rows/historical-shipment/adopt',
+      headers: { cookie: client.cookie }, payload: { batchId: second.id } });
+    expect(adoption.statusCode, adoption.body).toBe(200);
+    const adopted = ShipmentViewSchema.parse(adoption.json());
+    const before = await client.detail(component, 'dafuyan');
+    expect(before.archivedShipmentSources?.map(({ id }) => id)).toEqual(['historical-shipment']);
+    expect(before.batches.find(({ id }) => id === second.id)).not.toHaveProperty('hasUnavailableShipmentSource');
+
+    const reviewer = await loginAs(app, 'reviewer');
+    const relinked = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/shipment/historical-shipment/link',
+      headers: { cookie: reviewer }, payload: { orderLineId: otherLine } });
+    expect(relinked.statusCode, relinked.body).toBe(200);
+    const manager = await loginAs(app, 'manager');
+    const managerRead = (store: string) => app.inject({ url: `/api/v1/lines/${encodeURIComponent(component)}?store=${store}`, headers: { cookie: manager } });
+    const response = await managerRead('dafuyan');
+    expect(response.statusCode, response.body).toBe(200);
+    const after = OrderLineDetailSchema.parse(response.json());
+    expect(after.batches.find(({ id }) => id === first.id)).not.toHaveProperty('hasUnavailableShipmentSource');
+    expect(after.batches.find(({ id }) => id === second.id)).toMatchObject({ hasUnavailableShipmentSource: true, shippedQty: 10,
+      fulfillment: { verifiedShippedQty: 0 }, shipments: [{ ...adopted, factoryShipmentRowId: null }] });
+    expect(after.archivedShipmentSources).toEqual([]);
+    expect(response.body).not.toContain('historical-shipment');
+    expect(response.body).not.toContain('factory-history');
+    expect(response.body).not.toContain('工厂历史.xlsx');
+    expect((await managerRead('yiling')).statusCode).toBe(404);
+    expect((await app.inject({ url: '/api/v1/imports/factory-history', headers: { cookie: manager } })).statusCode).toBe(403);
+
+    await handle.exec("update shipments set created_at = '2020-01-01T00:00:00Z' where factory_shipment_row_id = 'historical-shipment'");
+    const voided = await app.inject({ method: 'POST', url: `/api/v1/shipments/${adopted.id}/void`,
+      headers: { cookie: client.cookie }, payload: { reason: '合成测试作废旧归属' } });
+    expect(voided.statusCode, voided.body).toBe(200);
+    const detail = await client.detail(component, 'dafuyan');
+    expect(detail.batches.find(({ id }) => id === second.id)).not.toHaveProperty('hasUnavailableShipmentSource');
   } finally {
     await close();
   }

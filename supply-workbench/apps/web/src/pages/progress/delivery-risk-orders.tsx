@@ -14,6 +14,7 @@ import { progressPagination, resetProgressPagination, storeLabels, withProgressP
 type Risk = Extract<ReturnType<typeof homeDeliveryRiskOf>, { kind: 'home-risk' }>;
 type Load = { kind: 'pending' } | { kind: 'failed'; message: string } | { kind: 'ready'; lines: OrderLineRow[] };
 const READ_LIMIT = 100;
+const READ_QUERY_LIMIT = 8000;
 
 export function DeliveryRiskOrders({ risk }: { readonly risk: Risk | { kind: 'invalid' } }) {
   const [params, setParams] = useFollowUpSearch();
@@ -118,11 +119,20 @@ async function readRiskRows({ requested, store, signal }: {
 }) {
   const ids = new URLSearchParams(requested).getAll('lineIds');
   const pages = [];
-  for (let index = 0; index < ids.length; index += READ_LIMIT) {
-    const query = new URLSearchParams({ store, pageSize: String(READ_LIMIT) });
-    for (const id of ids.slice(index, index + READ_LIMIT)) query.append('lineIds', id);
-    pages.push(read({ name: 'lines', query: query.toString(), signal }));
+  const base = new URLSearchParams({ store, pageSize: String(READ_LIMIT) }).toString();
+  let query = base;
+  let count = 0;
+  for (const id of ids) {
+    const entry = `&${new URLSearchParams({ lineIds: id })}`;
+    if (count === READ_LIMIT || (count > 0 && query.length + entry.length > READ_QUERY_LIMIT)) {
+      pages.push(read({ name: 'lines', query, signal }));
+      query = base;
+      count = 0;
+    }
+    query += entry;
+    count += 1;
   }
+  if (count > 0) pages.push(read({ name: 'lines', query, signal }));
   const results = await Promise.all(pages);
   const byId = new Map(results.flatMap(({ items }) => items.map((line) => [line.id, line] as const)));
   return ids.flatMap((id) => {

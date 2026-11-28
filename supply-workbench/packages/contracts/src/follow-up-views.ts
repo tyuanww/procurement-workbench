@@ -166,6 +166,7 @@ export const BatchViewSchema: z.ZodType<BatchView> = strictObject({
   cancelledAt: nullable(z.string()),
   cancelReason: nullable(z.string()),
   shipments: z.array(ShipmentViewSchema),
+  hasUnavailableShipmentSource: optional(z.boolean()),
   receipts: z.array(ReceiptViewSchema),
   deliveryNote: nullable(DeliveryNoteViewSchema),
   fulfillment: optional(BatchFulfillmentSchema),
