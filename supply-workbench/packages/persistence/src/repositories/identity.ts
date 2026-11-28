@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
 import { CODE_TYPES, REVIEW_STATUSES, type CodeLink, type ItemCode, type ItemName } from '@sw/domain';
 import type { CodeLinkRepository } from '../../../application/src/ports/code-link-repository.js';
@@ -60,7 +60,11 @@ export function codeLinkRepository(db: AppDatabase): CodeLinkRepository {
     },
     find: (id) => findLink(db, id),
     async save(entity) {
-      await db.insert(codeLinks).values(entity).onConflictDoUpdate({ target: codeLinks.id, set: entity });
+      await db.insert(codeLinks).values(entity).onConflictDoUpdate({
+        target: codeLinks.id,
+        set: entity,
+        setWhere: sql`${entity.status !== 'pending'} or ${codeLinks.status} = 'pending'`,
+      });
     },
     async listApproved() {
       const rows = await db.select().from(codeLinks).where(eq(codeLinks.status, 'approved'));

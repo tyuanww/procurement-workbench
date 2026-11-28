@@ -31,8 +31,8 @@ export const makeRelinkFactoryRows =
       await tx.factoryReports.lockReportSources(reports.map((row) => row.factoryPartyId));
       const oldOwners = await tx.factoryReports.effectiveReportOwners(reports);
       await write.links.lockOwnershipChanges([...oldOwners, ...ownershipTargets({ plan, orderLines })]);
+      await writeRecordedLinks(write, { plan, orderLines });
       for (const result of [...plan].sort(comparePlannedWrites)) await applyResult({ ...write, result });
-      await writeUnlinkedLines({ links: write.links, orderLines, matchedLines, at });
     });
     const manualLines = orderLines.filter((line) => line.linkStatus === 'manual').length;
     return {
@@ -79,24 +79,12 @@ async function applyResult(input: Write & { readonly result: FactoryMatch }): Pr
 
 async function applyMatched(input: Write & { readonly result: Matched }): Promise<void> {
   const line = input.result.line;
-  const isSaved = await input.links.save(linkOf({
-    id: line.linkId ?? linkIdOf(line.orderLineId),
-    at: input.at,
-    orderLineId: line.orderLineId,
-    factoryPartyId: input.result.row.factoryPartyId,
-    status: 'linked',
-    source: 'relink',
-    confidence: input.result.basis,
-    poRaw: input.result.row.poRaw,
-    itemCodeRaw: input.result.row.itemCodeRaw,
-    barcodeRaw: input.result.row.barcodeRaw,
-  }));
+  const isSaved = input.matchedLines.has(line.orderLineId);
   if (!isSaved) {
     input.counters.factoryUnlinked += 1;
     await markRow({ tx: input.tx, row: input.result.row, status: 'unlinked', reason: 'LINE_LINK_IS_MANUAL' });
     return;
   }
-  input.matchedLines.add(line.orderLineId);
   await markRow({ tx: input.tx, row: input.result.row, status: 'linked', reason: null, orderLineId: line.orderLineId });
   input.counters.factoryLinked += 1;
   input.counters.byBasis[input.result.basis] += 1;
@@ -131,24 +119,50 @@ async function markRow(input: {
   await input.tx.factoryReports.save({ ...found, linkedOrderLineId: orderLineId === null ? null : brandOrderLineId(orderLineId), linkStatus: input.status, linkReason: input.reason });
 }
 
-async function writeUnlinkedLines(input: {
-  readonly links: LineFactoryLinkRepository;
-  readonly orderLines: readonly OrderLineMatchRef[];
-  readonly matchedLines: ReadonlySet<string>;
-  readonly at: string;
+async function writeRecordedLinks(write: Write, { plan, orderLines }: {
+  readonly plan: readonly FactoryMatch[]; readonly orderLines: readonly OrderLineMatchRef[];
 }): Promise<void> {
-  for (const line of input.orderLines) {
-    if (line.linkStatus === 'manual' || input.matchedLines.has(line.orderLineId)) continue;
-    if (line.linkStatus === 'unlinked' && line.linkReason === 'NO_FACTORY_ROW_MATCH') continue;
-    await input.links.save(linkOf({
-      id: line.linkId ?? linkIdOf(line.orderLineId),
-      at: input.at,
-      orderLineId: line.orderLineId,
-      factoryPartyId: null,
-      status: 'unlinked',
-      source: 'relink',
-      confidence: 'none',
-      reason: 'NO_FACTORY_ROW_MATCH',
-    }));
+  const candidates = new Map(plan.flatMap((result) => result.kind === 'matched' ? [[result.line.orderLineId, result] as const] : []));
+  for (const line of [...orderLines].sort((left, right) => left.orderLineId.localeCompare(right.orderLineId))) {
+    const result = candidates.get(line.orderLineId);
+    if (result !== undefined && await saveLinked({ links: write.links, at: write.at, result })) {
+      write.matchedLines.add(line.orderLineId);
+      continue;
+    }
+    await writeUnlinked({ links: write.links, at: write.at, line });
   }
+}
+
+async function saveLinked({ links, at, result }: {
+  readonly links: LineFactoryLinkRepository; readonly at: string; readonly result: Matched;
+}): Promise<boolean> {
+  const line = result.line;
+  return links.save(linkOf({
+    id: line.linkId ?? linkIdOf(line.orderLineId),
+    at: at,
+    orderLineId: line.orderLineId,
+    factoryPartyId: result.row.factoryPartyId,
+    status: 'linked',
+    source: 'relink',
+    confidence: result.basis,
+    poRaw: result.row.poRaw,
+    itemCodeRaw: result.row.itemCodeRaw,
+    barcodeRaw: result.row.barcodeRaw,
+  }));
+}
+
+async function writeUnlinked({ links, at, line }: {
+  readonly links: LineFactoryLinkRepository; readonly at: string; readonly line: OrderLineMatchRef;
+}): Promise<void> {
+  if (isManualLine(line) || (line.linkStatus === 'unlinked' && line.linkReason === 'NO_FACTORY_ROW_MATCH')) return;
+  await links.save(linkOf({
+    id: line.linkId ?? linkIdOf(line.orderLineId),
+    at,
+    orderLineId: line.orderLineId,
+    factoryPartyId: null,
+    status: 'unlinked',
+    source: 'relink',
+    confidence: 'none',
+    reason: 'NO_FACTORY_ROW_MATCH',
+  }));
 }
