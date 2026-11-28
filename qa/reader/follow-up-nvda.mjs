@@ -105,8 +105,9 @@ async function step(role, name, action, check) {
   await save();
   try {
     await check(record);
-    record.status = record.speechError ? 'fail' : 'pass';
-    if (record.speechError) evidence.errors.push({ role, name, error: record.speechError });
+    const observedError = record.speechError ?? record.verificationError;
+    record.status = observedError ? 'fail' : 'pass';
+    if (observedError) evidence.errors.push({ role, name, error: observedError });
     console.log(role, name, record.status, JSON.stringify(record.spoken ?? []));
   } catch (error) {
     record.status = 'fail';
@@ -242,16 +243,31 @@ async function manager(page) {
     assert.equal(await risk.getAttribute('aria-expanded'), 'true');
     record.location = new URL(page.url()).pathname + new URL(page.url()).search;
     record.riskButtonSpeech = record.spoken;
+    record.motion = await waitForDrawerMotion(drawer);
+    record.readyFocus = await observeDrawerFocus(drawer);
     await reportFocus(record, /交期风险|关闭/u);
-    record.drawerFocus = await drawer.evaluate(element => ({
-      within: element.contains(document.activeElement),
-      atRoot: element === document.activeElement,
-      role: document.activeElement?.getAttribute('role'),
-    }));
+    record.reportedFocus = await observeDrawerFocus(drawer);
   });
   const returnUrl = page.url();
-  await step(role, 'actively select a specific order', 'Playwright focuses the specific link in the drawer; NVDA reports the link and sends Enter; Playwright observes the scoped detail page', async record => {
-    await selected.focus();
+  await step(role, 'first ordinary Tab after risk drawer opens', 'NVDA sends exactly one plain Tab; Playwright observes focus and never moves it', async record => {
+    await nvda.clearSpokenPhraseLog();
+    await nvda.press('Tab');
+    record.spoken = [...await nvda.spokenPhraseLog()];
+    record.firstTabFocus = await observeDrawerFocus(drawer);
+    if (!record.firstTabFocus.insideNamedDialog) {
+      record.verificationError = 'The first Tab after opening risk did not reach a control inside the named risk dialog';
+    }
+  });
+  await step(role, 'actively select a specific order with Tab and Enter', 'NVDA sends ordinary Tab until the selected link has focus, then reports the focus and sends Enter; Playwright observes the scoped detail page', async record => {
+    record.tabTrail = [];
+    const focusedLink = selected.and(page.locator(':focus'));
+    for (let tab = 0; tab < 14 && await focusedLink.count() === 0; tab++) {
+      await nvda.clearSpokenPhraseLog();
+      await nvda.press('Tab');
+      record.tabTrail.push({ focus: await observeDrawerFocus(drawer), spoken: [...await nvda.spokenPhraseLog()] });
+    }
+    assert.equal(await focusedLink.count(), 1, 'Tab did not reach the selected order link in the drawer');
+    record.selectedFocus = await observeDrawerFocus(drawer);
     await reportFocus(record, RegExp('查看订单\\s*' + spokenPo, 'u'));
     await nvda.press('Enter');
     await page.waitForURL(url => decodeURIComponent(url.pathname) === '/lines/' + component && url.searchParams.get('store') === 'dafuyan');
@@ -268,6 +284,55 @@ async function manager(page) {
     assert.equal(await sort.getAttribute('aria-sort'), 'ascending');
     record.location = new URL(page.url()).pathname + new URL(page.url()).search;
     await reportFocus(record, RegExp('查看订单\\s*' + spokenPo, 'u'));
+  });
+}
+
+async function waitForDrawerMotion(drawer) {
+  return drawer.evaluate(async dialog => {
+    const wrapper = dialog.closest('.ant-drawer-content-wrapper') ?? dialog;
+    const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const position = () => {
+      const rect = wrapper.getBoundingClientRect();
+      return JSON.stringify([rect.left, rect.right, rect.top, getComputedStyle(wrapper).transform]);
+    };
+    const deadline = performance.now() + 5000;
+    let previous;
+    let stableFrames = 0;
+    while (stableFrames < 4 && performance.now() < deadline) {
+      await frame();
+      const geometry = position();
+      const moving = wrapper.getAnimations().some(animation =>
+        animation.pending || animation.playState === 'running');
+      stableFrames = !moving && geometry === previous ? stableFrames + 1 : 0;
+      previous = geometry;
+    }
+    if (stableFrames < 4) throw new Error('Risk drawer did not reach a stable position');
+    return { stableFrames, geometry: JSON.parse(previous) };
+  });
+}
+
+async function observeDrawerFocus(drawer) {
+  return drawer.evaluate(dialog => {
+    const active = document.activeElement;
+    const identify = element => element ? {
+      tag: element.tagName,
+      role: element.getAttribute('role'),
+      ariaLabel: element.getAttribute('aria-label'),
+      ariaLabelledBy: element.getAttribute('aria-labelledby'),
+      id: element.id || null,
+      className: element.getAttribute('class'),
+      tabIndex: element.getAttribute('tabindex'),
+    } : null;
+    const nearestDialog = active?.closest('dialog, [role="dialog"], [role="alertdialog"]');
+    const drawerShell = dialog.closest('.ant-drawer') ?? dialog;
+    return {
+      active: identify(active),
+      closestDialog: identify(nearestDialog),
+      namedDialog: identify(dialog),
+      insideNamedDialog: dialog.contains(active),
+      insideDrawerShell: drawerShell.contains(active),
+      matchesNamedDialog: active === dialog,
+    };
   });
 }
 
