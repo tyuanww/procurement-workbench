@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { makeCreateBatch, makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
+import { makeCancelLine, makeCreateBatch, makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
 import { makeLinkFactoryRow } from '../../packages/application/src/master-data/index.js';
 import { linkIdOf, linkOf } from '../../packages/application/src/shared/factory-link.js';
 import { entityId, localDate, orderLineId } from '../../packages/domain/src/index.js';
@@ -79,6 +79,36 @@ it.skipIf(url === undefined)('需求批次与人工建批同时提交时按同�
     expect([...detail.batches].sort((a, b) => a.seq - b.seq)).toMatchObject([
       { seq: 1, plannedQty: 50, origin: 'from_factory_demand' }, { seq: 2, plannedQty: 75, origin: 'manual' },
     ]);
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('订单取消先提交时，等待编号的工厂需求沿用已取消的跳过原因', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const deps = writes(main.db);
+    const paused = gate();
+    const cancel = makeCancelLine({ ...deps, uow: {
+      run: (work) => deps.uow.run(async (tx) => {
+        const result = await work(tx);
+        await paused.hold();
+        return result;
+      }),
+    } });
+    const cancelling = cancel({ lineId: sample.lineId, reason: '合成订单取消' }, sample.buyer);
+    const generate = makeGenerateBatchesFromDemand(writes(competing.db));
+    let generated: ReturnType<typeof generate> | undefined;
+    try {
+      await Promise.race([paused.entered, cancelling]);
+      generated = generate({ rowIds: [sample.id] }, sample.buyer);
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(generated === undefined ? [cancelling] : [cancelling, generated]);
+    }
+    await cancelling;
+    expect(await generated).toEqual({ createdLines: 0, createdBatches: 0,
+      skipped: [{ rowId: sample.id, slotIndex: 0, reason: '订单行已取消' }] });
+    expect((await onlyLineDetail(main.db, sample.code)).batches).toEqual([]);
   });
 }, 15000);
 

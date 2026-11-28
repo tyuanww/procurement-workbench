@@ -117,6 +117,9 @@ async function createSlots(
   const skipped: SlotSkip[] = [];
   const created: CreatedSlot[] = [];
   const line = await input.tx.orderLines.lock(input.lineId);
+  if (line.cancelledAt !== null) {
+    return { created, skipped: input.candidates.map(({ rowId, slotIndex }) => skip({ rowId, slotIndex, reason: '订单行已取消' })) };
+  }
   let seq = nextSeq(await input.tx.batches.listByOrderLine(input.lineId));
   const receiver = line.receiverPartyId ?? input.factoryPartyId;
   for (const slot of input.candidates) {
