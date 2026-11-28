@@ -179,17 +179,20 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
     await page.goto(address.href);
-    const sources = [{ link: order, batchId: null }, { link: overdue, batchId: batches[0] }];
-    if (width === 1440) sources.push({ link: note, batchId: null });
-    for (const { link, batchId } of sources) {
+    const sources = [
+      { link: order, batchId: null, source: '物料单号' },
+      { link: overdue, batchId: batches[0], source: '逾期批次' },
+    ];
+    if (width === 1440) sources.push({ link: note, batchId: null, source: '订单备注' });
+    for (const { link, batchId, source } of sources) {
       for (const fromButton of [true, false]) {
-        await openDeliveryDetail(page, { link, lineId, batchId });
+        await openDeliveryDetail(page, { link, lineId, batchId, source, width });
         await returnToDailyDelivery(page, { address, fromButton, width });
         await link.and(page.locator(':focus')).waitFor();
       }
     }
   }
-  await openDeliveryDetail(page, { link: overdue, lineId, batchId: batches[0] ?? null });
+  await openDeliveryDetail(page, { link: overdue, lineId, batchId: batches[0] ?? null, source: '逾期批次', width: 1440 });
   for (const id of batches) {
     const saved = await page.request.patch(new URL(`/api/v1/batches/${encodeURIComponent(id)}`, daily).href,
       { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
@@ -201,12 +204,17 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
   assert.equal(await row.count(), 0);
 }
 
-async function openDeliveryDetail(page: Page, { link, lineId, batchId }: {
+async function openDeliveryDetail(page: Page, { link, lineId, batchId, source, width }: {
   readonly link: Locator; readonly lineId: string; readonly batchId: string | null;
+  readonly source: string; readonly width: number;
 }) {
-  const address = new URL(await link.getAttribute('href') ?? '', page.url());
-  assert.equal(decodeURIComponent(address.pathname), `/lines/${lineId}`);
-  assert.equal(address.searchParams.get('focusBatch'), batchId);
+  const href = await link.getAttribute('href');
+  assert.ok(href, `${width}px ${source}缺少详情地址，当前地址 ${page.url()}`);
+  const address = new URL(href, page.url());
+  const expectedPath = `/lines/${lineId}`;
+  assert.equal(decodeURIComponent(address.pathname), expectedPath, `${width}px ${source}详情地址 ${address.href}，预期路径 ${expectedPath}`);
+  const actualBatch = address.searchParams.get('focusBatch');
+  assert.equal(actualBatch, batchId, `${width}px ${source}详情地址 ${address.href}，批次实际 ${actualBatch}，预期 ${batchId}`);
   await Promise.all([page.waitForURL(address.href), link.press('Enter')]);
   await page.getByRole('region', { name: '批次', exact: true }).waitFor();
 }
@@ -216,9 +224,9 @@ async function returnToDailyDelivery(page: Page, { address, fromButton, width }:
 }) {
   const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
   const href = await back.getAttribute('href');
-  assert.ok(href, '订单详情缺少返回地址');
+  assert.ok(href, `${width}px 订单详情缺少返回地址，预期 ${address.href}，当前地址 ${page.url()}`);
   const target = new URL(href, page.url());
-  assert.equal(target.href, address.href, '订单详情应指回原日常交付筛选');
+  assert.equal(target.href, address.href, `${width}px 订单详情返回地址实际 ${target.href}，预期 ${address.href}`);
   const activate = () => fromButton ? back.press('Enter') : page.goBack({ waitUntil: 'commit' });
   try {
     await Promise.all([page.waitForURL(address.href, { waitUntil: 'commit' }), activate()]);
