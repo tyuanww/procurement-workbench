@@ -833,7 +833,7 @@ async function checkImportSourceRetry({ page, drawer, order, sourceUrl, match, r
   readonly page: Page; readonly drawer: Locator; readonly order: Locator; readonly sourceUrl: string;
   readonly match: (url: URL) => boolean; readonly reopen: () => Promise<unknown>;
 }) {
-  const matchesRead = (url: URL) => url.pathname === '/api/v1/lines' && match(url);
+  const matchesRead = (url: URL) => url.pathname === '/api/v1/lines' && url.searchParams.get('pageSize') === '1' && match(url);
   const waitRead = () => page.waitForResponse((response) => matchesRead(new URL(response.url())));
   expectedFailures.push({ role: 'buyer', path: '/api/v1/lines', status: 503 });
   await page.route(matchesRead, (route) => route.fulfill({
@@ -955,9 +955,13 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   await orderLink.and(page.locator(':focus')).waitFor();
   await orderLink.click();
   await page.waitForURL((url) => url.pathname === '/lines' && matchesScope(url));
+  await page.getByRole('link', { name: '返回导入批次', exact: true }).waitFor();
   await checkImportSourceRetry({
-    page, drawer, order: orderLink, sourceUrl, reopen: () => page.goBack(),
-    match: (url) => matchesScope(url) && url.searchParams.get('pageSize') === '1',
+    page, drawer, order: orderLink, sourceUrl, reopen: async () => {
+      await page.goBack();
+      await page.waitForURL(sourceUrl);
+    },
+    match: matchesScope,
   });
   await orderLink.press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines' && matchesScope(url));
