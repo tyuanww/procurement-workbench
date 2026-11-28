@@ -18,11 +18,11 @@ export const makeResolveMultiName =
     const at = deps.clock.now();
     await deps.uow.run(async (tx) => {
       const code = await tx.itemCodes.lock(input.codeId);
-      const rows = await prepareCodeRelink(tx, [code.codeNorm]);
       const itemId = await ensureItem(tx, { ids: deps.ids, itemId: code.itemId, codeRaw: code.codeRaw, input, at });
       await applyDecision(tx, { itemId, input, at });
       if (code.itemId === null) await tx.itemCodes.save({ ...code, itemId, status: 'approved', updatedAt: at });
       const filled = code.itemId === null ? await backfillItems(tx, { items: [{ codeNorm: code.codeNorm, itemId }], at }) : [];
+      const rows = await prepareCodeRelink(tx, [code.codeNorm]);
       const linked = await relinkPreparedRows(tx, rows);
       const lineIds = [...filled, ...linked];
       if (lineIds.length > 0) await refreshLineProjection(tx, lineIds);

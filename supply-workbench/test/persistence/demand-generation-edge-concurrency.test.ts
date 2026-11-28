@@ -1,15 +1,15 @@
 import { expect, it } from 'vitest';
-import { makeCancelBatch, makeCreateBatch, makeGenerateBatchesFromDemand, makeReopenLine } from '../../packages/application/src/follow-up/index.js';
+import { makeCancelBatch, makeCreateBatch, makeGenerateBatchesFromDemand, makeReopenBatch, makeReopenLine, makeUpdateBatch } from '../../packages/application/src/follow-up/index.js';
 import { makeBulkCreateItems } from '../../packages/application/src/master-data/index.js';
-import { entityId, orderLineId } from '../../packages/domain/src/index.js';
+import { entityId, localDate, orderLineId } from '../../packages/domain/src/index.js';
 import type { AppDatabase } from '../../packages/persistence/src/client.js';
 import { followUpQueries } from '../../packages/persistence/src/queries/follow-up/index.js';
 import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
 import { itemCodeRepository } from '../../packages/persistence/src/repositories/identity.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
-import { anOrderLine } from '../../packages/testkit/src/index.js';
-import { blockedOnPostgres, clock, gate, seedLine, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
+import { aBatch, anOrderLine } from '../../packages/testkit/src/index.js';
+import { anotherDemand, blockedOnPostgres, clock, gate, seedLine, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
 
 it.skipIf(url === undefined)('取消旧批次与生成新批次重叠后，订单列表显示实际开放的下一批', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
@@ -18,7 +18,7 @@ it.skipIf(url === undefined)('取消旧批次与生成新批次重叠后，订�
       lineId: sample.lineId, receiverPartyId: sample.factoryId, plannedQty: 25,
     }, sample.buyer);
     const paused = gate();
-    const generate = makeGenerateBatchesFromDemand(beforeBatchSave(main.db, paused));
+    const generate = makeGenerateBatchesFromDemand(beforeBatchSave(main.db, { paused }));
     const generation = generate({ rowIds: [sample.id] }, sample.buyer);
     let cancellation: ReturnType<ReturnType<typeof makeCancelBatch>> | undefined;
     try {
@@ -57,15 +57,26 @@ it.skipIf(url === undefined)('取消唯一批次后，列表仍显示未建要�
   });
 }, 15000);
 
-function beforeBatchSave(db: AppDatabase, paused: ReturnType<typeof gate>) {
+function beforeBatchSave(db: AppDatabase, { paused, beforeLineLock = false }: {
+  readonly paused: ReturnType<typeof gate>;
+  readonly beforeLineLock?: boolean;
+}) {
   const deps = writes(db);
+  async function holdOnce() { if (!paused.hasEntered()) await paused.hold(); }
   const uow: typeof deps.uow = {
     run: (effect) => deps.uow.run((tx) => effect({
       ...tx,
+      orderLines: {
+        ...tx.orderLines,
+        async lock(...args: Parameters<typeof tx.orderLines.lock>) {
+          if (beforeLineLock) await holdOnce();
+          return tx.orderLines.lock(...args);
+        },
+      },
       batches: {
         ...tx.batches,
         async saveWithRecords(records) {
-          await paused.hold();
+          await holdOnce();
           await tx.batches.saveWithRecords(records);
         },
       },
@@ -141,6 +152,34 @@ it.skipIf(url === undefined)('重复生成已存在的全部批次时，反序�
   });
 }, 15000);
 
+it.skipIf(url === undefined)('等待已取消候选的锁时释放已获取的订单行锁', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    const cancelled = orderLineId(`${sample.id}-other`);
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    await seedLine({ db: main.db, sample, id: cancelled, fields: { cancelledAt: clock.now(), cancelReason: '合成取消', stage: 'cancelled' } });
+    const paused = gate();
+    const other = writes(main.db).uow.run(async (tx) => {
+      await tx.orderLines.lock(cancelled);
+      await paused.hold();
+      await tx.orderLines.lock(sample.lineId);
+    });
+    const generate = makeGenerateBatchesFromDemand(writes(competing.db));
+    let generation: ReturnType<typeof generate> | undefined;
+    try {
+      await Promise.race([other, paused.entered]);
+      generation = settled(generate({ rowIds: [sample.id] }, sample.buyer)).result;
+      await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+      expect(await main.exec(`select id from order_lines where id = '${sample.lineId}' for update nowait`))
+        .toMatchObject({ rows: [{ id: sample.lineId }] });
+    } finally {
+      paused.release();
+      await Promise.allSettled(generation === undefined ? [other] : [other, generation]);
+    }
+    await other;
+    expect(await generation).toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
+  });
+}, 15000);
+
 async function seedPendingCodes(db: AppDatabase, { sample, secondCode }: { readonly sample: Sample; readonly secondCode: string }) {
   const left = entityId(`${sample.id}-code-left`);
   const right = entityId(`${sample.id}-code-right`);
@@ -164,3 +203,108 @@ async function seedPair(db: AppDatabase, sample: Sample) {
   await reports.save({ ...first, id: secondRow, fingerprint: secondRow, rowNo: 5, demand: { ...first.demand, itemCodeRaw: secondCode } });
   return { lineIds: [sample.lineId, secondLine], rowIds: [sample.id, secondRow], secondCode } as const;
 }
+
+it.skipIf(url === undefined)('已生成的需求重试不等待同采购单另一需求的生成', async () => {
+  await withFixture(async ({ main, competing, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const second = await anotherDemand(main.db, { sample });
+    const generate = makeGenerateBatchesFromDemand(writes(main.db));
+    expect(await generate({ rowIds: [sample.id] }, sample.buyer)).toMatchObject({ createdBatches: 1 });
+    const paused = gate();
+    const pending = makeGenerateBatchesFromDemand(beforeBatchSave(competing.db, { paused }))({ rowIds: [second] }, sample.buyer);
+    let retry: ReturnType<typeof generate> | undefined;
+    try {
+      await Promise.race([pending, paused.entered]);
+      const next = settled(generate({ rowIds: [sample.id] }, sample.buyer));
+      retry = next.result;
+      await expect.poll(next.isDone, { timeout: 1600, interval: 30 }).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(retry === undefined ? [pending] : [pending, retry]);
+    }
+    expect(await retry).toEqual({ createdLines: 0, createdBatches: 0, skipped: [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }] });
+    expect(await pending).toMatchObject({ createdBatches: 1 });
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('等待前一订单时重开的后续物料可以生成', async () => {
+  await withFixture(async ({ main, competing, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const code = `${sample.code}-other`;
+    const second = await anotherDemand(main.db, { sample, code });
+    const laterId = orderLineId(`${sample.id}-other`);
+    await orderLineRepository(main.db).save(anOrderLine({
+      id: laterId, purchaseOrderId: sample.orderId, lane: 'material', itemCodeRaw: code,
+      cancelledAt: clock.now(), cancelReason: '合成取消', stage: 'cancelled',
+    }));
+    const paused = gate();
+    const generate = makeGenerateBatchesFromDemand(beforeBatchSave(main.db, { paused, beforeLineLock: true }));
+    const pending = generate({ rowIds: [sample.id, second] }, sample.buyer);
+    try {
+      await Promise.race([pending, paused.entered]);
+      await makeReopenLine(writes(competing.db))({ lineId: laterId, reason: '恢复合成订单' }, sample.buyer);
+    } finally {
+      paused.release();
+      await pending;
+    }
+    expect(await pending).toEqual({ createdLines: 0, createdBatches: 2, skipped: [] });
+    expect(await deliveryBatchRepository(main.db).listByOrderLine(laterId)).toHaveLength(1);
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('重开已收到数量的旧批次与需求生成并发时保留开放的新批次投影', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const old = aBatch().withReceipt(1);
+    const batch = { ...old.build(), orderLineId: sample.lineId, receiverPartyId: sample.factoryId,
+      status: 'cancelled' as const, cancelledAt: clock.now(), cancelReason: '合成取消' };
+    const records = old.records();
+    await deliveryBatchRepository(main.db).saveWithRecords({ ...records, batch,
+      receipts: records.receipts.map((row) => ({ ...row, batchId: batch.id })) });
+    const paused = gate();
+    const generate = makeGenerateBatchesFromDemand(beforeBatchSave(main.db, { paused }));
+    const pending = generate({ rowIds: [sample.id] }, sample.buyer);
+    let opening: ReturnType<ReturnType<typeof makeReopenBatch>> | undefined;
+    try {
+      await Promise.race([pending, paused.entered]);
+      const next = settled(makeReopenBatch(writes(competing.db))({ batchId: batch.id, reason: '重开合成批次' }, sample.buyer));
+      opening = next.result;
+      await expect.poll(() => next.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(opening === undefined ? [pending] : [pending, opening]);
+    }
+    expect(await pending).toMatchObject({ createdBatches: 1 });
+    expect(await opening).toEqual({ batchId: batch.id });
+    const stored = await orderLineRepository(main.db).get(sample.lineId);
+    const batches = await deliveryBatchRepository(main.db).listByOrderLine(sample.lineId);
+    expect(batches.find(({ id }) => id === batch.id)).toMatchObject({ cancelledAt: null });
+    expect(stored).toMatchObject({ stage: 'awaiting_date', nextDueBatchId: batches.find(({ id }) => id !== batch.id)?.id });
+  });
+}, 15000);
+
+it.skipIf(url === undefined)('修改前一批日期与取消后一批重叠时不指向已取消批次', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const create = makeCreateBatch(writes(main.db));
+    const first = await create({ lineId: sample.lineId, receiverPartyId: sample.factoryId, plannedQty: 5,
+      dateBuyerConfirmed: localDate('2026-11-29') }, sample.buyer);
+    const second = await create({ lineId: sample.lineId, receiverPartyId: sample.factoryId, plannedQty: 5,
+      dateBuyerConfirmed: localDate('2026-11-30') }, sample.buyer);
+    const paused = gate();
+    const pending = makeCancelBatch(beforeBatchSave(main.db, { paused }))({ batchId: second.batchId, reason: '取消合成批次' }, sample.buyer);
+    let updating: ReturnType<ReturnType<typeof makeUpdateBatch>> | undefined;
+    try {
+      await Promise.race([pending, paused.entered]);
+      const next = settled(makeUpdateBatch(writes(competing.db))({ batchId: first.batchId, dateBuyerConfirmed: localDate('2026-12-01'), reason: '合成确认延期' }, sample.buyer));
+      updating = next.result;
+      await expect.poll(() => next.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled(updating === undefined ? [pending] : [pending, updating]);
+    }
+    expect(await pending).toEqual({ batchId: second.batchId });
+    expect(await updating).toEqual({ batchId: first.batchId });
+    expect(await orderLineRepository(main.db).get(sample.lineId)).toMatchObject({ nextDueBatchId: first.batchId });
+  });
+}, 15000);

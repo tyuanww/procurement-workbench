@@ -684,12 +684,9 @@ async function checkProcurementImport(page: Page): Promise<string> {
   assert.equal(await component.getByText('共用子件', { exact: true }).count(), 2);
   const rowSource = component.getByRole('button', { name: /^查看来源/u });
   const sourceDrawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
-  await rowSource.press('Enter');
-  await sourceDrawer.getByText(workbookName, { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).pathname, importPath);
-  assert.equal(await sourceDrawer.getByRole('link').count(), 0);
-  await page.keyboard.press('Escape');
-  await rowSource.and(page.locator(':focus')).waitFor();
+  const implicitOaReturn = await checkProcurementGroupReturn(page, { importPath, previousOa: null });
+  await checkDefaultProcurementSource({ page, rowSource, sourceDrawer, importPath });
+  const explicitOaReturn = await checkProcurementGroupReturn(page, { importPath, previousOa: 'XPKA(CN)9901' });
   await page.screenshot({ path: join(out, 'procurement-preview.png'), animations: 'disabled' });
 
   await page.getByRole('button', { name: '确认导入', exact: true }).click();
@@ -734,15 +731,10 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await order.and(page.locator(':focus')).waitFor();
   await page.keyboard.press('Escape');
   await rowSource.and(page.locator(':focus')).waitFor();
-  expectedFailures.push({ role: 'buyer', path: '/api/v1/lines', status: 503 });
-  await page.route((url) => url.pathname === '/api/v1/lines' && url.searchParams.get('lineIds') === verified.searchParams.get('lineIds'),
-    (route) => route.fulfill({ status: 503, json: { error: { code: 'INTERNAL', message: '验收模拟来源读取失败', details: {} } } }), { times: 1 });
-  await rowSource.press('Enter');
-  await sourceDrawer.getByText('关联记录没有读出来。', { exact: true }).waitFor();
-  assert.equal(await order.count(), 0);
-  assert.equal(page.url(), sourceUrl);
-  await sourceDrawer.getByRole('button', { name: '重试', exact: true }).press('Enter');
-  await order.waitFor();
+  await checkImportSourceRetry({
+    page, drawer: sourceDrawer, order, sourceUrl, reopen: () => rowSource.press('Enter'),
+    match: (url) => url.searchParams.get('lineIds') === verified.searchParams.get('lineIds'),
+  });
   await page.keyboard.press('Escape');
   await rowSource.and(page.locator(':focus')).waitFor();
   await page.setViewportSize({ width: 320, height: 667 });
@@ -783,8 +775,111 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await page.waitForURL(`**${importPath}?template=po-master-v1&status=committed`);
   result.checks.procurementImport = { workbookName, importPath, componentPath, componentCode, componentPo, linkedFinished: 3, followUp: memo,
     sourceUrl, previewStaysLocal: true, drawerEscapeFocus: true, browserBackFocus: true, explicitBackFocus: true,
-    widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedStaysLocal: true, completedSourceKeepsAssociation: true, candidateDeepLinkFocus: true };
+    widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedStaysLocal: true, completedSourceKeepsAssociation: true,
+    candidateDeepLinkFocus: true, oaReturns: { implicit: implicitOaReturn, explicit: explicitOaReturn } };
   return importPath;
+}
+
+async function checkDefaultProcurementSource({ page, rowSource, sourceDrawer, importPath }: {
+  readonly page: Page; readonly rowSource: Locator; readonly sourceDrawer: Locator; readonly importPath: string;
+}) {
+  const before = new URL(page.url());
+  assert.equal(before.searchParams.has('previewOa'), false);
+  const previewReads: string[] = [];
+  const record = (request: { url: () => string; method: () => string }) => {
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname === `/api/v1${importPath}/procurement`) previewReads.push(url.search);
+  };
+  page.on('request', record);
+  try {
+    await rowSource.press('Enter');
+    await sourceDrawer.getByText(workbookName, { exact: true }).waitFor();
+    const address = new URL(page.url());
+    assert.equal(address.pathname, importPath);
+    assert.equal(address.searchParams.get('previewOa'), 'XPKA(CN)9901');
+    assert.equal(await sourceDrawer.getByRole('link').count(), 0);
+    await page.keyboard.press('Escape');
+    await rowSource.and(page.locator(':focus')).waitFor();
+    assert.deepEqual(previewReads, []);
+  } finally {
+    page.off('request', record);
+  }
+}
+
+async function checkProcurementGroupReturn(page: Page, { importPath, previousOa }: { readonly importPath: string; readonly previousOa: string | null }) {
+  assert.equal(new URL(page.url()).searchParams.get('previewOa'), previousOa);
+  const finished = page.getByRole('table', { name: '总表成品明细' });
+  const reads: (string | null)[] = [];
+  const path = `/api/v1${importPath}/procurement`;
+  const record = (request: { url: () => string; method: () => string }) => {
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname === path) reads.push(url.searchParams.get('oa'));
+  };
+  const readGroup = (oa: string | null) => page.waitForResponse((response) => {
+    const address = new URL(response.url());
+    return response.request().method() === 'GET' && address.pathname === path && address.searchParams.get('oa') === oa;
+  });
+  page.on('request', record);
+  try {
+    await page.getByRole('combobox', { name: 'OA 需求编号' }).click();
+    const [switched] = await Promise.all([
+      readGroup('XPKA(CN)9902'),
+      page.getByText(/^XPKA\(CN\)9902（\d+ 条）$/u).click(),
+    ]);
+    assert.ok(switched.ok());
+    await finished.getByText('采购订单总表 第 6 行', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('previewOa'), 'XPKA(CN)9902');
+    const [returned] = await Promise.all([readGroup(previousOa), page.goBack()]);
+    assert.ok(returned.ok());
+    await finished.getByText('采购订单总表 第 2 行', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('previewOa'), previousOa);
+    assert.deepEqual(reads, ['XPKA(CN)9902', previousOa]);
+    return { reads, returnedQuery: new URL(returned.url()).search, previewOa: previousOa };
+  } finally {
+    page.off('request', record);
+  }
+}
+
+async function checkImportSourceRetry({ page, drawer, order, sourceUrl, match, reopen }: {
+  readonly page: Page; readonly drawer: Locator; readonly order: Locator; readonly sourceUrl: string;
+  readonly match: (url: URL) => boolean; readonly reopen: () => Promise<unknown>;
+}) {
+  const matchesRead = (url: URL) => url.pathname === '/api/v1/lines' && url.searchParams.get('pageSize') === '1' && match(url);
+  const waitRead = () => page.waitForResponse((response) => matchesRead(new URL(response.url())));
+  expectedFailures.push({ role: 'buyer', path: '/api/v1/lines', status: 503 });
+  await page.route(matchesRead, (route) => route.fulfill({
+    status: 503, json: { error: { code: 'INTERNAL', message: '验收模拟来源读取失败', details: {} } },
+  }), { times: 1 });
+  const [failed] = await Promise.all([waitRead(), reopen()]);
+  assert.equal(failed.status(), 503);
+  await drawer.getByText('关联记录没有读出来。', { exact: true }).waitFor();
+  assert.equal(await order.count(), 0);
+  assert.equal(page.url(), sourceUrl);
+  const retry = drawer.getByRole('button', { name: '重试', exact: true });
+  await retry.click({ trial: true });
+  const retryRegion = drawer.getByRole('region', { name: '关联记录', exact: true }).and(page.locator(':focus'));
+  let continueRead = () => {};
+  const loadingObserved = new Promise<void>((resolve) => { continueRead = resolve; });
+  await page.route(matchesRead, async (route) => {
+    await loadingObserved;
+    await route.continue();
+  }, { times: 1 });
+  const [recovered] = await Promise.all([waitRead(), (async () => {
+    try {
+      await retry.press('Enter');
+      await drawer.getByRole('status', { name: '正在核对关联记录', exact: true }).waitFor();
+      await retryRegion.waitFor();
+    } finally {
+      continueRead();
+    }
+  })()]);
+  assert.ok(recovered.ok());
+  await order.waitFor();
+  await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
+  await retryRegion.waitFor();
+  await page.keyboard.press('Tab');
+  await order.and(page.locator(':focus')).waitFor();
+  assert.equal(page.url(), sourceUrl);
 }
 
 async function checkLocalImportSources({ page, importPath, drawer }: {
@@ -886,9 +981,19 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   await orderLink.and(page.locator(':focus')).waitFor();
   await orderLink.click();
   await page.waitForURL((url) => url.pathname === '/lines' && matchesScope(url));
+  await page.getByRole('link', { name: '返回导入批次', exact: true }).waitFor();
+  await checkImportSourceRetry({
+    page, drawer, order: orderLink, sourceUrl, reopen: async () => {
+      await page.goBack();
+      await page.waitForURL(sourceUrl);
+    },
+    match: matchesScope,
+  });
+  await orderLink.press('Enter');
+  await page.waitForURL((url) => url.pathname === '/lines' && matchesScope(url));
   await checkImportedNoBatchView(page, matchesScope);
   const scopedNavigation = await checkScopedImportNavigation({ page, importPath, importBatchId });
-  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true, scopedNavigation };
+  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true, sourceRetryAfterBack: true, scopedNavigation };
 }
 
 async function checkScopedImportNavigation({ page, importPath, importBatchId }: {
@@ -1204,7 +1309,11 @@ async function openOrderSummary(page: Page) {
 async function checkImportedNoBatchView(page: Page, matchesScope: (url: URL) => boolean) {
   const noBatch = page.getByRole('radiogroup', { name: '常用视图' }).getByText('未建要货', { exact: true });
   const [list] = await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/lines'),
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === 'GET' && url.pathname === '/api/v1/lines'
+        && matchesScope(url) && url.searchParams.get('stages') === 'no_batch';
+    }),
     noBatch.click(),
   ]);
   await page.waitForURL((url) => url.searchParams.get('view') === 'no-batch' && matchesScope(url));

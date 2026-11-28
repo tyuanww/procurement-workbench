@@ -282,6 +282,21 @@ async function checkArrivalSourcePage(page: Page, preview: ReturnType<Page['loca
   await page.waitForURL((url) => !url.searchParams.has('source') && !url.searchParams.has('drawer'));
   await preview.getByRole('cell', { name: '分页合成 20', exact: true }).waitFor();
 
+  const unavailableOnPageTwo = new URL(correct);
+  const pagination = page.getByRole('navigation', { name: /^确认到货日明细分页/u });
+  for (const row of [23, 999]) {
+    unavailableOnPageTwo.searchParams.set('source', JSON.stringify(['arrival', sheetName, row]));
+    await page.goto(unavailableOnPageTwo.href);
+    await page.getByText('找不到链接中的来源记录。', { exact: true }).waitFor();
+    if (row === 23) await preview.getByRole('cell', { name: '分页合成 21', exact: true }).waitFor();
+    else assert.equal(await preview.count(), 0);
+    await pagination.getByTitle('上一页', { exact: true }).press('Enter');
+    await page.waitForURL((url) => !['source', 'drawer', 'arrivalPage'].some((key) => url.searchParams.has(key)));
+    await preview.getByRole('cell', { name: '分页合成 20', exact: true }).waitFor();
+    assert.equal(await preview.getByRole('cell', { name: '分页合成 21', exact: true }).count(), 0);
+    assert.equal(await pagination.evaluate((nav) => nav.contains(document.activeElement)), true);
+  }
+
   stale.searchParams.set('source', JSON.stringify(['arrival', sheetName, 999]));
   await page.goto(stale.href);
   await page.getByText('找不到链接中的来源记录。', { exact: true }).waitFor();

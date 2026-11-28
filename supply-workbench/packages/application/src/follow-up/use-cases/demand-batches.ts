@@ -4,6 +4,7 @@ import {
   type BatchCandidate,
   type DeliveryBatchId,
   type EntityId,
+  type FactoryDemandFacts,
   type FactoryReportRow,
   type OrderLine,
   type OrderLineId,
@@ -12,7 +13,8 @@ import type { Actor } from '../../shared/actor.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
 import { lockOrderLines, requireLockedOrderLine } from '../../shared/locked-order-lines.js';
-import { isCurrentMaterialLine, resolveMaterialLine, type MaterialIdentity } from './demand-line.js';
+import { isCurrentMaterialFailure, isCurrentMaterialLine, resolveMaterialLine, type MaterialIdentity, type MaterialMatchFailure } from './demand-line.js';
+import { purchaseOrderKey } from './purchase-order-ref.js';
 import { commandContext, persistBatch } from './persist-batch.js';
 
 const NO_SLOT = -1;
@@ -49,36 +51,46 @@ export type GenerateInput = {
 
 type DemandSnapshot = Awaited<ReturnType<UnitOfWorkStores['factoryReports']['getForDemandGeneration']>>;
 
-type PreparedDemand = {
-  readonly lineId: OrderLineId;
-  readonly material: MaterialIdentity;
-  readonly matchingLineIds: readonly OrderLineId[];
-  readonly lineCreated: boolean;
+type ActionableDemand = {
+  readonly demand: FactoryDemandFacts;
   readonly rowId: string;
   readonly version: string | null;
   readonly factoryPartyId: EntityId;
   readonly candidates: readonly BatchCandidate[];
 };
 
+type PreparedDemand = Omit<ActionableDemand, 'demand'> & {
+  readonly lineId: OrderLineId;
+  readonly material: MaterialIdentity;
+  readonly matchingLineIds: readonly OrderLineId[];
+  readonly lineCreated: boolean;
+};
+
+type PreparedFailure = MaterialMatchFailure & Pick<ActionableDemand, 'candidates'>;
+
 export class DemandMaterialChanged extends Error {}
 
 export async function generateDemandRows(input: GenerateInput, sources: readonly DemandSnapshot[]): Promise<RowOutcome[]> {
   const rows = [];
   const lineIds = new Set<OrderLineId>();
-  for (const source of sources) {
-    const row = await prepareDemandRow(input, source);
+  for (const source of await lockNeededMaterialOrders(input.tx, sources)) {
+    const row = 'demand' in source ? await prepareDemandRow(input, source) : source;
     rows.push(row);
-    if ('lineId' in row) {
+    if ('matchingLineIds' in row) {
       for (const lineId of row.matchingLineIds) lineIds.add(lineId);
     }
   }
-  const lines = await lockOrderLines(input.tx.orderLines, [...lineIds]);
+  const shouldLockWithoutWaiting = lineIds.size > 1;
+  const lines = await lockOrderLines({ lock: (id) => input.tx.orderLines.lock(id, { noWait: shouldLockWithoutWaiting }) }, [...lineIds]);
   const outcomes = [];
   for (const row of rows) {
     if ('lineId' in row) {
       const line = requireLockedOrderLine(lines, row.lineId);
       if (!await isCurrentMaterialLine(input.tx, { line, material: row.material })) throw new DemandMaterialChanged();
       outcomes.push(await generatePreparedRow(input, { ...row, line }));
+    } else if ('material' in row) {
+      if (!await isCurrentMaterialFailure(input.tx, row)) throw new DemandMaterialChanged();
+      outcomes.push(skipCandidates(row.candidates, row.reason));
     } else {
       outcomes.push(row);
     }
@@ -86,7 +98,19 @@ export async function generateDemandRows(input: GenerateInput, sources: readonly
   return outcomes;
 }
 
-async function prepareDemandRow(input: GenerateInput, { row, version }: DemandSnapshot): Promise<PreparedDemand | RowOutcome> {
+async function lockNeededMaterialOrders(tx: UnitOfWorkStores, sources: readonly DemandSnapshot[]): Promise<readonly (ActionableDemand | RowOutcome)[]> {
+  const prepared = [];
+  const orders = new Set<string | null>();
+  for (const source of sources) {
+    const row = await prepareCandidates(tx, source);
+    prepared.push(row);
+    if ('demand' in row) orders.add(purchaseOrderKey(row.demand.blockMaterialPoRaw).poNorm);
+  }
+  if (orders.size > 0) await tx.batches.lockDemandGeneration({ materialOrderNumbers: [...orders] });
+  return prepared;
+}
+
+async function prepareCandidates(tx: UnitOfWorkStores, { row, version }: DemandSnapshot): Promise<ActionableDemand | RowOutcome> {
   const blocked = blockReason(row);
   if (blocked !== null) return skippedRow(row.id, blocked);
   const demand = row.demand;
@@ -100,26 +124,24 @@ async function prepareDemandRow(input: GenerateInput, { row, version }: DemandSn
     },
   ]);
   if (candidates.length === 0) return { lines: 0, batches: 0, skipped: [] };
+  if (await allSlotsGenerated(tx, candidates)) return skipCandidates(candidates, EXISTING_BATCH);
+  return { rowId: row.id, version, factoryPartyId: row.factoryPartyId, demand, candidates };
+}
+
+async function prepareDemandRow(input: GenerateInput, source: ActionableDemand): Promise<PreparedDemand | PreparedFailure | RowOutcome> {
+  const { demand, rowId, version, factoryPartyId, candidates } = source;
   const line = await resolveMaterialLine(input.tx, {
-    demand,
-    factoryPartyId: row.factoryPartyId,
-    at: input.at,
-    nextOrderLineId: input.nextOrderLineId,
-    nextEntityId: input.nextEntityId,
+    demand, factoryPartyId, at: input.at, nextOrderLineId: input.nextOrderLineId, nextEntityId: input.nextEntityId,
   });
-  if ('reason' in line)
-    return {
-      lines: 0,
-      batches: 0,
-      skipped: candidates.map((slot) => skip({ rowId: row.id, slotIndex: slot.slotIndex, reason: line.reason })),
-    };
-  if (!line.created && await allSlotsGenerated(input.tx, candidates)) {
-    return { lines: 0, batches: 0, skipped: candidates.map(({ rowId, slotIndex }) => skip({ rowId, slotIndex, reason: EXISTING_BATCH })) };
-  }
+  if ('reason' in line) return 'material' in line ? { ...line, candidates } : skipCandidates(candidates, line.reason);
   return {
-    rowId: row.id, version, lineId: line.lineId, material: line.material, matchingLineIds: line.matchingLineIds,
-    lineCreated: line.created, factoryPartyId: row.factoryPartyId, candidates,
+    rowId, version, lineId: line.lineId, material: line.material, matchingLineIds: line.matchingLineIds,
+    lineCreated: line.created, factoryPartyId, candidates,
   };
+}
+
+function skipCandidates(candidates: readonly BatchCandidate[], reason: string): RowOutcome {
+  return { lines: 0, batches: 0, skipped: candidates.map(({ rowId, slotIndex }) => skip({ rowId, slotIndex, reason })) };
 }
 
 async function allSlotsGenerated(tx: UnitOfWorkStores, candidates: readonly BatchCandidate[]): Promise<boolean> {

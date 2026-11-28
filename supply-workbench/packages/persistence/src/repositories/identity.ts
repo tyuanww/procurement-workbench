@@ -71,7 +71,11 @@ export function codeLinkRepository(db: AppDatabase): CodeLinkRepository {
     },
     find: (id) => findLink(db, id),
     async save(entity) {
-      await db.insert(codeLinks).values(entity).onConflictDoUpdate({ target: codeLinks.id, set: entity });
+      await db.insert(codeLinks).values(entity).onConflictDoUpdate({
+        target: codeLinks.id,
+        set: entity,
+        setWhere: sql`${entity.status !== 'pending'} or ${codeLinks.status} = 'pending'`,
+      });
     },
     async listApproved() {
       const rows = await db.select().from(codeLinks).where(eq(codeLinks.status, 'approved'));
