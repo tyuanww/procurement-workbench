@@ -197,8 +197,8 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
       { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
     assert.ok(saved.ok(), await saved.text());
   }
-  await returnToDailyDelivery(page, { address, fromButton: true, source: '已移出逾期结果的批次', width: 1440, focus: results });
-  await results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }).waitFor();
+  await returnToDailyDelivery(page, { address, fromButton: true, source: '已移出逾期结果的批次', width: 1440, focus: results,
+    notice: results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }) });
   assert.equal(await row.count(), 0);
 }
 
@@ -218,8 +218,9 @@ async function openDeliveryDetail(page: Page, { link, lineId, batchId, source, w
   }
 }
 
-async function returnToDailyDelivery(page: Page, { address, fromButton, source, width, focus }: {
-  readonly address: URL; readonly fromButton: boolean; readonly source: string; readonly width: number; readonly focus: Locator;
+async function returnToDailyDelivery(page: Page, { address, fromButton, source, width, focus, notice }: {
+  readonly address: URL; readonly fromButton: boolean; readonly source: string; readonly width: number;
+  readonly focus: Locator; readonly notice?: Locator;
 }) {
   try {
     if (fromButton) {
@@ -231,6 +232,7 @@ async function returnToDailyDelivery(page: Page, { address, fromButton, source, 
       await back.press('Enter');
     } else await page.goBack({ waitUntil: 'commit' });
     await page.waitForURL(address.href, { waitUntil: 'commit' });
+    await notice?.waitFor();
     await focus.and(page.locator(':focus')).waitFor();
   } catch (cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
