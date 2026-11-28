@@ -33,11 +33,8 @@ export function readLineDetailBack({ lineId, params, state }: { readonly lineId:
 export function lineDetailBack(input: BackSource): DetailBack | null {
   const home = homeBack(input);
   if (home !== null) return home;
-  if (typeof input.delivery === 'string') {
-    const to = deliveryBackAddress(input.delivery);
-    const state = detailReturnState(input.state, input.deliveryEntry ? { detailPath: to, sourceLink: input.deliveryEntry } : to);
-    return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
-  }
+  const delivery = deliveryBack(input);
+  if (delivery !== null) return delivery;
   if (input.progress !== null) return legacyProgressBack(input.progress, input.state);
   const batchDrawer = todayBatchDrawerBack(input);
   if (batchDrawer !== null) return batchDrawer;
@@ -47,6 +44,14 @@ export function lineDetailBack(input: BackSource): DetailBack | null {
   const to = lineDeskAddress(input.state);
   if (to !== null) return { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
   return typeof input.schedule === 'string' ? scheduleBack(new URLSearchParams(input.schedule), input.state) : null;
+}
+
+function deliveryBack(input: BackSource): DetailBack | null {
+  if (typeof input.delivery !== 'string') return null;
+  const to = deliveryBackAddress(input.delivery);
+  const target = input.deliveryEntry ? { detailPath: to, sourceLink: input.deliveryEntry } : to;
+  const state = detailReturnState(input.state, target);
+  return { to, label: '返回按店铺交付', ...(state === undefined ? {} : { state }) };
 }
 
 function legacyProgressBack(search: string, state: unknown): DetailBack {
