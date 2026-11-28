@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-router';
+import { STUCK_BATCH_PARAM, STUCK_RETURN_PARAM, stuckOrderFocus, stuckReturnAddress } from '../../../features/performance/index.js';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday, deliveryBackAddress } from '../../../features/follow-up/index.js';
-import { STUCK_BATCH_PARAM, STUCK_RETURN_PARAM, stuckOrderFocus, stuckReturnAddress } from '../../../features/performance/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 
@@ -18,23 +18,22 @@ export type DetailBack = { readonly to: string; readonly label: string; readonly
   | { readonly todayPendingId: string } | { readonly todayArrivalId: string } | PlanningReturnState };
 
 type BackSource = {
-  readonly progress: string | null; readonly delivery?: string | null; readonly home?: string | null;
-  readonly schedule?: string | null; readonly stuck?: string | null;
+  readonly progress: string | null; readonly delivery?: string | null; readonly home?: string | null; readonly schedule?: string | null;
   readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null;
 };
 
 export function readLineDetailBack({ lineId, params, state }: { readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown }) {
+  const stuck = stuckBack(params.get(STUCK_RETURN_PARAM), state);
+  if (stuck !== null) return stuck;
   const focusBatch = params.get('focusBatch');
   return lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,
     progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), home: params.get(HOME_RISK_RETURN_PARAM),
-    schedule: params.get('backToSchedule'), stuck: params.get(STUCK_RETURN_PARAM) });
+    schedule: params.get('backToSchedule') });
 }
 
 export function lineDetailBack(input: BackSource): DetailBack | null {
   const home = homeBack(input);
   if (home !== null) return home;
-  const stuck = stuckBack(input.stuck, input.state);
-  if (stuck !== null) return stuck;
   if (typeof input.delivery === 'string') {
     const to = deliveryBackAddress(input.delivery);
     const state = detailReturnState(input.state, to);
@@ -87,14 +86,6 @@ function homeBack(input: BackSource): DetailBack | null {
   return { to, label: '返回首页', ...(state === undefined ? {} : { state }) };
 }
 
-function stuckBack(search: string | null | undefined, state: unknown): DetailBack | null {
-  const to = stuckReturnAddress(search ?? null);
-  const batchId = new URLSearchParams(search ?? '').get(STUCK_BATCH_PARAM);
-  if (to === null || batchId === null) return null;
-  const origin = detailReturnState(state, { detailPath: to, sourceLink: stuckOrderFocus(batchId) });
-  return { to, label: '返回管理看板', ...(origin === undefined ? {} : { state: origin }) };
-}
-
 function todayBack(state: unknown, batchId: string | null | undefined): DetailBack | null {
   if (typeof state !== 'object' || state === null) return null;
   if ('personalTodaySearch' in state && typeof state.personalTodaySearch === 'string') {
@@ -133,4 +124,12 @@ export function useLineDetailSearchParams() {
   const [params, setParams] = useSearchParams();
   const { state } = useLocation();
   return { params, setParams: (next: URLSearchParams) => setParams(next, { state }) };
+}
+
+function stuckBack(search: string | null, state: unknown): DetailBack | null {
+  const to = stuckReturnAddress(search);
+  const batchId = new URLSearchParams(search ?? '').get(STUCK_BATCH_PARAM);
+  if (to === null || batchId === null) return null;
+  const origin = detailReturnState(state, { detailPath: to, sourceLink: stuckOrderFocus(batchId) });
+  return { to, label: '返回管理看板', ...(origin === undefined ? {} : { state: origin }) };
 }
