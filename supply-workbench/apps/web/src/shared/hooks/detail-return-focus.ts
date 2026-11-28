@@ -38,6 +38,7 @@ function linkOrigin(state: unknown) {
 }
 
 function historyOrigin(key: string) {
+  if (typeof window === 'undefined') return undefined;
   const origin = readOrigin(window.history.state?.[historyMarker]);
   return origin?.sourceKey === key ? origin : undefined;
 }
