@@ -35,15 +35,16 @@ export function LineListPage() {
   const [params, setParams] = useFollowUpSearch();
   const { state } = useLocation();
   const canReadImports = useCan('imports.read');
-  const lens = orderLensOf(params);
-  const back = canReadImports && lens === 'query' ? importFollowUpReturn({ params, state, scoped: true }) : null;
+  const isImportScope = importFollowUpScope(params) !== null;
+  const lens = isImportScope ? 'query' : orderLensOf(params);
+  const back = canReadImports && isImportScope ? importFollowUpReturn({ params, state, scoped: true }) : null;
   return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}
     action={back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}>
-    {back === null ? <div style={{ marginBottom: space[2] }}>
+    {isImportScope ? null : <div style={{ marginBottom: space[2] }}>
       <ViewSwitch<OrderLens> aria-label="订单查法" value={lens}
         options={[{ value: 'query', label: '订单查询' }, { value: 'delivery', label: '按店铺交付' }]}
         onChange={(value) => setParams(switchOrderLens(params, value))} />
-    </div> : null}
+    </div>}
     {lens === 'delivery' ? <DeliveryOrders /> : <OrderQuery />}
   </WorkbenchPage>;
 }

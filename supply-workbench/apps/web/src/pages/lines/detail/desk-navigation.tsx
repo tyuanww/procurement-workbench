@@ -12,13 +12,14 @@ type LineDetailLinkProps = { readonly href: string; readonly search: string; rea
 
 export function LineDetailLink(props: LineDetailLinkProps) {
   const scope = importFollowUpScope(new URLSearchParams(props.search));
-  const href = scope === null ? props.href : importDetailAddress(props.href, scope.to);
+  const href = scope === null ? props.href : importDetailAddress(props.href, scope);
   return useInRouterContext() ? <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} /> : <a href={href}>{props.children}</a>;
 }
 
-function importDetailAddress(href: string, returnTo: string): string {
+function importDetailAddress(href: string, scope: NonNullable<ReturnType<typeof importFollowUpScope>>): string {
   const detail = new URL(href, 'https://workbench.invalid');
-  detail.searchParams.set(IMPORT_RETURN_PARAM, returnTo);
+  detail.searchParams.set('importBatchId', scope.id);
+  detail.searchParams.set(IMPORT_RETURN_PARAM, scope.to);
   return followUpAddress(detail.pathname, detail.searchParams);
 }
 
@@ -130,8 +131,29 @@ export function readReturningLine(state: unknown): string | null {
 }
 
 function lineDeskAddress(state: unknown): string | null {
+  const params = lineDeskParams(state);
+  return params === null ? null : followUpAddress('/lines', params);
+}
+
+function lineDeskParams(state: unknown): URLSearchParams | null {
   if (typeof state !== 'object' || state === null || !('lineDeskSearch' in state) || typeof state.lineDeskSearch !== 'string') return null;
-  return followUpAddress('/lines', new URLSearchParams(state.lineDeskSearch));
+  return new URLSearchParams(state.lineDeskSearch);
+}
+
+export function arrivalEvidenceLink({ arrivalId, params, state }: {
+  readonly arrivalId: string; readonly params: URLSearchParams; readonly state: unknown;
+}) {
+  const scoped = arrivalDeskScope(params, state);
+  const search = scoped ?? new URLSearchParams();
+  search.set('arrival', arrivalId);
+  return { to: followUpAddress('/lines', search), state: scoped === null ? undefined : readImportBatchOriginState(state) };
+}
+
+function arrivalDeskScope(params: URLSearchParams, state: unknown): URLSearchParams | null {
+  const desk = lineDeskParams(state);
+  if (desk !== null && importFollowUpScope(desk) !== null) return desk;
+  const scope = importFollowUpScope(params);
+  return scope === null ? null : new URLSearchParams({ lane: 'all', importBatchId: scope.id, [IMPORT_RETURN_PARAM]: scope.to });
 }
 
 export function useLineDetailSearchParams() {

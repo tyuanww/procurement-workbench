@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button, Input, Space, Tag, Typography } from 'antd';
 import { ReceiptViewSchema, ShipmentViewSchema, type BatchView, type ReceiptView, type ShipmentView } from '@sw/contracts';
 import { countsInRecordedQuantity, isNotProvided, normalizeUnit, type FulfillmentEvidence, type FulfillmentReviewReason } from '@sw/domain';
+import { useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { formatDateTime } from '../../../shared/ui/format.js';
+import { arrivalEvidenceLink } from './desk-navigation.js';
 
 const quantity = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
 const reviewLabels = {
@@ -57,10 +59,16 @@ export function FulfillmentRecords({ batch, canEdit, canViewArrival, onVerify, o
       {batch.receipts.map((row) => <li key={row.id}>
         <RecordText row={row} title={row.fulfillment == null ? '历史收货登记' : row.fulfillment.disposition === 'return' ? '退回记录' : row.fulfillment.disposition === 'rework' ? '返工记录' : '实收登记'} date={row.receivedOn} />
         {row.fulfillment?.arrival === undefined ? <VoidForm row={row} resource="receipts" canEdit={canEdit} onReload={onReload} />
-          : canViewArrival ? <> · <Link to={`/lines?arrival=${encodeURIComponent(row.fulfillment.arrival.arrivalId)}`}>查看到仓凭据</Link></> : null}
+          : canViewArrival ? <> · <ArrivalEvidenceLink arrivalId={row.fulfillment.arrival.arrivalId} /></> : null}
       </li>)}
     </ul>
   );
+}
+
+function ArrivalEvidenceLink({ arrivalId }: { readonly arrivalId: string }) {
+  const [params] = useFollowUpSearch();
+  const { state } = useLocation();
+  return <Link {...arrivalEvidenceLink({ arrivalId, params, state })}>查看到仓凭据</Link>;
 }
 
 function shipmentLabel(row: ShipmentView, linked: ReadonlyMap<string, boolean>): string {

@@ -117,11 +117,11 @@ describe('已修改状态', () => {
     expect(new URL(exportAddress({ query: requestQuery, columns: COLUMNS }), 'http://localhost').searchParams.get('importBatchId')).toBe(activeId);
   });
 
-  it('接受导入批次尾斜杠与编码标识，拒绝错批次和非批次路径', () => {
+  it('按路由规则接受导入批次大小写、尾斜杠与编码标识', () => {
     const query = '?drawer=import-source&source=batch';
     const scope = (route: string, id = 'batch+a=b') =>
       importFollowUpScope(new URLSearchParams({ importBatchId: id, backToImport: route + query }));
-    for (const route of ['/imports/batch%2Ba%3Db', '/imports/batch%2Ba%3Db/', '/imports/batch+a=b/']) {
+    for (const route of ['/imports/batch%2Ba%3Db', '/Imports/batch%2Ba%3Db', '/imports/batch%2Ba%3Db//', '/imports/batch+a=b/']) {
       expect(scope(route)).toEqual({ id: 'batch+a=b', to: route + query, recordKey: 'batch' });
     }
     expect(scope('/imports/batch%2Ba%3Db/', 'different')).toBeNull();

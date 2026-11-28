@@ -1,4 +1,5 @@
 import { EntityIdSchema } from '@sw/contracts';
+import { matchPath } from 'react-router';
 
 export const IMPORT_RETURN_PARAM = 'backToImport';
 export const IMPORT_SOURCE_DRAWER = 'import-source';
@@ -20,8 +21,8 @@ export function importFollowUpBackAddress(value: string | null): { readonly id: 
 }
 
 function importRouteId(pathname: string): string | undefined {
-  const encoded = /^\/imports\/([^/\\\s]+)\/?$/u.exec(pathname)?.[1];
-  if (encoded === undefined) return undefined;
+  const encoded = matchPath('/imports/:id', pathname)?.params.id;
+  if (encoded === undefined || /[\\\s]/u.test(encoded)) return undefined;
   try {
     const id = decodeURIComponent(encoded);
     if (id.trim() === '' || id === '.' || id === '..' || /[/\\\p{Cc}]|%2f/iu.test(id)) return undefined;
