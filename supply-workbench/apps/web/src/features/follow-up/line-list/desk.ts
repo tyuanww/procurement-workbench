@@ -2,6 +2,7 @@ import { LINE_STAGES, lineStageLabel, type Lane, type LineStage } from '@sw/doma
 import { LaneSchema, LinesQuerySchema, LineStageSchema, type LinesQuery } from '@sw/contracts';
 import { z } from 'zod';
 import { columnsOf, type LineColumnView } from './columns.js';
+import { importBatchOf } from './follow-up-address.js';
 
 const PAGE_CAP = 200;
 const DEFAULT_LANE = 'all';
@@ -120,7 +121,7 @@ function parseDesk(search: string): DeskRecord {
     buyer: takeField({ raw: params.get('buyer'), field: textField }),
     supplierPartyId: takeField({ raw: params.get('supplierPartyId'), field: textField }),
     factoryPartyId: takeField({ raw: params.get('factoryPartyId'), field: LinesQuerySchema.shape.factoryPartyId }),
-    importBatchId: takeField({ raw: params.get('importBatchId'), field: textField }),
+    importBatchId: importBatchOf(params),
     inTransitFactory: takeField({ raw: params.get('inTransitFactory'), field: LinesQuerySchema.shape.inTransitFactory }),
     stage: stageSlot({ stages: stageTokens(params.get('stages')), single: params.get('stage') }),
     isOverdue: isOverdueAddress({ overdue: params.get('overdue'), overdueOnly: params.get('overdueOnly') }),
@@ -274,6 +275,8 @@ function addressOf(record: DeskRecord): string {
 function requestOf(record: DeskRecord): string {
   const next = commonParams(record);
   if (record.lane === 'all') next.delete('lane');
+  const store = record.rest.find(({ key }) => key === 'store')?.value;
+  if (record.importBatchId !== undefined) setText({ next, key: 'store', value: LinesQuerySchema.shape.store.safeParse(store).data });
   if (record.isOverdue) next.set('overdueOnly', 'true');
   const stages = stageParam(record.stage);
   if (stages !== undefined) next.set('stages', stages);

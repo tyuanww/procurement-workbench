@@ -12,17 +12,15 @@ const TESTKIT = 'packages/testkit/src/contracts/import-template.ts';
 const PARSED_ROWS = 'packages/application/src/ports/parsed-rows.ts';
 
 it('flow 不再穷尽列出全部模板', () => {
-  expect(mentioned(FLOW)).toEqual(['po-master-v1', 'factory-progress-v1', 'product-archive-v1']);
+  expect(mentioned(FLOW)).toEqual(['product-archive-v1']);
   expect(read(FLOW).includes('switch (input.template)')).toBe(false);
   expect(read(PARSED_ROWS)).toContain('Exclude<TemplateId');
   expect(read(TESTKIT)).toContain('rowIdentities(parsed)');
 });
 
-it('已有模板的提交去向保持不变', () => {
-  expect(labels(committed({ template: 'po-master-v1', pendingAliases: 0 }))).toEqual(['查看本次导入订单']);
-  expect(continuationOf(committed({ template: 'factory-progress-v1', pendingAliases: 0 }))).toMatchObject({
-    steps: [{ to: '/lines', label: '去跟进中心' }],
-  });
+it('采购总表和工厂表提交结果没有直接查单入口，其他模板保留后续操作', () => {
+  expect(labels(committed({ template: 'po-master-v1', pendingAliases: 0 }))).toEqual([]);
+  expect(labels(committed({ template: 'factory-progress-v1', pendingAliases: 0 }))).toEqual([]);
   expect(labels(committed({ template: 'product-archive-v1', pendingAliases: 2 }))).toEqual(['去审核 2 个新主体', '去产品档案']);
   expect(labels(committed({ template: 'bom-v1', pendingAliases: 0 }))).toEqual([]);
   expect(labels(committed({ template: 'owner-map-v1', pendingAliases: 1 }))).toEqual(['去审核 1 个新主体']);
@@ -40,7 +38,7 @@ it('解析结果和提交去向覆盖领域里的每一个模板 id', () => {
 });
 
 function committed(input: { readonly template: TemplateId; readonly pendingAliases: number }): ImportContinuationInput {
-  return { ...input, importBatchId: 'batch-a', status: 'committed', canReviewAliases: true, unresolvedConflicts: 0, error: null };
+  return { ...input, status: 'committed', canReviewAliases: true, unresolvedConflicts: 0, error: null };
 }
 
 function labels(input: ImportContinuationInput): readonly string[] {

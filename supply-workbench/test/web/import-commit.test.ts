@@ -13,7 +13,6 @@ const parsed: ImportContinuationInput = {
   template: 'po-master-v1',
   status: 'parsed',
   pendingAliases: 26,
-  importBatchId: 'batch-a',
   canReviewAliases: false,
   unresolvedConflicts: 0,
   error: null,
@@ -40,8 +39,7 @@ it('已提交的汇总直接画出下一步，请求仍是空闲', () => {
   });
   expect(html).toContain('26 个新主体待审核');
   expect(html).not.toContain('href="/master"');
-  expect(html.match(/href="\/lines\?lane=all&amp;importBatchId=batch-a"/gu)).toHaveLength(1);
-  expect(html).toContain('查看本次导入订单');
+  expect(html).not.toContain('href="/lines');
   expect(html).not.toContain('按总表首批生成待确认批次');
   expect(html).not.toContain('可以确认导入');
   expect(html).not.toContain('确认导入');
@@ -54,7 +52,7 @@ it('审核人仍可打开主数据审核队列', () => {
     onCommit: () => undefined,
   });
   expect(html).toMatch(/href="\/master"[^>]*>去审核 26 个新主体/u);
-  expect(html).toContain('查看本次导入订单');
+  expect(html).not.toContain('href="/lines');
 });
 
 it('确认返回已提交后，门槛句换成下一步', () => {
@@ -62,13 +60,13 @@ it('确认返回已提交后，门槛句换成下一步', () => {
   expect(before).toContain('可以确认导入');
   expect(before).toContain('确认导入');
   expect(before).not.toContain('ant-btn-loading');
-  expect(before).not.toContain('查看本次导入订单');
+  expect(before).not.toContain('href="/lines');
   const after = markup(ImportCommitPanel, {
     summary: { ...parsed, status: 'committed' },
     request: idle(),
     onCommit: () => undefined,
   });
-  expect(after).toContain('查看本次导入订单');
+  expect(after).not.toContain('href="/lines');
   expect(after).not.toContain('可以确认导入');
 });
 
@@ -77,14 +75,14 @@ it('确认进行中按钮在转，接口错误只留下说明', () => {
   expect(pending).toContain('ant-btn-loading');
   expect(pending).toContain('disabled=""');
   expect(pending).toContain('确认导入');
-  expect(pending).not.toContain('查看本次导入订单');
+  expect(pending).not.toContain('href="/lines');
   const blocked = markup(ImportCommitPanel, {
     summary: { ...parsed, status: 'failed', error: null },
     request: idle(),
     onCommit: () => undefined,
   });
   expect(blocked).toContain('解析失败');
-  expect(blocked).not.toContain('查看本次导入订单');
+  expect(blocked).not.toContain('href="/lines');
   expect(blocked).not.toContain('确认导入');
   const failed = markup(ImportCommitPanel, {
     summary: parsed,
@@ -92,7 +90,7 @@ it('确认进行中按钮在转，接口错误只留下说明', () => {
     onCommit: () => undefined,
   });
   expect(failed).toContain(CONFLICT);
-  expect(failed).not.toContain('查看本次导入订单');
+  expect(failed).not.toContain('href="/lines');
   expect(failed).toContain('可以确认导入');
 });
 

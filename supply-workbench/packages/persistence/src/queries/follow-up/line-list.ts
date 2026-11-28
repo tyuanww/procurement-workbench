@@ -8,6 +8,7 @@ import { orderLines, purchaseOrders } from '../../schema/orders.js';
 import { storeFilter } from '../store-progress/scope.js';
 import { storeProgressOf } from '../store-progress/rows.js';
 import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
+import { importedOrderLines } from './imported-order-lines.js';
 import { factoryPartyWhere, inTransitFactoryWhere } from './line-factory-filter.js';
 import { loadRelations, toRow } from './line-row.js';
 
@@ -124,7 +125,7 @@ function whereOf({ query, today, actorId }: { readonly query: LinesQuery; readon
     exceptionOf(query.hasOpenException),
     missingClause(query.missingInLatestImport),
     confirmedOf(query),
-    importOf(query.importBatchId),
+    query.importBatchId === undefined ? undefined : importedOrderLines(query.importBatchId),
   ].filter((part) => part !== undefined);
   return parts.length === 0 ? undefined : and(...parts);
 }
@@ -179,21 +180,6 @@ function confirmedOf(query: LinesQuery): SQL | undefined {
     query.confirmedTo === undefined ? undefined : lte(orderLines.nextDueDate, query.confirmedTo),
   ].filter((part) => part !== undefined);
   return and(...parts);
-}
-
-function importOf(importBatchId: string | undefined): SQL | undefined {
-  if (importBatchId === undefined) return undefined;
-  return sql`${orderLines.id} in (
-    select s.order_line_id from order_line_snapshots s where s.import_batch_id = ${importBatchId}
-    union all
-    select r.target_id from import_rows r
-    inner join import_batches b on b.id = r.import_batch_id
-    where r.import_batch_id = ${importBatchId} and b.template = 'po-master-v1' and b.status = 'committed'
-      and r.target_id is not null and r.action <> 'skip'
-    union all
-    select o.material_line_id from procurement_observations o
-    where o.import_batch_id = ${importBatchId} and o.material_line_id is not null
-  )`;
 }
 
 function actorUserId(query: LinesQuery): string | undefined {

@@ -76,7 +76,6 @@ function StepList({ steps }: { readonly steps: readonly NextStep[] }) {
 
 export function commitSummary(summary: ImportBatchSummary, canReviewAliases: boolean): ImportContinuationInput {
   return {
-    importBatchId: summary.id,
     template: summary.template,
     status: summary.status,
     pendingAliases: summary.stats.pendingAliases,

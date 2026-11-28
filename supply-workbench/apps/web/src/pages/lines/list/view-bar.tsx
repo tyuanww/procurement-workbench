@@ -1,12 +1,13 @@
-import { DELIVERY_QUERY_PARAM } from '../../../features/follow-up/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
 import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
-import { deskAddress, exportAddress, lineTableLayout, readDesk, renderedLineColumns, type LineDeskView } from '../../../features/follow-up/index.js';
+import { clearOrderLensParams, DELIVERY_QUERY_PARAM, deskAddress, exportAddress, importBatchOf, lineTableLayout, readDesk, renderedLineColumns, type LineDeskView } from '../../../features/follow-up/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { bg, radiusCard, space } from '../../../theme/tokens.js';
 import { saveCurrent } from './actions.js';
+import { retainImportViewFilters } from './import-scope-query.js';
 import { SaveViewButton } from './SaveViewButton.js';
 
 export type SavedView = LineDeskView;
@@ -36,7 +37,7 @@ const DENSITY_PARAM = 'density';
 const HIDDEN_PARAM = 'hide';
 const VIEW_PARAM = 'view';
 const FIXED_COLUMN = LINE_DESK_PINNED_KEY;
-const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM, HIDDEN_PARAM, VIEW_PARAM, DELIVERY_QUERY_PARAM];
+const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM, HIDDEN_PARAM, VIEW_PARAM, DELIVERY_QUERY_PARAM, IMPORT_RETURN_PARAM];
 const DENSITY_OPTIONS = [
   { label: '紧凑', value: 'small' },
   { label: '舒适', value: 'middle' },
@@ -97,7 +98,8 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   const current = new URLSearchParams(input.search);
   if (input.view.preserveLane === true) copyParam({ from: current, to: next, key: 'lane' });
   else if (!next.has('lane')) next.set('lane', 'all');
-  if (!next.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
+  retainImportViewFilters(current, next);
+  clearOrderLensParams(next);
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });
@@ -110,6 +112,9 @@ export function clearFiltersAddress(search: string): URLSearchParams {
   const current = new URLSearchParams(search);
   copyParam({ from: current, to: next, key: 'lane' });
   copyParam({ from: current, to: next, key: 'importBatchId' });
+  const source = importFollowUpCandidate(current);
+  if (source !== null) next.set(IMPORT_RETURN_PARAM, source.to);
+  if (importBatchOf(current) !== undefined) copyParam({ from: current, to: next, key: 'store' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });
@@ -119,6 +124,8 @@ export function clearFiltersAddress(search: string): URLSearchParams {
 export function saveAddress(query: string): string {
   const params = deskAddress(query);
   for (const key of NON_FILTER_PARAMS) params.delete(key);
+  clearOrderLensParams(params);
+  if (importBatchOf(params) === undefined) params.delete('store');
   params.set('lane', readDesk(query).lane);
   return params.toString();
 }

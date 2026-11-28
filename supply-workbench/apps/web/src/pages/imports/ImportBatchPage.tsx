@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Descriptions, Flex, Typography } from 'antd';
-import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
-import { IMPORT_ACTIONS, importActionLabel } from '@sw/domain';
+import { ImportBatchSummarySchema, ProcurementStoreSchema, type ImportBatchSummary } from '@sw/contracts';
+import { IMPORT_ACTIONS, importActionLabel, importStatusLabel, templateIdLabel } from '@sw/domain';
 import { ApiError, apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
-import { decisionsWithDateDecision, issueGroupText } from '../../features/imports/index.js';
+import { BATCH_IMPORT_SOURCE, decisionsWithDateDecision, issueGroupText, PROCUREMENT_BATCH_IMPORT_SOURCE } from '../../features/imports/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { space } from '../../theme/tokens.js';
@@ -19,6 +19,8 @@ import { ProcurementPreview } from './ProcurementPreview.js';
 import { ConfirmedArrivalPreview } from './ConfirmedArrivalPreview.js';
 import { useImportBatch } from './use-import-batch.js';
 import { ImportWorkflow } from './import-workflow.js';
+import { ImportSourceButton, ImportSourceDrawer } from './ImportSourceDrawer.js';
+import { importBatchOrigin, importPreviewKeys, useImportSource } from './import-source.js';
 
 export function ImportBatchPage() {
   const { id = '' } = useParams();
@@ -28,9 +30,11 @@ export function ImportBatchPage() {
 function ImportBatchContent({ id }: { readonly id: string }) {
   const { pathname, state } = useLocation();
   const [search, setParams] = useSearchParams();
-  const backSearch = writeUrlState(search.toString(), { drawer: null });
-  const returnFocus = detailReturnState(state, pathname);
-  const returnState = state?.productOrigin === undefined ? returnFocus : { ...returnFocus, productOrigin: state.productOrigin };
+  const backSearch = writeUrlState(search.toString(), importPreviewKeys);
+  const origin = importBatchOrigin(state);
+  const returnFocus = detailReturnState(origin, pathname);
+  const productOrigin = typeof origin === 'object' && origin !== null && 'productOrigin' in origin ? origin.productOrigin : undefined;
+  const returnState = productOrigin === undefined ? returnFocus : { ...returnFocus, productOrigin };
   const back = <Link to={{ pathname: '/imports', search: backSearch }} state={returnState}>返回导入中心</Link>;
   const { load, retry, setSummary } = useImportBatch(id);
   const [request, setRequest] = useState<CommitRequest>({ kind: 'idle' });
@@ -82,8 +86,8 @@ function ImportBatchReady(props: ImportBatchReadyProps) {
       <ImportWorkflow stage={summary.status} />
       <Flex vertical gap={space[3]}>
         <BatchOverview summary={summary} />
-        {summary.hasProcurementPreview === true ? <ProcurementPreview key={id} id={id} isFinalized={summary.status === 'committed' || summary.status === 'discarded'} /> : null}
-        {isArrival ? <ConfirmedArrivalPreview key={id} id={id} revision={summary.revision} /> : null}
+        {summary.hasProcurementPreview === true ? <ProcurementPreview key={id} summary={summary} /> : null}
+        {isArrival ? <ConfirmedArrivalPreview key={id} summary={summary} /> : null}
         <ImportBatchReview {...props} canEdit={canEdit} canReviewAliases={canReviewAliases} />
         {summary.status === 'parsed' || isReplay ? null :
           <ImportBatchReceipt summary={summary} request={props.request} canReviewAliases={canReviewAliases} />}
@@ -116,9 +120,33 @@ function ImportBatchReceipt({ summary, request, canReviewAliases }: {
   readonly canReviewAliases: boolean;
 }) {
   if (summary.status === 'failed') return null;
+  const hasOrderSource = summary.status === 'committed' && ['po-master-v1', 'factory-progress-v1'].includes(summary.template);
   return <SectionGroup title="提交结果">
     <ImportCommitPanel summary={commitSummary(summary, canReviewAliases)} request={request} />
+    {hasOrderSource ? <CommittedImportSource summary={summary} /> : null}
   </SectionGroup>;
+}
+
+function CommittedImportSource({ summary }: { readonly summary: ImportBatchSummary }) {
+  const source = useImportSource();
+  const isFactory = summary.template === 'factory-progress-v1';
+  const batchSource = isFactory ? BATCH_IMPORT_SOURCE : PROCUREMENT_BATCH_IMPORT_SOURCE;
+  const recordKey = source.sourceKey;
+  const isBatch = recordKey === batchSource || (!isFactory && recordKey === BATCH_IMPORT_SOURCE);
+  const store = isFactory ? ProcurementStoreSchema.safeParse(source.params.get('store')).data : undefined;
+  return <>
+    <ImportSourceButton source={source} recordKey={batchSource} />
+    <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={isBatch ? {
+      key: recordKey,
+      items: [
+        { key: 'status', label: '导入状态', children: importStatusLabel(summary.status) },
+        { key: 'id', label: '导入批次 ID', children: summary.id },
+        { key: 'template', label: '导入模板', children: templateIdLabel(summary.template) },
+        ...(summary.factoryParty === null ? [] : [{ key: 'factory', label: '代工厂', children: summary.factoryParty.displayName }]),
+      ],
+      result: { kind: 'scope', importId: summary.id, ...(store === undefined ? {} : { store }) },
+    } : null} />
+  </>;
 }
 
 function BatchResult({ summary }: { readonly summary: ImportBatchSummary }) {

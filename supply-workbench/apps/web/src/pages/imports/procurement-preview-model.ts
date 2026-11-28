@@ -1,5 +1,57 @@
 import { recognizedPoNumbers } from '@sw/domain';
-import { UNLINKED_PROCUREMENT, type ProcurementPreviewSelection } from '@sw/contracts';
+import { ProcurementPreviewSelectionSchema, UNLINKED_PROCUREMENT, type ProcurementPreviewSelection } from '@sw/contracts';
+import { isBatchImportSource } from '../../features/imports/index.js';
+import { apiGetWithSignal } from '../../shared/api/client.js';
+import { importSourceQuery, previewPage, type ImportSourceState } from './import-source.js';
+
+export const sourcePageSizes = { finished: 12, component: 16, candidate: 16 } as const;
+export type SourceTable = keyof typeof sourcePageSizes;
+
+export function procurementPreviewOa(params: URLSearchParams): string | null {
+  const oa = params.get(importSourceQuery.oa);
+  return oa === '~' ? '' : oa;
+}
+
+export function fetchProcurementPreview({ id, oa, signal }: {
+  readonly id: string; readonly oa: string | null; readonly signal: AbortSignal;
+}) {
+  const query = oa === null ? '' : `?${new URLSearchParams({ oa })}`;
+  return apiGetWithSignal({ path: `/api/v1/imports/${encodeURIComponent(id)}/procurement${query}`, schema: ProcurementPreviewSelectionSchema, signal });
+}
+
+export function sourcePagination({ source, table }: { readonly source: ImportSourceState; readonly table: SourceTable }) {
+  const key = importSourceQuery[table];
+  return {
+    pageSize: sourcePageSizes[table], current: previewPage(source.params, key), hideOnSinglePage: true, showSizeChanger: false,
+    onChange: (page: number) => source.update({ [key]: page === 1 ? null : String(page) }, true),
+  };
+}
+
+export function rowSourceInOa(source: ImportSourceState, oa: string): ImportSourceState {
+  return { ...source, open: (key) => source.open(key, { [importSourceQuery.oa]: oa === '' ? '~' : oa }) };
+}
+
+export function switchPreviewOa(source: ImportSourceState, oa: string) {
+  const rowSource = source.sourceKey !== null && !isBatchImportSource(source.sourceKey) ? { drawer: null, source: null } : undefined;
+  source.update({
+    [importSourceQuery.oa]: oa === '' ? '~' : oa, [importSourceQuery.finished]: null,
+    [importSourceQuery.component]: null, [importSourceQuery.candidate]: null, candidates: null, ...rowSource,
+  });
+}
+
+export function sourcePagePatch({ params, selected, isUnlinked }: {
+  readonly params: URLSearchParams; readonly selected: { readonly table: SourceTable; readonly page: number } | null; readonly isUnlinked: boolean;
+}) {
+  if (selected === null) return null;
+  const key = importSourceQuery[selected.table];
+  const isWrongPage = previewPage(params, key) !== selected.page;
+  const isCollapsed = selected.table === 'candidate' && !isUnlinked && !params.has('candidates');
+  if (!isWrongPage && !isCollapsed) return null;
+  return {
+    ...(isWrongPage ? { [key]: selected.page === 1 ? null : String(selected.page) } : {}),
+    ...(isCollapsed ? { candidates: '1' } : {}),
+  };
+}
 
 type FinishedRow = ProcurementPreviewSelection['finishedRows'][number];
 type ComponentFact = ProcurementPreviewSelection['componentFacts'][number];
@@ -14,6 +66,10 @@ export type ComponentRow = {
 };
 
 export type FinishedSummary = FinishedRow & { readonly statuses: readonly ComponentFact['status'][]; readonly orderLineId?: string };
+
+export function componentSourceLineId(row: ComponentRow): string | undefined {
+  return row.observation?.materialLineId ?? undefined;
+}
 type VisibleProcurement = {
   readonly rows: readonly FinishedSummary[];
   readonly poCount: number;

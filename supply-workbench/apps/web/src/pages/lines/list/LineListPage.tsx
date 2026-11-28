@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
-import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, useFollowUpSearch, type OrderLens } from '../../../features/follow-up/index.js';
+import { importBatchOf, loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, useFollowUpSearch, type OrderLens } from '../../../features/follow-up/index.js';
+import { importFollowUpCandidate, ImportReturnTemplateContext, useImportReturnTemplate, useImportReturnTemplateContext } from '../../../features/imports/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { DeliveryOrders } from '../../progress/DeliveryOrders.js';
 import { space, topBar } from '../../../theme/tokens.js';
+import { useCan } from '../../../shared/actor.js';
+import { importFollowUpReturn, readImportBatchOriginState } from '../../imports/import-source.js';
 import { readReturningLine } from '../detail/desk-navigation.js';
 import { LineAlerts, LineBulkBar } from './actions.js';
 import { loadDeskOwners } from './owners.js';
@@ -30,20 +33,30 @@ type ResultsRef = RefObject<HTMLDivElement | null>;
 
 export function LineListPage() {
   const [params, setParams] = useFollowUpSearch();
+  const { state } = useLocation();
+  const canReadImports = useCan('imports.read');
+  const hasImportBatch = importBatchOf(params) !== undefined;
   const lens = orderLensOf(params);
-  return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}>
-    <div style={{ marginBottom: space[2] }}>
+  const template = useImportReturnTemplate(params, canReadImports);
+  const back = canReadImports ? importFollowUpReturn({ params, state, template }) : null;
+  return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}
+    action={back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}>
+    {hasImportBatch ? null : <div style={{ marginBottom: space[2] }}>
       <ViewSwitch<OrderLens> aria-label="订单查法" value={lens}
         options={[{ value: 'query', label: '订单查询' }, { value: 'delivery', label: '按店铺交付' }]}
         onChange={(value) => setParams(switchOrderLens(params, value))} />
-    </div>
-    {lens === 'delivery' ? <DeliveryOrders /> : <OrderQuery />}
+    </div>}
+    <ImportReturnTemplateContext value={template}>
+      {lens === 'delivery' ? <DeliveryOrders /> : <OrderQuery />}
+    </ImportReturnTemplateContext>
   </WorkbenchPage>;
 }
 
 function OrderQuery() {
-  const [params, setParams] = useFollowUpSearch();
+  const [params, updateParams] = useFollowUpSearch();
   const location = useLocation();
+  const importOrigin = importFollowUpCandidate(params) === null ? undefined : readImportBatchOriginState(location.state);
+  const setParams: SearchSetter = (next, options) => updateParams(next, importOrigin === undefined ? options : { ...options, state: importOrigin });
   const results = useRef<HTMLDivElement>(null);
   const [users, setUsers] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
   const [isOwnerVisible, setOwnerVisible] = useState(false);
@@ -60,12 +73,13 @@ function OrderQuery() {
   const { picked, setPicked } = useDeskSelection(request);
   const refresh = () => setReload((value) => value + 1);
   const rememberPreviewTrigger = usePreviewTrigger(preview !== null, results);
-  useDetailReturnFocus({ results, lineId: readReturningLine(location.state), key: location.key, isSettled: load.kind !== 'pending' });
+  const isTemplateSettled = useImportReturnTemplateContext() !== undefined;
+  useDetailReturnFocus({ results, lineId: readReturningLine(location.state), key: location.key, isSettled: isTemplateSettled && load.kind !== 'pending' });
   useEffect(() => { void loadDeskOwners({ setUsers, setUserId, setOwnerVisible }); }, []);
   return (
     <>
       <LineTop search={search} desk={desk} setParams={setParams} views={viewChoices(userId)} userId={userId} setMessage={setMessage} picked={load.kind === 'ready' ? picked : []} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} onReload={refresh} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys}
-        arrivalAction={<ArrivalDesk userId={userId} onMutated={refresh} />}
+        arrivalAction={<ArrivalDesk search={search} setParams={setParams} userId={userId} onMutated={refresh} />}
         onResults={() => results.current?.focus()}
       />
       <LineAlerts skips={skips} setSkips={setSkips} message={message} />

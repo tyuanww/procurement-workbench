@@ -8,7 +8,6 @@ type DateDecision = 'fill_file_year' | 'keep_null';
 export type NextStep = { readonly to: string; readonly label: string };
 
 export type ImportContinuationInput = {
-  readonly importBatchId: string;
   readonly template: TemplateId;
   readonly status: ImportStatus;
   readonly pendingAliases: number;
@@ -49,15 +48,10 @@ function aliasStep({ canReviewAliases, pendingAliases }: ImportContinuationInput
 }
 
 const COMMITTED_STEP: Partial<Record<TemplateId, NextStep>> = {
-  'factory-progress-v1': { to: '/lines', label: '去跟进中心' },
   'product-archive-v1': { to: '/products', label: '去产品档案' },
 };
 
 function templateSteps(input: ImportContinuationInput): readonly NextStep[] {
-  if (input.template === 'po-master-v1') {
-    const query = new URLSearchParams({ lane: 'all', importBatchId: input.importBatchId });
-    return [{ to: `/lines?${query}`, label: '查看本次导入订单' }];
-  }
   const step = COMMITTED_STEP[input.template];
   if (step === undefined) return [];
   return [step];
