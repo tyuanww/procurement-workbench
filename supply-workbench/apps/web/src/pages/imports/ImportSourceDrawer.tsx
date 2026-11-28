@@ -94,10 +94,9 @@ type TargetLoad =
 type ImportTargetOrigin = {
   readonly source: ImportSourceState;
   readonly sourceKey: string;
-  readonly isShown: boolean;
 };
 
-function ImportTarget({ target, ...origin }: ImportTargetOrigin & { readonly target: Target }) {
+function ImportTarget({ target, isShown, ...origin }: ImportTargetOrigin & { readonly target: Target; readonly isShown: boolean }) {
   const [load, setLoad] = useState<TargetLoad>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [request] = useState(target);
@@ -129,12 +128,12 @@ function ImportTarget({ target, ...origin }: ImportTargetOrigin & { readonly tar
     setAttempt((value) => value + 1);
   };
   return <section ref={resultRegion} tabIndex={-1} aria-label="关联记录">
-    <ImportTargetResult {...origin} load={load} onRetry={retry} />
+    <ImportTargetResult {...origin} load={load} restoreReturnFocus={isShown && attempt === 0} onRetry={retry} />
   </section>;
 }
 
 function ImportTargetResult({ load, onRetry, ...origin }: ImportTargetOrigin & {
-  readonly load: TargetLoad; readonly onRetry: () => void;
+  readonly load: TargetLoad; readonly restoreReturnFocus: boolean; readonly onRetry: () => void;
 }) {
   switch (load.kind) {
     case 'loading': return <div role="status" aria-label="正在核对关联记录"><Skeleton active paragraph={false} /></div>;
@@ -185,15 +184,13 @@ async function readBatchDestination({ lineId, batchId, signal }: {
   };
 }
 
-function ImportTargetLink({ destination, source, sourceKey, isShown }: {
+function ImportTargetLink({ destination, source, sourceKey, restoreReturnFocus }: ImportTargetOrigin & {
   readonly destination: Destination;
-  readonly source: ImportSourceState;
-  readonly sourceKey: string;
-  readonly isShown: boolean;
+  readonly restoreReturnFocus: boolean;
 }) {
   const { state } = useLocation();
   const { state: origin, ...link } = useDetailFocusLink(source.to, importSourceTriggerId(sourceKey));
-  useDetailReturnFocus(isShown, { allowContainerFocus: true });
+  useDetailReturnFocus(restoreReturnFocus, { allowContainerFocus: true });
   const query = new URLSearchParams({ [IMPORT_RETURN_PARAM]: source.to });
   const to = `${destination.href}${destination.href.includes('?') ? '&' : '?'}${query}`;
   return <Flex vertical align="start" gap={space[2]}>
