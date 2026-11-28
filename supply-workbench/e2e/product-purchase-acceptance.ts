@@ -42,7 +42,7 @@ export async function checkProductPurchaseEntry({ page, manager, origin, out }: 
       await page.waitForURL(openAddress);
       await order.and(page.locator(':focus')).waitFor();
     }
-    await closePurchase(page, exactTrigger, source.href);
+    await closePurchase(page, exactTrigger, source.href, viewport.width === 320);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   }
   await verifyUnavailablePurchase(page, source);
@@ -131,8 +131,15 @@ function orderLink(drawer: Locator) {
 async function verifyPurchase(page: Page, line: typeof exactLine) {
   const drawer = purchaseDrawer(page);
   for (const value of [line.po, line.barcode, line.relationship, rawName]) await drawer.getByText(value, { exact: true }).waitFor();
-  if (line.id === exactLine.id) {
-    for (const value of ['UI-DEMO-ITEM-005', '300', rawSupplier]) await drawer.getByText(value, { exact: true }).waitFor();
+  const exact = line.id === exactLine.id;
+  for (const [label, value] of [
+    ['物料编码', exact ? 'UI-DEMO-ITEM-005' : '未填写'],
+    ['采购数量', exact ? '300' : '1,000'],
+    ['供应商原文', exact ? rawSupplier : '未填写'],
+    ['当前采购阶段', '待发货'],
+  ] as const) {
+    const field = drawer.getByRole('row').filter({ has: page.getByText(label, { exact: true }) });
+    await field.getByText(value, { exact: true }).waitFor();
   }
   return drawer;
 }
@@ -143,8 +150,13 @@ async function openOrder(page: Page, target: string, po: string) {
   await page.getByRole('heading', { name: po, exact: true }).waitFor();
 }
 
-async function closePurchase(page: Page, source: Locator, address: string) {
-  await page.keyboard.press('Escape');
+async function closePurchase(page: Page, source: Locator, address: string, viaPointer = false) {
+  if (viaPointer) {
+    const close = purchaseDrawer(page).getByRole('button', { name: /^(关闭|Close)$/u });
+    const target = await bounds(close);
+    assert.ok(target.width >= 44 && target.height >= 44);
+    await close.click();
+  } else await page.keyboard.press('Escape');
   await purchaseDrawer(page).waitFor({ state: 'hidden' });
   await source.and(page.locator(':focus')).waitFor();
   assert.equal(page.url(), address);

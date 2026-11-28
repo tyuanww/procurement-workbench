@@ -47,6 +47,7 @@
  .dossier-identity>div:nth-child(2) { flex:1 1 55% }
  .dossier-identity>div:nth-child(3) { min-width:calc(36% - 16px) }
  .dossier-detail .ant-btn { min-height:44px; height:auto }
+ .dossier-purchase-drawer .ant-drawer-close { min-width:44px; min-height:44px }
  .dossier-detail .ant-tabs-content a { display:inline-flex; align-items:center; min-height:44px }
  .dossier-purchase-action a { display:inline-flex; align-items:center; min-height:44px }
 }
