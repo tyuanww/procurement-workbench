@@ -97,6 +97,46 @@ it('同单同品同日的要货批次按序号区分，抽屉链接定位所选�
   expect(textOf(dialog)).toContain('未发 —');
 });
 
+it('旧卡点链接按服务端实际展示的页码返回并保留筛选', async () => {
+  installMatchMedia();
+  installFetch();
+  const address = '/dashboard?view=legacy&lane=finished&card=overdue&page=99';
+  page = mount(memoryRouter(element(ActorRoles, { roles: ['manager'], children: element(DashboardPage) }), address));
+  const visible = { ...base, total: 151, page: 4, items: [{ ...late, poRaw: 'PO-01', batchSeq: 2, orderLineId: 'line-01' }] };
+  await respond('lane=finished&card=overdue&page=99', visible);
+  click(button('查看卡点明细 PO-01 第 2 批'));
+  await respond('lane=finished&card=overdue&page=4', visible);
+  const selector = '[role="dialog"] a';
+  await waitFor(() => textOf(selector) === '核对本批记录');
+  const detail = new URL(document.querySelector(selector)?.getAttribute('href') ?? '', 'https://workbench.test');
+  expect(detail.searchParams.get('backToStuck')).toBe('view=legacy&lane=finished&card=overdue&page=4&stuckBatch=overdue');
+  expect(document.querySelector('.ant-pagination-item-active')?.textContent).toBe('4');
+});
+
+it('卡点读取失败先显示重试，重试成功后把消失的批次提示放在原清单焦点旁', async () => {
+  installMatchMedia();
+  installFetch();
+  const address = '/dashboard?lane=finished&card=overdue&page=4&stuckBatch=gone';
+  page = mount(memoryRouter(element(DashboardPage), address));
+  await waitFor(() => calls.some(({ url }) => url.startsWith('/api/v1/dashboard/stuck?')));
+  await act(async () => { fulfill({ urlPart: '/api/v1/dashboard/stuck?', status: 503, body: {} }); });
+  await waitFor(() => textOf('body').includes('看板没有读出来'));
+  expect(textOf('body')).not.toContain('原批次已不在');
+  click(button('重试'));
+  await respond('lane=finished&card=overdue&page=4', { ...base, page: 4, items: [late] });
+  const list = document.querySelector('[aria-label="卡点明细"]');
+  const alert = list?.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain('原批次已不在当前卡点清单，原筛选已保留。');
+  expect(alert?.compareDocumentPosition(list?.querySelector('table') ?? document.body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(document.activeElement).toBe(list);
+  expect(textOf('body')).toContain('当前筛选 逾期');
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  click(button('关闭提示'));
+  await waitFor(() => !textOf('body').includes('原批次已不在'));
+  expect(document.querySelector('.ant-pagination-item-active')?.textContent).toBe('4');
+  expect(textOf('body')).toContain('当前筛选 逾期');
+});
+
 it('手机卡点先显示具体批次，旧链接的报表期间不参与当日快照', async () => {
   installMatchMedia();
   vi.stubGlobal('matchMedia', (query: string) => ({

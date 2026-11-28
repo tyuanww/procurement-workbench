@@ -1,5 +1,5 @@
 import { Button, Collapse, Empty, Flex, Table, Tag, Typography, type TableColumnType } from 'antd';
-import { useRef, type Ref } from 'react';
+import { useRef, type ReactNode, type Ref } from 'react';
 import type { StuckDashboard } from '@sw/contracts';
 import { batchStatusLabel } from '@sw/domain';
 import { formatQuantity, formatTableDate } from '../../shared/ui/format.js';
@@ -58,21 +58,21 @@ export function StuckPanel(props: {
     <CardRow kpis={data.kpis} filters={query} onSearch={filterList} />
     <CauseFilter counts={data.causeCounts} cause={query.cause} onSearch={filterList} />
   </Flex>;
+  const selection = <StuckSelection batchId={batchId} data={data} rows={stuck.rows} now={props.now}
+    isUpdating={isUpdating} listRef={listRef} onClose={() => select(null)} />;
   return (
     <Flex vertical gap={space[3]}>
       {isPhone ? <Collapse size="small" items={[{ key: 'filters', label: '卡点指标与原因筛选', children: filters }]} /> : filters}
       <StuckList ref={listRef} data={data} query={query} rows={stuck.rows} isUpdating={isUpdating} now={props.now} isPhone={isPhone}
-        onSearch={onSearch} onClear={() => filterList(CLEAR_FILTERS)}
-        onOpen={(batch) => select(batch.batchId)} />
+        selection={selection} onSearch={onSearch} onClear={() => filterList(CLEAR_FILTERS)}
+        onOpen={(batch) => select(batch.batchId, data.page === query.page ? undefined : data.page)} />
       <DwellChart dwell={stuck.dwell} onSearch={filterList} />
       <SourceLinks key={data.asOf} asOf={data.asOf} />
-      <StuckSelection batchId={batchId} data={data} rows={stuck.rows} now={props.now}
-        isUpdating={isUpdating} listRef={listRef} onClose={() => select(null)} />
     </Flex>
   );
 }
 
-function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch, onClear, onOpen }: {
+function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, selection, onSearch, onClear, onOpen }: {
   readonly ref: Ref<HTMLElement>;
   readonly data: StuckDashboard;
   readonly query: StuckFilters;
@@ -80,6 +80,7 @@ function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch,
   readonly isUpdating: boolean;
   readonly now: Date;
   readonly isPhone: boolean;
+  readonly selection: ReactNode;
   readonly onSearch: SearchHandler;
   readonly onClear: () => void;
   readonly onOpen: (row: StuckTableRow) => void;
@@ -89,6 +90,7 @@ function StuckList({ ref, data, query, rows, isUpdating, now, isPhone, onSearch,
       <Typography.Title level={2} style={{ margin: 0 }}>
         卡点清单{isUpdating ? '' : `（${formatQuantity(data.total)} 批）`}
       </Typography.Title>
+      {selection}
       <StuckFilter filters={query} onClear={onClear} />
       {data.total === 0 && !isUpdating ? <Empty description="当前筛选没有卡点" /> : (
         <StuckTable rows={isUpdating ? [] : rows} page={data.page} pageSize={data.pageSize}

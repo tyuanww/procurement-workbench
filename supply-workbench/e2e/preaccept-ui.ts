@@ -18,7 +18,7 @@ import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
 import { checkDirectorHome, checkManagementMeeting, checkOrderLineNote, checkProductDevelopment, checkStoreSchedule } from './procurement-mainline-acceptance.ts';
 import { checkPoMasterTemplate } from './po-master-template-acceptance.ts';
 import { checkChaseToday, checkFirstBatch, checkKeyboardReceipt, checkTodayDrawer, seedChaseSample, seedDemoFixture } from './procurement-today-acceptance.ts';
-import { checkStuckRoundTrip } from './stuck-follow-up-acceptance.ts';
+import { addStuckSecondBatch, checkStuckRoundTrip, openStuckSecondBatch } from './stuck-follow-up-acceptance.ts';
 import { checkRedReview } from './red-review-acceptance.ts';
 import { sidebarGroup, sidebarLink } from './sidebar.ts';
 
@@ -184,25 +184,30 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   assert.equal(await heading.evaluate((node) => getComputedStyle(node).clipPath), 'inset(50%)');
   assert.equal(await (await sidebarLink(progress, '计划与新品', '订单与任务排期')).getAttribute('href'), '/progress/schedule?store=dafuyan');
 
-  const stuckUrl = new URL('/dashboard?preset=custom&from=2025-01-01&to=2025-02-28&lane=finished', origin);
+  const batchId = await addStuckSecondBatch(buyer, origin, warehouse);
+  const stuckUrl = new URL('/dashboard?view=legacy&preset=custom&from=2025-01-01&to=2025-02-28&lane=finished&card=overdue', origin);
   await manager.goto(stuckUrl.href);
-  const stuckTrigger = manager.getByRole('button', { name: /^查看卡点明细 HZ09-/ }).first();
-  await stuckTrigger.press('Enter');
+  const stuckTrigger = manager.getByRole('button', { name: '查看卡点明细 HZ09-0001 第 2 批', exact: true });
+  await manager.getByRole('button', { name: '查看卡点明细 HZ09-0001 第 1 批', exact: true }).waitFor();
   const stuck = manager.getByRole('dialog', { name: '卡点批次明细', exact: true });
-  await stuck.getByText('交付等待方', { exact: true }).waitFor();
-  const opened = new URL(manager.url());
-  const batchId = opened.searchParams.get('stuckBatch');
-  assert.ok(batchId);
-  opened.searchParams.delete('stuckBatch');
-  assert.equal(opened.href, stuckUrl.href);
-  await manager.keyboard.press('Escape');
-  await stuck.waitFor({ state: 'hidden' });
-  await stuckTrigger.and(manager.locator(':focus')).waitFor();
-  await stuckTrigger.click();
-  await checkStuckRoundTrip(manager, stuck, batchId, false);
+  await openStuckSecondBatch(manager, stuckTrigger, stuck);
+  const opened = new URL(stuckUrl);
+  opened.searchParams.set('stuckBatch', batchId);
+  assert.equal(manager.url(), opened.href);
+  await manager.reload();
+  await stuck.getByText('第 2 批', { exact: true }).waitFor();
+  const sharedOrder = await checkStuckRoundTrip(manager, stuck, batchId, false);
   await checkStuckRoundTrip(manager, stuck, batchId, true);
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
+  await manager.waitForURL(stuckUrl.href);
+  await stuckTrigger.and(manager.locator(':focus')).waitFor();
+
+  await buyer.goto(sharedOrder.href);
+  await buyer.getByRole('heading', { name: 'HZ09-0001', exact: true }).waitFor();
+  assert.equal(await buyer.getByRole('link', { name: '返回管理看板', exact: true }).count(), 0);
+  await buyer.goto(opened.href);
+  await buyer.getByRole('heading', { name: '这个角色看不到这页。', exact: true }).waitFor();
 
   const sidebar = manager.locator('aside');
   const suppliers = await sidebarLink(sidebar, '管理看板', '供应商表现');
@@ -232,11 +237,12 @@ async function checkPageStories({ buyer, manager }: { readonly buyer: Page; read
   const firstBatch = await stuckTrigger.boundingBox();
   assert.ok(firstBatch && firstBatch.y >= 0 && firstBatch.y + firstBatch.height <= 780, '手机首屏应能查看第一批卡点');
   assert.equal(await manager.getByRole('radiogroup', { name: '期间', exact: true }).count(), 0);
-  await stuckTrigger.click();
-  await stuck.getByText('交付等待方', { exact: true }).waitFor();
+  await openStuckSecondBatch(manager, stuckTrigger, stuck);
   await checkStuckRoundTrip(manager, stuck, batchId, false);
   await manager.keyboard.press('Escape');
   await stuck.waitFor({ state: 'hidden' });
+  await manager.waitForURL(stuckUrl.href);
+  await stuckTrigger.and(manager.locator(':focus')).waitFor();
   await manager.setViewportSize({ width: 1440, height: 900 });
   return { legacyDevelopment: true, scope: 'dafuyan', hiddenPageBanner: true, localDetails: ['卡点', '供应商表现'], focusedStuckBatch: true, phoneWidth: 320 };
 }

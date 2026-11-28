@@ -22,8 +22,10 @@ type BackSource = {
   readonly state: unknown; readonly lineId: string; readonly todayBatch?: string | null; readonly focusBatch?: string | null;
 };
 
-export function readLineDetailBack({ lineId, params, state }: { readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown }) {
-  const stuck = stuckBack(params.get(STUCK_RETURN_PARAM), state);
+export function readLineDetailBack({ lineId, params, state, canReadDashboard }: {
+  readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown; readonly canReadDashboard: boolean;
+}) {
+  const stuck = canReadDashboard ? stuckBack(params.get(STUCK_RETURN_PARAM), state) : null;
   if (stuck !== null) return stuck;
   const focusBatch = params.get('focusBatch');
   return lineDetailBack({ lineId, state, focusBatch, todayBatch: params.get('backToToday') === 'arrivals' ? focusBatch : null,

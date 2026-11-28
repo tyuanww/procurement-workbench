@@ -32,11 +32,13 @@ export function useStuckSelection(list: RefObject<HTMLElement | null>) {
     const frame = window.requestAnimationFrame(() => (document.getElementById(stuckTriggerId(prior)) ?? list.current)?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [batchId, list]);
-  return { batchId, select(id: string | null) {
+  return { batchId, select(id: string | null, displayedPage?: number) {
     setParams((previous) => {
       const next = new URLSearchParams(previous);
       if (id === null) next.delete(STUCK_BATCH_PARAM);
       else next.set(STUCK_BATCH_PARAM, id);
+      if (displayedPage === 1) next.delete('page');
+      else if (displayedPage !== undefined) next.set('page', String(displayedPage));
       return next;
     }, { replace: true, preventScrollReset: true });
   } };
