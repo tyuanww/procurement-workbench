@@ -783,7 +783,7 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await page.waitForURL(`**${importPath}?template=po-master-v1&status=committed`);
   result.checks.procurementImport = { workbookName, importPath, componentPath, componentCode, componentPo, linkedFinished: 3, followUp: memo,
     sourceUrl, previewStaysLocal: true, drawerEscapeFocus: true, browserBackFocus: true, explicitBackFocus: true,
-    widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedAndHistoricalStayLocal: true, candidateDeepLinkFocus: true };
+    widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedStaysLocal: true, completedSourceKeepsAssociation: true, candidateDeepLinkFocus: true };
   return importPath;
 }
 
@@ -793,22 +793,11 @@ async function checkLocalImportSources({ page, importPath, drawer }: {
   readonly drawer: Locator;
 }) {
   await page.getByRole('button', { name: /^待核对的子件/u }).click();
-  const cases = [
-    { trigger: /查看来源.*99010007/u, text: '缺少已确认的成品关联' },
-    { trigger: /查看来源.*99010009/u, text: '已完结表' },
-  ];
-  for (const { trigger: name, text } of cases) {
-    const trigger = page.getByRole('button', { name });
-    await trigger.press('Enter');
-    await drawer.getByText(text, { exact: false }).waitFor();
-    assert.equal(new URL(page.url()).pathname, importPath);
-    assert.equal(await drawer.locator('a[href^="/lines"]').count(), 0);
-    await page.keyboard.press('Escape');
-    await trigger.and(page.locator(':focus')).waitFor();
-  }
   const candidate = page.getByRole('button', { name: /查看来源.*99010007/u });
   await candidate.press('Enter');
   await drawer.getByText('缺少已确认的成品关联', { exact: false }).waitFor();
+  assert.equal(new URL(page.url()).pathname, importPath);
+  assert.equal(await drawer.locator('a[href^="/lines"]').count(), 0);
   const stale = new URL(page.url());
   stale.searchParams.delete('candidates');
   stale.searchParams.set('candidatePage', '2');
@@ -825,6 +814,26 @@ async function checkLocalImportSources({ page, importPath, drawer }: {
   await page.getByRole('button', { name: '清除来源定位', exact: true }).click();
   await page.waitForURL((url) => !url.searchParams.has('source') && !url.searchParams.has('drawer'));
   await page.goto(recovered);
+  await checkCompletedImportSource(page, drawer);
+}
+
+async function checkCompletedImportSource(page: Page, drawer: Locator) {
+  const trigger = page.getByRole('button', { name: /查看来源.*99010009/u });
+  await trigger.press('Enter');
+  await drawer.getByText('已完结表', { exact: true }).waitFor();
+  const order = drawer.getByRole('link', { name: '查看关联订单', exact: true });
+  await order.waitFor();
+  const source = page.url();
+  const { pathname, searchParams } = new URL(await order.getAttribute('href') ?? '', origin);
+  assert.match(decodeURIComponent(pathname), /^\/lines\/procurement-component:.*:99010009$/u);
+  assert.equal(searchParams.get('importBatchId'), new URL(source).pathname.slice('/imports/'.length));
+  await order.press('Enter');
+  await page.waitForURL((url) => url.pathname === pathname);
+  await page.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
+  await page.waitForURL(source);
+  await order.and(page.locator(':focus')).waitFor();
+  await page.keyboard.press('Escape');
+  await trigger.and(page.locator(':focus')).waitFor();
 }
 
 async function checkImportOrderScope(page: Page, importPath: string) {
