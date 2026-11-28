@@ -47,6 +47,13 @@ export function transitOf(row: Envelope & { poRaw: string | null; nameRaw: strin
   } };
 }
 
+export function transitSourceOf(row: Parameters<typeof transitOf>[0]): OrderLineDetail['factoryReports']['inTransit'][number] {
+  const raw = record(row.raw);
+  return { ...transitOf(row), originalCells: originalsOf({
+    po: cellRaw(raw.po), nameRaw: cellRaw(raw.nameRaw), qtyRequired: cellRaw(raw.qtyRequired), qtyDeliveredFactory: cellRaw(raw.qtyDeliveredFactory),
+  }) };
+}
+
 export function shipmentOf(row: Envelope & { poRaw: string | null; itemCodeRaw: string | null; nameRaw: string | null; lotRaw: string | null; qty: string | null; casePackRaw: string | null; palletsRaw: string | null; shipmentKindRaw: string | null; shipOrArriveOn: string | null; destinationRaw: string | null; vehicleRaw: string | null; note2Raw: string | null }): FactoryReportOf<'shipment'> {
   const raw = record(row.raw);
   return { ...envelope(row), kind: 'shipment', payload: {
@@ -118,7 +125,7 @@ function mapDemand(row: DemandRow, captureOriginal: boolean): DemandSourceReport
   const raw = record(row.raw);
   const originalCells = captureOriginal ? originalsOf({
     blockMaterialPoRaw: raw.blockMaterialPoRaw,
-    blockOrderRaw: originalText(raw.blockPoRaw) ?? originalText(raw.blockLabelRaw),
+    blockOrderRaw: demandOrderOriginal(raw),
     itemCodeRaw: cellRaw(raw.itemCodeRaw), nameRaw: cellRaw(raw.nameRaw), unitRaw: cellRaw(raw.unitRaw), qtyNet: cellRaw(raw.qtyNet),
   }) : undefined;
   return { ...envelope(row), kind: 'demand', ...(originalCells === undefined ? {} : { originalCells }), payload: {
@@ -175,6 +182,11 @@ function cellRaw(cell: unknown): unknown {
 
 function originalText(value: unknown): string | null | undefined {
   return typeof value === 'string' || value === null ? value : undefined;
+}
+
+function demandOrderOriginal(raw: Readonly<Record<string, unknown>>) {
+  const alternatives = [originalText(raw.blockPoRaw), originalText(raw.blockLabelRaw)];
+  return alternatives.find((text) => text?.trim()) ?? (alternatives.includes(undefined) ? undefined : null);
 }
 
 function originalsOf(fields: Readonly<Record<string, unknown>>): Readonly<Record<string, string | null>> {

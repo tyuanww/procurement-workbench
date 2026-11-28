@@ -109,7 +109,7 @@ function ProcurementSource({ entry, canReadImport }: { readonly entry: Procureme
       {canReadImport ? <Link to={`/imports/${encodeURIComponent(entry.importBatchId)}`}>{source}</Link> : source}
       {' · '}{entry.fileName ?? entry.importBatchId}
       {' · '}{fact.status === 'completed' ? '源表标为已完结' : '项目表'}
-      {' · '}{fact.quantityRaw ?? '采购量未填'}{fact.quantityRaw === null || fact.unitRaw === null ? '' : `（单位原文 ${fact.unitRaw}）`}
+      {' · '}{fact.quantityRaw ?? '采购量未填'}
       {' · '}{fact.buyerRaw ?? '采购员未填'}
       {' · '}{fact.supplierRaw ?? '供应商未填'}
       {fact.deliveryProgressRaw == null ? null : ` · 源表交付原文 ${fact.deliveryProgressRaw}`}
