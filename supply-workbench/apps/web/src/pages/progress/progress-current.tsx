@@ -37,7 +37,6 @@ export function ProgressCurrent({ filters, origin = 'progress', ...scope }: Prog
   const rows = scopedRows.filter((row) => matchesProgressDrill(row, drill));
   const insight = progressInsights(scopedRows);
   const emptyMessage = currentEmptyMessage({ drill, oa, stay });
-  const shouldShowMatchCount = isLoaded && drill.kind !== 'all' && (error === '' || data.rows.length > 0);
   useDetailReturnFocus(isDelivery && isLoaded);
   useProgressRowFocus({ tableRef, search: table.search, isLoaded });
   return (
@@ -47,7 +46,7 @@ export function ProgressCurrent({ filters, origin = 'progress', ...scope }: Prog
         onOa={setOa} onStay={setStay} onDrill={setDrill} isDelivery={isDelivery} />
       {insight.total === 0 ? null : <ProgressBreakdown insight={insight} drill={drill} onDrill={setDrill} />}
       <div ref={tableRef} role="region" aria-label={isDelivery ? '按店铺交付结果' : '当前进度表'} tabIndex={-1} style={{ scrollMarginTop: topBar + space[2] }}>
-        <SectionGroup title="订单清单" meta={<span role="status">{shouldShowMatchCount ? `匹配 ${formatQuantity(rows.length)} 行` : ''}</span>}>
+        <SectionGroup title="订单清单" meta={<ProgressMatchCount count={rows.length} drill={drill} hasRows={data.rows.length > 0} error={error} isLoaded={isLoaded} />}>
           <ProgressActionNotice message={data.actionNotice} hasRows={scopedRows.length > 0} isLoaded={isLoaded} onRetry={retry} />
           <ProgressBody rows={data.rows} error={error} isLoaded={isLoaded} onRetry={retry}>
             <ProgressTable notes={notes} now={now} {...table} rows={rows} lines={data.lines} batchFacts={data.batchFacts} emptyMessage={emptyMessage} origin={origin} clearFilters={clearFilters} />
@@ -81,6 +80,17 @@ function currentEmptyMessage({ drill, oa, stay }: { readonly drill: ProgressDril
   return oa === null ? null : '这个 OA 没有进行中的成品订单行。';
 }
 
+function ProgressMatchCount({ count, drill, hasRows, error, isLoaded }: {
+  readonly count: number;
+  readonly drill: ProgressDrill;
+  readonly hasRows: boolean;
+  readonly error: string;
+  readonly isLoaded: boolean;
+}) {
+  const shouldShow = isLoaded && drill.kind !== 'all' && (error === '' || hasRows);
+  return <span role="status">{shouldShow ? `匹配 ${formatQuantity(count)} 行` : ''}</span>;
+}
+
 function ProgressActionNotice(props: { readonly message: string; readonly hasRows: boolean; readonly isLoaded: boolean; readonly onRetry: () => void }) {
   if (!props.isLoaded || !props.hasRows || props.message === '') return null;
   return <Alert type="warning" showIcon title={props.message} action={<Button onClick={props.onRetry}>重试</Button>} />;
@@ -98,13 +108,6 @@ function useCurrentFilter() {
   const writePage = (nextPage: number, nextSize: number) => setParams(
     withProgressPagination(params, { page: nextPage, pageSize: nextSize }), { preventScrollReset: true },
   );
-  const writeExpanded = (keys: readonly Key[]) => {
-    const next = new URLSearchParams(params);
-    next.delete('openLine');
-    next.delete('focusLine');
-    for (const key of keys) next.append('openLine', String(key));
-    setParams(next, { replace: true, preventScrollReset: true });
-  };
   const writeFilters = (nextDrill: ProgressDrill, nextStay: ProgressStay | null) => {
     const next = withProgressDrill(resetProgressPagination(params), nextDrill);
     if (nextStay === null) next.delete('stay');
@@ -113,7 +116,8 @@ function useCurrentFilter() {
   };
   return {
     oa, stay, drill, tableRef, page, pageSize, search: params.toString(),
-    expanded: params.getAll('openLine'), setExpanded: writeExpanded,
+    expanded: params.getAll('openLine'),
+    setExpanded: (keys: readonly Key[]) => setParams(expandedLineParams(params, keys), { replace: true, preventScrollReset: true }),
     clearFilters: () => {
       const next = oaParams(withProgressDrill(resetProgressPagination(params), { kind: 'all' }), null);
       next.delete('stay');
@@ -165,6 +169,14 @@ function memosForOa({ lines, arrivalMemos }: ProgressData, oa: string | null) {
     for (const material of line.storeProgress?.materials ?? []) visibleIds.add(material.id);
   }
   return arrivalMemos.filter((memo) => visibleIds.has(memo.line.id));
+}
+
+function expandedLineParams(params: URLSearchParams, keys: readonly Key[]): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.delete('openLine');
+  next.delete('focusLine');
+  for (const key of keys) next.append('openLine', String(key));
+  return next;
 }
 
 function oaParams(params: URLSearchParams, value: string | null): URLSearchParams {

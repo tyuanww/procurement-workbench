@@ -3,13 +3,13 @@ import { createRequire } from 'node:module';
 import { LineSummarySchema, OrderLineRowSchema, listResponseSchema } from '@sw/contracts';
 import { expect, it } from 'vitest';
 import { loginAs } from './helpers/server.js';
+import { workbookWithBuyer } from './helpers/procurement-buyer-workbook.js';
 import { must, openProcurementImport, procurementImportClient } from './helpers/procurement-import.js';
 import { verifyStoreIsolation } from './helpers/procurement-store.js';
 
 const ORIGINAL = readFileSync(new URL('../../../fixtures/synthetic/po-master-procurement.xlsx', import.meta.url));
 const requireImporter = createRequire(new URL('../../../packages/importers/package.json', import.meta.url));
 const XLSX = requireImporter('xlsx');
-const { unzipSync, zipSync } = requireImporter('fflate');
 const PROJECT = '达肤妍项目进度表';
 const CAP = '99010003';
 const FIRST_PO = 'PO20261117009103';
@@ -33,7 +33,7 @@ it('带 @ 的采购员原文按单元格类型匹配对应账号', async () => {
     await opened.handle.exec(`update users set name = '@测试采购员 C' where id = '${BUYER_LITERAL_AT}'`);
     const api = await procurementImportClient(opened.app, opened.handle);
     for (const [kind, buyerId] of [['mention', BUYER_C], ['literal', BUYER_LITERAL_AT]] as const) {
-      const batch = await api.upload(`buyer-${kind}.xlsx`, workbookWithBuyer(kind));
+      const batch = await api.upload(`buyer-${kind}.xlsx`, workbookWithBuyer(ORIGINAL, kind));
       const preview = await api.preview(batch);
       expect(preview.componentFacts.find((fact) => fact.source.sheetName === PROJECT && fact.source.rowNo === 5)).toMatchObject({
         buyerRaw: '@测试采购员 C', poRaw: FIRST_PO, quantity: 200000,
@@ -76,26 +76,6 @@ it('店铺按逐行已提交 OA 和每次观察的成品引用查询同一采购
     await opened.close();
   }
 }, 90_000);
-
-function workbookWithBuyer(kind: 'mention' | 'literal'): Buffer {
-  const files: Record<string, Uint8Array> = unzipSync(ORIGINAL);
-  const sheetPath = 'xl/worksheets/sheet2.xml';
-  const stringsPath = 'xl/sharedStrings.xml';
-  const sheet = Buffer.from(must(files[sheetPath])).toString();
-  const buyerCell = kind === 'mention'
-    ? '<x:c r="I5" s="7" t="s"><x:v>0</x:v></x:c>'
-    : '<x:c r="I5" s="7" t="str"><x:v>@测试采购员 C</x:v></x:c>';
-  files[sheetPath] = Buffer.from(sheet.replace(
-    '<x:c r="I5" s="7" t="str"><x:v>测试采购员 C</x:v></x:c>',
-    buyerCell,
-  ));
-  if (kind === 'mention') {
-    files[stringsPath] = Buffer.from(
-      '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t></t><r><rPr><u val="single"/></rPr><t xml:space="preserve">@测试采购员 </t></r><r><t>&#67;</t></r><rPh sb="0" eb="2"><t>注音</t></rPh></si></sst>',
-    );
-  }
-  return Buffer.from(zipSync(files));
-}
 
 async function verifyOriginal(api: Awaited<ReturnType<typeof procurementImportClient>>) {
   const original = await api.upload('original.xlsx', ORIGINAL);
