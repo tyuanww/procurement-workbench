@@ -179,30 +179,61 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
     await page.goto(address.href);
-    const sources = [{ link: order, batchId: null }, { link: overdue, batchId: batches[0] }];
-    if (width === 1440) sources.push({ link: note, batchId: null });
-    for (const { link, batchId } of sources) {
+    const sources = [
+      { link: order, batchId: null, source: '物料单号' },
+      { link: overdue, batchId: batches[0], source: '逾期批次' },
+    ];
+    if (width === 1440) sources.push({ link: note, batchId: null, source: '订单备注' });
+    for (const { link, batchId, source } of sources) {
       for (const fromButton of [true, false]) {
-        await link.press('Enter');
-        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
-        if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-        else await page.goBack();
-        await page.waitForURL(address.href);
+        await openDeliveryDetail(page, { link, lineId, batchId, source, width });
+        await returnToDailyDelivery(page, { address, fromButton, width });
         await link.and(page.locator(':focus')).waitFor();
       }
     }
   }
-  await overdue.press('Enter');
+  await openDeliveryDetail(page, { link: overdue, lineId, batchId: batches[0] ?? null, source: '逾期批次', width: 1440 });
   for (const id of batches) {
     const saved = await page.request.patch(new URL(`/api/v1/batches/${encodeURIComponent(id)}`, daily).href,
       { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
     assert.ok(saved.ok(), await saved.text());
   }
-  await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-  await page.waitForURL(address.href);
+  await returnToDailyDelivery(page, { address, fromButton: true, width: 1440 });
   await results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }).waitFor();
   await results.and(page.locator(':focus')).waitFor();
   assert.equal(await row.count(), 0);
+}
+
+async function openDeliveryDetail(page: Page, { link, lineId, batchId, source, width }: {
+  readonly link: Locator; readonly lineId: string; readonly batchId: string | null;
+  readonly source: string; readonly width: number;
+}) {
+  const href = await link.getAttribute('href');
+  assert.ok(href, `${width}px ${source}缺少详情地址，当前地址 ${page.url()}`);
+  const address = new URL(href, page.url());
+  const expectedPath = `/lines/${lineId}`;
+  assert.equal(decodeURIComponent(address.pathname), expectedPath, `${width}px ${source}详情地址 ${address.href}，预期路径 ${expectedPath}`);
+  const actualBatch = address.searchParams.get('focusBatch');
+  assert.equal(actualBatch, batchId, `${width}px ${source}详情地址 ${address.href}，批次实际 ${actualBatch}，预期 ${batchId}`);
+  await Promise.all([page.waitForURL(address.href), link.press('Enter')]);
+  await page.getByRole('region', { name: '批次', exact: true }).waitFor();
+}
+
+async function returnToDailyDelivery(page: Page, { address, fromButton, width }: {
+  readonly address: URL; readonly fromButton: boolean; readonly width: number;
+}) {
+  const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
+  const href = await back.getAttribute('href');
+  assert.ok(href, `${width}px 订单详情缺少返回地址，预期 ${address.href}，当前地址 ${page.url()}`);
+  const target = new URL(href, page.url());
+  assert.equal(target.href, address.href, `${width}px 订单详情返回地址实际 ${target.href}，预期 ${address.href}`);
+  const activate = () => fromButton ? back.press('Enter') : page.goBack({ waitUntil: 'commit' });
+  try {
+    await Promise.all([page.waitForURL(address.href, { waitUntil: 'commit' }), activate()]);
+  } catch (cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${width}px ${fromButton ? '显式返回' : '浏览器后退'}后 URL 为 ${page.url()}\n${detail}`, { cause });
+  }
 }
 
 function rowDetails(requests: readonly URL[]): string[] {

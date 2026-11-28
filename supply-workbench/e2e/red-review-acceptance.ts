@@ -137,12 +137,12 @@ async function checkScheduleFilters(page: Page, origin: URL): Promise<void> {
   await extra.getByRole('combobox', { name: '工厂', exact: true }).waitFor();
   await extra.getByRole('combobox', { name: '状态', exact: true }).click();
   await page.getByRole('option', { name: '已完成', exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get('status') === 'done');
+  await waitForScheduleUrl(page, { action: '选择已完成后应写入 status=done', matches: (url) => url.searchParams.get('status') === 'done' });
   await filters.getByRole('button', { name: '更多筛选 · 1', exact: true }).waitFor();
   await more.press('Enter');
   await extra.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: '清除状态筛选 已完成', exact: true }).press('Enter');
-  await page.waitForURL((url) => !url.searchParams.has('status'));
+  await waitForScheduleUrl(page, { action: '清除状态筛选后应移除 status', matches: (url) => !url.searchParams.has('status') });
   assert.equal(await more.evaluate((button) => button === document.activeElement), true);
   const results = page.getByRole('region', { name: '排期结果', exact: true });
   const firstBatch = results.getByRole('button', { name: /查看批次/u }).first();
@@ -171,10 +171,20 @@ async function checkScheduleFilters(page: Page, origin: URL): Promise<void> {
   await searchInput.waitFor({ state: 'hidden' });
   assert.equal(await searchTrigger.evaluate((button) => button === document.activeElement), true);
   await page.locator('.planning-period').getByText('日', { exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get('scale') === 'day');
+  await waitForScheduleUrl(page, { action: '选择日刻度后应写入 scale=day', matches: (url) => url.searchParams.get('scale') === 'day' });
   const date = page.getByLabel('选择排期日期', { exact: true });
   await date.waitFor();
   const selected = await date.inputValue();
   await page.getByRole('button', { name: '下一日', exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get('from') !== selected);
+  await waitForScheduleUrl(page, { action: `移至下一日后应切换 ${selected}`, matches: (url) => url.searchParams.get('from') !== selected });
+}
+
+async function waitForScheduleUrl(page: Page, { action, matches }: { readonly action: string; readonly matches: URLMatch }): Promise<void> {
+  try {
+    await page.waitForURL(matches);
+  } catch (cause: unknown) {
+    const { pathname, search } = new URL(page.url());
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${action}，当前地址 ${pathname}${search}\n${detail}`, { cause });
+  }
 }
