@@ -2,7 +2,7 @@ import type { OrderLine } from '@sw/domain';
 import type { OrderLineRepository } from '../ports/order-line-repository.js';
 import { NotFoundError } from './errors.js';
 
-export async function lockOrderLines(repository: OrderLineRepository, ids: readonly string[]): Promise<Map<string, OrderLine>> {
+export async function lockOrderLines(repository: Pick<OrderLineRepository, 'lock'>, ids: readonly string[]): Promise<Map<string, OrderLine>> {
   const lines = new Map<string, OrderLine>();
   for (const id of [...new Set(ids)].sort()) {
     try {

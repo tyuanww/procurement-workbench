@@ -1,8 +1,8 @@
 import type { GenerateBatchesFromDemand, GenerateBatchesFromDemandDeps } from '../boundary.js';
-import { purchaseOrderKey } from './purchase-order-ref.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { authorize } from '../../shared/authorize.js';
-import { StateConflictError } from '../../shared/errors.js';
+import { OrderLineLockBusy, StateConflictError } from '../../shared/errors.js';
+import { lockOrderLines } from '../../shared/locked-order-lines.js';
 import { DemandMaterialChanged, freezeGenerationEvidence, generateDemandRows, type GenerateInput, type RowOutcome, type SlotSkip } from './demand-batches.js';
 
 const MATERIAL_RETRIES = 2;
@@ -17,12 +17,18 @@ export const makeGenerateBatchesFromDemand =
       nextEntityId: () => deps.ids.next(),
       nextDeliveryBatchId: () => deps.ids.deliveryBatch(),
     };
-    for (let retries = 0; ; retries += 1) {
+    let materialRetries = 0;
+    for (;;) {
       try {
         return await deps.uow.run((tx) => generateOnce({ ...context, tx }, input.rowIds));
       } catch (error) {
+        if (error instanceof OrderLineLockBusy) {
+          await deps.uow.run((tx) => lockOrderLines(tx.orderLines, [error.lineId]));
+          continue;
+        }
         if (!(error instanceof DemandMaterialChanged)) throw error;
-        if (retries === MATERIAL_RETRIES) throw new StateConflictError('order_line.material_changed');
+        if (materialRetries === MATERIAL_RETRIES) throw new StateConflictError('order_line.material_changed');
+        materialRetries += 1;
       }
     }
   };
@@ -48,14 +54,9 @@ async function generateOnce(input: GenerateInput, rowIds: readonly string[]) {
 async function lockedDemands(tx: UnitOfWorkStores, rowIds: readonly string[]) {
   await tx.batches.lockDemandGeneration({ rowIds });
   const demands = [];
-  const materialOrderNumbers = new Set<string | null>();
   for (const rowId of rowIds) {
     const source = await tx.factoryReports.getForDemandGeneration(rowId);
     demands.push(source);
-    if (source.row.demand?.role === 'material') {
-      materialOrderNumbers.add(purchaseOrderKey(source.row.demand.blockMaterialPoRaw).poNorm);
-    }
   }
-  await tx.batches.lockDemandGeneration({ materialOrderNumbers: [...materialOrderNumbers] });
   return demands;
 }

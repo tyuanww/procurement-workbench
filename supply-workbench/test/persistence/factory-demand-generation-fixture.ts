@@ -45,6 +45,7 @@ export async function seedOtherFactoryReport(db: AppDatabase, { sample, kind }: 
 
 type Hooks = {
   readonly afterOriginRead?: () => Promise<void>;
+  readonly afterMaterialOrderLock?: () => Promise<void>;
   readonly afterDemandSave?: () => Promise<void>;
   readonly afterLineLock?: (id: string) => Promise<void>;
   readonly afterLineSave?: (id: string) => Promise<void>;
@@ -136,6 +137,10 @@ function batchesWithHooks(tx: AppDatabase, hooks: Hooks) {
   const batches = deliveryBatchRepository(tx);
   return {
     ...batches,
+    async lockDemandGeneration(scope: Parameters<typeof batches.lockDemandGeneration>[0]) {
+      await batches.lockDemandGeneration(scope);
+      if ('materialOrderNumbers' in scope) await hooks.afterMaterialOrderLock?.();
+    },
     async listByOriginRef(ref: { readonly rowId: string; readonly slotIndex: number }) {
       const found = await batches.listByOriginRef(ref);
       await hooks.afterOriginRead?.();
@@ -152,8 +157,9 @@ function orderLinesWithHooks(tx: AppDatabase, hooks: Hooks) {
   const orders = orderLineRepository(tx);
   return {
     ...orders,
-    async lock(id: string) {
-      const line = await orders.lock(id);
+    async lock(...args: Parameters<typeof orders.lock>) {
+      const line = await orders.lock(...args);
+      const [id] = args;
       await hooks.afterLineLock?.(id);
       return line;
     },
@@ -211,6 +217,15 @@ async function seedDemand(db: AppDatabase, sample: Sample): Promise<void> {
     raw: { slots: [{ ...slot, ...rawCells, sourceColumns: { date: 10, quantity: 11 } }] },
     demand: { role: 'material', blockMaterialPoRaw: sample.poRaw, poNorm: null, itemCodeRaw: sample.code, nameRaw: '合成包材', slots: [slot] },
   }));
+}
+
+export async function anotherDemand(db: AppDatabase, { sample, code = sample.code }: { readonly sample: Sample; readonly code?: string }) {
+  const repo = factoryReportRepository(db);
+  const first = await repo.get(sample.id);
+  if (first.demand === null) throw new Error('合成需求缺失');
+  const id = entityId(`${sample.id}-other-demand`);
+  await repo.save({ ...first, id, fingerprint: id, rowNo: 5, demand: { ...first.demand, itemCodeRaw: code } });
+  return id;
 }
 
 export async function seedLine({ db, sample, id, fields }: {
