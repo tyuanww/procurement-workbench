@@ -3,6 +3,7 @@ import { expect, it } from 'vitest';
 import { systemIds } from '../../apps/server/src/system/ids.js';
 import { makeGenerateBatchesFromDemand } from '../../packages/application/src/follow-up/index.js';
 import { makeLinkFactoryRow } from '../../packages/application/src/master-data/index.js';
+import { linkIdOf, linkOf } from '../../packages/application/src/shared/factory-link.js';
 import { entityId, localDate, orderLineId, parsePoCell } from '../../packages/domain/src/index.js';
 import { createDb, type AppDatabase, type AppHandle } from '../../packages/persistence/src/client.js';
 import { migrate } from '../../packages/persistence/src/migrate.js';
@@ -12,6 +13,7 @@ import { auditRepository } from '../../packages/persistence/src/repositories/aud
 import { deliveryBatchRepository } from '../../packages/persistence/src/repositories/delivery-batches.js';
 import { factoryReportRepository } from '../../packages/persistence/src/repositories/factory-reports.js';
 import { importBatchRepository } from '../../packages/persistence/src/repositories/import-batches.js';
+import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
@@ -101,6 +103,44 @@ it.skipIf(url === undefined).each([
     await reports.save({ ...original, raw: { slots: [{ ...slot, ...rawCells, ...conflict }] } });
     const generated = await makeGenerateBatchesFromDemand(writes(main.db))({ rowIds: [sample.id] }, sample.buyer);
     expect(generated).toEqual({ createdLines: 1, createdBatches: 1, skipped: [] });
+    const detail = await onlyLineDetail(main.db, sample.code);
+    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
+    expect(detail.batchDemandSources).toEqual({});
+  });
+}, 15000);
+
+it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 未关联需求只为工厂归属兼容的订单保存原表（冲突 %s）', async (conflict) => {
+  await withFixture(async ({ main, sample }) => {
+    await seedLine({ db: main.db, sample, id: sample.lineId });
+    const factoryId = conflict ? `${sample.factoryId}-other` : sample.factoryId;
+    await lineFactoryLinkRepository(main.db).save(linkOf({
+      id: linkIdOf(sample.lineId), at: clock.now(), orderLineId: sample.lineId,
+      factoryPartyId: factoryId, source: 'manual', status: 'manual', confidence: 'manual',
+    }));
+    expect(await makeGenerateBatchesFromDemand(writes(main.db))({ rowIds: [sample.id] }, sample.buyer))
+      .toEqual({ createdLines: 0, createdBatches: 1, skipped: [] });
+    const detail = await onlyLineDetail(main.db, sample.code);
+    expect(detail.line.factory).toMatchObject({ id: factoryId });
+    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
+    expect(Object.values(detail.batchDemandSources ?? {}))
+      .toMatchObject(conflict ? [] : [{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
+  });
+}, 15000);
+
+it.skipIf(url === undefined).each(['raw', 'normalized'] as const)('真实 PostgreSQL 重复 %s 槽索引只影响生成凭据', async (repeated) => {
+  await withFixture(async ({ main, sample }) => {
+    const reports = factoryReportRepository(main.db);
+    const original = await reports.get(sample.id);
+    if (original.demand === null) throw new Error('缺少合成需求');
+    const second = { ...slot, qty: 75, date: localDate('2026-11-25') };
+    const rawSecond = { ...second, qtyRaw: '075.00', dateRaw: '2026/11/25' };
+    await reports.save({ ...original,
+      raw: { slots: repeated === 'raw' ? [{ ...slot, ...rawCells }, rawSecond] : [rawSecond] },
+      demand: { ...original.demand, slots: repeated === 'normalized' ? [slot, second] : [slot] },
+    });
+    const skipped = repeated === 'normalized' ? [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }] : [];
+    expect(await makeGenerateBatchesFromDemand(writes(main.db))({ rowIds: [sample.id] }, sample.buyer))
+      .toEqual({ createdLines: 1, createdBatches: 1, skipped });
     const detail = await onlyLineDetail(main.db, sample.code);
     expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
     expect(detail.batchDemandSources).toEqual({});
@@ -208,6 +248,7 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
     delete from delivery_batches where origin_ref->>'rowId' = '${sample.id}';
+    delete from line_factory_links where order_line_id = '${sample.lineId}';
     delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
     delete from purchase_orders where po_raw = '${sample.poRaw}';
     delete from factory_material_demand_rows where id = '${sample.id}';
