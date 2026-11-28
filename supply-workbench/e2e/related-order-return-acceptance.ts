@@ -178,7 +178,7 @@ async function returnWhileSessionIsLoading(page: Page, source: string) {
   }
 }
 
-function afterFocusEffects(page: Page) {
+export function afterFocusEffects(page: Page) {
   return page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
 }
 

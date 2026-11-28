@@ -82,11 +82,13 @@ function useArrivalOrigin(sourceLinkPrefix: string) {
   const previous = usePreviousBrowserEntry();
   const index = browserEntryIndex(key);
   const isForward = index !== undefined && previous?.index !== undefined && previous.index < index;
-  const candidate = navigation === 'POP' && !isForward ? departureOnBack(previous, key, index) : linkOrigin(state);
+  const candidate = navigation === 'POP' && !isForward ? departureOnBack(previous, { key, index }) : linkOrigin(state);
   return { key, origin: matchesReturnRoute(candidate, { address: createPath(location), sourceLinkPrefix }) };
 }
 
-function departureOnBack(previous: ReturnType<typeof usePreviousBrowserEntry>, key: string, index: number | undefined) {
+function departureOnBack(previous: ReturnType<typeof usePreviousBrowserEntry>, { key, index }: {
+  readonly key: string; readonly index: number | undefined;
+}) {
   if (index === undefined || previous?.index !== index + 1) return undefined;
   const departure = departureSchema.safeParse(previous.state).data?.detailDeparture;
   return departure?.sourceKey === key ? departure : undefined;

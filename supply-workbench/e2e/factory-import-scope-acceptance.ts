@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { URLSearchParams } from 'node:url';
 import type { Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { seedDemoFixture } from './procurement-today-acceptance.ts';
-import { checkRelatedOrderReturn } from './related-order-return-acceptance.ts';
+import { afterFocusEffects, checkRelatedOrderReturn } from './related-order-return-acceptance.ts';
 
 const requireWeb = createRequire(new URL('../packages/report-renderers/package.json', import.meta.url));
 const xlsx: typeof import('../node_modules/.pnpm/node_modules/xlsx/types/index.js') = requireWeb('xlsx');
