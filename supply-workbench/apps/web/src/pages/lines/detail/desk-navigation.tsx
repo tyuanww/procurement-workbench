@@ -1,3 +1,4 @@
+import { EntityIdSchema } from '@sw/contracts';
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation } from 'react-router';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
@@ -11,15 +12,17 @@ import { readImportBatchOriginState } from '../../imports/import-source.js';
 type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode };
 
 export function LineDetailLink(props: LineDetailLinkProps) {
-  const scope = importFollowUpScope(new URLSearchParams(props.search));
-  const href = scope === null ? props.href : importDetailAddress(props.href, scope);
+  const search = new URLSearchParams(props.search);
+  const scope = importFollowUpScope(search);
+  const batch = EntityIdSchema.safeParse(search.get('importBatchId')).data;
+  const href = batch === undefined ? props.href : importDetailAddress(props.href, { batch, back: scope?.to });
   return useInRouterContext() ? <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} /> : <a href={href}>{props.children}</a>;
 }
 
-function importDetailAddress(href: string, scope: NonNullable<ReturnType<typeof importFollowUpScope>>): string {
+function importDetailAddress(href: string, { batch, back }: { readonly batch: string; readonly back: string | undefined }): string {
   const detail = new URL(href, 'https://workbench.invalid');
-  detail.searchParams.set('importBatchId', scope.id);
-  detail.searchParams.set(IMPORT_RETURN_PARAM, scope.to);
+  detail.searchParams.set('importBatchId', batch);
+  if (back !== undefined) detail.searchParams.set(IMPORT_RETURN_PARAM, back);
   return followUpAddress(detail.pathname, detail.searchParams);
 }
 
@@ -151,9 +154,13 @@ export function arrivalEvidenceLink({ arrivalId, params, state }: {
 
 function arrivalDeskScope(params: URLSearchParams, state: unknown): URLSearchParams | null {
   const desk = lineDeskParams(state);
-  if (desk !== null && importFollowUpScope(desk) !== null) return desk;
+  if (desk !== null && EntityIdSchema.safeParse(desk.get('importBatchId')).success) return desk;
+  const id = EntityIdSchema.safeParse(params.get('importBatchId'));
+  if (!id.success) return null;
+  const search = new URLSearchParams({ lane: 'all', importBatchId: id.data });
   const scope = importFollowUpScope(params);
-  return scope === null ? null : new URLSearchParams({ lane: 'all', importBatchId: scope.id, [IMPORT_RETURN_PARAM]: scope.to });
+  if (scope !== null) search.set(IMPORT_RETURN_PARAM, scope.to);
+  return search;
 }
 
 export function useLineDetailSearchParams() {

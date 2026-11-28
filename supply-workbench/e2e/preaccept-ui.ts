@@ -675,7 +675,8 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await writeFile(join(out, 'procurement-import-source-a11y.yml'), accessibleSource);
   await page.screenshot({ path: join(out, 'procurement-import-source-1440.png'), animations: 'disabled' });
   await order.press('Enter');
-  await page.waitForURL(/\/lines\/[^/?]+\?/u);
+  await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${verified.searchParams.get('lineIds')}`
+    && url.searchParams.get('importBatchId') === importPath.slice('/imports/'.length));
   await page.goBack();
   await page.waitForURL(sourceUrl);
   await order.and(page.locator(':focus')).waitFor();
@@ -919,7 +920,7 @@ async function checkCopiedImportLine({ page, row, sourceUrl }: { readonly page: 
 async function checkImportScopeRouteForms({ page, importPath, importBatchId, savedView }: {
   readonly page: Page; readonly importPath: string; readonly importBatchId: string; readonly savedView: string;
 }) {
-  for (const path of [importPath.replace(/^\/imports/u, '/Imports'), `${importPath}//`]) {
+  for (const path of [importPath.replace(/^\/imports/u, '/Imports'), `${importPath}//`, importPath.replace(/^\/imports/u, '/%69mports')]) {
     const address = new URL(`${path}?template=po-master-v1&status=committed`, origin);
     await page.goto(address.href);
     await page.getByRole('button', { name: '核对本次导入来源', exact: true }).press('Enter');
@@ -998,6 +999,7 @@ async function checkImportedArrivalEvidence(page: Page, importPath: string) {
   await order.press('Enter');
   await page.getByRole('heading', { name: 'PO20261117009004', exact: true }).waitFor();
   const arrivalId = await seedImportedArrival(page);
+  const detail = page.url();
   await page.reload();
   await page.getByRole('link', { name: '查看到仓凭据', exact: true }).press('Enter');
   const drawer = page.getByRole('dialog', { name: '到仓待归单', exact: true });
@@ -1016,7 +1018,21 @@ async function checkImportedArrivalEvidence(page: Page, importPath: string) {
   await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
   await page.waitForURL(history);
   await historyLink.and(page.locator(':focus')).waitFor();
-  return { drawerAndExportScoped: true, historyFocus: true };
+  const copied = await page.context().newPage();
+  try {
+    await copied.goto(detail);
+    await copied.getByRole('link', { name: '查看到仓凭据', exact: true }).press('Enter');
+    await copied.waitForURL(opened.href);
+    const copiedDrawer = copied.getByRole('dialog', { name: '到仓待归单', exact: true });
+    await copiedDrawer.getByText(/SW-IMPORT-GUARD/u).first().waitFor();
+    await copied.keyboard.press('Escape');
+    await copiedDrawer.waitFor({ state: 'hidden' });
+    await copied.waitForURL(scoped);
+    await assertImportOrdersAndExport(copied);
+  } finally {
+    await copied.close();
+  }
+  return { drawerAndExportScoped: true, historyFocus: true, copiedDetailKeepsScope: true };
 }
 
 async function seedImportedArrival(page: Page): Promise<string> {

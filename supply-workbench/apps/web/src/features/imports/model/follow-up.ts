@@ -21,9 +21,10 @@ export function importFollowUpBackAddress(value: string | null): { readonly id: 
 }
 
 function importRouteId(pathname: string): string | undefined {
-  const encoded = matchPath('/imports/:id', pathname)?.params.id;
-  if (encoded === undefined || /[\\\s]/u.test(encoded)) return undefined;
   try {
+    const path = pathname.replace(/^\/[^/]+/u, (section) => decodeURIComponent(section));
+    const encoded = matchPath('/imports/:id', path)?.params.id;
+    if (encoded === undefined || /[\\\s]/u.test(encoded)) return undefined;
     const id = decodeURIComponent(encoded);
     if (id.trim() === '' || id === '.' || id === '..' || /[/\\\p{Cc}]|%2f/iu.test(id)) return undefined;
     return EntityIdSchema.safeParse(id).data;
