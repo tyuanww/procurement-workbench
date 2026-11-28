@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { browserFailureLocation } from './acceptance-diagnostics.ts';
+import { browserFailureLocation, failureMessage } from './acceptance-diagnostics.ts';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
@@ -67,6 +67,7 @@ type AcceptanceResult = {
   result?: 'pass' | 'fail';
   failure?: string;
   failureAt?: string;
+  cleanupFailure?: string;
 };
 const result: AcceptanceResult = { platform: process.platform, browser: browser.version(), channel, checks: {}, network: [], exceptions: [] };
 const expectedFailures: ExpectedFailure[] = [];
@@ -80,15 +81,24 @@ try {
   assert.deepEqual(result.exceptions, []);
   result.result = 'pass';
 } catch (error) {
-  result.result = 'fail';
-  result.failure = error instanceof Error ? error.message : String(error);
-  result.failureAt = browserFailureLocation(error);
-  process.exitCode = 1;
-} finally {
+  recordFailure(error);
+}
+try {
   await browser.close();
+} catch (error) {
+  if (result.result === 'fail') result.cleanupFailure = failureMessage(error);
+  else recordFailure(error);
+} finally {
   await writeFile(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n');
 }
 console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure, failureAt: result.failureAt }));
+
+function recordFailure(error: unknown): void {
+  result.result = 'fail';
+  result.failure = failureMessage(error);
+  result.failureAt = browserFailureLocation(error);
+  process.exitCode = 1;
+}
 
 async function procurementAcceptance(): Promise<void> {
   seedChaseSample();

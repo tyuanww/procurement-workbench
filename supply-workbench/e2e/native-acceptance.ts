@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { release, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { acceptanceSummary, type AcceptanceSummary } from './acceptance-diagnostics.ts';
+import { acceptanceSummary, failureMessage, type AcceptanceSummary } from './acceptance-diagnostics.ts';
 
 const [sha, output] = process.argv.slice(2);
 assert.ok(sha && /^[0-9a-f]{40}$/.test(sha), 'Provide the full Git SHA');
@@ -48,6 +48,8 @@ type RunEvidence = {
   health?: Readonly<Record<string, unknown>>;
   result?: 'pass' | 'fail';
   error?: string;
+  failureStage?: string;
+  cleanupError?: string;
 };
 
 const evidence: RunEvidence = {
@@ -73,6 +75,7 @@ let app: ReturnType<typeof fork> | undefined;
 let appExit: Promise<unknown[]> | undefined;
 const browserAcceptanceStage = '执行采购浏览器验收';
 let stage = '准备合成样本与浏览器';
+let failure: { readonly stage: string; readonly error: unknown } | undefined;
 try {
   const webDir = resolve('apps/web/dist/app');
   evidence.fixtures = [await verifyProcurementFixture()];
@@ -139,38 +142,48 @@ try {
     env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, windowsHide: true,
   });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
-  assert.equal(result.status, 0, 'Procurement browser acceptance failed');
+  if (result.error) throw result.error;
+  const signal = result.signal === null ? '' : ` (${result.signal})`;
+  assert.equal(result.status, 0, `Procurement browser acceptance failed${signal}`);
   stage = '核对浏览器实际加载的入口';
   await verifyServedEntry(evidence.entry);
-  evidence.result = 'pass';
 } catch (error) {
-  evidence.result = 'fail';
-  evidence.error = error instanceof Error ? error.message : String(error);
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    const browser: unknown = stage === browserAcceptanceStage
-      ? await readFile(join(evidenceDir, 'preaccept', 'result.json'), 'utf8').then(JSON.parse).catch(() => undefined)
-      : undefined;
-    await writeSummary({ sha, result: 'fail', stage, browser });
-  }
-  throw error;
-} finally {
+  failure = { stage, error };
+}
+
+try {
   if (app?.exitCode === null && app.signalCode === null) {
     app.kill();
     await appExit;
   }
-  if (evidence.result === 'fail') {
+  if (failure !== undefined) {
     for (const file of [pgLog, appLog]) {
       const log = await readFile(file, 'utf8').catch(() => '');
       if (log.trim()) console.error(log.split('\n').slice(-25).join('\n').trim());
     }
   }
-  try {
-    if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
-    await rm(working, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  } finally {
-    await writeEvidence();
-  }
+  if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
+  await rm(working, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+} catch (error) {
+  if (failure === undefined) failure = { stage: '清理隔离服务与数据库', error };
+  else evidence.cleanupError = failureMessage(error);
 }
+
+if (failure !== undefined) {
+  const error = failureMessage(failure.error);
+  evidence.result = 'fail';
+  evidence.error = error;
+  evidence.failureStage = failure.stage;
+  await writeEvidence();
+  const browser: unknown = process.env.GITHUB_STEP_SUMMARY && failure.stage === browserAcceptanceStage
+    ? await readFile(join(evidenceDir, 'preaccept', 'result.json'), 'utf8').then(JSON.parse).catch(() => undefined)
+    : undefined;
+  const cleanup = evidence.cleanupError === undefined ? {} : { cleanupError: evidence.cleanupError };
+  await writeSummary({ sha, result: 'fail', stage: failure.stage, browser, error, ...cleanup });
+  throw failure.error;
+}
+evidence.result = 'pass';
+await writeEvidence();
 await writeSummary({ sha, result: 'pass' });
 
 async function writeSummary(summary: AcceptanceSummary): Promise<void> {

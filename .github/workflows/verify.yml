@@ -294,7 +294,10 @@ jobs:
             sudo apt-get install -y postgresql
             pgbin=$(pg_config --bindir)
           fi
-          test -x "$pgbin/initdb"
+          if [ ! -x "$pgbin/initdb" ]; then
+            printf 'PostgreSQL initdb was not found in %s\n' "$pgbin" >&2
+            exit 1
+          fi
           export PGBIN="$pgbin"
           pnpm exec node --experimental-strip-types e2e/native-acceptance.ts "$TESTED_SHA" "$RUNNER_TEMP/linux-acceptance"
       - name: Upload procurement browser and runner evidence

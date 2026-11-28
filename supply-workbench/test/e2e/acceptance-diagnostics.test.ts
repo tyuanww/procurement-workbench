@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptanceSummary, browserFailureLocation } from '../../e2e/acceptance-diagnostics.ts';
+import { acceptanceSummary, browserFailureLocation, failureMessage } from '../../e2e/acceptance-diagnostics.ts';
 
 const sha = 'a'.repeat(40);
 
@@ -35,9 +35,14 @@ describe('采购浏览器验收摘要', () => {
   });
 
   it('浏览器尚无子进程报告时仍显示失败阶段和日志入口', () => {
-    const summary = acceptanceSummary({ sha, result: 'fail', stage: '启动并检查构建后的应用', browser: undefined });
+    const summary = acceptanceSummary({
+      sha, result: 'fail', stage: '执行采购浏览器验收', browser: undefined,
+      error: 'spawnSync <browser> ETIMEDOUT', cleanupError: 'pg_ctl stop failed',
+    });
 
-    expect(summary).toContain('结果：失败（启动并检查构建后的应用）');
+    expect(summary).toContain('结果：失败（执行采购浏览器验收）');
+    expect(summary).toContain('spawnSync &lt;browser&gt; ETIMEDOUT');
+    expect(summary).toContain('清理失败：pg_ctl stop failed');
     expect(summary).toContain('完整错误见失败步骤日志');
     expect(summary).not.toContain('断言位置');
   });
@@ -48,6 +53,16 @@ describe('采购浏览器验收摘要', () => {
     expect(summary).toContain('结果：通过');
     expect(summary).not.toContain('失败');
   });
+});
+
+it('浏览器包裹断言错误时保留原位置和原因', () => {
+  const cause = new Error('locator.waitFor: timed out');
+  cause.stack = `${cause.message}\n    at checkArrival (file:///workbench/e2e/arrival-acceptance.ts:137:12)`;
+  const error = new Error('找不到第 2 批', { cause });
+  error.stack = `${error.message}\n    at checkArrival (file:///workbench/e2e/arrival-acceptance.ts:140:9)`;
+
+  expect(browserFailureLocation(error)).toBe('e2e/arrival-acceptance.ts:137:12');
+  expect(failureMessage(error)).toBe('找不到第 2 批\n原因：locator.waitFor: timed out');
 });
 
 it.each([
