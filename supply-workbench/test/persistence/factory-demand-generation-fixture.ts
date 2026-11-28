@@ -47,7 +47,7 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
         ...batches,
         async lockDemandGeneration(scope: Parameters<typeof batches.lockDemandGeneration>[0]) {
           await batches.lockDemandGeneration(scope);
-          if (scope.materialOrderNumbers !== undefined) await hooks.afterMaterialOrderLock?.();
+          if ('materialOrderNumbers' in scope) await hooks.afterMaterialOrderLock?.();
         },
         async listByOriginRef(ref: { readonly rowId: string; readonly slotIndex: number }) {
           const found = await batches.listByOriginRef(ref);
