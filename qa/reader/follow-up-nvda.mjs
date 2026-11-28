@@ -241,9 +241,13 @@ async function manager(page) {
     await selected.waitFor();
     assert.equal(await risk.getAttribute('aria-expanded'), 'true');
     record.location = new URL(page.url()).pathname + new URL(page.url()).search;
-    record.appManagedFocusInDrawer = await drawer.locator(':focus').count() > 0;
     record.riskButtonSpeech = record.spoken;
     await reportFocus(record, /交期风险|关闭/u);
+    record.drawerFocus = await drawer.evaluate(element => ({
+      within: element.contains(document.activeElement),
+      atRoot: element === document.activeElement,
+      role: document.activeElement?.getAttribute('role'),
+    }));
   });
   const returnUrl = page.url();
   await step(role, 'actively select a specific order', 'Playwright focuses the specific link in the drawer; NVDA reports the link and sends Enter; Playwright observes the scoped detail page', async record => {
