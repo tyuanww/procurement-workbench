@@ -47,8 +47,16 @@ export type ReportingApi = {
 };
 
 export function registerReportingRoutes(app: FastifyInstance, api: ReportingApi): void {
-  app.get('/api/v1/dashboard/director/brands', async () => wire(DirectorBrandsSchema, await api.brands()));
-  app.get('/api/v1/dashboard/director/schedule', async () => wire(DirectorScheduleSchema, await api.schedule()));
+  app.get('/api/v1/dashboard/director/brands', async (req, reply) => {
+    requireActor(req);
+    reply.header('Cache-Control', 'private, no-store');
+    return wire(DirectorBrandsSchema, await api.brands());
+  });
+  app.get('/api/v1/dashboard/director/schedule', async (req, reply) => {
+    requireActor(req);
+    reply.header('Cache-Control', 'private, no-store');
+    return wire(DirectorScheduleSchema, await api.schedule());
+  });
   if (api.managementMeeting !== undefined) registerManagementMeetingRoutes(app, api.managementMeeting);
   app.post('/api/v1/reports/weekly', async (req) => create(api, req));
   app.get('/api/v1/reports/weekly', async (req) => api.list(pageQuery(req), requireActor(req)));

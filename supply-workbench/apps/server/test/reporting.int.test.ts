@@ -19,6 +19,26 @@ const AT = '2026-10-12T00:00:00.000Z';
 const SECRET = '0123456789abcdef0123456789abcdef';
 const XLSX = 0x50;
 
+it('总监首页数据要求登录并沿用管理看板读取权限', async () => {
+  const brand = '合成品牌';
+  const opened = await open({ schedule: async () => ({ brands: [brand], projects: [] }) });
+  try {
+    const manager = { cookie: await loginAs(opened.app, 'manager') };
+    const buyer = { cookie: await loginAs(opened.app, 'buyer') };
+    for (const resource of ['schedule', 'brands']) {
+      const url = `/api/v1/dashboard/director/${resource}`;
+      expect((await opened.app.inject({ url })).statusCode).toBe(401);
+      expect((await opened.app.inject({ url, headers: buyer })).statusCode).toBe(403);
+      const authorized = await opened.app.inject({ url, headers: manager });
+      expect(authorized.statusCode).toBe(200);
+      expect(authorized.headers['cache-control']).toBe('private, no-store');
+      if (resource === 'schedule') expect(authorized.json()).toEqual({ brands: [brand], projects: [] });
+    }
+  } finally {
+    await opened.close();
+  }
+});
+
 it('生成周报后可以下载 Excel，过期打印令牌返回 401', async () => {
   const opened = await open();
   const cookie = await loginAs(opened.app, 'manager');
@@ -106,7 +126,7 @@ it('管理周会按店铺读取当前事实，周报冻结该版事实并沿用�
   }
 });
 
-async function open(extra: Pick<Parameters<typeof composeReporting>[0], 'printOrigin' | 'loadDevelopment'> = {}) {
+async function open(extra: Pick<Parameters<typeof composeReporting>[0], 'printOrigin' | 'loadDevelopment' | 'schedule'> = {}) {
   const handle = await createDb({ driver: 'pglite' });
   await migrate(handle.exec);
   await seed(handle.exec);
