@@ -77,6 +77,45 @@ it.skipIf(url === undefined)('等待首次快照写入编码对照后，审核�
   });
 }, 15000);
 
+it.skipIf(url === undefined)('同期重复快照只保留先发布的编码对照凭据', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    const codes = await seedReviewedLine(main.db, sample);
+    const incoming = await stageIncomingReport(main.db, sample);
+    const imports = importBatchRepository(main.db);
+    const duplicateId = entityId(`${incoming.id}-duplicate`);
+    await imports.save({ ...await imports.get(incoming.id), id: duplicateId });
+    for (const row of await imports.listRows(incoming.id)) {
+      await imports.saveRow({ ...row, id: entityId(`${row.id}-duplicate`), importBatchId: duplicateId });
+    }
+    try {
+      const paused = gate();
+      const first = makeCommitImport(writes(main.db, { afterCodeLinkSave: paused.hold }));
+      const publishing = first({ importBatchId: incoming.id }, sample.reviewer);
+      let copying: ReturnType<typeof first> | undefined;
+      try {
+        await Promise.race([paused.entered, publishing]);
+        copying = makeCommitImport(writes(competing.db))({ importBatchId: duplicateId }, sample.reviewer);
+        void copying.catch(() => undefined);
+        await expect.poll(() => blockedOnPostgres(main, applicationName), wait).toBe(true);
+      } finally {
+        paused.release();
+        await Promise.allSettled(copying === undefined ? [publishing] : [publishing, copying]);
+      }
+      expect(await publishing).toEqual({ importBatchId: incoming.id });
+      expect(await copying).toEqual({ importBatchId: duplicateId });
+      expect(await imports.get(incoming.id)).toMatchObject({ status: 'committed' });
+      expect(await imports.get(duplicateId)).toMatchObject({ status: 'discarded' });
+      expect(await codeLinkRepository(main.db).get(codes.linkId)).toMatchObject({ evidence: { importBatchId: incoming.id } });
+    } finally {
+      await main.exec(`
+        delete from factory_in_transit_rows where id in ('${incoming.reportId}', '${incoming.reportId.replace(':report', '-duplicate:report')}');
+        delete from import_rows where import_batch_id in ('${incoming.id}', '${duplicateId}');
+        delete from import_batches where id in ('${incoming.id}', '${duplicateId}'); ${cleanupCodes(codes)}
+      `);
+    }
+  });
+}, 15000);
+
 it.skipIf(url === undefined)('不同处理上限的自动重联可以同时提交', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
     const ids = await seedTwoReportKinds(main.db, sample);
