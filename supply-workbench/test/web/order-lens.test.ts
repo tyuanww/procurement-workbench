@@ -45,7 +45,7 @@ describe('跟进中心订单查法', () => {
   it('关联子件可返回大小写及尾斜杠不同的原订单地址，拒绝非订单和外部地址', () => {
     const originalState = { lineDeskSearch: 'importBatchId=batch-a&store=dafuyan' };
     const readBack = (to: string) => readLineDetailBack({ lineId: 'component', params: new URLSearchParams(),
-      state: { relatedOrderOrigin: { to, state: originalState } }, canReadImports: true });
+      state: { relatedOrderOrigin: { to, state: originalState } }, canReadDashboard: false, canReadImports: true });
     const address = '/Lines/original//?importBatchId=batch-a&store=dafuyan';
     expect(readBack(address)).toEqual({ to: address, label: '返回原订单', state: originalState });
     for (const to of ['/imports/batch-a', '/lines', '/lines/%2e%2e', 'https://external.invalid/lines/original', '//external.invalid/lines/original', '/\\external.invalid/lines/original']) {
