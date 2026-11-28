@@ -74,7 +74,7 @@ function RelatedProcurementLines({ lines, section }: {
   const batch = isImportMember ? EntityIdSchema.safeParse(params.get('importBatchId')).data : undefined;
   const members = useRelatedImportMembers({ batch, store: params.get('store'), lines });
   const source = createPath(location);
-  const detailFocusLink = useDetailFocusLinks();
+  const detailFocusLink = useDetailFocusLinks({ recordDestination: true });
   const isReady = !isCheckingImportMembership && members !== undefined;
   useRestoreRelatedOrder(isReady, section);
   if (lines.length === 0) return null;

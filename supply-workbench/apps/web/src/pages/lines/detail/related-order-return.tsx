@@ -14,23 +14,30 @@ export function RelatedOrderReturnRegion({ isBusy, children }: { readonly isBusy
   </RelatedOrderReturn>;
 }
 
-export function useRestoreRelatedOrder(isReady: boolean, sourceRegion: RefObject<HTMLElement | null>) {
+export function RelatedOrderLoadError({ children }: { readonly children: ReactNode }) {
+  useRestoreRelatedOrder(true);
+  return children;
+}
+
+export function useRestoreRelatedOrder(isReady: boolean, sourceRegion?: RefObject<HTMLElement | null>) {
   const returnFocus = useContext(RelatedOrderReturn);
   useEffect(() => {
-    if (isReady) returnFocus?.restore(sourceRegion.current ?? returnFocus.orderRegion.current);
+    if (isReady) returnFocus?.restore(sourceRegion?.current ?? returnFocus.orderRegion.current);
   }, [isReady, returnFocus, sourceRegion]);
 }
 
-export function useBatchEntryFocus(focused: boolean) {
+export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, block: ScrollLogicalPosition) {
   const returnFocus = useContext(RelatedOrderReturn);
-  const row = useRef<HTMLLIElement>(null);
-  const hasRelatedReturn = useEffectEvent(() => returnFocus?.hasOrigin === true);
-  useEffect(() => {
-    if (!focused || hasRelatedReturn() || row.current === null) return;
+  const entry = useRef<T>(null);
+  const focus = useEffectEvent(() => {
+    if (returnFocus?.hasOrigin === true || entry.current === null) return;
     const active = document.activeElement;
-    if (active !== document.body && active !== row.current) return;
-    row.current.focus({ preventScroll: true });
-    row.current.scrollIntoView({ block: 'center' });
+    if (active !== document.body && active !== entry.current) return;
+    entry.current.focus({ preventScroll: true });
+    entry.current.scrollIntoView({ block });
+  });
+  useEffect(() => {
+    if (focused) focus();
   }, [focused]);
-  return row;
+  return entry;
 }

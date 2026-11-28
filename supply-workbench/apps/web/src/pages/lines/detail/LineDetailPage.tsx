@@ -19,7 +19,7 @@ import { DetailTimeline } from './DetailTimeline.js';
 import { BatchSources } from './batch-sources.js';
 import { orderScheduleAddress, readLineDetailBack, useLineDetailNavigation, useLineDetailSearchParams } from './desk-navigation.js';
 import { LineImportMembership } from './import-detail-verification.js';
-import { RelatedOrderReturnRegion, useBatchEntryFocus } from './related-order-return.js';
+import { RelatedOrderLoadError, RelatedOrderReturnRegion, useOrderEntryFocus } from './related-order-return.js';
 
 const MISSING_PO = '无单号';
 
@@ -52,7 +52,7 @@ function LineDetailContent({ lineId, store, back, isCheckingImportSource }: { re
       {back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}
       <PageHeader title={title} browserTitle={browserTitle} showIdentity />
       {detail === null ? null : <LineIdentity line={detail.line} />}
-      {detail === null && isFailed ? (
+      {detail === null && isFailed ? <RelatedOrderLoadError>
         <Result
           status="error"
           title="订单行没有读出来"
@@ -62,7 +62,7 @@ function LineDetailContent({ lineId, store, back, isCheckingImportSource }: { re
             <Button key="back" onClick={() => window.history.back()}>返回</Button>,
           ]}
         />
-      ) : (
+      </RelatedOrderLoadError> : (
         <>
           {detail === null ? <Skeleton active paragraph={{ rows: 8 }} /> : <LineBody detail={detail} events={events} lineId={lineId} setMessage={setMessage} onReload={load} />}
           {detail === null ? null : <BuyerControls detail={detail} onSaved={(saved) => {
@@ -158,7 +158,7 @@ function BatchDetail({ batch, detail, focused, canRecord, hasProcurementSchedule
 }) {
   const canEdit = canRecord && showsRecordEdits(batch.status);
   const confirmedKey = [batch.id, batch.dateBuyerConfirmed, batch.firstConfirmedDate].join(':');
-  const row = useBatchEntryFocus(focused);
+  const row = useOrderEntryFocus<HTMLLIElement>(focused, 'center');
   return (
     <li ref={row} tabIndex={-1} style={{ minWidth: 0 }}>
       <Card size="small" title={batchLineText(batch)}>

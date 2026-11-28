@@ -56,8 +56,10 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   preview.searchParams.set('lineId', 'scope-line-manual');
   await page.goto(preview.href);
   const drawer = page.getByRole('dialog', { name: 'FS-MANUAL 预览', exact: true });
-  await drawer.getByRole('link', { name: '查看第 1 批', exact: true }).and(page.locator('a[href]')).press('Enter');
-  await page.getByRole('region', { name: '批次', exact: true }).locator('li:focus').waitFor();
+  const detailBatch = drawer.getByRole('link', { name: '查看第 1 批', exact: true }).and(page.locator('a[href]'));
+  const focusedBatch = page.getByRole('region', { name: '批次', exact: true }).locator('li:focus');
+  await detailBatch.press('Enter');
+  await focusedBatch.waitFor();
   const original = page.url();
   assert.equal(new URL(original).searchParams.get('focusBatch'), 'scope-manual-batch-focus');
   const related = page.getByRole('region', { name: '关联采购事项', exact: true });
@@ -80,10 +82,12 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await inside.and(page.locator(':focus')).waitFor();
   await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines');
+  await page.getByRole('region', { name: '订单查询结果', exact: true })
+    .getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator(':focus')).waitFor();
   await page.goBack();
   await page.waitForURL(original);
   await inside.waitFor();
-  await afterFocusEffects(page);
+  await focusedBatch.waitFor();
   assert.equal(await related.locator('a:focus').count(), 0);
 
   async function throughMember() {
@@ -100,6 +104,21 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await throughMember();
   await page.waitForURL(ordinary);
   await afterFocusEffects(page);
+  assert.equal(await related.locator('a:focus').count(), 0);
+
+  await page.goto(preview.href);
+  await detailBatch.press('Enter');
+  await focusedBatch.waitFor();
+  const batchAddress = page.url();
+  await outside.press('Enter');
+  await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
+  await page.evaluate(() => window.history.go(-2));
+  await page.waitForURL(preview.href);
+  await detailBatch.waitFor();
+  await page.goForward();
+  await page.waitForURL(batchAddress);
+  await outside.waitFor();
+  await focusedBatch.waitFor();
   assert.equal(await related.locator('a:focus').count(), 0);
 }
 

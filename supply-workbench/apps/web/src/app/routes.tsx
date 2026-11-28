@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import { NAV_ROUTES, PAGE_MANIFEST, type PageManifestEntry } from './page-manifest.js';
 import type { SessionUser } from '@sw/contracts';
 import { ActorRoles } from '../shared/actor.js';
+import { BrowserEntryHistory } from '../shared/hooks/browser-entry-history.js';
 import { ForbiddenPage, MissingPage, ReviewQueueProvider, routeAccess, shellView, useShellLoad, type ShellView } from '../features/shell/index.js';
 import { Shell } from './Shell.js';
 import { LoginPage } from '../pages/login/LoginPage.js';
@@ -74,7 +75,7 @@ function Workbench({ user }: { readonly user: SessionUser }) {
   if (isHomeGate(pathname)) return <HomeGate home={view.home} />;
   return (
     <ReviewQueueProvider refresh={loaded.refreshReviewQueue}>
-      <Shell view={{ ...view, userId: user.id }} />
+      <BrowserEntryHistory><Shell view={{ ...view, userId: user.id }} /></BrowserEntryHistory>
     </ReviewQueueProvider>
   );
 }
