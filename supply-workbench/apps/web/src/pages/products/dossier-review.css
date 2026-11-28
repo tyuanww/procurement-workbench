@@ -30,6 +30,10 @@
 .dossier-detail .ant-tabs-tab { min-height:44px }
 .dossier-detail a:focus-visible,.dossier-grid a:focus-visible,.dossier-detail button:focus-visible { outline:2px solid var(--ant-color-primary); outline-offset:2px }
 .dossier-result { margin:8px 0 }
+.dossier-purchase-trigger.ant-btn { padding:0; height:auto; min-height:32px; white-space:normal; max-width:100%; overflow-wrap:anywhere }
+.dossier-purchase-drawer { overflow-wrap:anywhere }
+.dossier-purchase-action { margin-top:8px }
+.dossier-purchase-action a:focus-visible { outline:2px solid var(--ant-color-primary); outline-offset:2px }
 .dossier-stock-record { padding:12px 0; border-bottom:1px solid var(--ant-color-border-secondary) }
 .dossier-stock-record:first-child { padding-top:0 }
 .dossier-stock-record p { margin:4px 0 }
@@ -44,6 +48,7 @@
  .dossier-identity>div:nth-child(3) { min-width:calc(36% - 16px) }
  .dossier-detail .ant-btn { min-height:44px; height:auto }
  .dossier-detail .ant-tabs-content a { display:inline-flex; align-items:center; min-height:44px }
+ .dossier-purchase-action a { display:inline-flex; align-items:center; min-height:44px }
 }
 
 @media(max-width:767px){

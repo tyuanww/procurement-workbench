@@ -154,7 +154,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.factoryLinkBoard = await checkFactoryLinkBoard({ reviewer, openAdmin: async () => (await open('admin', '/master?tab=factory-link')).page, origin, out });
   seedDemoFixture(new URL('../fixtures/demo/frontend-closeout.sql', import.meta.url));
   result.checks.importFactoryDetail = await checkImportFactoryDetail(admin, origin);
-  result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, origin, out });
+  result.checks.frontendCloseout = await checkFrontendCloseout({ page: admin, manager, origin, out });
   result.checks.redReview = await checkRedReview({ page: admin, origin });
   result.checks.crossPageFulfillment = await checkCrossPageFulfillment({ page: admin, origin, buyer: users.buyer, warehouse });
   result.checks.directorHome = await checkDirectorHome({ page: manager, buyer, lead, origin, out, materialPo: componentPo, weekStart: meeting.weekStart, warehouse });
