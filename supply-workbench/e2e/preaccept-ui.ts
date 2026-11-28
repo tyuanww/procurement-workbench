@@ -901,7 +901,7 @@ async function checkScopedImportNavigation({ page, importPath, importBatchId }: 
   await sourceLink.press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === importBatchId);
   const scoped = new URL(page.url());
-  const row = page.getByRole('link', { name: componentPo, exact: true });
+  const row = page.getByRole('link', { name: componentPo, exact: true }).and(page.locator('a[href]'));
   await checkCopiedImportLine({ page, row, sourceUrl });
   await row.press('Enter');
   await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
@@ -1049,7 +1049,7 @@ async function checkImportScopeRouteForms({ page, importPath, importBatchId, sav
 
 async function assertImportOrdersAndExport(page: Page) {
   const orders = page.getByRole('region', { name: '订单查询结果' });
-  await orders.getByRole('link', { name: importOrderPos[0], exact: true }).waitFor();
+  await orders.getByRole('link', { name: importOrderPos[0], exact: true }).and(page.locator('a[href]')).waitFor();
   assert.deepEqual((await orders.locator('th[scope="row"] a').allTextContents()).sort(), importOrderPos);
   const exportLink = page.getByRole('link', { name: '导出 Excel', exact: true });
   const href = new URL(await exportLink.getAttribute('href') ?? '', origin);
@@ -1095,7 +1095,7 @@ async function checkImportedArrivalEvidence(page: Page, importPath: string) {
   await source.press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.has('importBatchId'));
   const scoped = page.url();
-  const order = page.getByRole('link', { name: 'PO20261117009004', exact: true });
+  const order = page.getByRole('link', { name: 'PO20261117009004', exact: true }).and(page.locator('a[href]'));
   await order.press('Enter');
   await page.getByRole('heading', { name: 'PO20261117009004', exact: true }).waitFor();
   const arrivalId = await seedImportedArrival(page);

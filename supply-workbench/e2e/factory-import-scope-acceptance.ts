@@ -88,7 +88,7 @@ async function checkDetachedFactoryDetail(page: Page, shared: URL) {
 }
 
 async function checkRelatedOutsideFactoryBatch(page: Page, origin: URL) {
-  const scopedRow = page.getByRole('link', { name: 'FS-MANUAL', exact: true });
+  const scopedRow = page.getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator('a[href]'));
   const [membership] = await Promise.all([
     page.waitForResponse((response) => {
       const url = new URL(response.url());
@@ -149,7 +149,7 @@ async function checkCopiedSourceWithNoStore(page: Page, shared: URL) {
     list.searchParams.set('backToImport', source.pathname + source.search);
     await page.goto(list.href);
     const rows = page.getByRole('region', { name: '订单查询结果', exact: true });
-    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).and(page.locator('a[href]')).waitFor();
     assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
     const order = rows.getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator('a[href]'));
     const detail = new URL(await order.getAttribute('href') ?? '', shared);
@@ -161,7 +161,7 @@ async function checkCopiedSourceWithNoStore(page: Page, shared: URL) {
     await page.getByRole('link', { name: '返回本批订单', exact: true }).press('Enter');
     await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === scopeId
       && !url.searchParams.has('store') && !url.searchParams.has('backToImport'));
-    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).and(page.locator('a[href]')).waitFor();
     assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), currentFactoryOrderPos);
   }
 }
@@ -182,7 +182,7 @@ async function checkFactorySourceCannotBecomeProcurement(page: Page, shared: URL
     assert.ok(summary.ok());
     assert.equal((await summary.json()).template, 'factory-progress-v1');
     const rows = page.getByRole('region', { name: '订单查询结果', exact: true });
-    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).and(page.locator('a[href]')).waitFor();
     assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
     assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), currentFactoryOrderPos);
   }
@@ -331,7 +331,7 @@ async function checkFactorySourceRoundTrip(page: Page, origin: URL) {
 
 async function assertFactoryScopeRows(page: Page) {
   const rows = page.getByRole('region', { name: '订单查询结果', exact: true });
-  await rows.getByRole('link', { name: 'FS-MANUAL', exact: true }).waitFor();
+  await rows.getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator('a[href]')).waitFor();
   assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), storeOrderPos);
 }
 
