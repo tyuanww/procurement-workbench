@@ -81,6 +81,36 @@ it.skipIf(url === undefined)('批量确认到货和反序派单相遇后都提�
   });
 }, 15000);
 
+it.skipIf(url === undefined)('确认到货先退回失效原行，再等有效行的订单锁', async () => {
+  await withFixture(async ({ main, competing, applicationName, sample }) => {
+    const holder = orderLineId(`${sample.id}-z`);
+    const lineIds = [sample.lineId, orderLineId(`${sample.id}-other`), holder];
+    for (const id of lineIds) await seedLine({ db: main.db, sample, id });
+    const edited = await seedArrivalEdit(main.db, { sample, lineIds, date: '2026-12-01' });
+    const imports = importBatchRepository(main.db);
+    const source = await imports.get(sample.importId);
+    await imports.save({ ...source, template: 'batch-confirmed-arrival-v1', status: 'parsed', committedBy: null, committedAt: null, revision: 1 });
+    for (const [index, batch] of edited.entries()) {
+      const exported = index === 0 ? { ...batch, dateBuyerConfirmed: localDate('2026-11-29') } : batch;
+      await imports.saveRow(arrivalRow(exported, { importId: sample.importId, rowNo: index + 2 }));
+    }
+    const paused = gate();
+    const lock = writes(main.db).uow.run(async (tx) => { await tx.orderLines.lock(holder); await paused.hold(); });
+    await Promise.race([lock, paused.entered]);
+    const input = { importBatchId: sample.importId, expectedRevision: 1 };
+    const action = settled(makeCommitImport(writes(competing.db))(input, sample.buyer));
+    try {
+      await expect.poll(() => action.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
+      expect(action.isDone()).toBe(true);
+    } finally {
+      paused.release();
+      await Promise.allSettled([lock, action.result]);
+    }
+    await expect(action.result).rejects.toMatchObject({ details: { state: 'ARRIVAL_CONFIRM_DATE_CHANGED' } });
+    expect(await imports.get(sample.importId)).toMatchObject({ status: 'parsed', revision: 1 });
+  });
+}, 15000);
+
 async function seedArrivalEdit(db: AppDatabase, { sample, lineIds, date }: {
   readonly sample: Sample; readonly lineIds: readonly ReturnType<typeof orderLineId>[]; readonly date: string;
 }): Promise<DeliveryBatch[]> {
