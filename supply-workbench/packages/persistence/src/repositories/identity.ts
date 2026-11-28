@@ -31,6 +31,16 @@ export function itemCodeRepository(db: AppDatabase): ItemCodeRepository {
     async save(entity) {
       await db.insert(itemCodes).values(entity).onConflictDoUpdate({ target: itemCodes.id, set: entity });
     },
+    async insertIfAbsent(entity) {
+      const [inserted] = await db.insert(itemCodes).values(entity)
+        .onConflictDoNothing({ target: [itemCodes.codeType, itemCodes.codeNorm] })
+        .returning();
+      if (inserted !== undefined) return entityId(inserted.id);
+      const [existing] = await db.select({ id: itemCodes.id }).from(itemCodes)
+        .where(and(eq(itemCodes.codeType, entity.codeType), eq(itemCodes.codeNorm, entity.codeNorm)));
+      if (existing === undefined) throw new NotFoundError('编码', entity.codeNorm);
+      return entityId(existing.id);
+    },
     async listByNorm(codeNorm) {
       const rows = await db.select().from(itemCodes).where(eq(itemCodes.codeNorm, codeNorm));
       return rows.map(toCode);

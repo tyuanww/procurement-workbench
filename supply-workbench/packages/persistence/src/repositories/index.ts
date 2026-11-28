@@ -16,7 +16,7 @@ export function placeholderStores(): UnitOfWorkStores {
     parties: { get: p02, find: p02, save: p02 },
     aliases: { get: p02, find: p02, findByNormName: p02, save: p02 },
     items: { get: p02, lock: p02, find: p02, save: p02 },
-    itemCodes: { get: p02, lock: p02, lockMany: p02, find: p02, save: p02, listByNorm: p02 },
+    itemCodes: { get: p02, lock: p02, lockMany: p02, find: p02, save: p02, insertIfAbsent: p02, listByNorm: p02 },
     itemNames: { listByItem: p02, save: p02, decision: p02, saveDecision: p02 },
     codeLinks: { get: p02, find: p02, save: p02, listApproved: p02 },
     purchaseOrders: { get: p02, find: p02, save: p02, listByPoNorm: p02, listNoNumber: p02, backfillMissingSupplier: p02 },

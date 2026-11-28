@@ -14,7 +14,7 @@ import { importBatchRepository } from '../../packages/persistence/src/repositori
 import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
 import { itemRepository } from '../../packages/persistence/src/repositories/items.js';
-import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
+import { aliasRepository, partyRepository } from '../../packages/persistence/src/repositories/parties.js';
 import { ownerAssignmentRepository } from '../../packages/persistence/src/repositories/owner-assignments.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
@@ -50,10 +50,11 @@ type Hooks = {
   readonly afterLineLock?: (id: string) => Promise<void>;
   readonly afterLineSave?: (id: string) => Promise<void>;
   readonly afterFactoryLinkSave?: () => Promise<void>;
-  readonly afterSnapshotCommit?: () => Promise<void>;
+  readonly beforeSnapshotTransactionCommit?: () => Promise<void>;
   readonly afterSnapshotSourceLock?: () => Promise<void>;
   readonly afterCodeLinkSave?: () => Promise<void>;
-  readonly afterItemCodeSave?: () => Promise<void>;
+  readonly afterItemCodeRead?: (norm: string) => Promise<void>;
+  readonly afterItemCodeInsertAttempt?: () => Promise<void>;
   readonly afterSourceFreeze?: () => Promise<void>;
 };
 
@@ -61,29 +62,23 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
   const uow = createUnitOfWork(db, (transaction) => {
     const tx = requireDatabase(transaction);
     const factoryLinks = lineFactoryLinkRepository(tx);
-    const itemCodes = itemCodeRepository(tx);
     return {
       ...placeholderStores(),
       batches: batchesWithHooks(tx, hooks),
       factoryReports: reportsWithHooks(tx, hooks),
       codeLinks: codeLinksWithHooks(tx, hooks),
-      itemCodes: {
-        ...itemCodes,
-        async save(code: Parameters<typeof itemCodes.save>[0]) {
-          await itemCodes.save(code);
-          await hooks.afterItemCodeSave?.();
-        },
-      },
+      itemCodes: itemCodesWithHooks(tx, hooks),
       items: itemRepository(tx),
       factoryLinks: {
         ...factoryLinks,
         async save(row: Parameters<typeof factoryLinks.save>[0]) {
           const isSaved = await factoryLinks.save(row);
-          await hooks.afterFactoryLinkSave?.();
+          if (isSaved) await hooks.afterFactoryLinkSave?.();
           return isSaved;
         },
       },
       parties: partyRepository(tx),
+      aliases: aliasRepository(tx),
       orderLines: orderLinesWithHooks(tx, hooks),
       ownerAssignments: ownerAssignmentRepository(tx),
       users: userRepository(tx),
@@ -122,13 +117,30 @@ function codeLinksWithHooks(tx: AppDatabase, hooks: Hooks) {
   };
 }
 
+function itemCodesWithHooks(tx: AppDatabase, hooks: Hooks) {
+  const repo = itemCodeRepository(tx);
+  return {
+    ...repo,
+    async listByNorm(norm: string) {
+      const codes = await repo.listByNorm(norm);
+      await hooks.afterItemCodeRead?.(norm);
+      return codes;
+    },
+    async insertIfAbsent(code: Parameters<typeof repo.insertIfAbsent>[0]) {
+      const codeId = await repo.insertIfAbsent(code);
+      await hooks.afterItemCodeInsertAttempt?.();
+      return codeId;
+    },
+  };
+}
+
 function auditWithHooks(tx: AppDatabase, hooks: Hooks) {
   const audit = auditRepository(tx);
   return {
     ...audit,
     async record(entry: Parameters<typeof audit.record>[0]) {
       await audit.record(entry);
-      if (entry.action === 'import.commit') await hooks.afterSnapshotCommit?.();
+      if (entry.action === 'import.commit') await hooks.beforeSnapshotTransactionCommit?.();
     },
   };
 }

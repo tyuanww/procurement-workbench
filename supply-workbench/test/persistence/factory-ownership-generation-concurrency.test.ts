@@ -72,7 +72,7 @@ it.skipIf(url === undefined)('自动批量首挂只让受影响订单的凭据�
       const paused = gate();
       const relink = makeRelinkFactoryRows({
         ...writes(competing.db, { afterFactoryLinkSave: paused.hold }),
-        links: scopedFactoryReports(competing.db, [rowId]),
+        links: scopedFactoryReports(competing.db, { reports: [rowId], lines: [sample.lineId] }),
       })({ limit: 1 }, sample.reviewer);
       try {
         await Promise.race([relink, paused.entered]);
@@ -106,7 +106,8 @@ it.skipIf(url === undefined)('批量重联会拆掉原归属时，处理前序�
         expect((await onlyLineDetail(main.db, sample.code)).line.factory?.id).toBe(sample.factoryId);
         const paused = gate();
         const relink = makeRelinkFactoryRows({
-          ...writes(competing.db, { afterFactoryLinkSave: paused.hold }), links: scopedFactoryReports(competing.db, [first, moving]),
+          ...writes(competing.db, { afterFactoryLinkSave: paused.hold }),
+          links: scopedFactoryReports(competing.db, { reports: [first, moving], lines: [sample.lineId, target.lineId] }),
         })({}, sample.reviewer);
         try {
           await Promise.race([relink, paused.entered]);
@@ -132,12 +133,15 @@ async function seedMovingShipment(db: AppDatabase, { sample, target }: { readonl
   return id;
 }
 
-function scopedFactoryReports(db: AppDatabase, ids: readonly string[]) {
+function scopedFactoryReports(db: AppDatabase, { reports, lines }: { readonly reports: readonly string[]; readonly lines: readonly string[] }) {
   const queries = factoryLinkQueries(db);
   return {
     ...queries,
+    async listOrderLineRefs() {
+      return (await queries.listOrderLineRefs()).filter((line) => lines.includes(line.orderLineId));
+    },
     async listFactoryRowRefs() {
-      return (await queries.listFactoryRowRefs()).filter((row) => ids.includes(row.rowId));
+      return (await queries.listFactoryRowRefs()).filter((row) => reports.includes(row.rowId));
     },
   };
 }
