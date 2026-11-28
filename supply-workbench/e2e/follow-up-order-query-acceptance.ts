@@ -45,6 +45,13 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, warehouse
     await batchDetails.getByText(/^2 · .*确认 2099-11-27$/u).waitFor();
     await page.waitForFunction(() => document.activeElement?.matches('li[tabindex="-1"]') === true
       && document.activeElement.textContent?.includes('2 · 已确认 · 确认 2099-11-27') === true);
+    await batchDetails.getByRole('button', { name: '回查第 2 批原表', exact: true }).press('Enter');
+    const source = batchDetails.getByRole('region', { name: '采购表 · 本单参考', exact: true });
+    await source.getByRole('link', { name: /po-master-procurement\.xlsx.*达肤妍项目进度表.*第 5 行/u }).waitFor();
+    await source.getByText('采购数量', { exact: true }).first().waitFor();
+    await source.getByText('200000', { exact: true }).first().waitFor();
+    await batchDetails.getByRole('region', { name: '工厂表 · 本批已归属', exact: true })
+      .getByText('本批暂无已归属的工厂出货原行。', { exact: true }).waitFor();
     await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
     await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('q') === po);
     await page.waitForFunction((text) => document.activeElement?.textContent === text, po);
@@ -60,7 +67,7 @@ export async function checkFollowUpOrderQuery({ page, origin, out, po, warehouse
   await page.getByText(/没有符合条件的订单行/u).waitFor();
   assert.equal(await order.count(), 0);
   await page.setViewportSize({ width: 1440, height: 900 });
-  return { po, batch: second.seq, widths: [1440, 320], returnFocus: true, explicitFinishedLane: true };
+  return { po, batch: second.seq, widths: [1440, 320], sourceEvidence: true, returnFocus: true, explicitFinishedLane: true };
 }
 
 async function createBatch(page: Page, path: URL, receiverPartyId: string) {
