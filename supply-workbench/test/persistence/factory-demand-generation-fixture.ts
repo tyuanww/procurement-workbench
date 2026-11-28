@@ -13,6 +13,7 @@ import { codeLinkRepository, itemCodeRepository } from '../../packages/persisten
 import { importBatchRepository } from '../../packages/persistence/src/repositories/import-batches.js';
 import { lineFactoryLinkRepository } from '../../packages/persistence/src/repositories/line-factory-links.js';
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
+import { itemRepository } from '../../packages/persistence/src/repositories/items.js';
 import { partyRepository } from '../../packages/persistence/src/repositories/parties.js';
 import { ownerAssignmentRepository } from '../../packages/persistence/src/repositories/owner-assignments.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
@@ -64,6 +65,7 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
       factoryReports: reportsWithHooks(tx, hooks),
       codeLinks: codeLinksWithHooks(tx, hooks),
       itemCodes: itemCodeRepository(tx),
+      items: itemRepository(tx),
       factoryLinks: {
         ...factoryLinks,
         async save(row: Parameters<typeof factoryLinks.save>[0]) {
