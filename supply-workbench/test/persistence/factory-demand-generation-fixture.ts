@@ -13,6 +13,7 @@ import { importBatchRepository } from '../../packages/persistence/src/repositori
 import { placeholderStores } from '../../packages/persistence/src/repositories/index.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { purchaseOrderRepository } from '../../packages/persistence/src/repositories/purchase-orders.js';
+import { settingsRepository } from '../../packages/persistence/src/repositories/settings.js';
 import { createUnitOfWork } from '../../packages/persistence/src/unit-of-work.js';
 import { aFactoryStockRow, anActor, anOrderLine, aPurchaseOrder, FixedClock } from '../../packages/testkit/src/index.js';
 
@@ -22,13 +23,18 @@ export const slot = { index: 0, date: localDate('2026-11-24'), qty: 50 };
 export const rawCells = { dateRaw: '2026/11/24', qtyRaw: '050.00' };
 export const wait = { timeout: 4000, interval: 25 };
 
-type Hooks = { readonly afterOriginRead?: () => Promise<void>; readonly afterDemandSave?: () => Promise<void> };
+type Hooks = {
+  readonly afterOriginRead?: () => Promise<void>;
+  readonly afterDemandSave?: () => Promise<void>;
+  readonly afterLineLock?: (id: string) => Promise<void>;
+};
 
 export function writes(db: AppDatabase, hooks: Hooks = {}) {
   const uow = createUnitOfWork(db, (transaction) => {
     const tx = requireDatabase(transaction);
     const batches = deliveryBatchRepository(tx);
     const reports = factoryReportRepository(tx);
+    const orderLines = orderLineRepository(tx);
     return {
       ...placeholderStores(),
       batches: {
@@ -46,7 +52,15 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
           await hooks.afterDemandSave?.();
         },
       },
-      orderLines: orderLineRepository(tx),
+      orderLines: {
+        ...orderLines,
+        async lock(id: string) {
+          const line = await orderLines.lock(id);
+          await hooks.afterLineLock?.(id);
+          return line;
+        },
+      },
+      settings: settingsRepository(tx),
       purchaseOrders: purchaseOrderRepository(tx),
       audit: auditRepository(tx),
     };
@@ -56,9 +70,10 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
 
 function sampleOf() {
   const token = randomUUID();
+  const poDigits = BigInt(`0x${token.replaceAll('-', '')}`).toString().slice(-14).padStart(14, '0');
   return {
     id: entityId(token), lineId: orderLineId(token), importId: entityId(`demand-test-${token}`), factoryId: entityId(`demand-factory-${token}`),
-    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `DEMAND-PO-${token}`,
+    orderId: entityId(`demand-order-${token}`), code: `VERIFY-DEMAND-${token}`, poRaw: `PO${poDigits}`,
     buyer: { ...anActor('buyer'), id: entityId(`demand-buyer-${token}`) },
     reviewer: { ...anActor('reviewer'), id: entityId(`demand-reviewer-${token}`) },
   };
@@ -122,11 +137,11 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
-    delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}');
+    delete from delivery_batches where order_line_id in (select id from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other');
     delete from line_factory_links where order_line_id = '${sample.lineId}';
     delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
-    delete from purchase_orders where lower(po_raw) = lower('${sample.poRaw}');
-    delete from factory_material_demand_rows where id in ('${sample.id}', '${sample.id}-second');
+    delete from purchase_orders where id = '${sample.orderId}' or po_norm in ('${sample.poRaw}', upper('ALT-${sample.id}'));
+    delete from factory_material_demand_rows where import_batch_id = '${sample.importId}';
     delete from import_batches where id = '${sample.importId}';
   `);
 }

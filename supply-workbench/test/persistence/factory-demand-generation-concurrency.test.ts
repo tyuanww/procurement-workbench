@@ -23,8 +23,10 @@ it.skipIf(url === undefined).each([
       const reports = factoryReportRepository(main.db);
       const original = await reports.get(sample.id);
       if (original.demand === null) throw new Error('合成行缺少工厂需求');
+      const secondSlot = { ...slot, qty: 75 };
       await reports.save({ ...original, id: otherId, fingerprint: otherId, rowNo: 5,
-        demand: { ...original.demand, blockMaterialPoRaw: sample.poRaw.toLowerCase() },
+        raw: { slots: [{ ...secondSlot, ...rawCells, qtyRaw: '075.00', sourceColumns: { date: 10, quantity: 11 } }] },
+        demand: { ...original.demand, blockMaterialPoRaw: ` ＰＯ${sample.poRaw.slice(2)} `, slots: [secondSlot] },
       });
     }
     const paused = gate();
@@ -52,7 +54,9 @@ it.skipIf(url === undefined).each([
         importId: source?.importBatchId, row: source?.rowNo, raw: source?.slot.originalCells };
     });
     const firstBatch = { seq: 1, qty: slot.qty, date: slot.date, importId: sample.importId, row: 4, raw: rawCells };
-    expect(saved).toEqual(distinct ? [firstBatch, { ...firstBatch, seq: 2, row: 5 }] : [firstBatch]);
+    expect(saved).toEqual(distinct
+      ? [firstBatch, { ...firstBatch, seq: 2, row: 5, qty: 75, raw: { ...rawCells, qtyRaw: '075.00' } }]
+      : [firstBatch]);
   });
 }, 15000);
 

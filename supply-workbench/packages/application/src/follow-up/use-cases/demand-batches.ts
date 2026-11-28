@@ -5,11 +5,13 @@ import {
   type DeliveryBatchId,
   type EntityId,
   type FactoryReportRow,
+  type OrderLine,
   type OrderLineId,
 } from '@sw/domain';
 import type { Actor } from '../../shared/actor.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
+import { NotFoundError } from '../../shared/errors.js';
 import { resolveMaterialLine } from './demand-line.js';
 import { commandContext, persistBatch } from './persist-batch.js';
 
@@ -46,7 +48,39 @@ type GenerateInput = {
 
 type DemandSnapshot = Awaited<ReturnType<UnitOfWorkStores['factoryReports']['getForDemandGeneration']>>;
 
-export async function generateDemandRow(input: GenerateInput, { row, version }: DemandSnapshot): Promise<RowOutcome> {
+type PreparedDemand = {
+  readonly lineId: OrderLineId;
+  readonly lineCreated: boolean;
+  readonly rowId: string;
+  readonly version: string | null;
+  readonly factoryPartyId: EntityId;
+  readonly candidates: readonly BatchCandidate[];
+};
+
+export async function generateDemandRows(input: GenerateInput, sources: readonly DemandSnapshot[]): Promise<RowOutcome[]> {
+  const rows = [];
+  const lineIds = new Set<OrderLineId>();
+  for (const source of sources) {
+    const row = await prepareDemandRow(input, source);
+    rows.push(row);
+    if ('lineId' in row) lineIds.add(row.lineId);
+  }
+  const lines = new Map<OrderLineId, OrderLine>();
+  for (const id of [...lineIds].sort()) lines.set(id, await input.tx.orderLines.lock(id));
+  const outcomes = [];
+  for (const row of rows) {
+    if ('lineId' in row) {
+      const line = lines.get(row.lineId);
+      if (line === undefined) throw new NotFoundError('订单行', row.lineId);
+      outcomes.push(await generatePreparedRow(input, { ...row, line }));
+    } else {
+      outcomes.push(row);
+    }
+  }
+  return outcomes;
+}
+
+async function prepareDemandRow(input: GenerateInput, { row, version }: DemandSnapshot): Promise<PreparedDemand | RowOutcome> {
   const blocked = blockReason(row);
   if (blocked !== null) return skippedRow(row.id, blocked);
   const demand = row.demand;
@@ -73,17 +107,17 @@ export async function generateDemandRow(input: GenerateInput, { row, version }: 
       batches: 0,
       skipped: candidates.map((slot) => skip({ rowId: row.id, slotIndex: slot.slotIndex, reason: line.reason })),
     };
-  if (line.created) await auditLine(input, line.lineId);
-  const made = await createSlots({
-    ...input,
-    lineId: line.lineId,
-    factoryPartyId: row.factoryPartyId,
-    candidates,
-  });
-  const evidence = version === null || made.created.length === 0 ? undefined : {
-    rowId: row.id, version, orderLineId: line.lineId, created: made.created,
+  return { rowId: row.id, version, lineId: line.lineId, lineCreated: line.created, factoryPartyId: row.factoryPartyId, candidates };
+}
+
+async function generatePreparedRow(input: GenerateInput, row: PreparedDemand & { readonly line: OrderLine }): Promise<RowOutcome> {
+  const line = row.line;
+  if (row.lineCreated) await auditLine(input, line);
+  const made = await createSlots({ ...input, ...row }, line);
+  const evidence = row.version === null || made.created.length === 0 ? undefined : {
+    rowId: row.rowId, version: row.version, orderLineId: line.id, created: made.created,
   };
-  return { lines: line.created ? 1 : 0, batches: made.created.length, skipped: made.skipped, ...(evidence === undefined ? {} : { evidence }) };
+  return { lines: row.lineCreated ? 1 : 0, batches: made.created.length, skipped: made.skipped, ...(evidence === undefined ? {} : { evidence }) };
 }
 
 export async function freezeGenerationEvidence(tx: UnitOfWorkStores, { created, ...ref }: GenerationEvidence): Promise<void> {
@@ -100,8 +134,7 @@ function blockReason(row: FactoryReportRow): string | null {
   return null;
 }
 
-async function auditLine(input: GenerateInput, lineId: string): Promise<void> {
-  const line = await input.tx.orderLines.get(lineId);
+async function auditLine(input: GenerateInput, line: OrderLine): Promise<void> {
   await input.tx.audit.record(
     auditOf({ action: 'line.create', subject: line, ctx: { actor: input.actor, at: input.at, entity: '订单行' } }),
   );
@@ -113,10 +146,10 @@ async function createSlots(
     readonly factoryPartyId: EntityId;
     readonly candidates: readonly BatchCandidate[];
   },
+  line: OrderLine,
 ): Promise<{ readonly created: CreatedSlot[]; readonly skipped: SlotSkip[] }> {
   const skipped: SlotSkip[] = [];
   const created: CreatedSlot[] = [];
-  const line = await input.tx.orderLines.lock(input.lineId);
   if (line.cancelledAt !== null) {
     return { created, skipped: input.candidates.map(({ rowId, slotIndex }) => skip({ rowId, slotIndex, reason: '订单行已取消' })) };
   }
