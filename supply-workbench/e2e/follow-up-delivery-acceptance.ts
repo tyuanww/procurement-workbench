@@ -183,26 +183,46 @@ async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
     if (width === 1440) sources.push({ link: note, batchId: null });
     for (const { link, batchId } of sources) {
       for (const fromButton of [true, false]) {
-        await link.press('Enter');
-        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
-        if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-        else await page.goBack();
-        await page.waitForURL(address.href);
+        await openDeliveryDetail(page, { link, lineId, batchId });
+        await returnToDailyDelivery(page, { address, fromButton, width });
         await link.and(page.locator(':focus')).waitFor();
       }
     }
   }
-  await overdue.press('Enter');
+  await openDeliveryDetail(page, { link: overdue, lineId, batchId: batches[0] ?? null });
   for (const id of batches) {
     const saved = await page.request.patch(new URL(`/api/v1/batches/${encodeURIComponent(id)}`, daily).href,
       { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
     assert.ok(saved.ok(), await saved.text());
   }
-  await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-  await page.waitForURL(address.href);
+  await returnToDailyDelivery(page, { address, fromButton: true, width: 1440 });
   await results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }).waitFor();
   await results.and(page.locator(':focus')).waitFor();
   assert.equal(await row.count(), 0);
+}
+
+async function openDeliveryDetail(page: Page, { link, lineId, batchId }: {
+  readonly link: Locator; readonly lineId: string; readonly batchId: string | null;
+}) {
+  const address = new URL(await link.getAttribute('href') ?? '', page.url());
+  assert.equal(decodeURIComponent(address.pathname), `/lines/${lineId}`);
+  assert.equal(address.searchParams.get('focusBatch'), batchId);
+  await Promise.all([page.waitForURL(address.href), link.press('Enter')]);
+  await page.getByRole('region', { name: '批次', exact: true }).waitFor();
+}
+
+async function returnToDailyDelivery(page: Page, { address, fromButton, width }: {
+  readonly address: URL; readonly fromButton: boolean; readonly width: number;
+}) {
+  const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
+  const target = new URL(await back.getAttribute('href') ?? '', address);
+  assert.equal(target.href, address.href, '订单详情应指回原日常交付筛选');
+  const activate = () => fromButton ? back.press('Enter') : page.goBack({ waitUntil: 'commit' });
+  try {
+    await Promise.all([page.waitForURL(address.href, { waitUntil: 'commit' }), activate()]);
+  } catch (cause: unknown) {
+    throw new Error(`${width}px ${fromButton ? '显式返回' : '浏览器后退'}后 URL 为 ${page.url()}`, { cause });
+  }
 }
 
 function rowDetails(requests: readonly URL[]): string[] {
