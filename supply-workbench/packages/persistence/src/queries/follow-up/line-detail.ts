@@ -1,5 +1,5 @@
 import { procurementScheduleDates, procurementScheduleItems } from '../plan/procurement-schedule.js';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { isOwnerAccount } from '@sw/application';
 import type { ExceptionView, FollowUpView, OrderLineDetail } from '@sw/application';
@@ -156,7 +156,7 @@ async function sourceEvidence(db: AppDatabase, { lineId, batches, snapshot, repo
 }) {
   const [archivedShipmentSources, batchDemandSources] = await Promise.all([
     archivedShipments(db, { lineId, batches, current: reports.shipments }),
-    batchDemandSourcesOf(db, { batches, current: reports.demand }),
+    batchDemandSourcesOf(db, { lineId, batches, current: reports.demand }),
   ]);
   const sourceFiles = await sourceFileNames(db, [
     snapshot?.importBatchId,
@@ -166,7 +166,8 @@ async function sourceEvidence(db: AppDatabase, { lineId, batches, snapshot, repo
   return { sourceFiles, archivedShipmentSources, batchDemandSources };
 }
 
-async function batchDemandSourcesOf(db: AppDatabase, { batches, current }: {
+async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current }: {
+  readonly lineId: string;
   readonly batches: OrderLineDetail['batches'];
   readonly current: OrderLineDetail['factoryReports']['demand'];
 }): Promise<NonNullable<OrderLineDetail['batchDemandSources']>> {
@@ -177,14 +178,19 @@ async function batchDemandSourcesOf(db: AppDatabase, { batches, current }: {
   const byId = new Map(current.map((row) => [row.id, row]));
   const missing = [...new Set(origins.map(({ rowId }) => rowId).filter((id) => !byId.has(id)))];
   if (missing.length > 0) {
-    const rows = await db.select().from(factoryMaterialDemandRows).where(inArray(factoryMaterialDemandRows.id, missing));
+    const rows = await db.select().from(factoryMaterialDemandRows).where(and(
+      inArray(factoryMaterialDemandRows.id, missing),
+      or(eq(factoryMaterialDemandRows.linkedOrderLineId, lineId), and(
+        isNull(factoryMaterialDemandRows.linkedOrderLineId), eq(factoryMaterialDemandRows.linkStatus, 'unlinked'),
+      )),
+    ));
     for (const row of rows) byId.set(row.id, demandOf(row));
   }
   return Object.fromEntries(origins.flatMap(({ batchId, rowId, slotIndex }) => {
     const row = byId.get(rowId);
     if (row?.payload.role !== 'material') return [];
     const slot = row.payload.slots.find(({ index }) => index === slotIndex);
-    if (slot === undefined) return [];
+    if (slot === undefined || !slot.dateRaw?.trim() || !slot.qtyRaw?.trim()) return [];
     const { importBatchId, sheetName, rowNo } = row;
     const { index, dateRaw, qtyRaw, sourceColumns } = slot;
     return [[batchId, { importBatchId, sheetName, rowNo, slot: {
