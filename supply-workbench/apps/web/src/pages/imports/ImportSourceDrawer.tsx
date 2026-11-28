@@ -1,0 +1,167 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router';
+import { Alert, Button, Descriptions, Drawer, Flex, Skeleton, Typography, type DescriptionsProps } from 'antd';
+import { OrderLineDetailSchema, OrderLineRowSchema, listResponseSchema } from '@sw/contracts';
+import { IMPORT_RETURN_PARAM } from '../../features/imports/index.js';
+import { useCan } from '../../shared/actor.js';
+import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
+import { useDetailFocusLink, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
+import { drawerWidth, space } from '../../theme/tokens.js';
+import { importBatchOrigin, importSourceTriggerId, type ImportSourceState, type SourceLocation } from './import-source.js';
+
+type Target =
+  | { readonly kind: 'scope'; readonly importId: string }
+  | { readonly kind: 'order'; readonly importId: string; readonly lineId: string }
+  | { readonly kind: 'batch'; readonly lineId: string; readonly batchId: string };
+
+export type ImportSourceRecord = {
+  readonly key: string;
+  readonly location?: SourceLocation;
+  readonly items: NonNullable<DescriptionsProps['items']>;
+  readonly result: { readonly kind: 'local'; readonly text: string } | Target;
+};
+
+export function ImportSourceButton({ source, recordKey, label }: {
+  readonly source: ImportSourceState;
+  readonly recordKey: string;
+  readonly label?: string;
+}) {
+  return <Button id={importSourceTriggerId(recordKey)} aria-label={label} aria-haspopup="dialog" onClick={() => source.open(recordKey)}>
+    {recordKey === 'batch' ? '核对本次导入来源' : '查看来源'}
+  </Button>;
+}
+
+export function ImportSourceDrawer({ source, record, fileName }: {
+  readonly source: ImportSourceState;
+  readonly record: ImportSourceRecord | null;
+  readonly fileName: string;
+}) {
+  const [isShown, setShown] = useState(false);
+  const trigger = useRef<string | null>(null);
+  const key = record?.key ?? null;
+  const canRead = useCan('data.read');
+  useEffect(() => {
+    if (key !== null) {
+      trigger.current = importSourceTriggerId(key);
+      return;
+    }
+    const triggerId = trigger.current;
+    if (triggerId === null) return;
+    trigger.current = null;
+    const frame = window.requestAnimationFrame(() => document.getElementById(triggerId)?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [key]);
+  return <Drawer title={key === 'batch' ? '核对本次导入来源' : '核对导入记录来源'} open={key !== null}
+    size={`min(${drawerWidth}px, 100vw)`} destroyOnHidden
+    closable={{ 'aria-label': '关闭导入来源' }}
+    focusable={{ trap: true, focusTriggerAfterClose: false }}
+    onClose={source.close} afterOpenChange={setShown}>
+    {record === null ? null : <Flex vertical gap={space[3]}>
+      <Descriptions size="small" column={1} styles={{ content: { overflowWrap: 'anywhere' } }} items={[
+        { key: 'file', label: '文件', children: fileName },
+        ...(record.location === undefined ? [] : [{ key: 'location', label: '原表位置', children: sourceText(record.location) }]),
+        ...record.items,
+      ]} />
+      {record.result.kind === 'local' ? <Typography.Text>{record.result.text}</Typography.Text>
+        : !canRead ? <Alert type="info" title="当前账号无法查看关联订单。" />
+        : <ImportTarget key={JSON.stringify(record.result)} target={record.result} source={source} sourceKey={record.key} isShown={isShown} />}
+    </Flex>}
+  </Drawer>;
+}
+
+export function sourceText(location: SourceLocation) {
+  return `${location.sheetName} 第 ${location.rowNo} 行`;
+}
+
+const orderListSchema = listResponseSchema(OrderLineRowSchema);
+type Destination = { readonly href: string; readonly label: string; readonly text: string };
+type TargetLoad =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'failed'; readonly message: string }
+  | { readonly kind: 'ready'; readonly destination: Destination };
+
+function ImportTarget({ target, source, sourceKey, isShown }: {
+  readonly target: Target;
+  readonly source: ImportSourceState;
+  readonly sourceKey: string;
+  readonly isShown: boolean;
+}) {
+  const [load, setLoad] = useState<TargetLoad>({ kind: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+  const [request] = useState(target);
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const result = request.kind === 'batch'
+      ? readBatchDestination({ ...request, signal })
+      : readImportDestination({ importId: request.importId, lineId: request.kind === 'order' ? request.lineId : undefined, signal });
+    void result.then((destination) => {
+      if (!signal.aborted) setLoad(destination === null ? { kind: 'missing' } : { kind: 'ready', destination });
+    }).catch((error: unknown) => {
+      if (!signal.aborted) setLoad({ kind: 'failed', message: apiErrorMessage(error) ?? '关联订单没有读出来。' });
+    });
+    return () => controller.abort();
+  }, [attempt, request]);
+  switch (load.kind) {
+    case 'loading': return <div role="status" aria-label="正在核对关联记录"><Skeleton active paragraph={false} /></div>;
+    case 'missing': return <Alert type="info" title="当前范围没有可查看的关联记录。" />;
+    case 'failed': return <Alert type="error" title="关联记录没有读出来。" description={load.message} action={<Button onClick={() => {
+      setLoad({ kind: 'loading' });
+      setAttempt((value) => value + 1);
+    }}>重试</Button>} />;
+    case 'ready': return <ImportTargetLink destination={load.destination} source={source} sourceKey={sourceKey} isShown={isShown} />;
+  }
+}
+
+async function readImportDestination({ importId, lineId, signal }: {
+  readonly importId: string;
+  readonly lineId: string | undefined;
+  readonly signal: AbortSignal;
+}): Promise<Destination | null> {
+  const scope = new URLSearchParams({ lane: 'all', importBatchId: importId });
+  const query = new URLSearchParams({ importBatchId: importId, pageSize: '1' });
+  if (lineId !== undefined) query.set('lineIds', lineId);
+  const { items, page } = await apiGetWithSignal({ path: `/api/v1/lines?${query}`, schema: orderListSchema, signal });
+  if (lineId === undefined) {
+    return page.total === 0 ? null : {
+      href: `/lines?${scope}`, label: '查看本次实际关联的订单', text: `本次导入关联 ${page.total} 条可查看的订单行。`,
+    };
+  }
+  const line = items.find((item) => item.id === lineId);
+  if (line === undefined) return null;
+  return { href: `/lines/${encodeURIComponent(line.id)}`, label: '查看关联订单', text: [line.po.poRaw, line.nameRaw].filter(Boolean).join(' · ') };
+}
+
+async function readBatchDestination({ lineId, batchId, signal }: {
+  readonly lineId: string;
+  readonly batchId: string;
+  readonly signal: AbortSignal;
+}): Promise<Destination | null> {
+  const href = `/lines/${encodeURIComponent(lineId)}`;
+  const detail = await apiGetWithSignal({ path: `/api/v1${href}`, schema: OrderLineDetailSchema, signal });
+  const batch = detail.batches.find((item) => item.id === batchId);
+  if (batch === undefined) return null;
+  return {
+    href: `${href}?${new URLSearchParams({ focusBatch: batch.id })}`,
+    label: '查看关联要货批次',
+    text: [detail.po.poRaw, detail.line.nameRaw, `第 ${batch.seq} 批`].filter(Boolean).join(' · '),
+  };
+}
+
+function ImportTargetLink({ destination, source, sourceKey, isShown }: {
+  readonly destination: Destination;
+  readonly source: ImportSourceState;
+  readonly sourceKey: string;
+  readonly isShown: boolean;
+}) {
+  const { state } = useLocation();
+  const { state: origin, ...link } = useDetailFocusLink(source.to, importSourceTriggerId(sourceKey));
+  useDetailReturnFocus(isShown, { allowContainerFocus: true });
+  const query = new URLSearchParams({ [IMPORT_RETURN_PARAM]: source.to });
+  const to = `${destination.href}${destination.href.includes('?') ? '&' : '?'}${query}`;
+  return <Flex vertical align="start" gap={space[2]}>
+    <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>{destination.text}</Typography.Text>
+    <Link to={to} {...link} state={{ ...origin, importBatchOrigin: importBatchOrigin(state) }} style={{ paddingBlock: space[1] }}>{destination.label}</Link>
+  </Flex>;
+}

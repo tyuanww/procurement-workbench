@@ -3,6 +3,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { Button, Card, Checkbox, Flex, Input, Select } from 'antd';
 import type { useSearchParams } from 'react-router';
 import { readDesk, writeDesk } from '../../../features/follow-up/index.js';
+import { IMPORT_RETURN_PARAM } from '../../../features/imports/index.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { space } from '../../../theme/tokens.js';
 
@@ -68,6 +69,7 @@ function ImportScopeAction({ search, setParams }: { readonly search: string; rea
   if (!params.has('importBatchId')) return null;
   return <Button onClick={() => {
     params.delete('importBatchId');
+    params.delete(IMPORT_RETURN_PARAM);
     params.delete('page');
     setParams(params);
   }}>退出本次导入范围</Button>;

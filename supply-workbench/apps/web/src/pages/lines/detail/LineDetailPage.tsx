@@ -18,6 +18,7 @@ import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
 import { BatchSources } from './batch-sources.js';
 import { orderScheduleAddress, readLineDetailBack, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
+import { importFollowUpReturn } from '../../imports/import-source.js';
 
 const MISSING_PO = '无单号';
 
@@ -31,11 +32,13 @@ export function LineDetailPage() {
   const [params] = useSearchParams();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
-  const back = readLineDetailBack({ lineId: id, params, state });
+  const canReadImports = useCan('imports.read');
+  const back = readLineDetailBack({ lineId: id, params, state }) ?? (canReadImports ? importFollowUpReturn({ params, state }) : null);
   return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
 }
 
-function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {
+type LineDetailBack = DetailBack | ReturnType<typeof importFollowUpReturn>;
+function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: LineDetailBack }) {
   const [detail, setDetail] = useState<OrderLineDetail | null>(null);
   const [events, setEvents] = useState<readonly TimelineEvent[]>([]);
   const [message, setMessage] = useState('');

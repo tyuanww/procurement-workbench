@@ -150,6 +150,23 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   await batchRow(firstBatchId).getByRole('cell', { name: /^跳过/ }).waitFor();
   await page.getByRole('button', { name: '确认导入', exact: true }).click();
   await page.getByText('已提交 · 共 2 行 · 更新 1 行 · 跳过 1 行', { exact: true }).waitFor();
+  const drawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
+  const target = drawer.getByRole('link', { name: '查看关联要货批次', exact: true });
+  await batchRow(firstBatchId).getByRole('button', { name: /^查看来源/u }).press('Enter');
+  await drawer.getByText('这条记录仅供当前导入核对。', { exact: true }).waitFor();
+  assert.equal(await target.count(), 0);
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await batchRow(secondBatchId).getByRole('button', { name: /^查看来源/u }).press('Enter');
+  await target.waitFor();
+  const sourceUrl = page.url();
+  await target.press('Enter');
+  await page.waitForURL((url) => url.pathname === `/lines/${lineId}` && url.searchParams.get('focusBatch') === secondBatchId);
+  await page.getByRole('region', { name: '批次', exact: true }).getByRole('listitem')
+    .filter({ hasText: /^2 ·/u }).and(page.locator(':focus')).waitFor();
+  await page.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
+  await page.waitForURL(sourceUrl);
+  await target.and(page.locator(':focus')).waitFor();
 
   const response = await page.request.get(new URL(`/api/v1/lines/${lineId}`, origin).href);
   assert.ok(response.ok());
@@ -157,5 +174,5 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   assert.equal(batches.length, 2);
   const actual = batches.map((batch: { id: string; dateBuyerConfirmed: string | null }) => [batch.id, batch.dateBuyerConfirmed]);
   assert.deepEqual(actual, [[firstBatchId, '2025-01-01'], [secondBatchId, date]]);
-  return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual };
+  return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual, followUp: { focusBatch: secondBatchId, skippedStaysLocal: true, explicitBackFocus: true } };
 }

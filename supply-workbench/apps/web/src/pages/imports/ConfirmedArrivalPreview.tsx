@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Alert, Card, Table, Typography, type TableProps } from 'antd';
-import { ConfirmedArrivalPayloadSchema, ImportRowViewSchema, listResponseSchema, type ImportRowView } from '@sw/contracts';
+import { Alert, Button, Card, Table, Typography, type TableProps } from 'antd';
+import { ConfirmedArrivalPayloadSchema, ImportRowViewSchema, listResponseSchema, type ImportBatchSummary, type ImportRowView } from '@sw/contracts';
 import { importActionLabel } from '@sw/domain';
 import { apiGetWithSignal } from '../../shared/api/client.js';
 import { space } from '../../theme/tokens.js';
 import { ImportPagination } from './ImportPagination.js';
+import { ImportSourceButton, ImportSourceDrawer, sourceText, type ImportSourceRecord } from './ImportSourceDrawer.js';
+import { importSourceKey, importSourceQuery, previewPage, useImportSource, type ImportSourceState } from './import-source.js';
 
 const PAGE_SIZE = 20;
 const rowsSchema = listResponseSchema(ImportRowViewSchema);
 type Row = ReturnType<typeof readRow>;
 type ArrivalDate = ReturnType<typeof ConfirmedArrivalPayloadSchema.parse>['date'];
 type Load =
-  | { readonly kind: 'loading' }
   | { readonly kind: 'failed' }
   | { readonly kind: 'ready'; readonly rows: readonly Row[]; readonly total: number };
 
@@ -27,7 +28,10 @@ const previewCss = `
   }
 `;
 
-const columns: NonNullable<TableProps<Row>['columns']> = [
+function columns(source: ImportSourceState): NonNullable<TableProps<Row>['columns']> {
+  return [
+  { title: '原行', key: 'source', render: (_, row) => <ImportSourceButton source={source} recordKey={importSourceKey('arrival', row)}
+    label={`查看来源 ${[row.payload?.po, row.payload?.sequence && `第 ${row.payload.sequence} 批`, sourceText(row)].filter(Boolean).join(' · ')}`} /> },
   { title: '批次核对', key: 'check', className: compactOnly, render: (_, row) => <BatchCheck row={row} /> },
   { title: '行号', dataIndex: 'rowNo', className: wideOnly },
   { title: 'PO 单号', key: 'po', className: wideOnly, render: (_, row) => row.payload?.po ?? '—' },
@@ -39,7 +43,8 @@ const columns: NonNullable<TableProps<Row>['columns']> = [
   { title: '改期原因', key: 'reason', render: (_, row) => row.payload?.reason ?? '—' },
   { title: '处理结果', dataIndex: 'result', className: wideOnly },
   { title: '要货批次 ID', key: 'batchId', render: (_, row) => row.payload?.batchId ?? '—' },
-];
+  ];
+}
 
 function BatchCheck({ row }: { readonly row: Row }) {
   const sequence = row.payload?.sequence ?? '—';
@@ -62,34 +67,77 @@ function BatchCheck({ row }: { readonly row: Row }) {
   );
 }
 
-export function ConfirmedArrivalPreview({ id, revision }: { readonly id: string; readonly revision: number }) {
-  const [page, setPage] = useState(1);
-  const [load, setLoad] = useState<Load>({ kind: 'loading' });
+export function ConfirmedArrivalPreview({ summary }: { readonly summary: ImportBatchSummary }) {
+  const { id, revision } = summary;
+  const source = useImportSource();
+  const page = previewPage(source.params, importSourceQuery.arrival);
+  const [attempt, setAttempt] = useState(0);
+  const requestKey = JSON.stringify([revision, page, attempt]);
+  const [response, setResponse] = useState<{ readonly key: string; readonly load: Load }>();
+  const load = response?.key === requestKey ? response.load : null;
   useEffect(() => {
     const controller = new AbortController();
     const query = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     void apiGetWithSignal({ path: `/api/v1/imports/${encodeURIComponent(id)}/rows?${query}`, schema: rowsSchema, signal: controller.signal })
-      .then(({ items, page: result }) => { if (!controller.signal.aborted) setLoad({ kind: 'ready', rows: items.map(readRow), total: result.total }); })
-      .catch(() => { if (!controller.signal.aborted) setLoad({ kind: 'failed' }); });
+      .then(({ items, page: result }) => {
+        if (!controller.signal.aborted) setResponse({ key: requestKey, load: { kind: 'ready', rows: items.map(readRow), total: result.total } });
+      })
+      .catch(() => { if (!controller.signal.aborted) setResponse({ key: requestKey, load: { kind: 'failed' } }); });
     return () => controller.abort();
-  }, [id, page, revision]);
+  }, [id, page, requestKey]);
+  if (load === null) return <Card title="确认到货日预览" loading />;
+  if (load.kind === 'failed') return <Card title="确认到货日预览">
+    <Alert type="error" title="确认到货日预览没有读出来。"
+      action={<Button onClick={() => setAttempt((value) => value + 1)}>重试</Button>} />
+  </Card>;
+  return <ArrivalResults load={load} summary={summary} source={source} page={page} />;
+}
+
+function ArrivalResults({ load, summary, source, page }: {
+  readonly load: Extract<Load, { readonly kind: 'ready' }>;
+  readonly summary: ImportBatchSummary;
+  readonly source: ImportSourceState;
+  readonly page: number;
+}) {
+  const selected = load.rows.find((row) => importSourceKey('arrival', row) === source.sourceKey);
   return (
-    <Card title="确认到货日预览" loading={load.kind === 'loading'}>
-      {load.kind === 'failed' ? <Alert type="error" title="读取确认到货日预览失败，请刷新重试。" /> : null}
-      {load.kind === 'ready' ? (
+    <Card title="确认到货日预览">
         <div className="confirmed-arrival-preview">
           <style>{previewCss}</style>
           <Typography.Paragraph type="secondary" id="arrival-preview-scroll" style={{ marginBottom: space[2] }}>
             横向滚动可查看完整明细。
           </Typography.Paragraph>
           <div role="region" aria-label="确认到货日明细" aria-describedby="arrival-preview-scroll" tabIndex={0} style={{ overflowX: 'auto' }}>
-            <Table<Row> dataSource={load.rows} columns={columns} rowKey="id" size="small" pagination={false} />
+            <Table<Row> dataSource={load.rows} columns={columns(source)} rowKey="id" size="small" pagination={false} />
           </div>
-          <ImportPagination label="确认到货日明细分页" page={page} pageSize={PAGE_SIZE} total={load.total} onChange={setPage} />
+          <ImportPagination label="确认到货日明细分页" page={page} pageSize={PAGE_SIZE} total={load.total}
+            onChange={(value) => source.update({ [importSourceQuery.arrival]: value === 1 ? null : String(value) }, true)} />
         </div>
-      ) : null}
+      <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
     </Card>
   );
+}
+
+function arrivalSource(row: Row, status: ImportBatchSummary['status']): ImportSourceRecord {
+  const { payload } = row;
+  return {
+    key: importSourceKey('arrival', row), location: row,
+    items: [
+      { key: 'po', label: 'PO 单号', children: payload?.po ?? '未填' },
+      { key: 'seq', label: '要货批次序号', children: payload?.sequence ?? '未填' },
+      { key: 'dates', label: '导出时与本次确认到货日', children: `${row.before} → ${row.after}` },
+      { key: 'result', label: '处理结果', children: row.result },
+    ],
+    result: arrivalTarget(row, status),
+  };
+}
+
+function arrivalTarget({ action, payload }: Row, status: ImportBatchSummary['status']): ImportSourceRecord['result'] {
+  if (status === 'committed' && (action === 'update' || action === 'unchanged') &&
+    payload !== null && payload.exportedLineId !== null) {
+    return { kind: 'batch', lineId: payload.exportedLineId, batchId: payload.batchId };
+  }
+  return { kind: 'local', text: '这条记录仅供当前导入核对。' };
 }
 
 function readRow(row: ImportRowView) {
@@ -99,7 +147,9 @@ function readRow(row: ImportRowView) {
   const explanation = issues.length === 0 ? row.skipReason : issues.join('。');
   return {
     id: row.id,
+    sheetName: row.sheetName,
     rowNo: row.rowNo,
+    action: row.action,
     payload,
     before: dateText(payload?.exportedDate),
     after: dateText(payload?.date),

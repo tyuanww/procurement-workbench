@@ -1,4 +1,5 @@
 import { DELIVERY_QUERY_PARAM } from '../../../features/follow-up/index.js';
+import { IMPORT_RETURN_PARAM } from '../../../features/imports/index.js';
 import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
@@ -36,7 +37,7 @@ const DENSITY_PARAM = 'density';
 const HIDDEN_PARAM = 'hide';
 const VIEW_PARAM = 'view';
 const FIXED_COLUMN = LINE_DESK_PINNED_KEY;
-const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM, HIDDEN_PARAM, VIEW_PARAM, DELIVERY_QUERY_PARAM];
+const NON_FILTER_PARAMS: readonly string[] = ['page', 'pageSize', DENSITY_PARAM, HIDDEN_PARAM, VIEW_PARAM, DELIVERY_QUERY_PARAM, IMPORT_RETURN_PARAM];
 const DENSITY_OPTIONS = [
   { label: '紧凑', value: 'small' },
   { label: '舒适', value: 'middle' },
@@ -98,6 +99,7 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   if (input.view.preserveLane === true) copyParam({ from: current, to: next, key: 'lane' });
   else if (!next.has('lane')) next.set('lane', 'all');
   if (!next.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
+  copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });
@@ -110,6 +112,7 @@ export function clearFiltersAddress(search: string): URLSearchParams {
   const current = new URLSearchParams(search);
   copyParam({ from: current, to: next, key: 'lane' });
   copyParam({ from: current, to: next, key: 'importBatchId' });
+  copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });

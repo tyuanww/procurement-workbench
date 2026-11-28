@@ -4,3 +4,4 @@ export { canSubmitImport, recommendedTemplate, selectedTemplate, templateNeedsFa
 export type { DetectCandidate, ImportTypeChoice } from './model/choice.js';
 export { allConflictChoices, conflictCandidateOf, conflictChoicesOf, conflictQueryOf, conflictResolutionsOf } from './model/conflicts.js';
 export type { ConflictCandidate } from './model/conflicts.js';
+export { IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, importFollowUpBackAddress } from './model/follow-up.js';
