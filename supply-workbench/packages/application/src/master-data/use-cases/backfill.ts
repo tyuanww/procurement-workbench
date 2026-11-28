@@ -15,21 +15,18 @@ export async function backfillSupplier(tx: UnitOfWorkStores, input: { readonly n
 export type ItemBackfill = { readonly codeNorm: string; readonly itemId: EntityId };
 
 export async function backfillItems(tx: UnitOfWorkStores, { items, at }: { readonly items: readonly ItemBackfill[]; readonly at: string }): Promise<string[]> {
-  const candidates = new Map<string, ItemBackfill[]>();
+  const candidates = new Set<string>();
   for (const item of items) {
     for (const line of await tx.orderLines.listByCodeNorm(item.codeNorm)) {
-      if (line.itemId !== null) continue;
-      const matches = candidates.get(line.id);
-      if (matches === undefined) candidates.set(line.id, [item]);
-      else matches.push(item);
+      if (line.itemId === null) candidates.add(line.id);
     }
   }
 
   const changed: string[] = [];
-  for (const [id, line] of await lockOrderLines(tx.orderLines, [...candidates.keys()])) {
+  for (const [id, line] of await lockOrderLines(tx.orderLines, [...candidates])) {
     if (line.itemId !== null) continue;
     const currentCodes = [line.itemCodeRaw, line.barcodeRaw].filter((code) => code !== null).map(normalizeText);
-    const match = candidates.get(id)?.find(({ codeNorm }) => currentCodes.includes(codeNorm));
+    const match = items.find(({ codeNorm }) => currentCodes.includes(codeNorm));
     if (match === undefined) continue;
     await tx.orderLines.save({ ...line, itemId: match.itemId, updatedAt: at });
     changed.push(id);

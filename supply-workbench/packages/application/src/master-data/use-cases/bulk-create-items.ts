@@ -1,8 +1,10 @@
+import type { ItemCode } from '@sw/domain';
 import type { BulkCreateItems, BulkCreateItemsDeps } from '../boundary.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { auditOf } from '../../shared/audit.js';
 import { authorize } from '../../shared/authorize.js';
+import { NotFoundError } from '../../shared/errors.js';
 import { refreshLineProjection } from '../../shared/line-projection.js';
 import { backfillItems, type ItemBackfill } from './backfill.js';
 import { itemDraft } from './drafts.js';
@@ -13,10 +15,14 @@ export const makeBulkCreateItems =
     authorize(actor, 'master.review');
     const at = deps.clock.now();
     return deps.uow.run(async (tx) => {
-      await tx.itemCodes.lockMany(input.codeIds);
+      await tx.procurement?.lockCommit();
+      const locked = await tx.itemCodes.lockMany(input.codeIds);
+      const byId = new Map<string, ItemCode>(locked.map((code) => [code.id, code]));
       const items: ItemBackfill[] = [];
-      for (const codeId of input.codeIds) {
-        const item = await createFor(tx, { ids: deps.ids, codeId, at });
+      for (const codeId of new Set(input.codeIds)) {
+        const code = byId.get(codeId);
+        if (code === undefined) throw new NotFoundError('编码', codeId);
+        const item = await createFor(tx, { ids: deps.ids, code, at });
         if (item !== null) items.push(item);
       }
       const lineIds = await backfillItems(tx, { items, at });
@@ -27,8 +33,8 @@ export const makeBulkCreateItems =
     });
   };
 
-async function createFor(tx: UnitOfWorkStores, ctx: { readonly ids: IdGenerator; readonly codeId: string; readonly at: string }): Promise<ItemBackfill | null> {
-  const code = await tx.itemCodes.get(ctx.codeId);
+async function createFor(tx: UnitOfWorkStores, ctx: { readonly ids: IdGenerator; readonly code: ItemCode; readonly at: string }): Promise<ItemBackfill | null> {
+  const { code } = ctx;
   if (code.status === 'rejected' || code.itemId !== null) return null;
   const itemId = ctx.ids.next();
   await tx.items.save(itemDraft({ id: itemId, at: ctx.at, displayName: code.codeRaw, kind: 'unknown' }));

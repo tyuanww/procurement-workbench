@@ -22,9 +22,10 @@ export function itemCodeRepository(db: AppDatabase): ItemCodeRepository {
       return toCode(row);
     },
     async lockMany(ids) {
-      if (ids.length === 0) return;
-      await db.select({ id: itemCodes.id }).from(itemCodes)
+      if (ids.length === 0) return [];
+      const rows = await db.select().from(itemCodes)
         .where(sql`${itemCodes.id} = any(${sql.param(ids)}::text[])`).orderBy(itemCodes.id).for('update');
+      return rows.map(toCode);
     },
     find: (id) => findCode(db, id),
     async save(entity) {
