@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type MouseEvent, type RefObject } from 'react';
 import { createPath, useLocation, useNavigationType } from 'react-router';
 import { z } from 'zod';
-import { browserEntryIndex, usePreviousBrowserEntry } from './browser-entry-history.js';
+import { browserEntryIndex, useCanRestoreEntryFocus, usePreviousBrowserEntry } from './browser-entry-history.js';
 
 const detailOriginSchema = z.union([
   z.object({ sourceKey: z.string(), detailPath: z.string(), sourceLink: z.string().optional() }),
@@ -81,12 +81,15 @@ function useArrivalOrigin(sourceLinkPrefix: string) {
   const navigation = useNavigationType();
   const previous = usePreviousBrowserEntry();
   const index = browserEntryIndex(key);
-  const previousDeparture = index !== undefined && previous?.index === index + 1
-    ? departureSchema.safeParse(previous.state).data?.detailDeparture : undefined;
-  const popOrigin = previousDeparture?.sourceKey === key ? previousDeparture : undefined;
   const isForward = index !== undefined && previous?.index !== undefined && previous.index < index;
-  const candidate = navigation === 'POP' && !isForward ? popOrigin : linkOrigin(state);
+  const candidate = navigation === 'POP' && !isForward ? departureOnBack(previous, key, index) : linkOrigin(state);
   return { key, origin: matchesReturnRoute(candidate, { address: createPath(location), sourceLinkPrefix }) };
+}
+
+function departureOnBack(previous: ReturnType<typeof usePreviousBrowserEntry>, key: string, index: number | undefined) {
+  if (index === undefined || previous?.index !== index + 1) return undefined;
+  const departure = departureSchema.safeParse(previous.state).data?.detailDeparture;
+  return departure?.sourceKey === key ? departure : undefined;
 }
 
 function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceLinkPrefix }: {
@@ -97,6 +100,7 @@ function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceL
 
 export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailReturnFocus {
   const { key, origin } = useArrivalOrigin(sourceLinkPrefix);
+  const canRestore = useCanRestoreEntryFocus();
   const restored = useRef<string | null>(null);
   const restore = useCallback((fallback: HTMLElement | null) => {
     if (origin === undefined || restored.current === key) return;
@@ -104,8 +108,8 @@ export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailRet
     if (target === null) return;
     // Limit focus changes to this visit. A later Back can reuse the same history entry.
     restored.current = key;
-    if (canRestoreFocus(target, false)) target.focus();
-  }, [key, origin]);
+    if (canRestore()) target.focus();
+  }, [key, origin, canRestore]);
   return { hasOrigin: origin !== undefined, restore };
 }
 

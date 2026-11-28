@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useEffectEvent, useRef, type ReactNode, type RefObject } from 'react';
 import { useOneTimeDetailReturnFocus, type DetailReturnFocus } from '../../../shared/hooks/detail-return-focus.js';
+import { useCanRestoreEntryFocus } from '../../../shared/hooks/browser-entry-history.js';
 import { relatedFocusPrefix } from './related-procurement-navigation.js';
 
 const RelatedOrderReturn = createContext<(DetailReturnFocus & { readonly orderRegion: RefObject<HTMLElement | null> }) | null>(null);
@@ -28,11 +29,11 @@ export function useRestoreRelatedOrder(isReady: boolean, sourceRegion?: RefObjec
 
 export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, block: ScrollLogicalPosition) {
   const returnFocus = useContext(RelatedOrderReturn);
+  const canRestore = useCanRestoreEntryFocus();
   const entry = useRef<T>(null);
   const focus = useEffectEvent(() => {
     if (returnFocus?.hasOrigin === true || entry.current === null) return;
-    const active = document.activeElement;
-    if (active !== document.body && active !== entry.current) return;
+    if (!canRestore({ allowInherited: true })) return;
     entry.current.focus({ preventScroll: true });
     entry.current.scrollIntoView({ block });
   });
