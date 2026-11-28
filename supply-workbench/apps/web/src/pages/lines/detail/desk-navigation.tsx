@@ -1,4 +1,4 @@
-import { EntityIdSchema } from '@sw/contracts';
+import { EntityIdSchema, ProcurementStoreSchema } from '@sw/contracts';
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation } from 'react-router';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
@@ -15,15 +15,23 @@ export function LineDetailLink(props: LineDetailLinkProps) {
   const search = new URLSearchParams(props.search);
   const scope = importFollowUpScope(search);
   const batch = EntityIdSchema.safeParse(search.get('importBatchId')).data;
-  const href = batch === undefined ? props.href : importDetailAddress(props.href, { batch, back: scope?.to });
+  const href = batch === undefined ? props.href : importDetailAddress({ href: props.href, search, batch, back: scope?.to });
   return useInRouterContext() ? <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} /> : <a href={href}>{props.children}</a>;
 }
 
-function importDetailAddress(href: string, { batch, back }: { readonly batch: string; readonly back: string | undefined }): string {
+function importDetailAddress({ href, batch, back, search }: {
+  readonly href: string; readonly batch: string; readonly back: string | undefined; readonly search: URLSearchParams;
+}): string {
   const detail = new URL(href, 'https://workbench.invalid');
   detail.searchParams.set('importBatchId', batch);
   if (back !== undefined) detail.searchParams.set(IMPORT_RETURN_PARAM, back);
+  copyImportStore(search, detail.searchParams);
   return followUpAddress(detail.pathname, detail.searchParams);
+}
+
+function copyImportStore(from: URLSearchParams, to: URLSearchParams) {
+  const store = ProcurementStoreSchema.safeParse(from.get('store')).data;
+  if (store !== undefined) to.set('store', store);
 }
 
 function RoutedLineDetailLink({ href, search, children, isScoped }: LineDetailLinkProps & { readonly isScoped: boolean }) {
@@ -160,6 +168,7 @@ function arrivalDeskScope(params: URLSearchParams, state: unknown): URLSearchPar
   const search = new URLSearchParams({ lane: 'all', importBatchId: id.data });
   const scope = importFollowUpScope(params);
   if (scope !== null) search.set(IMPORT_RETURN_PARAM, scope.to);
+  copyImportStore(params, search);
   return search;
 }
 

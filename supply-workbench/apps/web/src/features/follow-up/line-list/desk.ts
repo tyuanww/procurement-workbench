@@ -274,6 +274,8 @@ function addressOf(record: DeskRecord): string {
 function requestOf(record: DeskRecord): string {
   const next = commonParams(record);
   if (record.lane === 'all') next.delete('lane');
+  const store = record.rest.find(({ key }) => key === 'store')?.value;
+  if (record.importBatchId !== undefined) setText({ next, key: 'store', value: LinesQuerySchema.shape.store.safeParse(store).data });
   if (record.isOverdue) next.set('overdueOnly', 'true');
   const stages = stageParam(record.stage);
   if (stages !== undefined) next.set('stages', stages);

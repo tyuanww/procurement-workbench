@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Alert, Button, Descriptions, Drawer, Flex, Skeleton, Typography, type DescriptionsProps } from 'antd';
+import type { ProcurementStore } from '@sw/contracts';
 import { IMPORT_RETURN_PARAM } from '../../features/imports/index.js';
 import { useCan } from '../../shared/actor.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
@@ -9,7 +10,7 @@ import { drawerWidth, space } from '../../theme/tokens.js';
 import { importBatchOrigin, importSourceTriggerId, type ImportSourceState, type SourceLocation } from './import-source.js';
 
 type Target =
-  | { readonly kind: 'scope'; readonly importId: string }
+  | { readonly kind: 'scope'; readonly importId: string; readonly store?: ProcurementStore }
   | { readonly kind: 'order'; readonly importId: string; readonly lineId: string }
   | { readonly kind: 'batch'; readonly lineId: string; readonly batchId: string };
 
@@ -104,7 +105,8 @@ function ImportTarget({ target, source, sourceKey, isShown }: {
     const signal = controller.signal;
     const result = request.kind === 'batch'
       ? readBatchDestination({ ...request, signal })
-      : readImportDestination({ importId: request.importId, lineId: request.kind === 'order' ? request.lineId : undefined, signal });
+      : readImportDestination({ importId: request.importId, lineId: request.kind === 'order' ? request.lineId : undefined,
+        store: request.kind === 'scope' ? request.store : undefined, signal });
     void result.then((destination) => {
       if (!signal.aborted) setLoad(destination === null ? { kind: 'missing' } : { kind: 'ready', destination });
     }).catch((error: unknown) => {
@@ -130,13 +132,18 @@ function ImportTarget({ target, source, sourceKey, isShown }: {
   }
 }
 
-async function readImportDestination({ importId, lineId, signal }: {
+async function readImportDestination({ importId, lineId, store, signal }: {
   readonly importId: string;
   readonly lineId: string | undefined;
+  readonly store: ProcurementStore | undefined;
   readonly signal: AbortSignal;
 }): Promise<Destination | null> {
   const scope = new URLSearchParams({ lane: 'all', importBatchId: importId });
   const query = new URLSearchParams({ importBatchId: importId, pageSize: '1' });
+  if (store !== undefined) {
+    scope.set('store', store);
+    query.set('store', store);
+  }
   if (lineId !== undefined) query.set('lineIds', lineId);
   const { items, page } = await read({ name: 'lines', query: query.toString(), signal });
   if (lineId === undefined) {

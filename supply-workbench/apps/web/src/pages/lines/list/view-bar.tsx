@@ -99,7 +99,10 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   if (input.view.preserveLane === true) copyParam({ from: current, to: next, key: 'lane' });
   else if (!next.has('lane')) next.set('lane', 'all');
   const scope = importFollowUpScope(current);
-  if (scope !== null) next.set('importBatchId', scope.id);
+  if (scope !== null) {
+    next.set('importBatchId', scope.id);
+    copyParam({ from: current, to: next, key: 'store' });
+  }
   else if (!next.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
@@ -115,6 +118,7 @@ export function clearFiltersAddress(search: string): URLSearchParams {
   copyParam({ from: current, to: next, key: 'lane' });
   copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
+  if (importFollowUpScope(current) !== null) copyParam({ from: current, to: next, key: 'store' });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });
   copyParam({ from: current, to: next, key: DELIVERY_QUERY_PARAM });

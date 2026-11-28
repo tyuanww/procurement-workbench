@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { Alert, Button, Descriptions, Flex, Typography } from 'antd';
-import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
+import { ImportBatchSummarySchema, ProcurementStoreSchema, type ImportBatchSummary } from '@sw/contracts';
 import { IMPORT_ACTIONS, importActionLabel, importStatusLabel, templateIdLabel } from '@sw/domain';
 import { ApiError, apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
@@ -120,14 +120,16 @@ function ImportBatchReceipt({ summary, request, canReviewAliases }: {
   readonly canReviewAliases: boolean;
 }) {
   if (summary.status === 'failed') return null;
+  const hasOrderSource = summary.status === 'committed' && ['po-master-v1', 'factory-progress-v1'].includes(summary.template);
   return <SectionGroup title="提交结果">
     <ImportCommitPanel summary={commitSummary(summary, canReviewAliases)} request={request} />
-    {summary.template === 'po-master-v1' && summary.status === 'committed' ? <CommittedImportSource summary={summary} /> : null}
+    {hasOrderSource ? <CommittedImportSource summary={summary} /> : null}
   </SectionGroup>;
 }
 
 function CommittedImportSource({ summary }: { readonly summary: ImportBatchSummary }) {
   const source = useImportSource();
+  const store = summary.template === 'factory-progress-v1' ? ProcurementStoreSchema.safeParse(source.params.get('store')).data : undefined;
   return <>
     <ImportSourceButton source={source} recordKey="batch" />
     <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={source.sourceKey === 'batch' ? {
@@ -136,8 +138,9 @@ function CommittedImportSource({ summary }: { readonly summary: ImportBatchSumma
         { key: 'status', label: '导入状态', children: importStatusLabel(summary.status) },
         { key: 'id', label: '导入批次 ID', children: summary.id },
         { key: 'template', label: '导入模板', children: templateIdLabel(summary.template) },
+        ...(summary.factoryParty === null ? [] : [{ key: 'factory', label: '代工厂', children: summary.factoryParty.displayName }]),
       ],
-      result: { kind: 'scope', importId: summary.id },
+      result: { kind: 'scope', importId: summary.id, ...(store === undefined ? {} : { store }) },
     } : null} />
   </>;
 }
