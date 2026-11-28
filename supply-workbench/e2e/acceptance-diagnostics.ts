@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from 'node:util';
 
 export type AcceptanceSummary = { sha: string } & (
   | { result: 'pass' }
-  | { result: 'fail'; stage: string; browser: unknown; error?: string; cleanupError?: string }
+  | { result: 'fail'; stage: string; browser: unknown; error?: string; cleanupErrors?: readonly string[] }
 );
 
 export function browserFailureLocation(error: unknown): string | undefined {
@@ -53,8 +53,9 @@ export function acceptanceSummary(summary: AcceptanceSummary): string {
     if (summary.error !== undefined && summary.error !== browserError) {
       appendDiagnostic(lines, browserError === undefined ? summary.error : '运行器错误：' + summary.error);
     }
-    const cleanupErrors = [browser?.cleanupFailure, summary.cleanupError].filter((value): value is string => typeof value === 'string');
-    if (cleanupErrors.length) appendDiagnostic(lines, '清理失败：' + cleanupErrors.join('\n'));
+    const cleanupErrors = [...(summary.cleanupErrors ?? [])];
+    if (typeof browser?.cleanupFailure === 'string') cleanupErrors.unshift(browser.cleanupFailure);
+    for (const cleanupError of cleanupErrors) appendDiagnostic(lines, '清理失败：' + cleanupError);
     lines.push('', '完整错误见失败步骤日志。如已上传证据，打开 `run.json` 和 `preaccept/result.json`。');
   }
   return lines.join('\n') + '\n\n';

@@ -37,7 +37,7 @@ describe('采购浏览器验收摘要', () => {
   it('浏览器尚无子进程报告时仍显示失败阶段和日志入口', () => {
     const summary = acceptanceSummary({
       sha, result: 'fail', stage: '执行采购浏览器验收', browser: undefined,
-      error: 'spawnSync <browser> ETIMEDOUT', cleanupError: 'pg_ctl stop failed',
+      error: 'spawnSync <browser> ETIMEDOUT', cleanupErrors: ['pg_ctl stop failed'],
     });
 
     expect(summary).toContain('结果：失败（执行采购浏览器验收）');
@@ -63,6 +63,18 @@ describe('采购浏览器验收摘要', () => {
 
     expect(summary).toContain('找不到第 2 批');
     expect(summary).toContain('运行器错误：spawnSync node ETIMEDOUT');
+  });
+
+  it('浏览器清理日志较长时仍分别显示应用与数据库清理失败', () => {
+    const summary = acceptanceSummary({
+      sha, result: 'fail', stage: '执行采购浏览器验收',
+      browser: { result: 'fail', failure: '找不到第 2 批', cleanupFailure: '浏览器日志'.repeat(250) },
+      cleanupErrors: ['应用关闭超时', 'pg_ctl stop failed'],
+    });
+
+    expect(summary).toContain('清理失败：浏览器日志');
+    expect(summary).toContain('清理失败：应用关闭超时');
+    expect(summary).toContain('清理失败：pg_ctl stop failed');
   });
 });
 

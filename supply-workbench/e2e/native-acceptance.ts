@@ -72,7 +72,6 @@ const pgLog = join(working, 'postgres.log');
 const appLog = join(working, 'app.log');
 let pgStarted = false;
 let app: ReturnType<typeof fork> | undefined;
-let appExit: Promise<unknown[]> | undefined;
 const browserAcceptanceStage = '执行采购浏览器验收';
 const cleanupStage = '清理隔离服务与数据库';
 let stage = '准备合成样本与浏览器';
@@ -122,7 +121,7 @@ try {
     execArgv: ['--experimental-strip-types', '--import', productionLoader, '--import', './e2e/native-server.ts'],
     silent: true,
   });
-  appExit = once(app, 'exit');
+  const appExit = once(app, 'exit');
   assert.ok(app.stdout && app.stderr, 'Application log pipes are unavailable');
   const log = createWriteStream(appLog);
   app.stdout.pipe(log, { end: false });
@@ -159,13 +158,17 @@ function recordCleanup(error: unknown): void {
   console.error('Unable to clean up isolated acceptance:', message);
   failure ??= { stage: cleanupStage, error };
 }
-try {
-  if (app?.exitCode === null && app.signalCode === null) {
-    app.kill();
-    await appExit;
+if (app !== undefined) {
+  try {
+    await stopApplication(app, 'SIGTERM', 15_000);
+  } catch (error) {
+    recordCleanup(new Error('隔离应用未在正常关闭期限内退出', { cause: error }));
+    try {
+      await stopApplication(app, 'SIGKILL', 5_000);
+    } catch (forceError) {
+      recordCleanup(new Error('无法强制关闭隔离应用', { cause: forceError }));
+    }
   }
-} catch (error) {
-  recordCleanup(error);
 }
 try {
   if (pgStarted) run(pgTool('pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
@@ -197,7 +200,7 @@ if (failure !== undefined) {
     ? await readFile(join(evidenceDir, 'preaccept', 'result.json'), 'utf8').then(JSON.parse).catch(() => undefined)
     : undefined;
   const additionalCleanup = failure.stage === cleanupStage ? cleanupErrors.slice(1) : cleanupErrors;
-  const cleanup = additionalCleanup.length ? { cleanupError: additionalCleanup.join('\n') } : {};
+  const cleanup = additionalCleanup.length ? { cleanupErrors: additionalCleanup } : {};
   await writeSummary({ sha, result: 'fail', stage: failure.stage, browser, error, ...cleanup });
   throw failure.error;
 }
@@ -209,6 +212,14 @@ try {
   throw error;
 }
 await writeSummary({ sha, result: 'pass' });
+
+async function stopApplication(app: ReturnType<typeof fork>, signal: NodeJS.Signals, timeout: number): Promise<void> {
+  if (app.exitCode !== null || app.signalCode !== null) return;
+  await Promise.all([
+    once(app, 'exit', { signal: globalThis.AbortSignal.timeout(timeout) }),
+    Promise.resolve().then(() => app.kill(signal)),
+  ]);
+}
 
 async function writeSummary(summary: AcceptanceSummary): Promise<void> {
   const path = process.env.GITHUB_STEP_SUMMARY;
