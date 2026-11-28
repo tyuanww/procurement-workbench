@@ -17,7 +17,7 @@ export { postManualBatch, postReceipt, postShipment } from './record-forms/comma
 export { RecordForm } from './record-forms/RecordForm.js';
 export { RecordField, RecordFormLayout } from './record-forms/RecordFields.js';
 export { clearOrderLensParams, dailyDeliveryParams, DELIVERY_QUERY_PARAM, deliveryBackAddress, deliveryBuyerOf, deliveryStoreOf, homeDeliveryRiskAddress, homeDeliveryRiskOf, orderLensOf, switchOrderLens, type OrderLens } from './line-list/order-lens-query.js';
-export { followUpAddress, importBatchOf } from './line-list/follow-up-address.js';
+export { followUpAddress, followUpParams, importBatchOf } from './line-list/follow-up-address.js';
 export { followUpFeishuReturn, followUpLoginResume } from './line-list/follow-up-login.js';
 export { useFollowUpSearch } from './line-list/use-follow-up-search.js';
 export { DELIVERY_RISK_REASONS, deliveryRiskReasons } from './line-list/delivery-risk.js';

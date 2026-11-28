@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useEffectEvent, useRef, type ReactNode, type RefObject } from 'react';
 import { useLocation, useNavigationType } from 'react-router';
-import { followUpParams } from '../../../features/follow-up/line-list/follow-up-address.js';
+import { followUpParams } from '../../../features/follow-up/index.js';
 import { useOneTimeDetailReturnFocus, type DetailReturnFocus } from '../../../shared/hooks/detail-return-focus.js';
 import { browserEntryIndex, SearchDialogFocus, useCanRestoreEntryFocus, usePreviousBrowserEntry } from '../../../shared/hooks/browser-entry-history.js';
 import { relatedFocusPrefix } from './related-procurement-navigation.js';
