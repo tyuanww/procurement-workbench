@@ -1,7 +1,7 @@
 import type { ImportTemplate } from '../../packages/application/src/ports/import-template.js';
 import type { WorkbookLike } from '../../packages/application/src/ports/workbook-reader.js';
 import type { ParsedImport } from '../../packages/application/src/ports/parsed-rows.js';
-import { localDate } from '../../packages/domain/src/index.js';
+import { entityId, localDate, type ItemCode } from '../../packages/domain/src/index.js';
 import {
   aBatch,
   createMemory,
@@ -76,6 +76,19 @@ it('固定时钟按上海时区给业务日，advance 往后推', () => {
 it('顺序 id 不重复', () => {
   const ids = new SequentialIds();
   expect(ids.next()).not.toBe(ids.next());
+});
+
+it('登记新编码时保留实际编码与已审核状态，拒绝将既有 ID 分给另一个编码', async () => {
+  const codes = memory().stores.itemCodes;
+  const at = '2026-10-11T15:30:00.000Z';
+  const recorded: ItemCode = {
+    id: entityId('existing-code'), createdAt: at, updatedAt: at, codeType: 'pack_30',
+    codeRaw: '30000093', codeNorm: '30000093', status: 'approved', itemId: entityId('approved-item'),
+  };
+  await codes.save(recorded);
+  await expect(codes.insertIfAbsent({ ...recorded, id: entityId('attempted-code'), status: 'pending', itemId: null })).resolves.toBe(recorded.id);
+  await expect(codes.insertIfAbsent({ ...recorded, codeRaw: '30000094', codeNorm: '30000094' })).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+  expect(await codes.get(recorded.id)).toEqual(recorded);
 });
 
 it('构建器两次调用不共享对象', () => {
