@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
 import { parseLocalDate, type FactoryDemandFacts, type FactoryDemandSlot, type FactoryInTransitFacts, type FactoryReportKind, type FactoryReportRow, type FactoryShipmentFacts, type LinkStatus, type LocalDate } from '@sw/domain';
 import { LINK_STATUSES } from '@sw/domain';
@@ -7,11 +7,13 @@ import type { BatchDemandSource } from '../../../application/src/ports/delivery-
 import type { AppDatabase } from '../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../schema/factory.js';
 import { importBatches } from '../schema/archive.js';
-import { lineFactoryLinks } from '../schema/orders.js';
+import { effectiveFactoryLinks } from '../queries/factory-links/line-association.js';
+import { activeFactoryBatchIds } from '../queries/factory-links/snapshot-scope.js';
 import { batchDemandSourceOf, demandSourceOf, isAssociated } from '../queries/follow-up/payloads.js';
 import { numberOrNull } from '../mappers/number.js';
 import { entityId, orderLineIdOrNull } from '../mappers/id.js';
 import { comboColumns, demandColumns, scheduleColumns, shipmentColumns, stockColumns, suppliedColumns, transitColumns } from './factory-columns.js';
+import { lockFactoryOwnershipChange, tryLockFactoryOwnershipForEvidence } from './factory-ownership-lock.js';
 
 const CHUNK = 500;
 const demandVersion = sql<string>`${factoryMaterialDemandRows}.xmin::text || ':' || ${factoryMaterialDemandRows}.ctid::text`;
@@ -50,21 +52,17 @@ async function demandForGeneration(db: AppDatabase, id: string) {
 
 async function demandSourcesAtGeneration(db: AppDatabase, input: Parameters<FactoryReportRepository['demandSourcesAtGeneration']>[0]) {
   const table = factoryMaterialDemandRows;
-  const otherFactory = db.select({ id: lineFactoryLinks.id }).from(lineFactoryLinks)
-    .where(and(eq(lineFactoryLinks.orderLineId, input.orderLineId), ne(lineFactoryLinks.factoryPartyId, table.factoryPartyId)));
   // 重联仍在写入或已经换成另一版本时，只保留本次生成的业务事实。
   const [locked] = await db.select({ demand: table }).from(table)
     .innerJoin(importBatches, and(eq(importBatches.id, table.importBatchId), eq(importBatches.factoryPartyId, table.factoryPartyId),
       eq(importBatches.template, 'factory-progress-v1'), eq(importBatches.status, 'committed')))
-    .where(and(
-      eq(table.id, input.rowId), eq(table.role, 'material'), sql`(${demandVersion}) = ${input.version}`,
-      or(isNotNull(table.linkedOrderLineId), notExists(otherFactory)),
-    ))
+    .where(and(eq(table.id, input.rowId), eq(table.role, 'material'), sql`(${demandVersion}) = ${input.version}`))
     .for('share', { of: table, skipLocked: true });
   const sources = new Map<number, BatchDemandSource>();
   if (locked === undefined) return sources;
   const demand = locked.demand;
   if (!canCaptureDemandSource(demand, input.orderLineId)) return sources;
+  if (demand.linkedOrderLineId === null && !await factoryAllowsEvidence(db, input.orderLineId, demand.factoryPartyId)) return sources;
   // 生成凭据只接受已采集的 raw 槽，规范列用于生成批次的业务值。
   const view = demandSourceOf({ ...demand, slots: null });
   if (view.payload.role !== 'material') return sources;
@@ -76,6 +74,12 @@ async function demandSourcesAtGeneration(db: AppDatabase, input: Parameters<Fact
     if (source !== undefined) sources.set(slot.index, source);
   }
   return sources;
+}
+
+async function factoryAllowsEvidence(db: AppDatabase, orderLineId: string, factoryPartyId: string): Promise<boolean> {
+  if (!await tryLockFactoryOwnershipForEvidence(db, orderLineId)) return false;
+  const [ownership] = await effectiveFactoryLinks({ db, activeFactoryBatchIds: await activeFactoryBatchIds(db), lineIds: [orderLineId] });
+  return ownership?.factoryPartyId == null || ownership.factoryPartyId === factoryPartyId;
 }
 
 function unambiguousSlots<T extends { readonly index: number }>(slots: readonly T[]): Map<number, T | undefined> {
@@ -97,14 +101,17 @@ export async function insertFactoryShipments(db: AppDatabase, rows: readonly Fac
 
 async function saveReport(db: AppDatabase, entity: FactoryReportRow): Promise<void> {
   if (entity.kind === 'stock') {
+    await lockManualReportOwnership(db, factoryStockRows, entity);
     await db.insert(factoryStockRows).values(stockInsert(entity)).onConflictDoUpdate({ target: [factoryStockRows.importBatchId, factoryStockRows.fingerprint, factoryStockRows.sheetName, factoryStockRows.rowNo], set: stockInsert(entity) });
     return;
   }
   if (entity.kind === 'shipment') {
+    await lockManualReportOwnership(db, factoryShipmentRows, entity);
     await db.insert(factoryShipmentRows).values(shipmentInsert(entity)).onConflictDoUpdate({ target: [factoryShipmentRows.importBatchId, factoryShipmentRows.fingerprint, factoryShipmentRows.sheetName, factoryShipmentRows.rowNo], set: shipmentInsert(entity) });
     return;
   }
   if (entity.kind === 'in_transit') {
+    await lockManualReportOwnership(db, factoryInTransitRows, entity);
     await db.insert(factoryInTransitRows).values(transitInsert(entity)).onConflictDoUpdate({ target: [factoryInTransitRows.importBatchId, factoryInTransitRows.fingerprint, factoryInTransitRows.sheetName, factoryInTransitRows.rowNo], set: transitInsert(entity) });
     return;
   }
@@ -121,6 +128,16 @@ async function saveReport(db: AppDatabase, entity: FactoryReportRow): Promise<vo
     return;
   }
   await db.insert(customerSuppliedReceiptRows).values(suppliedInsert(entity)).onConflictDoUpdate({ target: [customerSuppliedReceiptRows.importBatchId, customerSuppliedReceiptRows.fingerprint, customerSuppliedReceiptRows.sheetName, customerSuppliedReceiptRows.rowNo], set: suppliedInsert(entity) });
+}
+
+async function lockManualReportOwnership(
+  db: AppDatabase, table: typeof factoryShipmentRows | typeof factoryInTransitRows | typeof factoryStockRows, entity: FactoryReportRow,
+): Promise<void> {
+  if (entity.linkStatus !== 'manual') return;
+  const [previous] = await db.select({ orderLineId: table.linkedOrderLineId }).from(table)
+    .where(eq(table.id, entity.id)).for('update');
+  // 新导入的报告可能继承手工关联，不是改挂现有报告。
+  if (previous !== undefined) await lockFactoryOwnershipChange(db, [previous.orderLineId, entity.linkedOrderLineId]);
 }
 
 async function findReport(db: AppDatabase, id: string): Promise<FactoryReportRow | undefined> {

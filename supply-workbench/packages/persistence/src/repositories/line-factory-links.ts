@@ -7,6 +7,7 @@ import { entityId, entityIdOrNull, orderLineId } from '../mappers/id.js';
 import { instant } from '../mappers/time.js';
 import { lineFactoryLinks } from '../schema/orders.js';
 import { parties } from '../schema/platform.js';
+import { lockFactoryOwnershipChange } from './factory-ownership-lock.js';
 
 const STATUSES: readonly LineFactoryLinkStatus[] = ['linked', 'unlinked', 'manual'];
 const SOURCES: readonly LineFactoryLinkSource[] = ['po_master', 'factory_progress', 'relink', 'manual'];
@@ -27,6 +28,7 @@ async function find(db: AppDatabase, orderLineIdValue: string): Promise<LineFact
 }
 
 async function save(db: AppDatabase, entity: LineFactoryLink): Promise<boolean> {
+  if (entity.source === 'manual') await lockFactoryOwnershipChange(db, [entity.orderLineId]);
   const row = toRow(entity);
   const updated = await db.insert(lineFactoryLinks).values(row).onConflictDoUpdate({
     target: lineFactoryLinks.id,
