@@ -1,4 +1,5 @@
 import type { GenerateBatchesFromDemand, GenerateBatchesFromDemandDeps } from '../boundary.js';
+import { purchaseOrderKey } from './purchase-order-ref.js';
 import { authorize } from '../../shared/authorize.js';
 import { freezeGenerationEvidence, generateDemandRow, type RowOutcome, type SlotSkip } from './demand-batches.js';
 
@@ -11,18 +12,27 @@ export const makeGenerateBatchesFromDemand =
     let createdLines = 0;
     let createdBatches = 0;
     await deps.uow.run(async (tx) => {
-      await tx.batches.lockDemandGeneration(input.rowIds);
-      const evidence: NonNullable<RowOutcome['evidence']>[] = [];
+      await tx.batches.lockDemandGeneration({ rowIds: input.rowIds });
+      const demands = [];
+      const materialOrderNumbers = new Set<string | null>();
       for (const rowId of input.rowIds) {
+        const source = await tx.factoryReports.getForDemandGeneration(rowId);
+        demands.push(source);
+        if (source.row.demand?.role === 'material') {
+          materialOrderNumbers.add(purchaseOrderKey(source.row.demand.blockMaterialPoRaw).poNorm);
+        }
+      }
+      await tx.batches.lockDemandGeneration({ materialOrderNumbers: [...materialOrderNumbers] });
+      const evidence: NonNullable<RowOutcome['evidence']>[] = [];
+      for (const source of demands) {
         const outcome = await generateDemandRow({
           tx,
-          rowId,
           actor,
           at,
           nextOrderLineId: () => deps.ids.orderLine(),
           nextEntityId: () => deps.ids.next(),
           nextDeliveryBatchId: () => deps.ids.deliveryBatch(),
-        });
+        }, source);
         createdLines += outcome.lines;
         createdBatches += outcome.batches;
         skipped.push(...outcome.skipped);

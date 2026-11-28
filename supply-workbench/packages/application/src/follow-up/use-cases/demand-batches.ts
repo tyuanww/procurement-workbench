@@ -37,7 +37,6 @@ type GenerationEvidence = {
 
 type GenerateInput = {
   readonly tx: UnitOfWorkStores;
-  readonly rowId: string;
   readonly actor: Actor;
   readonly at: string;
   readonly nextOrderLineId: () => OrderLineId;
@@ -45,8 +44,9 @@ type GenerateInput = {
   readonly nextDeliveryBatchId: () => DeliveryBatchId;
 };
 
-export async function generateDemandRow(input: GenerateInput): Promise<RowOutcome> {
-  const { row, version } = await input.tx.factoryReports.getForDemandGeneration(input.rowId);
+type DemandSnapshot = Awaited<ReturnType<UnitOfWorkStores['factoryReports']['getForDemandGeneration']>>;
+
+export async function generateDemandRow(input: GenerateInput, { row, version }: DemandSnapshot): Promise<RowOutcome> {
   const blocked = blockReason(row);
   if (blocked !== null) return skippedRow(row.id, blocked);
   const demand = row.demand;
@@ -116,8 +116,8 @@ async function createSlots(
 ): Promise<{ readonly created: CreatedSlot[]; readonly skipped: SlotSkip[] }> {
   const skipped: SlotSkip[] = [];
   const created: CreatedSlot[] = [];
+  const line = await input.tx.orderLines.lock(input.lineId);
   let seq = nextSeq(await input.tx.batches.listByOrderLine(input.lineId));
-  const line = await input.tx.orderLines.get(input.lineId);
   const receiver = line.receiverPartyId ?? input.factoryPartyId;
   for (const slot of input.candidates) {
     const batchId = await createSlot({ ...input, slot, seq, receiver, unit: line.unit, skipped });
