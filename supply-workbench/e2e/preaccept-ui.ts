@@ -748,7 +748,9 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await order.click();
   const source = page.getByRole('region', { name: '采购事项来源' });
   await source.getByRole('heading', { name: '关联成品', exact: true }).waitFor();
-  assert.equal(await source.locator('a[href^="/lines/"]').count(), 3);
+  const related = source.locator('a[href^="/lines/"]');
+  await related.nth(2).waitFor();
+  assert.equal(await related.count(), 3);
   await source.getByRole('button', { name: '来源版本（1）', exact: true }).click();
   const sourceLink = source.getByRole('link', { name: /第 5 行$/ });
   assert.equal(await sourceLink.getAttribute('href'), importPath);
