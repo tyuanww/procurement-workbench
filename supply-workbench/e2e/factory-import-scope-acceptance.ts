@@ -39,10 +39,11 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkSharedProcurementReturn({ page: manager, origin });
   await checkSharedProcurementReturn({ page: manager, origin, store: currentStore });
   await checkPendingPreviewReturn(buyer, origin);
+  await checkDelayedDetailReturnFocus(buyer, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
-    relatedOrdersKeepTrueScope: true, detachedDetailChecksMembership: true, sharedFilteredReturn: true, pendingPreviewReturn: true };
+    relatedOrdersKeepTrueScope: true, detachedDetailChecksMembership: true, sharedFilteredReturn: true, pendingPreviewReturn: true, delayedDetailReturnFocus: true };
 }
 
 function factoryRelatedComponent(page: Page) {
@@ -236,6 +237,44 @@ async function checkPendingPreviewReturn(page: Page, origin: URL) {
   } finally {
     finish();
     await page.unroute(isMembership);
+  }
+}
+
+async function checkDelayedDetailReturnFocus(page: Page, shared: URL) {
+  const address = new URL(shared);
+  address.searchParams.set('q', 'FS-MANUAL');
+  const isTemplate = (url: URL) => url.pathname === `/api/v1/imports/${scopeId}`;
+  const results = page.getByRole('region', { name: '订单查询结果', exact: true });
+  const row = results.getByRole('link', { name: 'FS-MANUAL', exact: true });
+  const order = row.and(page.locator('a[href]'));
+  for (const isExpectedSuccess of [true, false]) {
+    await page.goto(address.href);
+    const [summary] = await Promise.all([
+      page.waitForResponse((response) => isTemplate(new URL(response.url()))),
+      order.press('Enter'),
+    ]);
+    assert.ok(summary.ok());
+    await page.getByRole('heading', { name: 'FS-MANUAL', exact: true }).waitFor();
+    let finish: () => void = () => undefined;
+    const paused = new Promise<void>((resolve) => { finish = resolve; });
+    await page.route(isTemplate, async (route) => {
+      await paused;
+      if (isExpectedSuccess) await route.continue();
+      else await route.abort();
+    }, { times: 1 });
+    try {
+      await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+      await page.waitForURL(address.href);
+      await row.and(page.locator('[aria-busy="true"]')).waitFor();
+      await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
+      assert.equal(await results.and(page.locator(':focus')).count(), 0);
+      finish();
+      await order.and(page.locator(':focus')).waitFor();
+      assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), Number(isExpectedSuccess));
+    } finally {
+      finish();
+      await page.unroute(isTemplate);
+    }
   }
 }
 

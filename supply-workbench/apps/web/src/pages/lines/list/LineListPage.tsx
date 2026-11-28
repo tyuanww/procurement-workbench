@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type R
 import { Link, useLocation } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
 import { importBatchOf, loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, useFollowUpSearch, type OrderLens } from '../../../features/follow-up/index.js';
-import { importFollowUpCandidate, ImportReturnTemplateContext, useImportReturnTemplate } from '../../../features/imports/index.js';
+import { importFollowUpCandidate, ImportReturnTemplateContext, useImportReturnTemplate, useImportReturnTemplateContext } from '../../../features/imports/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
@@ -73,7 +73,8 @@ function OrderQuery() {
   const { picked, setPicked } = useDeskSelection(request);
   const refresh = () => setReload((value) => value + 1);
   const rememberPreviewTrigger = usePreviewTrigger(preview !== null, results);
-  useDetailReturnFocus({ results, lineId: readReturningLine(location.state), key: location.key, isSettled: load.kind !== 'pending' });
+  const isTemplateSettled = useImportReturnTemplateContext() !== undefined;
+  useDetailReturnFocus({ results, lineId: readReturningLine(location.state), key: location.key, isSettled: isTemplateSettled && load.kind !== 'pending' });
   useEffect(() => { void loadDeskOwners({ setUsers, setUserId, setOwnerVisible }); }, []);
   return (
     <>
