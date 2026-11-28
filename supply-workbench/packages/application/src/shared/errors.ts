@@ -30,6 +30,15 @@ export class ValidationFailedError extends AppError {
   }
 }
 
+export class OrderLineLockBusy extends Error {
+  readonly lineId: string;
+
+  constructor(lineId: string) {
+    super('订单行正在被另一事务更新');
+    this.lineId = lineId;
+  }
+}
+
 export class StateConflictError extends AppError {
   constructor(state: string) {
     super({ code: 'STATE_CONFLICT', message: '当前状态不允许这个操作', details: { state } });

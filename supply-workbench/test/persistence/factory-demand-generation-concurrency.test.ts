@@ -30,7 +30,7 @@ it.skipIf(url === undefined).each([
       });
     }
     const paused = gate();
-    const first = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
+    const first = makeGenerateBatchesFromDemand(writes(main.db, { afterMaterialOrderLock: paused.hold }));
     const second = makeGenerateBatchesFromDemand(writes(competing.db));
     const request = { rowIds: [sample.id] };
     const holding = first(request, sample.buyer);

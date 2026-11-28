@@ -178,7 +178,7 @@ it.skipIf(url === undefined)('四个不同需求行按相反物料单顺序同�
       ids.push(id);
     }
     const paused = gate();
-    const left = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
+    const left = makeGenerateBatchesFromDemand(writes(main.db, { afterMaterialOrderLock: paused.hold }));
     const right = makeGenerateBatchesFromDemand(writes(competing.db));
     const holding = left({ rowIds: ids.slice(0, 2) }, sample.buyer);
     let waiting: ReturnType<typeof right> | undefined;

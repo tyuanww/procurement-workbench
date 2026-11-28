@@ -4,8 +4,17 @@ import { createPurchaseOrder, findPurchaseOrders } from './purchase-order-ref.js
 
 export type MaterialIdentity = { readonly purchaseOrderId: EntityId; readonly itemCode: string };
 
+type MatchProblem = '匹配到多条订单行' | '订单行已取消';
+
+export type MaterialMatchFailure = {
+  readonly reason: MatchProblem;
+  readonly material: MaterialIdentity;
+  readonly matchingLineIds: readonly OrderLineId[];
+};
+
 type MaterialLine =
   { readonly lineId: OrderLineId; readonly material: MaterialIdentity; readonly matchingLineIds: readonly OrderLineId[]; readonly created: boolean }
+  | MaterialMatchFailure
   | { readonly reason: string };
 
 type ResolveInput = {
@@ -37,15 +46,14 @@ async function lineOnOrder(
   tx: UnitOfWorkStores,
   input: ResolveInput & { readonly itemCode: string; readonly purchaseOrderId: EntityId },
 ): Promise<MaterialLine> {
-  const matches = await materialLinesOnOrder(tx, input);
-  const open = matches.filter((line) => line.cancelledAt === null);
-  if (open.length > 1) return { reason: '匹配到多条订单行' };
+  const material = { purchaseOrderId: input.purchaseOrderId, itemCode: input.itemCode };
+  const matches = await materialLinesOnOrder(tx, material);
+  const open = openMatches(matches);
+  const matchingLineIds = matches.map((line) => line.id);
+  const reason = matchProblem({ matches, open });
+  if (reason !== null) return { reason, material, matchingLineIds };
   const found = open[0];
-  if (found !== undefined) return {
-    lineId: found.id, material: { purchaseOrderId: input.purchaseOrderId, itemCode: input.itemCode },
-    matchingLineIds: matches.map((line) => line.id), created: false,
-  };
-  if (matches.length > 0) return { reason: '订单行已取消' };
+  if (found !== undefined) return { lineId: found.id, material, matchingLineIds, created: false };
   return createLine(tx, { ...input, purchaseOrderId: input.purchaseOrderId });
 }
 
@@ -73,9 +81,24 @@ export async function isCurrentMaterialLine(tx: UnitOfWorkStores, { line, materi
   readonly line: OrderLine; readonly material: MaterialIdentity;
 }): Promise<boolean> {
   if (!sameMaterial(line, material)) return false;
-  const open = (await materialLinesOnOrder(tx, material)).filter((match) => match.cancelledAt === null);
+  const open = openMatches(await materialLinesOnOrder(tx, material));
   if (open.length === 0) return line.cancelledAt !== null;
   return open.length === 1 && open[0]?.id === line.id;
+}
+
+export async function isCurrentMaterialFailure(tx: UnitOfWorkStores, failure: MaterialMatchFailure): Promise<boolean> {
+  const matches = await materialLinesOnOrder(tx, failure.material);
+  return matchProblem({ matches, open: openMatches(matches) }) === failure.reason;
+}
+
+function openMatches(matches: readonly OrderLine[]): readonly OrderLine[] {
+  return matches.filter((line) => line.cancelledAt === null);
+}
+
+function matchProblem({ matches, open }: { readonly matches: readonly OrderLine[]; readonly open: readonly OrderLine[] }): MatchProblem | null {
+  if (open.length > 1) return '匹配到多条订单行';
+  if (open.length === 0 && matches.length > 0) return '订单行已取消';
+  return null;
 }
 
 async function materialLinesOnOrder(tx: UnitOfWorkStores, material: MaterialIdentity): Promise<readonly OrderLine[]> {

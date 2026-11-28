@@ -30,6 +30,7 @@ export const wait = { timeout: 4000, interval: 25 };
 
 type Hooks = {
   readonly afterOriginRead?: () => Promise<void>;
+  readonly afterMaterialOrderLock?: () => Promise<void>;
   readonly afterDemandSave?: () => Promise<void>;
   readonly afterLineLock?: (id: string) => Promise<void>;
   readonly afterLineSave?: (id: string) => Promise<void>;
@@ -44,6 +45,10 @@ export function writes(db: AppDatabase, hooks: Hooks = {}) {
       ...placeholderStores(),
       batches: {
         ...batches,
+        async lockDemandGeneration(scope: Parameters<typeof batches.lockDemandGeneration>[0]) {
+          await batches.lockDemandGeneration(scope);
+          if (scope.materialOrderNumbers !== undefined) await hooks.afterMaterialOrderLock?.();
+        },
         async listByOriginRef(ref: { readonly rowId: string; readonly slotIndex: number }) {
           const found = await batches.listByOriginRef(ref);
           await hooks.afterOriginRead?.();
@@ -75,8 +80,9 @@ function linesWithHooks(tx: AppDatabase, hooks: Hooks) {
   const orderLines = orderLineRepository(tx);
   return {
     ...orderLines,
-    async lock(id: string) {
-      const line = await orderLines.lock(id);
+    async lock(...args: Parameters<typeof orderLines.lock>) {
+      const line = await orderLines.lock(...args);
+      const [id] = args;
       await hooks.afterLineLock?.(id);
       return line;
     },
