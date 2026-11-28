@@ -120,7 +120,7 @@ it('已采纳出货重挂后仅提示原批次暂无法核对，发货数量和�
   }
 });
 
-it('生成的两批各自回查原需求，换表时保留，挂接其他订单后收起原稿', async () => {
+it('历史批次只回查可核对的原需求，挂接其他订单后收起原稿', async () => {
   const { app, handle, close } = await openProcurementImport({ isLocal: true });
   try {
     const client = await procurementImportClient(app, handle);
@@ -136,6 +136,7 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
       headers: { cookie: client.cookie }, payload: { rowIds: ['origin-row'] } });
     expect(generated.statusCode, generated.body).toBe(200);
     expect(generated.json()).toEqual({ createdLines: 1, createdBatches: 2, skipped: [] });
+    await handle.exec("update delivery_batches set origin_ref = origin_ref - 'generationSource' where origin_ref->>'rowId' = 'origin-row'");
     const line = must((await handle.db.select().from(schema.orderLines)).find(({ itemCodeRaw }) => itemCodeRaw === '99010004'));
     const before = await client.detail(line.id);
     const first = must(before.batches.find(({ seq }) => seq === 1));
@@ -197,7 +198,7 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
   }
 });
 
-it('旧工厂需求保留批次数量与日期，逐格区分缺原值和已采集空值', async () => {
+it('旧工厂需求生成新批次时保留业务值，逐格区分缺原值和已采集空值', async () => {
   const { app, handle, close } = await openProcurementImport({ isLocal: true });
   try {
     const client = await procurementImportClient(app, handle);
@@ -209,12 +210,15 @@ it('旧工厂需求保留批次数量与日期，逐格区分缺原值和已采�
     ];
     await handle.db.insert(schema.factoryMaterialDemandRows).values({
       ...stamp, id: 'legacy-origin', importBatchId: 'factory-legacy', factoryPartyId: factory, sheetName: demandSheet,
-      rowNo: 4, fingerprint: 'legacy-demand', linkStatus: 'unlinked', role: 'material',
+      rowNo: 4, fingerprint: 'legacy-demand', linkStatus: 'unlinked', linkReason: 'NO_CANDIDATE_LINE', role: 'material',
       blockMaterialPoRaw: 'PO20261117009105', itemCodeRaw: '99010005', nameRaw: '合成旧需求包材',
       slots: { slots: legacySlots.map(({ index, date, qty }) => ({ index, date, qty })) }, raw: { slots: legacySlots },
     });
-    const generated = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand-rows/generate-batches',
-      headers: { cookie: client.cookie }, payload: { rowIds: ['legacy-origin'] } });
+    const generate = (cookie: string) => app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand-rows/generate-batches',
+      headers: { cookie }, payload: { rowIds: ['legacy-origin'] } });
+    const reviewer = await loginAs(app, 'reviewer');
+    expect((await generate(reviewer)).statusCode).toBe(403);
+    const generated = await generate(client.cookie);
     expect(generated.statusCode, generated.body).toBe(200);
     expect(generated.json()).toEqual({ createdLines: 1, createdBatches: 2, skipped: [] });
     const line = must((await handle.db.select().from(schema.orderLines)).find(({ itemCodeRaw }) => itemCodeRaw === '99010005'));
@@ -230,14 +234,35 @@ it('旧工厂需求保留批次数量与日期，逐格区分缺原值和已采�
     } });
     expect(detail.sourceFiles).toEqual({ 'factory-legacy': '旧需求原表.xlsx' });
 
-    const reviewer = await loginAs(app, 'reviewer');
-    const linked = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand/legacy-origin/link',
-      headers: { cookie: reviewer }, payload: { orderLineId: line.id } });
+    const link = (orderLineId: string) => app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand/legacy-origin/link',
+      headers: { cookie: reviewer }, payload: { orderLineId } });
+    const linked = await link(line.id);
     expect(linked.statusCode, linked.body).toBe(200);
     const referenced = await client.detail(line.id);
     expect(referenced.factoryReports.demand[0]?.payload.slots.map(({ originalCells }) => originalCells)).toEqual([
       {}, { qtyRaw: '0100.00' }, { dateRaw: null, qtyRaw: '5' },
     ]);
+    const another = await app.inject({ method: 'POST', url: '/api/v1/lines', headers: { cookie: client.cookie },
+      payload: { lane: 'material', nameRaw: '合成另一订单行', qtyOrdered: 100, receiverPartyId: warehouse } });
+    expect(another.statusCode, another.body).toBe(200);
+    const anotherId = OrderLineDetailSchema.parse(another.json()).line.id;
+    expect((await link(anotherId)).statusCode).toBe(200);
+    await handle.exec(`update factory_material_demand_rows set row_no = 18, raw = '{"slots":[{"index":1,"qtyRaw":"新原表数量"}]}' where id = 'legacy-origin'`);
+    expect((await client.detail(anotherId)).factoryReports.demand).toMatchObject([
+      { rowNo: 18, payload: { slots: [{ qtyRaw: '新原表数量' }] } },
+    ]);
+    const patch = await app.inject({ method: 'PATCH', url: `/api/v1/batches/${partial.id}`, headers: { cookie: client.cookie },
+      payload: { dateSupplierPromised: '2026-11-29' } });
+    expect(patch.statusCode, patch.body).toBe(200);
+    expect(BatchViewSchema.parse(patch.json()).originRef).toEqual({ rowId: 'legacy-origin', slotIndex: 1 });
+    expect(patch.body).not.toContain('0100.00');
+    const retried = await generate(client.cookie);
+    expect(retried.statusCode, retried.body).toBe(200);
+    expect(retried.json()).toMatchObject({ createdLines: 0, createdBatches: 0 });
+    const final = await client.detail(line.id);
+    expect(final.batches.map(({ id }) => id)).toEqual(detail.batches.map(({ id }) => id));
+    expect(final.batchDemandSources).toEqual(detail.batchDemandSources);
+    expect(final.factoryReports.demand).toEqual([]);
   } finally {
     await close();
   }

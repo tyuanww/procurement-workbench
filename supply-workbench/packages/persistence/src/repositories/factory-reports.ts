@@ -1,23 +1,26 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
 import { parseLocalDate, type FactoryDemandFacts, type FactoryDemandSlot, type FactoryInTransitFacts, type FactoryReportKind, type FactoryReportRow, type FactoryShipmentFacts, type LinkStatus, type LocalDate } from '@sw/domain';
 import { LINK_STATUSES } from '@sw/domain';
 import type { FactoryReportRepository } from '../../../application/src/ports/factory-report-repository.js';
+import type { BatchDemandSource } from '../../../application/src/ports/delivery-batch-repository.js';
 import type { AppDatabase } from '../client.js';
 import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../schema/factory.js';
+import { importBatches } from '../schema/archive.js';
+import { lineFactoryLinks } from '../schema/orders.js';
+import { batchDemandSourceOf, demandSourceOf, isAssociated } from '../queries/follow-up/payloads.js';
 import { numberOrNull } from '../mappers/number.js';
 import { entityId, orderLineIdOrNull } from '../mappers/id.js';
 import { comboColumns, demandColumns, scheduleColumns, shipmentColumns, stockColumns, suppliedColumns, transitColumns } from './factory-columns.js';
 
 const CHUNK = 500;
+const demandVersion = sql<string>`${factoryMaterialDemandRows}.xmin::text || ':' || ${factoryMaterialDemandRows}.ctid::text`;
 
 export function factoryReportRepository(db: AppDatabase): FactoryReportRepository {
   return {
-    async get(id) {
-      const found = await findReport(db, id);
-      if (found === undefined) throw new NotFoundError('代工厂上报', id);
-      return found;
-    },
+    get: (id) => requireReport(db, id),
+    getForDemandGeneration: (id) => demandForGeneration(db, id),
+    demandSourcesAtGeneration: (input) => demandSourcesAtGeneration(db, input),
     find: (id) => findReport(db, id),
     save: (entity) => saveReport(db, entity),
     async linkUnassignedTransit(rowId, lineId) {
@@ -29,6 +32,61 @@ export function factoryReportRepository(db: AppDatabase): FactoryReportRepositor
     },
     listByCodeNorm: (codeNorm) => listByCode(db, codeNorm),
   };
+}
+
+async function requireReport(db: AppDatabase, id: string): Promise<FactoryReportRow> {
+  const found = await findReport(db, id);
+  if (found === undefined) throw new NotFoundError('代工厂上报', id);
+  return found;
+}
+
+async function demandForGeneration(db: AppDatabase, id: string) {
+  const table = factoryMaterialDemandRows;
+  const [found] = await db.select({ demand: table, version: demandVersion }).from(table).where(eq(table.id, id));
+  if (found === undefined) return { row: await requireReport(db, id), version: null };
+  const demand = found.demand;
+  return { row: report({ row: demand, kind: 'demand', shipment: null, demand: demandFacts(demand), inTransit: null }), version: found.version };
+}
+
+async function demandSourcesAtGeneration(db: AppDatabase, input: Parameters<FactoryReportRepository['demandSourcesAtGeneration']>[0]) {
+  const table = factoryMaterialDemandRows;
+  const otherFactory = db.select({ id: lineFactoryLinks.id }).from(lineFactoryLinks)
+    .where(and(eq(lineFactoryLinks.orderLineId, input.orderLineId), ne(lineFactoryLinks.factoryPartyId, table.factoryPartyId)));
+  // 重联仍在写入或已经换成另一版本时，只保留本次生成的业务事实。
+  const [locked] = await db.select({ demand: table }).from(table)
+    .innerJoin(importBatches, and(eq(importBatches.id, table.importBatchId), eq(importBatches.factoryPartyId, table.factoryPartyId),
+      eq(importBatches.template, 'factory-progress-v1'), eq(importBatches.status, 'committed')))
+    .where(and(
+      eq(table.id, input.rowId), eq(table.role, 'material'), sql`(${demandVersion}) = ${input.version}`,
+      or(isNotNull(table.linkedOrderLineId), notExists(otherFactory)),
+    ))
+    .for('share', { of: table, skipLocked: true });
+  const sources = new Map<number, BatchDemandSource>();
+  if (locked === undefined) return sources;
+  const demand = locked.demand;
+  if (!canCaptureDemandSource(demand, input.orderLineId)) return sources;
+  // 生成凭据只接受已采集的 raw 槽，规范列用于生成批次的业务值。
+  const view = demandSourceOf({ ...demand, slots: null });
+  if (view.payload.role !== 'material') return sources;
+  const originalSlots = unambiguousSlots(view.payload.slots);
+  for (const [index, fact] of unambiguousSlots(demandFacts(demand).slots)) {
+    const slot = originalSlots.get(index);
+    if (slot === undefined || fact === undefined || slot.date !== fact.date || slot.qty !== fact.qty) continue;
+    const source = batchDemandSourceOf(view, slot);
+    if (source !== undefined) sources.set(slot.index, source);
+  }
+  return sources;
+}
+
+function unambiguousSlots<T extends { readonly index: number }>(slots: readonly T[]): Map<number, T | undefined> {
+  const byIndex = new Map<number, T | undefined>();
+  for (const slot of slots) byIndex.set(slot.index, byIndex.has(slot.index) ? undefined : slot);
+  return byIndex;
+}
+
+function canCaptureDemandSource(row: EnvelopeRow, orderLineId: string): boolean {
+  if (row.linkedOrderLineId !== null) return row.linkedOrderLineId === orderLineId && isAssociated(row.linkStatus) && row.linkReason === null;
+  return row.linkStatus === 'unlinked' && (row.linkReason === null || row.linkReason === 'NO_CANDIDATE_LINE');
 }
 
 export async function insertFactoryShipments(db: AppDatabase, rows: readonly FactoryReportRow[]): Promise<void> {

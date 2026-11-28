@@ -28,10 +28,12 @@ export function deliveryBatchRepository(db: AppDatabase): DeliveryBatchRepositor
     lockWithRecords: async (id) => recordsOf(db, await lockBatch(db, id)),
     listByOrderLine: (orderLineId) => listByLine(db, orderLineId),
     listByOriginRef: (ref) => listBySlot(db, ref),
+    lockDemandGeneration: (rowIds) => lockDemandGeneration(db, rowIds),
     findAdoptedShipment: (rowId) => adopted(db, rowId),
     findBatchIdOf: (kind, recordId) => batchIdOf({ db, kind, recordId }),
     save: (entity) => saveBatch(db, entity),
     saveWithRecords: (records) => saveRecords(db, records),
+    freezeDemandSource: (input) => freezeDemandSource(db, input),
     saveWithRecordsConditional: (records, expectedUpdatedAt) => saveRecordsConditional({ db, records, expectedUpdatedAt }),
     remove: (id) => removeBatch(db, id),
   };
@@ -84,7 +86,7 @@ async function saveRecords(db: AppDatabase, records: BatchWithRecords): Promise<
 async function saveRecordsConditional(input: { readonly db: AppDatabase; readonly records: BatchWithRecords; readonly expectedUpdatedAt: string }): Promise<boolean> {
   const row = batchRow(input.records.batch);
   const updated = await input.db.update(deliveryBatches)
-    .set(row)
+    .set(batchUpdate(row))
     .where(and(eq(deliveryBatches.id, input.records.batch.id), eq(deliveryBatches.updatedAt, input.expectedUpdatedAt)))
     .returning();
   if (updated.length !== 1) return false;
@@ -101,7 +103,27 @@ async function saveRecordsConditional(input: { readonly db: AppDatabase; readonl
 
 async function saveBatch(db: AppDatabase, entity: DeliveryBatch): Promise<void> {
   const row = batchRow(entity);
-  await db.insert(deliveryBatches).values(row).onConflictDoUpdate({ target: deliveryBatches.id, set: row });
+  const originRef = entity.originRef;
+  const insert = entity.origin === 'from_factory_demand' && originRef !== null
+    ? { ...row, originRef: { ...originRef, generationSource: null } }
+    : row;
+  await db.insert(deliveryBatches).values(insert).onConflictDoUpdate({ target: deliveryBatches.id, set: batchUpdate(row) });
+}
+
+async function freezeDemandSource(db: AppDatabase, { batchId, rowId, source }: Parameters<DeliveryBatchRepository['freezeDemandSource']>[0]): Promise<void> {
+  const ref = deliveryBatches.originRef;
+  await db.update(deliveryBatches).set({ originRef: sql`${ref} || ${sql.param({ generationSource: source }, ref)}` })
+    .where(and(eq(deliveryBatches.id, batchId), eq(deliveryBatches.origin, 'from_factory_demand'),
+      sql`${ref}->>'rowId' = ${rowId} and ${ref}->>'slotIndex' = ${String(source.slot.index)} and ${ref}->'generationSource' = 'null'::jsonb`));
+}
+
+function batchUpdate(row: typeof deliveryBatches.$inferInsert) {
+  const stored = deliveryBatches.originRef;
+  return {
+    ...row,
+    // 此处也要保留 null。它记录了新批生成时无法确认原表，不能回退到现时工厂行。
+    originRef: sql`case when ${stored} ? 'generationSource' then ${stored} else ${sql.param(row.originRef ?? null, stored)} end`,
+  };
 }
 
 async function removeBatch(db: AppDatabase, id: string): Promise<void> {
@@ -120,6 +142,18 @@ async function listByLine(db: AppDatabase, orderLineId: string): Promise<readonl
 async function listBySlot(db: AppDatabase, ref: { readonly rowId: string; readonly slotIndex: number }): Promise<readonly DeliveryBatch[]> {
   const rows = await db.select().from(deliveryBatches).where(sql`${deliveryBatches.originRef}->>'rowId' = ${ref.rowId} and (${deliveryBatches.originRef}->>'slotIndex')::int = ${ref.slotIndex}`);
   return rows.map(toBatch);
+}
+
+async function lockDemandGeneration(db: AppDatabase, rowIds: readonly string[]): Promise<void> {
+  if (rowIds.length === 0) return;
+  await db.execute(sql`
+    select pg_advisory_xact_lock(lock_key)
+    from (
+      select distinct hashtextextended('supply.follow-up.demand-generation:' || row_id, 0) as lock_key
+      from jsonb_array_elements_text(${JSON.stringify(rowIds)}::jsonb) as demand_rows(row_id)
+      order by lock_key
+    ) generation_lock_keys
+  `);
 }
 
 async function adopted(db: AppDatabase, rowId: string) {

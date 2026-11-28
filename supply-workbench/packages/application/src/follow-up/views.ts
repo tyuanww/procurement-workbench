@@ -21,6 +21,7 @@ import type {
 import type { BatchFulfillment, ReceiptEvidence, ReceiptEvidenceInput, ShipmentEvidence, ShipmentEvidenceInput } from '@sw/domain';
 import type { StoreProgressLine } from './store-progress.js';
 import type { ProcurementLineDetail } from '../ports/procurement-repository.js';
+import type { BatchDemandSource } from '../ports/delivery-batch-repository.js';
 import type { PartyRef, UserRef } from '../shared/refs.js';
 import type { ExceptionView, FollowUpView } from './record-views.js';
 import type { FactoryReportOf, ItemCodeView } from '../master-data/index.js';
@@ -152,10 +153,6 @@ type DemandSlot = DemandReport['payload']['slots'][number];
 type DemandSourceReport = WithOriginalCells<Omit<DemandReport, 'payload'> & {
   readonly payload: Omit<DemandReport['payload'], 'slots'> & { readonly slots: readonly WithOriginalCells<DemandSlot>[] };
 }>;
-type BatchDemandSource = Pick<FactoryReportOf<'demand'>, 'importBatchId' | 'sheetName' | 'rowNo'> & {
-  readonly slot: WithOriginalCells<Pick<DemandSlot, 'index' | 'dateRaw' | 'qtyRaw' | 'sourceColumns'>>;
-};
-
 export type OrderLineDetail = {
   readonly ownerUndo?: { readonly expectedAssignmentId: EntityId; readonly previousBuyer: UserRef | null };
   readonly pendingBuyerName?: string;

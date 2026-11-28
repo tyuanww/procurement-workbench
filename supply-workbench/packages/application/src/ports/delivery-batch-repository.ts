@@ -1,4 +1,14 @@
 import type { BatchDateChange, DeliveryBatch, DeliveryNote, Receipt, Shipment } from '@sw/domain';
+import type { DemandSlot } from './parsed-rows.js';
+
+export type BatchDemandSource = {
+  readonly importBatchId: string;
+  readonly sheetName: string;
+  readonly rowNo: number;
+  readonly slot: Pick<DemandSlot, 'index' | 'dateRaw' | 'qtyRaw' | 'sourceColumns'> & {
+    readonly originalCells?: Readonly<Record<string, string | null>>;
+  };
+};
 
 export interface BatchWithRecords {
   readonly batch: DeliveryBatch;
@@ -21,6 +31,8 @@ export interface DeliveryBatchRepository {
   listByOrderLine(orderLineId: string): Promise<readonly DeliveryBatch[]>;
   /** 从这一个需求槽生成过的批次，含已取消。没有就返回空数组。 */
   listByOriginRef(ref: { readonly rowId: string; readonly slotIndex: number }): Promise<readonly DeliveryBatch[]>;
+  /** 仅串行化同一工厂需求行的生成请求，锁保留到事务结束。 */
+  lockDemandGeneration(rowIds: readonly string[]): Promise<void>;
   /** 这条出货行已经采纳成哪条未作废发货。没有返回 undefined。 */
   findAdoptedShipment(factoryShipmentRowId: string): Promise<{ readonly shipmentId: string; readonly batchId: string } | undefined>;
   /** 发货、收货或送货单属于哪个批次。找不到返回 undefined。 */
@@ -29,6 +41,8 @@ export interface DeliveryBatchRepository {
   save(entity: DeliveryBatch): Promise<void>;
   /** 覆盖这一批的头和全部附属记录。不在列表里的旧附属记录删掉。 */
   saveWithRecords(records: BatchWithRecords): Promise<void>;
+  /** 写入本事务刚生成批次的原表凭据。 */
+  freezeDemandSource(input: { readonly batchId: string; readonly rowId: string; readonly source: BatchDemandSource }): Promise<void>;
   /** 只有批次头 updatedAt 仍等于读取时的值才覆盖，返回是否写入。 */
   saveWithRecordsConditional?(records: BatchWithRecords, expectedUpdatedAt: string): Promise<boolean>;
   /** 删掉批次和它的附属记录。找不到就抛 NotFoundError。 */

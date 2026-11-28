@@ -1,5 +1,6 @@
 import type { FactoryReportOf, OrderLineDetail } from '@sw/application';
 import type { ParsedCell, ParsedPo } from '../../../../application/src/ports/parsed-rows.js';
+import type { BatchDemandSource } from '../../../../application/src/ports/delivery-batch-repository.js';
 import { PO_FORMATS, localDate, type LocalDate } from '@sw/domain';
 import { isRecord, textOrNull } from './guards.js';
 
@@ -119,6 +120,16 @@ export function demandOf(row: DemandRow): FactoryReportOf<'demand'> {
 
 export function demandSourceOf(row: DemandRow): DemandSourceReport {
   return mapDemand(row, true);
+}
+
+export function batchDemandSourceOf(
+  { importBatchId, sheetName, rowNo }: Pick<BatchDemandSource, 'importBatchId' | 'sheetName' | 'rowNo'>,
+  { index, dateRaw, qtyRaw, sourceColumns, originalCells }: DemandSourceReport['payload']['slots'][number],
+): BatchDemandSource | undefined {
+  if (originalCells === undefined || !Object.values(originalCells).some((raw) => raw?.trim())) return undefined;
+  return { importBatchId, sheetName, rowNo, slot: {
+    index, dateRaw, qtyRaw, originalCells, ...(sourceColumns === undefined ? {} : { sourceColumns }),
+  } };
 }
 
 function mapDemand(row: DemandRow, captureOriginal: boolean): DemandSourceReport {
