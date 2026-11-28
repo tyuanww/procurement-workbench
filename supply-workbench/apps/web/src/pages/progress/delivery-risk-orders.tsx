@@ -1,15 +1,15 @@
 import { Button, Card, Empty, Flex, Result, Skeleton, Table, Tag, Typography, type TableColumnsType } from 'antd';
 import type { OrderLineRow } from '@sw/contracts';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { dailyDeliveryParams, DELIVERY_RISK_REASONS, deliveryRiskReasons, type homeDeliveryRiskOf } from '../../features/follow-up/index.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import { detailReturnState, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
+import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { space, topBar } from '../../theme/tokens.js';
 import { HOME_RISK_GROUP_FOCUS, HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../director-home/home-location.js';
-import { DeliveryDetailLink } from './delivery-detail-link.js';
-import { storeLabels } from './store-query.js';
+import { DeliveryDetailLink, useDeliveryReturnFocus } from './delivery-detail-link.js';
+import { progressPagination, resetProgressPagination, storeLabels, withProgressPagination } from './store-query.js';
 
 type Risk = Extract<ReturnType<typeof homeDeliveryRiskOf>, { kind: 'home-risk' }>;
 type Load = { kind: 'pending' } | { kind: 'failed'; message: string } | { kind: 'ready'; lines: OrderLineRow[] };
@@ -20,7 +20,7 @@ export function DeliveryRiskOrders({ risk }: { readonly risk: Risk | { kind: 'in
   const { state } = useLocation();
   const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
   const close = <Button onClick={() => {
-    const daily = dailyDeliveryParams(params);
+    const daily = resetProgressPagination(dailyDeliveryParams(params));
     daily.delete(HOME_RISK_RETURN_PARAM);
     setParams(daily);
   }}>查看日常店铺交付</Button>;
@@ -33,26 +33,33 @@ export function DeliveryRiskOrders({ risk }: { readonly risk: Risk | { kind: 'in
         {close}
       </Flex>
     </Card>
-    <RiskResults key={JSON.stringify(risk)} risk={risk} search={params.toString()} />
+    <RiskResults key={JSON.stringify(risk)} risk={risk} />
   </>;
 }
 
-function RiskResults({ risk, search }: { readonly risk: Risk; readonly search: string }) {
+function RiskResults({ risk }: { readonly risk: Risk }) {
+  const [params, setParams] = useSearchParams();
+  const { page, pageSize } = progressPagination(params);
+  const search = params.toString();
   const { load, retry } = useRiskRows(risk);
   const isPhone = useShellViewport().band === 'phone';
-  useDetailReturnFocus(load.kind === 'ready');
-  return <section aria-label="首页交期风险结果">
+  const results = useRef<HTMLElement>(null);
+  const isSourceMissing = useDeliveryReturnFocus(search, load.kind === 'ready', results);
+  return <section ref={results} tabIndex={-1} aria-label="首页交期风险结果">
     {load.kind === 'pending' ? <Skeleton active /> : null}
     {load.kind === 'failed' ? <Result status="error" title="这组订单没有读出来" subTitle={load.message}
       extra={<Button onClick={retry}>重试</Button>} /> : null}
     {load.kind === 'ready' ? <>
+      {isSourceMissing ? <Typography.Paragraph role="status">当前页找不到原记录入口，已保留查询。</Typography.Paragraph> : null}
       <Typography.Paragraph role="status">
         {load.lines.length} 条订单行
         {load.lines.length === risk.ids.length ? null : ` · ${risk.ids.length - load.lines.length} 条在原店铺范围内不可查`}
       </Typography.Paragraph>
       <Table size="small" rowKey="id" dataSource={load.lines} columns={riskColumns({ risk, search, isPhone })}
         {...(isPhone ? {} : { sticky: { offsetHeader: topBar } })} tableLayout="fixed"
-        pagination={{ hideOnSinglePage: true, defaultPageSize: 50, showSizeChanger: false }}
+        pagination={{ hideOnSinglePage: true, current: page, pageSize, showSizeChanger: false,
+          onChange: (nextPage) => setParams(withProgressPagination(params, { page: nextPage, pageSize }), { preventScrollReset: true }),
+        }}
         locale={{ emptyText: '在原店铺范围内未查到这组订单。' }} />
     </> : null}
   </section>;

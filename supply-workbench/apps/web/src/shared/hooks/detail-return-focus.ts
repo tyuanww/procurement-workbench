@@ -11,15 +11,21 @@ const historyMarker = 'workbenchDetailOrigin';
 const linkId = (detailPath: string) => `detail-link:${detailPath}`;
 
 export function useDetailFocusLink(detailPath: string, sourceLink = detailPath) {
+  return useDetailFocusLinks()(detailPath, sourceLink);
+}
+
+export function useDetailFocusLinks() {
   const { key } = useLocation();
-  const origin: DetailOrigin = { sourceKey: key, detailPath, ...(sourceLink === detailPath ? {} : { sourceLink }) };
-  return {
-    id: linkId(sourceLink),
-    state: { detailOrigin: origin },
-    onClick(event: MouseEvent<HTMLAnchorElement>) {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      window.history.replaceState({ ...window.history.state, [historyMarker]: origin }, '');
-    },
+  return (detailPath: string, sourceLink = detailPath) => {
+    const origin: DetailOrigin = { sourceKey: key, detailPath, ...(sourceLink === detailPath ? {} : { sourceLink }) };
+    return {
+      id: linkId(sourceLink),
+      state: { detailOrigin: origin },
+      onClick(event: MouseEvent<HTMLAnchorElement>) {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        window.history.replaceState({ ...window.history.state, [historyMarker]: origin }, '');
+      },
+    };
   };
 }
 
@@ -48,8 +54,8 @@ type ReturnFocusFallback = {
   readonly onMissing: () => void;
 };
 
-export function useDetailReturnFocus(isReady: boolean, { allowContainerFocus = false, fallback }: {
-  readonly allowContainerFocus?: boolean; readonly fallback?: ReturnFocusFallback;
+export function useDetailReturnFocus(isReady: boolean, { allowContainerFocus = false, fallback, sourcePath }: {
+  readonly allowContainerFocus?: boolean; readonly fallback?: ReturnFocusFallback; readonly sourcePath?: string;
 } = {}) {
   const { key, state } = useLocation();
   const navigation = useNavigationType();
@@ -57,12 +63,12 @@ export function useDetailReturnFocus(isReady: boolean, { allowContainerFocus = f
   useEffect(() => {
     if (!isReady || restored.current === key) return;
     const origin = navigation === 'POP' ? historyOrigin(key) : linkOrigin(state);
-    if (origin === undefined) return;
+    if (origin === undefined || (sourcePath !== undefined && origin.detailPath !== sourcePath)) return;
     const destination = findReturnTarget(origin, fallback);
     if (!destination) return;
     restored.current = key;
     if (canRestoreFocus(destination, allowContainerFocus)) destination.focus();
-  }, [allowContainerFocus, isReady, key, state, navigation, fallback]);
+  }, [allowContainerFocus, isReady, key, state, navigation, fallback, sourcePath]);
 }
 
 function findReturnTarget(origin: DetailOrigin, fallback: ReturnFocusFallback | undefined) {
