@@ -1,13 +1,13 @@
 import { ProcurementStoreSchema } from '@sw/contracts';
 import { useEffect, useState } from 'react';
-import type { Location } from 'react-router';
+import { matchPath, type Location } from 'react-router';
 import { z } from 'zod';
 import { read } from '../../../shared/api/reads.js';
 
 const MAX_MEMBERS = 100;
 const MAX_QUERY_LENGTH = 3800;
 const relatedOrderOriginSchema = z.object({
-  to: z.string().regex(/^\/lines\/[^/?#\\]+(?:[?#].*)?$/u),
+  to: z.string().refine(isLocalOrderAddress),
   state: z.unknown(),
 });
 
@@ -40,6 +40,12 @@ function relatedImportQuery({ batch, store, lines }: Parameters<typeof useRelate
     params.append('lineIds', id);
   }
   return params.has('lineIds') ? params.toString() : null;
+}
+
+function isLocalOrderAddress(to: string): boolean {
+  if (!to.startsWith('/') || to.startsWith('//') || /[\\\p{Cc}]/u.test(to)) return false;
+  const { pathname } = new URL(to, 'https://workbench.invalid');
+  return matchPath('/lines/:id', pathname) !== null;
 }
 
 function readRelatedOrderOrigin(state: unknown) {

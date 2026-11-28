@@ -7,6 +7,7 @@ import {
 import { deliveryRiskReasons } from '../../apps/web/src/features/follow-up/line-list/delivery-risk.js';
 import { followUpAddress, followUpParams } from '../../apps/web/src/features/follow-up/line-list/follow-up-address.js';
 import { followUpFeishuReturn } from '../../apps/web/src/features/follow-up/line-list/follow-up-login.js';
+import { readLineDetailBack } from '../../apps/web/src/pages/lines/detail/desk-navigation.js';
 import { clearFiltersAddress, saveAddress, viewAddress } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
 describe('跟进中心订单查法', () => {
@@ -39,6 +40,17 @@ describe('跟进中心订单查法', () => {
     expect(switchOrderLens(scope, 'delivery').get('importBatchId')).toBe('batch-a');
     expect(switchOrderLens(scope, 'delivery').get('store')).toBe('dafuyan');
     expect(orderLensOf(new URLSearchParams('importBatchId=&lens=delivery'))).toBe('delivery');
+  });
+
+  it('关联子件可返回大小写及尾斜杠不同的原订单地址，拒绝非订单和外部地址', () => {
+    const originalState = { lineDeskSearch: 'importBatchId=batch-a&store=dafuyan' };
+    const readBack = (to: string) => readLineDetailBack({ lineId: 'component', params: new URLSearchParams(),
+      state: { relatedOrderOrigin: { to, state: originalState } }, canReadImports: true });
+    const address = '/Lines/original//?importBatchId=batch-a&store=dafuyan';
+    expect(readBack(address)).toEqual({ to: address, label: '返回原订单', state: originalState });
+    for (const to of ['/imports/batch-a', '/lines', '/lines/%2e%2e', 'https://external.invalid/lines/original', '//external.invalid/lines/original', '/\\external.invalid/lines/original']) {
+      expect(readBack(to)).toBeNull();
+    }
   });
 
   it('明确的物料线、无效店铺及负责人筛选需要重新选择范围', () => {
