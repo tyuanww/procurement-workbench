@@ -76,6 +76,11 @@ const result: AcceptanceResult = { platform: process.platform, browser: browser.
 const expectedFailures: ExpectedFailure[] = [];
 let nextSession = 0;
 await mkdir(out, { recursive: true });
+const progressTimer = setInterval(() => {
+  const checks = Object.keys(result.checks);
+  console.log(JSON.stringify({ browserProgress: { elapsedMs: Math.round(process.uptime() * 1000),
+    completedChecks: checks.length, lastCompleted: checks.at(-1) ?? null } }));
+}, 30_000).unref();
 
 try {
   await procurementAcceptance();
@@ -95,9 +100,11 @@ try {
   console.error('Unable to close the acceptance browser:', result.cleanupFailure);
   process.exitCode = 1;
 } finally {
+  clearInterval(progressTimer);
   await saveResult();
 }
-console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure, failureAt: result.failureAt }));
+console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result,
+  elapsedMs: Math.round(process.uptime() * 1000), failure: result.failure, failureAt: result.failureAt }));
 
 async function saveResult(): Promise<void> {
   await writeAcceptanceJson(join(out, 'result.json'), result);
