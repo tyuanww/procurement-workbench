@@ -1,4 +1,4 @@
-import { entityId } from '../../packages/domain/src/index.js';
+import { entityId, localDate, orderLineId } from '../../packages/domain/src/index.js';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import type { FactoryReportRow, ImportBatch } from '../../packages/domain/src/index.js';
 import { createDb, type AppHandle } from '../../packages/persistence/src/client.js';
@@ -103,6 +103,26 @@ it('在途事实能写回，并按编码找到', async () => {
   expect(loaded.kind).toBe('in_transit');
   expect(loaded.inTransit).toMatchObject({ poNorm: 'PO1', itemCodeRaw: '70007022', qtyRequired: 10 });
   expect((await repo.listByCodeNorm('70007022')).map((row) => row.id)).toEqual(['transit-1']);
+});
+
+it('需求生成只从生成时读到的同一数据库行版本核对原文', async () => {
+  const repo = factoryReportRepository(handle.db);
+  await handle.exec(`insert into import_batches (id,created_at,updated_at,file_id,template,factory_party_id,status,file_meta,stats,decisions,created_by)
+    values ('import-1',now(),now(),'source-file','factory-progress-v1','factory-1','committed','{}','{}','{}','tester')`);
+  const slot = { index: 0, date: localDate('2026-11-24'), qty: 50 };
+  const row: FactoryReportRow = {
+    ...shipment(1), id: entityId('demand-version'), kind: 'demand', shipment: null,
+    sheetName: '11月排产包材原料需求表', raw: { slots: [{ ...slot, dateRaw: '2026/11/24', qtyRaw: '050.00' }] },
+    demand: { role: 'material', slots: [slot], blockMaterialPoRaw: null, poNorm: null, itemCodeRaw: '30037001', nameRaw: '合成包材' },
+  };
+  await repo.save(row);
+  const selected = await repo.getForDemandGeneration(row.id);
+  const forLine = { rowId: row.id, orderLineId: orderLineId('line-1') };
+  if (selected.version === null) throw new Error('需求行缺少数据库版本');
+  const input = { ...forLine, version: selected.version };
+  expect((await repo.demandSourcesAtGeneration(input)).get(0)?.slot.originalCells).toEqual({ dateRaw: '2026/11/24', qtyRaw: '050.00' });
+  await handle.exec("update factory_material_demand_rows set link_reason = link_reason where id = 'demand-version'");
+  expect(await repo.demandSourcesAtGeneration(input)).toEqual(new Map());
 });
 
 it('批量写入 7339 行出货在 10 秒内完成', async () => {

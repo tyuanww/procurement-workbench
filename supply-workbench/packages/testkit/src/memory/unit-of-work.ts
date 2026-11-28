@@ -86,6 +86,7 @@ function batchRepository(box: MemoryBox): DeliveryBatchRepository {
     findAdoptedShipment: async (rowId) => adoptedShipment(box, rowId),
     findBatchIdOf: async (kind, recordId) => findBatchId({ box, kind, recordId }),
     saveWithRecords: async (records) => saveBatchRecords(box, records),
+    freezeDemandSource: async () => {},
     saveWithRecordsConditional: async (records, expectedUpdatedAt) => {
       const current = box.current.batches.get(records.batch.id);
       if (current === undefined || current.updatedAt !== expectedUpdatedAt) return false;

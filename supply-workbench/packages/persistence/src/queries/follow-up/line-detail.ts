@@ -179,7 +179,7 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
     .where(and(eq(deliveryBatches.orderLineId, lineId), inArray(deliveryBatches.id, origins.map(({ batchId }) => batchId))));
   const sources = new Map(saved.map(({ id, originRef }) => [id, originRef?.generationSource]));
   // 没有标记的是旧批次，仍走按订单归属核验的旧逻辑。
-  const legacy = origins.filter(({ batchId }) => sources.get(batchId) === undefined);
+  const legacy = origins.filter(({ batchId }) => sources.has(batchId) && sources.get(batchId) === undefined);
   const byId = new Map(current.map((row) => [row.id, row]));
   const missing = [...new Set(legacy.map(({ rowId }) => rowId).filter((id) => !byId.has(id)))];
   if (missing.length > 0) {
@@ -195,6 +195,7 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
     }
   }
   return Object.fromEntries(origins.flatMap(({ batchId, rowId, slotIndex }) => {
+    if (!sources.has(batchId)) return [];
     const savedSource = sources.get(batchId);
     if (savedSource !== undefined) return savedSource === null ? [] : [[batchId, savedSource]];
     const row = byId.get(rowId);

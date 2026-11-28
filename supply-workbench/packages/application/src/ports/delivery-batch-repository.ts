@@ -38,7 +38,9 @@ export interface DeliveryBatchRepository {
   /** 插入或按 id 覆盖批次头。事务由 UnitOfWork.run 负责。 */
   save(entity: DeliveryBatch): Promise<void>;
   /** 覆盖这一批的头和全部附属记录。不在列表里的旧附属记录删掉。 */
-  saveWithRecords(records: BatchWithRecords, generationSource?: BatchDemandSource | null): Promise<void>;
+  saveWithRecords(records: BatchWithRecords): Promise<void>;
+  /** 写入本事务刚生成批次的原表凭据。 */
+  freezeDemandSource(input: { readonly batchId: string; readonly rowId: string; readonly source: BatchDemandSource }): Promise<void>;
   /** 只有批次头 updatedAt 仍等于读取时的值才覆盖，返回是否写入。 */
   saveWithRecordsConditional?(records: BatchWithRecords, expectedUpdatedAt: string): Promise<boolean>;
   /** 删掉批次和它的附属记录。找不到就抛 NotFoundError。 */

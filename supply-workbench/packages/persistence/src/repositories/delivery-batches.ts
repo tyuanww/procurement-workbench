@@ -14,7 +14,7 @@ import {
   type Shipment,
 } from '@sw/domain';
 import { deliveryBatchId, entityId, entityIdOrNull, orderLineId } from '../mappers/id.js';
-import type { BatchDemandSource, BatchWithRecords, DeliveryBatchRepository } from '../../../application/src/ports/delivery-batch-repository.js';
+import type { BatchWithRecords, DeliveryBatchRepository } from '../../../application/src/ports/delivery-batch-repository.js';
 import type { AppDatabase } from '../client.js';
 import { numberOrNull, numberToDb } from '../mappers/number.js';
 import { instant, instantOrNull } from '../mappers/time.js';
@@ -30,8 +30,9 @@ export function deliveryBatchRepository(db: AppDatabase): DeliveryBatchRepositor
     listByOriginRef: (ref) => listBySlot(db, ref),
     findAdoptedShipment: (rowId) => adopted(db, rowId),
     findBatchIdOf: (kind, recordId) => batchIdOf({ db, kind, recordId }),
-    save: (entity) => saveBatch({ db, entity }),
-    saveWithRecords: (records, generationSource) => saveRecords({ db, records, generationSource }),
+    save: (entity) => saveBatch(db, entity),
+    saveWithRecords: (records) => saveRecords(db, records),
+    freezeDemandSource: (input) => freezeDemandSource(db, input),
     saveWithRecordsConditional: (records, expectedUpdatedAt) => saveRecordsConditional({ db, records, expectedUpdatedAt }),
     remove: (id) => removeBatch(db, id),
   };
@@ -69,12 +70,8 @@ async function recordsOf(db: AppDatabase, batch: DeliveryBatch): Promise<BatchWi
   };
 }
 
-async function saveRecords({ db, records, generationSource }: {
-  readonly db: AppDatabase;
-  readonly records: BatchWithRecords;
-  readonly generationSource?: BatchDemandSource | null | undefined;
-}): Promise<void> {
-  await saveBatch({ db, entity: records.batch, generationSource });
+async function saveRecords(db: AppDatabase, records: BatchWithRecords): Promise<void> {
+  await saveBatch(db, records.batch);
   await db.delete(shipments).where(eq(shipments.batchId, records.batch.id));
   await db.delete(receipts).where(eq(receipts.batchId, records.batch.id));
   await db.delete(deliveryNotes).where(eq(deliveryNotes.batchId, records.batch.id));
@@ -103,15 +100,20 @@ async function saveRecordsConditional(input: { readonly db: AppDatabase; readonl
   return true;
 }
 
-async function saveBatch({ db, entity, generationSource }: {
-  readonly db: AppDatabase;
-  readonly entity: DeliveryBatch;
-  readonly generationSource?: BatchDemandSource | null | undefined;
-}): Promise<void> {
+async function saveBatch(db: AppDatabase, entity: DeliveryBatch): Promise<void> {
   const row = batchRow(entity);
   const originRef = entity.originRef;
-  const insert = originRef === null || generationSource === undefined ? row : { ...row, originRef: { ...originRef, generationSource } };
+  const insert = entity.origin === 'from_factory_demand' && originRef !== null
+    ? { ...row, originRef: { ...originRef, generationSource: null } }
+    : row;
   await db.insert(deliveryBatches).values(insert).onConflictDoUpdate({ target: deliveryBatches.id, set: batchUpdate(row) });
+}
+
+async function freezeDemandSource(db: AppDatabase, { batchId, rowId, source }: Parameters<DeliveryBatchRepository['freezeDemandSource']>[0]): Promise<void> {
+  const ref = deliveryBatches.originRef;
+  await db.update(deliveryBatches).set({ originRef: sql`${ref} || ${sql.param({ generationSource: source }, ref)}` })
+    .where(and(eq(deliveryBatches.id, batchId), eq(deliveryBatches.origin, 'from_factory_demand'),
+      sql`${ref}->>'rowId' = ${rowId} and ${ref}->>'slotIndex' = ${String(source.slot.index)} and ${ref}->'generationSource' = 'null'::jsonb`));
 }
 
 function batchUpdate(row: typeof deliveryBatches.$inferInsert) {

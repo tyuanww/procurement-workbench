@@ -7,8 +7,9 @@ export function factoryReportRepository(box: MemoryBox) {
   return {
     ...repo,
     async getForDemandGeneration(id: string) {
-      return { row: await repo.get(id), sources: new Map<never, never>() };
+      return { row: await repo.get(id), version: null };
     },
+    async demandSourcesAtGeneration() { return new Map<never, never>(); },
     async linkUnassignedTransit(rowId: string, lineId: OrderLineId) {
       const row = await repo.find(rowId);
       if (row?.kind !== 'in_transit' || row.linkedOrderLineId !== null) return false;

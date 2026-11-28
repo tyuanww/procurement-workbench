@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { NotFoundError } from '@sw/application/errors';
 import { parseLocalDate, type FactoryDemandFacts, type FactoryDemandSlot, type FactoryInTransitFacts, type FactoryReportKind, type FactoryReportRow, type FactoryShipmentFacts, type LinkStatus, type LocalDate } from '@sw/domain';
 import { LINK_STATUSES } from '@sw/domain';
@@ -13,11 +13,13 @@ import { entityId, orderLineIdOrNull } from '../mappers/id.js';
 import { comboColumns, demandColumns, scheduleColumns, shipmentColumns, stockColumns, suppliedColumns, transitColumns } from './factory-columns.js';
 
 const CHUNK = 500;
+const demandVersion = sql<string>`${factoryMaterialDemandRows}.xmin::text || ':' || ${factoryMaterialDemandRows}.ctid::text`;
 
 export function factoryReportRepository(db: AppDatabase): FactoryReportRepository {
   return {
     get: (id) => requireReport(db, id),
     getForDemandGeneration: (id) => demandForGeneration(db, id),
+    demandSourcesAtGeneration: (input) => demandSourcesAtGeneration(db, input),
     find: (id) => findReport(db, id),
     save: (entity) => saveReport(db, entity),
     async linkUnassignedTransit(rowId, lineId) {
@@ -39,29 +41,36 @@ async function requireReport(db: AppDatabase, id: string): Promise<FactoryReport
 
 async function demandForGeneration(db: AppDatabase, id: string) {
   const table = factoryMaterialDemandRows;
-  // 重联正在写这行时仍可按现有业务事实生成，但本次无法确认原表归属。
+  const [found] = await db.select({ demand: table, version: demandVersion }).from(table).where(eq(table.id, id));
+  if (found === undefined) return { row: await requireReport(db, id), version: null };
+  const demand = found.demand;
+  return { row: report({ row: demand, kind: 'demand', shipment: null, demand: demandFacts(demand), inTransit: null }), version: found.version };
+}
+
+async function demandSourcesAtGeneration(db: AppDatabase, input: Parameters<FactoryReportRepository['demandSourcesAtGeneration']>[0]) {
+  const table = factoryMaterialDemandRows;
+  // 重联仍在写入或已经换成另一版本时，只保留本次生成的业务事实。
   const [locked] = await db.select({ demand: table }).from(table)
     .innerJoin(importBatches, and(eq(importBatches.id, table.importBatchId), eq(importBatches.factoryPartyId, table.factoryPartyId),
       eq(importBatches.template, 'factory-progress-v1'), eq(importBatches.status, 'committed')))
-    .where(and(eq(table.id, id), eq(table.role, 'material')))
+    .where(and(eq(table.id, input.rowId), eq(table.role, 'material'), sql`(${demandVersion}) = ${input.version}`))
     .for('share', { of: table, skipLocked: true });
   const sources = new Map<number, BatchDemandSource>();
-  if (locked === undefined) return { row: await requireReport(db, id), sources };
+  if (locked === undefined) return sources;
   const demand = locked.demand;
-  const row = report({ row: demand, kind: 'demand', shipment: null, demand: demandFacts(demand), inTransit: null });
-  if (!canCaptureDemandSource(demand)) return { row, sources };
+  if (!canCaptureDemandSource(demand, input.orderLineId)) return sources;
   // 生成凭据只接受已采集的 raw 槽，规范列用于生成批次的业务值。
   const view = demandSourceOf({ ...demand, slots: null });
-  if (view.payload.role !== 'material') return { row, sources };
+  if (view.payload.role !== 'material') return sources;
   for (const slot of view.payload.slots) {
     const source = batchDemandSourceOf(view, slot);
     if (source !== undefined) sources.set(slot.index, source);
   }
-  return { row, sources };
+  return sources;
 }
 
-function canCaptureDemandSource(row: EnvelopeRow): boolean {
-  if (row.linkedOrderLineId !== null) return isAssociated(row.linkStatus) && row.linkReason === null;
+function canCaptureDemandSource(row: EnvelopeRow, orderLineId: string): boolean {
+  if (row.linkedOrderLineId !== null) return row.linkedOrderLineId === orderLineId && isAssociated(row.linkStatus) && row.linkReason === null;
   return row.linkStatus === 'unlinked' && (row.linkReason === null || row.linkReason === 'NO_CANDIDATE_LINE');
 }
 
