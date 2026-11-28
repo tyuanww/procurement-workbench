@@ -1,3 +1,4 @@
+import { StateConflictError } from '@sw/application/errors';
 import type { CodeLink, ItemCode, ItemName, PartyAlias } from '@sw/domain';
 import type { NameDecision } from '../../../application/src/ports/item-name-repository.js';
 import type { MemoryBox } from './box.js';
@@ -16,6 +17,20 @@ export function itemCodeRepository(box: MemoryBox) {
   const repo = idRepository(() => box.current.itemCodes, '编码');
   return {
     ...repo,
+    lock: repo.get,
+    async lockMany(ids: readonly string[]) {
+      return [...new Set(ids)].sort().flatMap((id) => {
+        const code = box.current.itemCodes.get(id);
+        return code === undefined ? [] : [code];
+      });
+    },
+    async insertIfAbsent(code: ItemCode) {
+      const existing = [...box.current.itemCodes.values()].find((row) => row.codeType === code.codeType && row.codeNorm === code.codeNorm);
+      if (existing !== undefined) return existing.id;
+      if (box.current.itemCodes.has(code.id)) throw new StateConflictError('编码标识已被其他编码占用');
+      await repo.save(code);
+      return code.id;
+    },
     async listByNorm(codeNorm: string) {
       return [...box.current.itemCodes.values()].filter((row) => row.codeNorm === codeNorm);
     },
@@ -26,6 +41,11 @@ export function codeLinkRepository(box: MemoryBox) {
   const repo = idRepository(() => box.current.codeLinks, '编码对照');
   return {
     ...repo,
+    async save(link: CodeLink) {
+      const current = box.current.codeLinks.get(link.id);
+      if (link.status === 'pending' && current !== undefined && current.status !== 'pending') return;
+      await repo.save(link);
+    },
     async listApproved() {
       return [...box.current.codeLinks.values()].filter((row) => row.status === 'approved');
     },

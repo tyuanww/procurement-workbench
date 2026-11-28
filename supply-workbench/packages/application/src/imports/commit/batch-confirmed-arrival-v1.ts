@@ -15,9 +15,17 @@ export async function commitConfirmedArrival(ctx: CommitContext): Promise<Commit
   const locked = [];
   for (const item of pending) {
     const loaded = await lockBatch(ctx, item.confirmation.batchId);
-    locked.push({ ...item, loaded });
+    locked.push({ ...item, loaded, decision: confirmationDecision(loaded.batch, item.confirmation) });
   }
   locked.sort((a, b) => compareIds(a.loaded.batch.orderLineId, b.loaded.batch.orderLineId));
+  const writtenLines = new Set<string>();
+  for (const { row, decision, loaded } of locked) {
+    assertConfirmationCanCommit(row, decision);
+    if (decision === 'update') writtenLines.add(loaded.batch.orderLineId);
+  }
+  if (writtenLines.size > 1) {
+    for (const lineId of writtenLines) await ctx.tx.orderLines.lock(lineId, { noWait: true });
+  }
   for (const item of locked) await confirm({ ctx, ...item });
   return { affectedLineIds: [], presentLineIds: [] };
 }
@@ -36,21 +44,25 @@ async function lockBatch(ctx: CommitContext, id: string) {
   }
 }
 
-async function confirm({ ctx, row, confirmation, loaded }: {
-  readonly ctx: CommitContext;
-  readonly row: CommitContext['rows'][number];
-  readonly confirmation: NonNullable<ReturnType<typeof confirmationOf>>;
-  readonly loaded: Awaited<ReturnType<CommitContext['tx']['batches']['lockWithRecords']>>;
-}): Promise<void> {
-  const decision = confirmationDecision(loaded.batch, confirmation);
-  if (decision === 'unchanged') {
-    if (row.action !== 'unchanged') await ctx.tx.imports.saveRow({ ...row, action: 'unchanged' });
-    return;
-  }
+function assertConfirmationCanCommit(row: CommitContext['rows'][number], decision: ReturnType<typeof confirmationDecision>): void {
+  if (decision === 'unchanged') return;
   if (decision === 'ARRIVAL_BATCH_RECEIVER_CHANGED' || decision === 'ARRIVAL_BATCH_IDENTITY_CHANGED') throw new StateConflictError(decision);
   if (row.action === 'unchanged') throw new StateConflictError('ARRIVAL_CONFIRM_DATE_CHANGED');
   if (decision === 'ARRIVAL_CONFIRM_DATE_REASON_MISSING') throw new DateChangeReasonRequiredError();
   if (decision !== 'update') throw new StateConflictError(decision);
+}
+
+async function confirm({ ctx, row, confirmation, loaded, decision }: {
+  readonly ctx: CommitContext;
+  readonly row: CommitContext['rows'][number];
+  readonly confirmation: NonNullable<ReturnType<typeof confirmationOf>>;
+  readonly loaded: Awaited<ReturnType<CommitContext['tx']['batches']['lockWithRecords']>>;
+  readonly decision: ReturnType<typeof confirmationDecision>;
+}): Promise<void> {
+  if (decision === 'unchanged') {
+    if (row.action !== 'unchanged') await ctx.tx.imports.saveRow({ ...row, action: 'unchanged' });
+    return;
+  }
   const id = entityId(`confirmed-arrival:${ctx.batch.id}:${row.id}`);
   await updateLockedBatch({
     tx: ctx.tx,
