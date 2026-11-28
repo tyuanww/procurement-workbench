@@ -215,13 +215,16 @@ async function returnToDailyDelivery(page: Page, { address, fromButton, width }:
   readonly address: URL; readonly fromButton: boolean; readonly width: number;
 }) {
   const back = page.getByRole('link', { name: '返回按店铺交付', exact: true });
-  const target = new URL(await back.getAttribute('href') ?? '', address);
+  const href = await back.getAttribute('href');
+  assert.ok(href, '订单详情缺少返回地址');
+  const target = new URL(href, page.url());
   assert.equal(target.href, address.href, '订单详情应指回原日常交付筛选');
   const activate = () => fromButton ? back.press('Enter') : page.goBack({ waitUntil: 'commit' });
   try {
     await Promise.all([page.waitForURL(address.href, { waitUntil: 'commit' }), activate()]);
   } catch (cause: unknown) {
-    throw new Error(`${width}px ${fromButton ? '显式返回' : '浏览器后退'}后 URL 为 ${page.url()}`, { cause });
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${width}px ${fromButton ? '显式返回' : '浏览器后退'}后 URL 为 ${page.url()}\n${detail}`, { cause });
   }
 }
 

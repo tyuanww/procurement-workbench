@@ -184,6 +184,7 @@ async function waitForScheduleUrl(page: Page, { action, matches }: { readonly ac
     await page.waitForURL(matches);
   } catch (cause: unknown) {
     const { pathname, search } = new URL(page.url());
-    throw new Error(`${action}，当前地址 ${pathname}${search}`, { cause });
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${action}，当前地址 ${pathname}${search}\n${detail}`, { cause });
   }
 }
