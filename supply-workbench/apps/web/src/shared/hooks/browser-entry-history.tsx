@@ -1,7 +1,14 @@
 import { createContext, useContext, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
-type Entry = { readonly key: string; readonly pathname: string; readonly search: string; readonly state: unknown; readonly index: number | undefined };
+type Entry = {
+  readonly key: string;
+  readonly pathname: string;
+  readonly search: string;
+  readonly hash: string;
+  readonly state: unknown;
+  readonly index: number | undefined;
+};
 type History = { readonly current: Entry; readonly previous?: Entry; readonly focus: ReturnType<typeof focusOnArrival> };
 const BrowserHistory = createContext<History | undefined>(undefined);
 export const SearchDialogFocus = createContext<{ readonly isBlocking: boolean; readonly returnTarget: Element | null }>({
@@ -31,7 +38,7 @@ function focusOnArrival() {
 export function BrowserEntryHistory({ children }: { readonly children: ReactNode }) {
   const location = useLocation();
   const key = location.key;
-  const entry: Entry = { key, pathname: location.pathname, search: location.search, state: location.state, index: browserEntryIndex(key) };
+  const entry: Entry = { ...location, index: browserEntryIndex(key) };
   const [history, setHistory] = useState<History>(() => ({ current: entry, focus: focusOnArrival() }));
   const lastBrowserEntry = useRef<Entry>(entry);
   const [traversal, setTraversal] = useState<{ readonly current: Entry; readonly previous: Entry }>();
@@ -93,6 +100,7 @@ export function browserEntryIndex(key: string): number | undefined {
 
 function browserHistoryEntry(): Entry {
   const state = window.history.state;
-  return { key: state?.key ?? 'default', pathname: window.location.pathname, search: window.location.search, state: state?.usr,
+  const { pathname, search, hash } = window.location;
+  return { key: state?.key ?? 'default', pathname, search, hash, state: state?.usr,
     index: typeof state?.idx === 'number' ? state.idx : undefined };
 }
