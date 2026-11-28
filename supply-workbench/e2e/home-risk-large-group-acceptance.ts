@@ -47,12 +47,17 @@ async function checkCopiedRiskAddress({ page, address, members }: { readonly pag
       if (url.pathname === '/api/v1/lines' && url.searchParams.has('lineIds')) reads.push(url);
     };
     target.on('request', track);
-    await signInFromCopiedAddress(target, address);
+    const sharedAddress = new URL(address);
+    sharedAddress.pathname += '/';
+    await signInFromCopiedAddress(target, sharedAddress);
     const results = resultsOf(target);
     await results.getByText(`${members.length} 条订单行`, { exact: true }).waitFor();
     target.off('request', track);
     assert.deepEqual(reads.flatMap((url) => url.searchParams.getAll('lineIds')).sort(), [...members].sort());
     assert.ok(reads.every((url) => url.searchParams.get('store') === 'dafuyan' && url.searchParams.getAll('lineIds').length <= 100));
+    assert.ok(reads.every((url) => url.search.length <= 8001));
+    await target.goto(address.href);
+    await results.getByText(`${members.length} 条订单行`, { exact: true }).waitFor();
     await checkCopiedRiskDetail(target, results);
     const wrongStore = new URL(address);
     wrongStore.searchParams.set('store', 'yiling');
@@ -61,6 +66,11 @@ async function checkCopiedRiskAddress({ page, address, members }: { readonly pag
     await excluded.waitFor();
     const excludedCount = /· (\d+) 条在原店铺范围内不可查/u.exec(await excluded.innerText())?.[1];
     assert.ok(Number(excludedCount) >= 300, '改成另一店铺时，300 条达肤妍专属合成记录均须被排除');
+    const missingResume = new URL(address);
+    missingResume.hash = 'follow-up-login=d10c6d8b-f7e7-48c7-a086-02a4283f1072';
+    await target.goto(missingResume.href);
+    await target.getByText('登录成功，暂时无法恢复这组订单', { exact: true }).waitFor();
+    await target.getByRole('link', { name: '回到工作台', exact: true }).waitFor();
   } finally {
     await context.close();
   }
@@ -79,7 +89,7 @@ async function signInFromCopiedAddress(page: Page, address: URL) {
     await route.fulfill({ status: 302, headers: { location: to } });
   });
   await page.goto(address.href);
-  await page.getByRole('link', { name: '使用飞书登录', exact: true }).press('Enter');
+  await page.getByRole('button', { name: '使用飞书登录', exact: true }).press('Enter');
   await page.waitForURL(address.href);
 }
 
