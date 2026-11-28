@@ -25,6 +25,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await assertFactoryScopeApi({ page: buyer, origin, id: scopeId, expected: ['FS-YILING'], store: 'yiling' });
   const shared = await checkFactorySourceRoundTrip(buyer, origin);
   await checkCopiedSourceFromAnotherStore(buyer, shared);
+  await checkCopiedSourceWithNoStore(buyer, shared);
   await checkRelatedBatchMember(buyer, origin);
   await checkEmptyFactorySource(buyer, origin);
   const denied = await manager.request.get(new URL(`/api/v1/imports/${scopeId}`, origin).href);
@@ -35,7 +36,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkSharedOrderView(manager, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
-    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, relatedOrdersKeepTrueScope: true };
+    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, relatedOrdersKeepTrueScope: true };
 }
 
 function factoryRelatedComponent(page: Page) {
@@ -102,6 +103,33 @@ async function checkCopiedSourceFromAnotherStore(page: Page, shared: URL) {
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === scopeId
     && url.searchParams.get('store') === currentStore && !url.searchParams.has('backToImport'));
   await assertFactoryScopeRows(page);
+}
+
+async function checkCopiedSourceWithNoStore(page: Page, shared: URL) {
+  const source = new URL(shared.searchParams.get('backToImport') ?? '', shared);
+  source.searchParams.set('store', 'yiling');
+  for (const store of [null, 'invalid-store']) {
+    const list = new URL(shared);
+    if (store === null) list.searchParams.delete('store');
+    else list.searchParams.set('store', store);
+    list.searchParams.set('backToImport', source.pathname + source.search);
+    await page.goto(list.href);
+    const rows = page.getByRole('region', { name: '订单查询结果', exact: true });
+    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+    const order = rows.getByRole('link', { name: 'FS-MANUAL', exact: true });
+    const detail = new URL(await order.getAttribute('href') ?? '', shared);
+    assert.equal(detail.searchParams.has('backToImport'), false);
+    detail.search = list.search;
+    await page.goto(detail.href);
+    await page.getByRole('heading', { name: 'FS-MANUAL', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+    await page.getByRole('link', { name: '返回本批订单', exact: true }).press('Enter');
+    await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === scopeId
+      && !url.searchParams.has('store') && !url.searchParams.has('backToImport'));
+    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), currentFactoryOrderPos);
+  }
 }
 
 async function checkSharedOrderView(page: Page, shared: URL) {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Alert, Button, Descriptions, Drawer, Flex, Skeleton, Typography, type DescriptionsProps } from 'antd';
 import type { ProcurementStore } from '@sw/contracts';
-import { IMPORT_RETURN_PARAM } from '../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, isBatchImportSource } from '../../features/imports/index.js';
 import { useCan } from '../../shared/actor.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
 import { useDetailFocusLink, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
@@ -27,7 +27,7 @@ export function ImportSourceButton({ source, recordKey, label }: {
   readonly label?: string;
 }) {
   return <Button id={importSourceTriggerId(recordKey)} aria-label={label} aria-haspopup="dialog" onClick={() => source.open(recordKey)}>
-    {recordKey === 'batch' ? '核对本次导入来源' : '查看来源'}
+    {isBatchImportSource(recordKey) ? '核对本次导入来源' : '查看来源'}
   </Button>;
 }
 
@@ -56,7 +56,7 @@ export function ImportSourceDrawer({ source, record, fileName }: {
     const frame = window.requestAnimationFrame(() => document.getElementById(triggerId)?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [isShown, key]);
-  return <Drawer title={key === 'batch' ? '核对本次导入来源' : '核对导入记录来源'} open={key !== null}
+  return <Drawer title={isBatchImportSource(key) ? '核对本次导入来源' : '核对导入记录来源'} open={key !== null}
     size={`min(${drawerWidth}px, 100vw)`} destroyOnHidden
     closable={{ 'aria-label': '关闭导入来源' }}
     focusable={{ trap: true, focusTriggerAfterClose: false }}

@@ -7,7 +7,7 @@ import { ApiError, apiErrorMessage, apiSend } from '../../shared/api/client.js';
 import { useCanWrite } from '../../shared/actor.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
-import { decisionsWithDateDecision, issueGroupText } from '../../features/imports/index.js';
+import { BATCH_IMPORT_SOURCE, decisionsWithDateDecision, issueGroupText, PROCUREMENT_BATCH_IMPORT_SOURCE } from '../../features/imports/index.js';
 import { WorkbenchPage } from '../../shared/ui/page.js';
 import { SectionGroup } from '../../shared/ui/section.js';
 import { space } from '../../theme/tokens.js';
@@ -129,11 +129,15 @@ function ImportBatchReceipt({ summary, request, canReviewAliases }: {
 
 function CommittedImportSource({ summary }: { readonly summary: ImportBatchSummary }) {
   const source = useImportSource();
-  const store = summary.template === 'factory-progress-v1' ? ProcurementStoreSchema.safeParse(source.params.get('store')).data : undefined;
+  const isFactory = summary.template === 'factory-progress-v1';
+  const batchSource = isFactory ? BATCH_IMPORT_SOURCE : PROCUREMENT_BATCH_IMPORT_SOURCE;
+  const recordKey = source.sourceKey;
+  const isBatch = recordKey === batchSource || (!isFactory && recordKey === BATCH_IMPORT_SOURCE);
+  const store = isFactory ? ProcurementStoreSchema.safeParse(source.params.get('store')).data : undefined;
   return <>
-    <ImportSourceButton source={source} recordKey="batch" />
-    <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={source.sourceKey === 'batch' ? {
-      key: 'batch',
+    <ImportSourceButton source={source} recordKey={batchSource} />
+    <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={isBatch ? {
+      key: recordKey,
       items: [
         { key: 'status', label: '导入状态', children: importStatusLabel(summary.status) },
         { key: 'id', label: '导入批次 ID', children: summary.id },

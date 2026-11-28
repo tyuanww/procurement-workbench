@@ -1,5 +1,5 @@
 import { useLocation, useSearchParams } from 'react-router';
-import { IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, importFollowUpBackAddress, importFollowUpScope } from '../../features/imports/index.js';
+import { BATCH_IMPORT_SOURCE, IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, PROCUREMENT_BATCH_IMPORT_SOURCE, importFollowUpBackAddress, importFollowUpScope } from '../../features/imports/index.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 
@@ -15,7 +15,7 @@ export function importSourceKey(kind: 'finished' | 'component' | 'candidate' | '
 }
 
 export function importSourceTriggerId(key: string) {
-  return `import-source:${key}`;
+  return `import-source:${key === PROCUREMENT_BATCH_IMPORT_SOURCE ? BATCH_IMPORT_SOURCE : key}`;
 }
 
 export function useImportSource() {
