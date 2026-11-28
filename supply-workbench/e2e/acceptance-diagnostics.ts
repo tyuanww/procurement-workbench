@@ -1,9 +1,21 @@
+import { rename, rm, writeFile } from 'node:fs/promises';
 import { stripVTControlCharacters } from 'node:util';
 
 export type AcceptanceSummary = { sha: string } & (
   | { result: 'pass' }
   | { result: 'fail'; stage: string; browser: unknown; error?: string; cleanupErrors?: readonly string[] }
 );
+
+export async function writeAcceptanceJson(path: string, value: unknown): Promise<void> {
+  const pending = `${path}.tmp`;
+  try {
+    await writeFile(pending, JSON.stringify(value, null, 2) + '\n');
+    await rename(pending, path);
+  } catch (error) {
+    await rm(pending, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
 
 export function browserFailureLocation(error: unknown): string | undefined {
   for (const cause of errorChain(error).reverse()) {

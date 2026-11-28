@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
-import { browserFailureLocation, failureMessage } from './acceptance-diagnostics.ts';
+import { browserFailureLocation, failureMessage, writeAcceptanceJson } from './acceptance-diagnostics.ts';
 import { checkConfirmedArrivalDownload } from './confirmed-arrival-acceptance.ts';
 import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
@@ -97,14 +97,7 @@ try {
 console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure, failureAt: result.failureAt }));
 
 async function saveResult(): Promise<void> {
-  const pending = join(out, 'result.json.tmp');
-  try {
-    await writeFile(pending, JSON.stringify(result, null, 2) + '\n');
-    await rename(pending, join(out, 'result.json'));
-  } catch (error) {
-    await rm(pending, { force: true }).catch(() => undefined);
-    throw error;
-  }
+  await writeAcceptanceJson(join(out, 'result.json'), result);
 }
 
 function recordFailure(error: unknown): void {

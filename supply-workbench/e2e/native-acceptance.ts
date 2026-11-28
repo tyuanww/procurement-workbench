@@ -3,12 +3,12 @@ import { execFileSync, fork, type ChildProcess, type ExecFileSyncOptions } from 
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { release, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { acceptanceSummary, failureMessage, type AcceptanceSummary } from './acceptance-diagnostics.ts';
+import { acceptanceSummary, failureMessage, writeAcceptanceJson, type AcceptanceSummary } from './acceptance-diagnostics.ts';
 import { runAcceptanceProcess } from './acceptance-process.ts';
 
 const [sha, output] = process.argv.slice(2);
@@ -303,5 +303,5 @@ async function browserVersion(): Promise<string> {
 }
 
 async function writeEvidence(): Promise<void> {
-  await writeFile(join(evidenceDir, 'run.json'), JSON.stringify(evidence, null, 2) + '\n');
+  await writeAcceptanceJson(join(evidenceDir, 'run.json'), evidence);
 }
