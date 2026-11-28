@@ -122,6 +122,11 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await outside.press('Enter');
   await component.waitFor();
   await saveNoteWhileReturning(page, batchAddress);
+  await page.goForward();
+  await component.waitFor();
+  await page.goBack();
+  await page.waitForURL(batchAddress);
+  await outside.and(page.locator(':focus')).waitFor();
   await openBatchWithModifier(page, batchAddress);
 }
 
@@ -158,6 +163,7 @@ async function saveNoteWhileReturning(page: Page, source: string) {
     await route.continue().catch(() => undefined);
   }, { times: 1 });
   const related = page.getByRole('region', { name: '关联采购事项', exact: true }).getByRole('link', { name: /FS-COMPONENT$/u });
+  let scrollBeforeRelease: number | undefined;
   try {
     await Promise.all([page.waitForRequest((request) => isMembership(new URL(request.url()))), page.goBack()]);
     await page.waitForURL(source);
@@ -172,7 +178,10 @@ async function saveNoteWhileReturning(page: Page, source: string) {
     assert.ok(saved.ok());
     await note.getByText(text, { exact: true }).waitFor();
     await related.and(page.locator('[aria-busy="true"]')).waitFor();
-    assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+    scrollBeforeRelease = await page.evaluate(() => {
+      if (document.activeElement !== document.body) throw Error('保存后应自然回到正文');
+      return window.scrollY;
+    });
     const loaded = page.waitForResponse(response => isMembership(new URL(response.url())) && response.request().method() === 'GET');
     release();
     assert.ok((await loaded).ok());
@@ -186,7 +195,8 @@ async function saveNoteWhileReturning(page: Page, source: string) {
   const href = await member.getAttribute('href');
   assert.equal(new URL(href ?? '', source).searchParams.get('importBatchId'), batch);
   await afterFocusEffects(page);
-  assert.equal(await related.and(page.locator(':focus')).count(), 0);
+  assert.deepEqual(await page.evaluate(() => ({ isBodyFocused: document.activeElement === document.body, scrollY: window.scrollY })),
+    { isBodyFocused: true, scrollY: scrollBeforeRelease });
 }
 
 async function returnWhileSessionIsLoading(page: Page, source: string) {

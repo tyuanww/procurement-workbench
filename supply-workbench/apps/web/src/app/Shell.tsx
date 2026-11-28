@@ -3,7 +3,7 @@ import { Link, Outlet, useNavigate } from 'react-router';
 import { SearchResultSchema } from '@sw/contracts';
 import { searchGroups, type SearchGroups } from '../features/search/hits.js';
 import { apiGet } from '../shared/api/client.js';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   closeDrawer,
   initialFrame,
@@ -19,7 +19,7 @@ import { matchesShortcut, searchShortcut, type Shortcut } from '../shared/hooks/
 import { bg } from '../theme/tokens.js';
 import { ShellDrawer, ShellSider, ShellTop, type MenuButton } from './shell-frame.js';
 import { WorkspaceBreadcrumb } from './workspace-breadcrumb.js';
-import { SearchDialogBlocksPageFocus } from '../shared/hooks/browser-entry-history.js';
+import { SearchDialogFocus } from '../shared/hooks/browser-entry-history.js';
 
 export function Shell(props: {
   readonly view: ShellView & { readonly userId: string };
@@ -27,13 +27,19 @@ export function Shell(props: {
   const viewport = useShellViewport();
   const [frame, setFrame] = useState(() => initialFrame(viewport));
   const [search, setSearch] = useState<'open' | 'closing' | 'closed'>('closed');
-  const openSearch = useCallback(() => setSearch('open'), []);
+  const searchOpener = useRef<Element | null>(null);
+  const [restoredTarget, setRestoredTarget] = useState<Element | null>(null);
+  const openSearch = useCallback(() => {
+    searchOpener.current = document.activeElement;
+    setRestoredTarget(null);
+    setSearch('open');
+  }, []);
   useSearchShortcut(openSearch);
   const synced = syncFrame({ frame, snapshot: viewport });
   if (synced !== frame) setFrame(synced);
   return (
     <Layout style={{ minHeight: '100vh', background: bg.page }}>
-      <SearchDialogBlocksPageFocus value={search !== 'closed'}>
+      <SearchDialogFocus value={{ isBlocking: search !== 'closed', returnTarget: restoredTarget }}>
         <ShellColumns
           view={props.view}
           viewport={viewport}
@@ -42,9 +48,12 @@ export function Shell(props: {
           onClose={() => setFrame(closeDrawer)}
           onSearch={openSearch}
         />
-      </SearchDialogBlocksPageFocus>
+      </SearchDialogFocus>
       <SearchLayer open={search === 'open'} onClose={() => setSearch('closing')}
-        afterClose={() => setSearch(current => current === 'closing' ? 'closed' : current)} />
+        afterClose={() => {
+          setRestoredTarget(document.activeElement === searchOpener.current ? searchOpener.current : null);
+          setSearch(current => current === 'closing' ? 'closed' : current);
+        }} />
     </Layout>
   );
 }

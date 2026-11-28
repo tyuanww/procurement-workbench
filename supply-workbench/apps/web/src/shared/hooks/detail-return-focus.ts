@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, type MouseEvent, type RefObject } from 'react';
+import { useCallback, useContext, useEffect, useRef, type MouseEvent, type RefObject } from 'react';
 import { createPath, useLocation, useNavigationType } from 'react-router';
 import { z } from 'zod';
-import { browserEntryIndex, useCanRestoreEntryFocus, usePreviousBrowserEntry } from './browser-entry-history.js';
+import { browserEntryIndex, SearchDialogFocus, useCanRestoreEntryFocus, usePreviousBrowserEntry } from './browser-entry-history.js';
 
 const detailOriginSchema = z.union([
   z.object({ sourceKey: z.string(), detailPath: z.string(), sourceLink: z.string().optional() }),
@@ -103,15 +103,21 @@ function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceL
 export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailReturnFocus {
   const { key, origin } = useArrivalOrigin(sourceLinkPrefix);
   const canRestore = useCanRestoreEntryFocus();
+  const { isBlocking: isSearchBlockingFocus, returnTarget } = useContext(SearchDialogFocus);
   const restored = useRef<{ key: string; canRestore: typeof canRestore } | null>(null);
+  const waitingForSearch = useRef<typeof canRestore | null>(null);
   const restore = useCallback((fallback: HTMLElement | null) => {
     if (origin === undefined || (restored.current?.key === key && restored.current.canRestore === canRestore)) return;
+    if (isSearchBlockingFocus) {
+      waitingForSearch.current = canRestore;
+      return;
+    }
     const target = findReturnTarget(origin, undefined) ?? fallback;
     if (target === null) return;
     // Limit focus changes to this visit. A later Back can reuse the same history entry.
     restored.current = { key, canRestore };
-    if (canRestore()) target.focus();
-  }, [key, origin, canRestore]);
+    if (canRestore({ searchReturnTarget: waitingForSearch.current === canRestore ? returnTarget : null })) target.focus();
+  }, [key, origin, canRestore, isSearchBlockingFocus, returnTarget]);
   return { hasOrigin: origin !== undefined, restore };
 }
 

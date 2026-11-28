@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useEffectEvent, useRef, type ReactNode, type RefObject } from 'react';
+import { useNavigationType } from 'react-router';
 import { useOneTimeDetailReturnFocus, type DetailReturnFocus } from '../../../shared/hooks/detail-return-focus.js';
-import { SearchDialogBlocksPageFocus, useCanRestoreEntryFocus } from '../../../shared/hooks/browser-entry-history.js';
+import { SearchDialogFocus, useCanRestoreEntryFocus } from '../../../shared/hooks/browser-entry-history.js';
 import { relatedFocusPrefix } from './related-procurement-navigation.js';
 
 const RelatedOrderReturn = createContext<(DetailReturnFocus & { readonly orderRegion: RefObject<HTMLElement | null> }) | null>(null);
@@ -29,17 +30,26 @@ export function useRestoreRelatedOrder(isReady: boolean, sourceRegion?: RefObjec
 
 export function useOrderEntryFocus<T extends HTMLElement>(focused: boolean, block: ScrollLogicalPosition) {
   const returnFocus = useContext(RelatedOrderReturn);
-  const isSearchBlockingFocus = useContext(SearchDialogBlocksPageFocus);
+  const { isBlocking: isSearchBlockingFocus, returnTarget } = useContext(SearchDialogFocus);
+  const navigation = useNavigationType();
   const canRestore = useCanRestoreEntryFocus();
+  const handledVisit = useRef<typeof canRestore | null>(null);
   const entry = useRef<T>(null);
   const focus = useEffectEvent(() => {
     if (returnFocus?.hasOrigin === true || entry.current === null) return;
-    if (!canRestore({ allowInherited: true })) return;
+    if (!canRestore({ allowInherited: true, searchReturnTarget: returnTarget })) return;
     entry.current.focus({ preventScroll: true });
     entry.current.scrollIntoView({ block });
   });
   useEffect(() => {
-    if (focused && !isSearchBlockingFocus) focus();
-  }, [focused, isSearchBlockingFocus, canRestore]);
+    if (!focused) {
+      handledVisit.current = null;
+      return;
+    }
+    if (isSearchBlockingFocus || handledVisit.current === canRestore) return;
+    const isEntry = handledVisit.current === null || navigation === 'POP';
+    handledVisit.current = canRestore;
+    if (isEntry) focus();
+  }, [focused, isSearchBlockingFocus, canRestore, navigation]);
   return entry;
 }

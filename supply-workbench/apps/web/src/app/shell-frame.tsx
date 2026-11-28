@@ -2,7 +2,6 @@ import { Button, ConfigProvider, Drawer, Layout, Menu } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SearchOutlined } from '@ant-design/icons';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { globalSearchTriggerId } from '../shared/hooks/browser-entry-history.js';
 import { shellLayer, type NavRow, type ShellChrome, type ShellView } from '../features/shell/index.js';
 import { searchShortcutHint } from '../shared/hooks/shortcuts.js';
 import { bg, border, brand, navCollapsed, navWidth, onBrand, space, topBar } from '../theme/tokens.js';
@@ -228,7 +227,6 @@ function SearchButton({ onSearch, hitPx }: { readonly onSearch: () => void; read
     <Button
       aria-label={searchLabel}
       aria-haspopup="dialog"
-      id={globalSearchTriggerId}
       aria-keyshortcuts={hint.ariaKeys}
       onClick={onSearch}
       icon={isPhone ? <SearchOutlined aria-hidden="true" /> : undefined}

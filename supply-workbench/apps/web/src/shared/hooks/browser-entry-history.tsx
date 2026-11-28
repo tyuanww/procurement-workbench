@@ -1,11 +1,12 @@
-import { createContext, useContext, useEffectEvent, useLayoutEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
 type Entry = { readonly key: string; readonly state: unknown; readonly index: number | undefined };
 type History = { readonly current: Entry; readonly previous?: Entry; readonly focus: ReturnType<typeof focusOnArrival> };
 const BrowserHistory = createContext<History | undefined>(undefined);
-export const SearchDialogBlocksPageFocus = createContext(false);
-export const globalSearchTriggerId = 'workbench-global-search-trigger';
+export const SearchDialogFocus = createContext<{ readonly isBlocking: boolean; readonly returnTarget: Element | null }>({
+  isBlocking: false, returnTarget: null,
+});
 const modifierKeys = new Set(['Alt', 'AltGraph', 'Control', 'Meta', 'Shift']);
 
 function focusOnArrival() {
@@ -16,10 +17,13 @@ function focusOnArrival() {
       if (event instanceof KeyboardEvent && modifierKeys.has(event.key)) return;
       hasInteracted = true;
     },
-    canRestore({ allowInherited = false } = {}) {
+    canRestore({ allowInherited = false, searchReturnTarget = null }: {
+      readonly allowInherited?: boolean;
+      readonly searchReturnTarget?: Element | null;
+    } = {}) {
       const active = document.activeElement;
-      if (hasInteracted || active?.closest('[aria-modal="true"]')) return false;
-      return active === document.body || (allowInherited && (active === inherited || active?.id === globalSearchTriggerId));
+      if (hasInteracted || active === null || active.closest('[aria-modal="true"]')) return false;
+      return active === document.body || active === searchReturnTarget || (allowInherited && active === inherited);
     },
   };
 }
@@ -29,23 +33,39 @@ export function BrowserEntryHistory({ children }: { readonly children: ReactNode
   const key = location.key;
   const entry: Entry = { key, state: location.state, index: browserEntryIndex(key) };
   const [history, setHistory] = useState<History>(() => ({ current: entry, focus: focusOnArrival() }));
+  const lastBrowserEntry = useRef<Entry>(entry);
+  const [traversal, setTraversal] = useState<{ readonly current: Entry; readonly previous: Entry }>();
   let visit = history;
   if (history.current.key !== key) {
-    visit = { current: entry, previous: history.current, focus: focusOnArrival() };
+    const previous = traversal?.current.key === key ? traversal.previous : history.current;
+    visit = { current: entry, previous, focus: focusOnArrival() };
     setHistory(visit);
   }
+  const commitEntry = useEffectEvent(() => {
+    if (entry.index !== undefined) lastBrowserEntry.current = entry;
+  });
+  useLayoutEffect(() => {
+    commitEntry();
+  }, [key]);
   const observePop = useEffectEvent(() => {
     // The browser can leave and return before React commits the intervening route.
-    const state = window.history.state;
-    if (typeof state?.idx === 'number' && (state.key ?? 'default') === visit.current.key && state.idx === visit.current.index) {
-      setHistory({ current: visit.current, focus: focusOnArrival() });
+    const current = browserHistoryEntry();
+    const previous = lastBrowserEntry.current;
+    lastBrowserEntry.current = current;
+    setTraversal({ current, previous });
+    if (current.key === visit.current.key && current.index === visit.current.index) {
+      setHistory({ current, previous, focus: focusOnArrival() });
     }
   });
   useLayoutEffect(() => {
     window.addEventListener('popstate', observePop, true);
     return () => window.removeEventListener('popstate', observePop, true);
   }, []);
-  const { focus } = visit;
+  useRecordInput(visit.focus);
+  return <BrowserHistory value={visit}>{children}</BrowserHistory>;
+}
+
+function useRecordInput(focus: History['focus']) {
   useLayoutEffect(() => {
     const controller = new AbortController();
     for (const event of ['keydown', 'pointerdown', 'click', 'input', 'wheel']) {
@@ -53,7 +73,6 @@ export function BrowserEntryHistory({ children }: { readonly children: ReactNode
     }
     return () => controller.abort();
   }, [focus]);
-  return <BrowserHistory value={visit}>{children}</BrowserHistory>;
 }
 
 export function usePreviousBrowserEntry() {
@@ -68,7 +87,11 @@ export function useCanRestoreEntryFocus() {
 
 export function browserEntryIndex(key: string): number | undefined {
   if (typeof window === 'undefined') return undefined;
+  const entry = browserHistoryEntry();
+  return entry.key === key ? entry.index : undefined;
+}
+
+function browserHistoryEntry(): Entry {
   const state = window.history.state;
-  if ((state?.key ?? 'default') !== key) return undefined;
-  return typeof state?.idx === 'number' ? state.idx : undefined;
+  return { key: state?.key ?? 'default', state: state?.usr, index: typeof state?.idx === 'number' ? state.idx : undefined };
 }
