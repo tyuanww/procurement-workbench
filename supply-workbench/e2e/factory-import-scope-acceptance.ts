@@ -26,6 +26,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   const shared = await checkFactorySourceRoundTrip(buyer, origin);
   await checkCopiedSourceFromAnotherStore(buyer, shared);
   await checkCopiedSourceWithNoStore(buyer, shared);
+  await checkFactorySourceCannotBecomeProcurement(buyer, shared);
   await checkRelatedBatchMember(buyer, origin);
   await checkEmptyFactorySource(buyer, origin);
   const denied = await manager.request.get(new URL(`/api/v1/imports/${scopeId}`, origin).href);
@@ -36,7 +37,8 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkSharedOrderView(manager, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
-    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, relatedOrdersKeepTrueScope: true };
+    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
+    relatedOrdersKeepTrueScope: true };
 }
 
 function factoryRelatedComponent(page: Page) {
@@ -128,6 +130,28 @@ async function checkCopiedSourceWithNoStore(page: Page, shared: URL) {
     await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === scopeId
       && !url.searchParams.has('store') && !url.searchParams.has('backToImport'));
     await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), currentFactoryOrderPos);
+  }
+}
+
+async function checkFactorySourceCannotBecomeProcurement(page: Page, shared: URL) {
+  const destination = new URL(shared);
+  destination.searchParams.delete('store');
+  const source = new URL(shared.searchParams.get('backToImport') ?? '', shared);
+  source.searchParams.set('template', 'po-master-v1');
+  source.searchParams.set('store', 'yiling');
+  for (const key of ['batch', 'procurement-batch']) {
+    source.searchParams.set('source', key);
+    destination.searchParams.set('backToImport', source.pathname + source.search);
+    const [summary] = await Promise.all([
+      page.waitForResponse((response) => new URL(response.url()).pathname === `/api/v1/imports/${scopeId}`),
+      page.goto(destination.href),
+    ]);
+    assert.ok(summary.ok());
+    assert.equal((await summary.json()).template, 'factory-progress-v1');
+    const rows = page.getByRole('region', { name: '订单查询结果', exact: true });
+    await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
     assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), currentFactoryOrderPos);
   }
 }

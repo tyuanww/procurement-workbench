@@ -1,6 +1,6 @@
 import { ProcurementStoreSchema } from '@sw/contracts';
 import { clearOrderLensParams, importBatchOf } from '../../../features/follow-up/index.js';
-import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
 
 export function retainImportViewFilters(current: URLSearchParams, next: URLSearchParams): void {
   const savedBatch = importBatchOf(next);
@@ -8,7 +8,7 @@ export function retainImportViewFilters(current: URLSearchParams, next: URLSearc
   const currentBatch = importBatchOf(current);
   if (currentBatch === undefined) return;
   const store = ProcurementStoreSchema.safeParse(current.get('store')).data;
-  if (store !== undefined || importFollowUpScope(current) !== null) {
+  if (store !== undefined || importFollowUpCandidate(current) !== null) {
     next.set('importBatchId', currentBatch);
     if (store === undefined) next.delete('store');
     else next.set('store', store);

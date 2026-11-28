@@ -4,4 +4,5 @@ export { canSubmitImport, recommendedTemplate, selectedTemplate, templateNeedsFa
 export type { DetectCandidate, ImportTypeChoice } from './model/choice.js';
 export { allConflictChoices, conflictCandidateOf, conflictChoicesOf, conflictQueryOf, conflictResolutionsOf } from './model/conflicts.js';
 export type { ConflictCandidate } from './model/conflicts.js';
-export { BATCH_IMPORT_SOURCE, IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, PROCUREMENT_BATCH_IMPORT_SOURCE, importFollowUpBackAddress, importFollowUpScope, isBatchImportSource } from './model/follow-up.js';
+export { BATCH_IMPORT_SOURCE, IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, PROCUREMENT_BATCH_IMPORT_SOURCE, importFollowUpBackAddress, importFollowUpCandidate, importFollowUpScope, isBatchImportSource } from './model/follow-up.js';
+export { fetchImportBatchSummary, useVerifiedProcurementImportReturn, useVerifiedProcurementImportReturnContext, VerifiedProcurementImportReturn } from './model/use-follow-up-return.js';

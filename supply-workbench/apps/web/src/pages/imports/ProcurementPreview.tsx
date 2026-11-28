@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Collapse, Flex, Select, Table, Tag, Typography } from 'antd';
 import type { TableProps } from 'antd';
 import { ProcurementPreviewSelectionSchema, UNLINKED_PROCUREMENT, type ImportBatchSummary, type ProcurementPreviewSelection, type ProcurementReviewReason } from '@sw/contracts';
+import { isBatchImportSource } from '../../features/imports/index.js';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { ImportSourceButton, ImportSourceDrawer, sourceText, UnavailableImportSource, type ImportSourceRecord } from './ImportSourceDrawer.js';
 import { importSourceKey, importSourceQuery, useImportSource, type ImportSourceState } from './import-source.js';
@@ -202,7 +203,7 @@ function SourceCell({ source, kind, location, primary, note, po }: {
 }
 
 function hasRowSource(key: string | null) {
-  return key !== null && key !== 'batch';
+  return key !== null && !isBatchImportSource(key);
 }
 
 function selectedRecord({ current, key, summary, isCommitted }: {

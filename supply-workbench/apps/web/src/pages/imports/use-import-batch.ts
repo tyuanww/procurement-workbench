@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ImportBatchSummarySchema, type ImportBatchSummary } from '@sw/contracts';
-import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
+import type { ImportBatchSummary } from '@sw/contracts';
+import { fetchImportBatchSummary } from '../../features/imports/index.js';
+import { apiErrorMessage } from '../../shared/api/client.js';
 
 type Load =
   | { readonly kind: 'loading' }
@@ -13,7 +14,7 @@ export function useImportBatch(id: string) {
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
-    void apiGetWithSignal({ path: `/api/v1/imports/${encodeURIComponent(id)}`, schema: ImportBatchSummarySchema, signal })
+    void fetchImportBatchSummary(id, signal)
       .then((summary) => { if (!signal.aborted) setLoad({ kind: 'ready', summary }); })
       .catch((error: unknown) => {
         if (!signal.aborted) setLoad({ kind: 'failed', message: apiErrorMessage(error) ?? '导入批次没有读出来。' });

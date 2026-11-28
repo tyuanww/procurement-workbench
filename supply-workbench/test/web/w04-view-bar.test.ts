@@ -176,19 +176,21 @@ describe('已修改状态', () => {
 
   it('整批工厂来源比较实际店铺，采购来源通过专用抽屉区分历史店铺', () => {
     const base = '/imports/batch-a?drawer=import-source';
-    const scope = (source: string, store?: string) => {
+    const scope = (source: string, store?: string, isVerifiedProcurement = false) => {
       const params = new URLSearchParams({ importBatchId: 'batch-a', backToImport: base + source });
       if (store !== undefined) params.set('store', store);
-      return importFollowUpScope(params);
+      return importFollowUpScope(params, isVerifiedProcurement);
     };
     for (const value of [undefined, 'invalid-store', 'all']) {
       expect(scope('&source=batch&store=yiling', value)).toBeNull();
       expect(scope('&source=batch&store=all', value)).not.toBeNull();
       expect(scope('&source=batch', value)).not.toBeNull();
     }
-    expect(scope('&source=batch&template=po-master-v1&store=yiling')?.recordKey).toBe('procurement-batch');
-    expect(scope('&source=procurement-batch&store=yiling')?.to).toBe(base + '&source=procurement-batch&store=yiling');
-    expect(scope('&source=procurement-batch&store=yiling', 'yiling')).toBeNull();
+    expect(scope('&source=batch&template=po-master-v1&store=yiling')).toBeNull();
+    expect(scope('&source=batch&store=yiling', undefined, true)?.recordKey).toBe('procurement-batch');
+    expect(scope('&source=procurement-batch&store=yiling')).toBeNull();
+    expect(scope('&source=procurement-batch&store=yiling', undefined, true)?.to).toBe(base + '&source=procurement-batch&store=yiling');
+    expect(scope('&source=procurement-batch&store=yiling', 'yiling', true)).toBeNull();
   });
 
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {

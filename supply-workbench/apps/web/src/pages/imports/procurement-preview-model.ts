@@ -1,5 +1,6 @@
 import { recognizedPoNumbers } from '@sw/domain';
 import { UNLINKED_PROCUREMENT, type ProcurementPreviewSelection } from '@sw/contracts';
+import { isBatchImportSource } from '../../features/imports/index.js';
 import { importSourceQuery, previewPage, type ImportSourceState } from './import-source.js';
 
 export const sourcePageSizes = { finished: 12, component: 16, candidate: 16 } as const;
@@ -18,7 +19,7 @@ export function rowSourceInOa(source: ImportSourceState, oa: string): ImportSour
 }
 
 export function switchPreviewOa(source: ImportSourceState, oa: string) {
-  const rowSource = source.sourceKey !== null && source.sourceKey !== 'batch' ? { drawer: null, source: null } : undefined;
+  const rowSource = source.sourceKey !== null && !isBatchImportSource(source.sourceKey) ? { drawer: null, source: null } : undefined;
   source.update({
     [importSourceQuery.oa]: oa === '' ? '~' : oa, [importSourceQuery.finished]: null,
     [importSourceQuery.component]: null, [importSourceQuery.candidate]: null, candidates: null, ...rowSource,

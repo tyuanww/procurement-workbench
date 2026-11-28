@@ -12,18 +12,30 @@ export function isBatchImportSource(key: string | null): boolean {
   return key === BATCH_IMPORT_SOURCE || key === PROCUREMENT_BATCH_IMPORT_SOURCE;
 }
 
-export function importFollowUpScope(params: URLSearchParams): ReturnType<typeof importFollowUpBackAddress> {
+export function importFollowUpCandidate(params: URLSearchParams) {
   const back = importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
   if (back === null || params.get('importBatchId') !== back.id) return null;
   const store = shopSchema.safeParse(params.get('store')).data;
-  const separator = back.to.indexOf('?');
-  const sourceQuery = new URLSearchParams(back.to.slice(separator));
+  const sourceQuery = new URLSearchParams(back.to.slice(back.to.indexOf('?')));
   const sourceStore = shopSchema.safeParse(sourceQuery.get('store')).data;
-  if (back.recordKey === PROCUREMENT_BATCH_IMPORT_SOURCE) return store === undefined ? back : null;
-  if (store === sourceStore || (store === undefined && !isBatchImportSource(back.recordKey))) return back;
-  if (store !== undefined || sourceQuery.get('template') !== 'po-master-v1') return null;
+  if (back.recordKey === PROCUREMENT_BATCH_IMPORT_SOURCE) {
+    return store === undefined ? { ...back, needsProcurementVerification: true } : null;
+  }
+  if (store === sourceStore || (store === undefined && !isBatchImportSource(back.recordKey))) {
+    return { ...back, needsProcurementVerification: false };
+  }
+  return store === undefined ? { ...back, needsProcurementVerification: true } : null;
+}
+
+export function importFollowUpScope(params: URLSearchParams, isVerifiedProcurement = false): ReturnType<typeof importFollowUpBackAddress> {
+  const candidate = importFollowUpCandidate(params);
+  if (candidate === null || (candidate.needsProcurementVerification && !isVerifiedProcurement)) return null;
+  const { id, to, recordKey } = candidate;
+  if (!candidate.needsProcurementVerification || recordKey === PROCUREMENT_BATCH_IMPORT_SOURCE) return { id, to, recordKey };
+  const separator = to.indexOf('?');
+  const sourceQuery = new URLSearchParams(to.slice(separator));
   sourceQuery.set('source', PROCUREMENT_BATCH_IMPORT_SOURCE);
-  return { ...back, to: `${back.to.slice(0, separator)}?${sourceQuery}`, recordKey: PROCUREMENT_BATCH_IMPORT_SOURCE };
+  return { id, to: `${to.slice(0, separator)}?${sourceQuery}`, recordKey: PROCUREMENT_BATCH_IMPORT_SOURCE };
 }
 
 export function importFollowUpBackAddress(value: string | null): { readonly id: string; readonly to: string; readonly recordKey: string } | null {

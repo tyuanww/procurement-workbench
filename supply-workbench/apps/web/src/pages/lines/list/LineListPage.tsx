@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type R
 import { Link, useLocation } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
 import { importBatchOf, loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, useFollowUpSearch, type OrderLens } from '../../../features/follow-up/index.js';
-import { importFollowUpScope } from '../../../features/imports/index.js';
+import { importFollowUpCandidate, useVerifiedProcurementImportReturn, VerifiedProcurementImportReturn } from '../../../features/imports/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
@@ -37,7 +37,8 @@ export function LineListPage() {
   const canReadImports = useCan('imports.read');
   const hasImportBatch = importBatchOf(params) !== undefined;
   const lens = orderLensOf(params);
-  const back = canReadImports && importFollowUpScope(params) !== null ? importFollowUpReturn({ params, state, scoped: true }) : null;
+  const isVerifiedProcurement = useVerifiedProcurementImportReturn(params, canReadImports);
+  const back = canReadImports ? importFollowUpReturn({ params, state, scoped: true, isVerifiedProcurement }) : null;
   return <WorkbenchPage title="跟进中心" browserTitle={lens === 'delivery' ? '按店铺交付' : '订单查询'}
     action={back === null ? null : <Link to={back.to} state={back.state}>{back.label}</Link>}>
     {hasImportBatch ? null : <div style={{ marginBottom: space[2] }}>
@@ -45,14 +46,16 @@ export function LineListPage() {
         options={[{ value: 'query', label: '订单查询' }, { value: 'delivery', label: '按店铺交付' }]}
         onChange={(value) => setParams(switchOrderLens(params, value))} />
     </div>}
-    {lens === 'delivery' ? <DeliveryOrders /> : <OrderQuery />}
+    <VerifiedProcurementImportReturn value={isVerifiedProcurement}>
+      {lens === 'delivery' ? <DeliveryOrders /> : <OrderQuery />}
+    </VerifiedProcurementImportReturn>
   </WorkbenchPage>;
 }
 
 function OrderQuery() {
   const [params, updateParams] = useFollowUpSearch();
   const location = useLocation();
-  const importOrigin = importFollowUpScope(params) === null ? undefined : readImportBatchOriginState(location.state);
+  const importOrigin = importFollowUpCandidate(params) === null ? undefined : readImportBatchOriginState(location.state);
   const setParams: SearchSetter = (next, options) => updateParams(next, importOrigin === undefined ? options : { ...options, state: importOrigin });
   const results = useRef<HTMLDivElement>(null);
   const [users, setUsers] = useState<readonly { readonly id: string; readonly name: string }[]>([]);

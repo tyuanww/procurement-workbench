@@ -893,6 +893,8 @@ async function checkScopedImportNavigation({ page, importPath, importBatchId }: 
   await historyLink.press('Enter');
   await sourceTrigger.press('Enter');
   await sourceLink.waitFor();
+  await page.getByLabel('OA 需求编号', { exact: true }).waitFor({ state: 'attached' });
+  assert.equal(await page.getByText('找不到链接中的来源记录', { exact: true }).count(), 0);
   const sourceUrl = page.url();
   await sourceLink.press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === importBatchId);
