@@ -26,9 +26,21 @@ const slot = { index: 0, date: localDate('2026-11-24'), qty: 50 };
 const rawCells = { dateRaw: '2026/11/24', qtyRaw: '050.00' };
 const wait = { timeout: 4000, interval: 25 };
 
-it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并发生成只提交一份凭据（目标订单已存在 %s）', async (existing) => {
+it.skipIf(url === undefined).each([
+  { existing: true, distinct: false }, { existing: false, distinct: false },
+  { existing: true, distinct: true }, { existing: false, distinct: true },
+])('真实 PostgreSQL 并发生成保留每个需求槽并连续编号（已有订单 $existing，不同需求行 $distinct）', async ({ existing, distinct }) => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
     if (existing) await seedLine({ db: main.db, sample, id: sample.lineId });
+    const otherId = distinct ? entityId(`${sample.id}-second`) : sample.id;
+    if (distinct) {
+      const reports = factoryReportRepository(main.db);
+      const original = await reports.get(sample.id);
+      if (original.demand === null) throw new Error('合成行缺少工厂需求');
+      await reports.save({ ...original, id: otherId, fingerprint: otherId, rowNo: 5,
+        demand: { ...original.demand, blockMaterialPoRaw: sample.poRaw.toLowerCase() },
+      });
+    }
     const paused = gate();
     const first = makeGenerateBatchesFromDemand(writes(main.db, { afterOriginRead: paused.hold }));
     const second = makeGenerateBatchesFromDemand(writes(competing.db));
@@ -37,7 +49,7 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并
     let other: ReturnType<typeof second> | undefined;
     try {
       await Promise.race([paused.entered, holding]);
-      const running = settled(second(request, sample.buyer));
+      const running = settled(second({ rowIds: [otherId] }, sample.buyer));
       other = running.result;
       await expect.poll(() => running.isDone() || blockedOnPostgres(main, applicationName), wait).toBe(true);
     } finally {
@@ -45,12 +57,16 @@ it.skipIf(url === undefined).each([true, false])('真实 PostgreSQL 需求槽并
       await Promise.allSettled(other === undefined ? [holding] : [holding, other]);
     }
     expect(await holding).toEqual({ createdLines: existing ? 0 : 1, createdBatches: 1, skipped: [] });
-    expect(await other).toEqual({ createdLines: 0, createdBatches: 0,
-      skipped: [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }] });
+    expect(await other).toEqual(distinct ? { createdLines: 0, createdBatches: 1, skipped: [] }
+      : { createdLines: 0, createdBatches: 0, skipped: [{ rowId: sample.id, slotIndex: 0, reason: '已经生成过批次' }] });
     const detail = await onlyLineDetail(main.db, sample.code);
-    expect(detail.batches).toMatchObject([{ plannedQty: slot.qty, dateFactoryRequired: slot.date }]);
-    const sources = Object.values(detail.batchDemandSources ?? {});
-    expect(sources).toMatchObject([{ importBatchId: sample.importId, slot: { originalCells: rawCells } }]);
+    const saved = detail.batches.toSorted((a, b) => a.seq - b.seq).map((batch) => {
+      const source = detail.batchDemandSources?.[batch.id];
+      return { seq: batch.seq, qty: batch.plannedQty, date: batch.dateFactoryRequired,
+        importId: source?.importBatchId, row: source?.rowNo, raw: source?.slot.originalCells };
+    });
+    const firstBatch = { seq: 1, qty: slot.qty, date: slot.date, importId: sample.importId, row: 4, raw: rawCells };
+    expect(saved).toEqual(distinct ? [firstBatch, { ...firstBatch, seq: 2, row: 5 }] : [firstBatch]);
   });
 }, 15000);
 
@@ -247,11 +263,11 @@ async function clearSample(handle: AppHandle, sample: Sample): Promise<void> {
   // 所有条件来自本次测试生成的 UUID，和同库的其他验证样本隔离。
   await handle.exec(`
     delete from audit_log where actor_user_id in ('${sample.buyer.id}', '${sample.reviewer.id}');
-    delete from delivery_batches where origin_ref->>'rowId' = '${sample.id}';
+    delete from delivery_batches where origin_ref->>'rowId' in ('${sample.id}', '${sample.id}-second');
     delete from line_factory_links where order_line_id = '${sample.lineId}';
     delete from order_lines where item_code_raw = '${sample.code}' or id = '${sample.id}-other';
-    delete from purchase_orders where po_raw = '${sample.poRaw}';
-    delete from factory_material_demand_rows where id = '${sample.id}';
+    delete from purchase_orders where lower(po_raw) = lower('${sample.poRaw}');
+    delete from factory_material_demand_rows where id in ('${sample.id}', '${sample.id}-second');
     delete from import_batches where id = '${sample.importId}';
   `);
 }
