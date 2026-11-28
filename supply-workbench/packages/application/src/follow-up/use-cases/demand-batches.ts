@@ -80,8 +80,8 @@ export async function generateDemandRows(input: GenerateInput, sources: readonly
       for (const lineId of row.matchingLineIds) lineIds.add(lineId);
     }
   }
-  const noWait = lineIds.size > 1;
-  const lines = await lockOrderLines({ lock: (id) => input.tx.orderLines.lock(id, { noWait }) }, [...lineIds]);
+  const shouldLockWithoutWaiting = lineIds.size > 1;
+  const lines = await lockOrderLines({ lock: (id) => input.tx.orderLines.lock(id, { noWait: shouldLockWithoutWaiting }) }, [...lineIds]);
   const outcomes = [];
   for (const row of rows) {
     if ('lineId' in row) {

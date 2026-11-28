@@ -142,6 +142,15 @@ async function seedDemand(db: AppDatabase, sample: Sample): Promise<void> {
   }));
 }
 
+export async function anotherDemand(db: AppDatabase, { sample, code = sample.code }: { readonly sample: Sample; readonly code?: string }) {
+  const repo = factoryReportRepository(db);
+  const first = await repo.get(sample.id);
+  if (first.demand === null) throw new Error('合成需求缺失');
+  const id = entityId(`${sample.id}-other-demand`);
+  await repo.save({ ...first, id, fingerprint: id, rowNo: 5, demand: { ...first.demand, itemCodeRaw: code } });
+  return id;
+}
+
 export async function seedLine({ db, sample, id, fields }: {
   readonly db: AppDatabase; readonly sample: Sample; readonly id: ReturnType<typeof orderLineId>;
   readonly fields?: Partial<ReturnType<typeof anOrderLine>>;

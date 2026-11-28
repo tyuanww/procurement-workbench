@@ -9,7 +9,7 @@ import { factoryReportRepository } from '../../packages/persistence/src/reposito
 import { itemCodeRepository } from '../../packages/persistence/src/repositories/identity.js';
 import { orderLineRepository } from '../../packages/persistence/src/repositories/order-lines.js';
 import { aBatch, anOrderLine } from '../../packages/testkit/src/index.js';
-import { blockedOnPostgres, clock, gate, seedLine, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
+import { anotherDemand, blockedOnPostgres, clock, gate, seedLine, settled, slot, url, wait, withFixture, writes, type Sample } from './factory-demand-generation-fixture.js';
 
 it.skipIf(url === undefined)('取消旧批次与生成新批次重叠后，订单列表显示实际开放的下一批', async () => {
   await withFixture(async ({ main, competing, applicationName, sample }) => {
@@ -202,15 +202,6 @@ async function seedPair(db: AppDatabase, sample: Sample) {
   if (first.demand === null) throw new Error('合成行缺少工厂需求');
   await reports.save({ ...first, id: secondRow, fingerprint: secondRow, rowNo: 5, demand: { ...first.demand, itemCodeRaw: secondCode } });
   return { lineIds: [sample.lineId, secondLine], rowIds: [sample.id, secondRow], secondCode } as const;
-}
-
-async function anotherDemand(db: AppDatabase, { sample, code = sample.code }: { readonly sample: Sample; readonly code?: string }) {
-  const repo = factoryReportRepository(db);
-  const first = await repo.get(sample.id);
-  if (first.demand === null) throw new Error('合成需求缺失');
-  const id = entityId(`${sample.id}-other-demand`);
-  await repo.save({ ...first, id, fingerprint: id, rowNo: 5, demand: { ...first.demand, itemCodeRaw: code } });
-  return id;
 }
 
 it.skipIf(url === undefined)('已生成的需求重试不等待同采购单另一需求的生成', async () => {
