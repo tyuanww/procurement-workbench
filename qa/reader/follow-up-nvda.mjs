@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { code, component, login, po, seed } from './fixture.mjs';
+import { code, component, login, po, seed, seedGeneratedDemand } from './fixture.mjs';
 
 const origin = process.env.ACCEPT_API;
 const accessCode = process.env.DEV_ACCESS_CODE;
@@ -36,7 +36,8 @@ const sanitize = (error) => String(error?.stack ?? error).replaceAll(accessCode,
 const spokenText = (phrases) => phrases.join(' ')
   .replace(/[\u200b-\u200d\ufeff]/gu, '')
   .replace(/\s+(?:dot|点)\s+/giu, '.')
-  .replace(/\b(purchase|factory) synthetic(?=\.xlsx\b)/giu, '$1-synthetic');
+  .replace(/\b(purchase|factory) synthetic(?=\.xlsx\b)/giu, '$1-synthetic')
+  .replace(/\bbatch demand synthetic(?=\.xlsx\b)/giu, 'batch-demand-synthetic');
 const spokenPo = po.replace(/^PO/u, 'PO\\s*');
 await save();
 
@@ -58,6 +59,23 @@ try {
     try {
       await login(page, origin, accessCode, account);
       await scenario(page, fixture);
+      evidence.checks[role] = evidence.steps.some(step => step.role === role && step.status === 'fail') ? 'fail' : 'pass';
+    } catch (error) {
+      evidence.checks[role] = 'fail';
+      evidence.errors.push({ role, error: sanitize(error) });
+    } finally {
+      await page.close();
+      await save();
+    }
+  }
+  if (process.env.VERIFY_GENERATED_DEMAND === 'true') {
+    const role = 'buyer-generated-demand';
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    try {
+      const fixture = await seedGeneratedDemand(browser, { origin, accessCode });
+      evidence.fixture.generatedDemand = fixture;
+      await login(page, origin, accessCode, '2');
+      await readGeneratedDemand(page, fixture, role);
       evidence.checks[role] = evidence.steps.some(step => step.role === role && step.status === 'fail') ? 'fail' : 'pass';
     } catch (error) {
       evidence.checks[role] = 'fail';
@@ -306,4 +324,51 @@ async function readSources(page, role) {
       }
     });
   }
+}
+
+
+async function readGeneratedDemand(page, fixture, role) {
+  await visit(page, '/lines/' + encodeURIComponent(fixture.lineId) + '?focusBatch=' + fixture.batchId, role);
+  const trigger = page.getByRole('button', { name: '回查第 2 批原表', exact: true });
+  const group = page.getByRole('region', { name: '工厂需求表 · 本批生成来源', exact: true });
+  const sourceRow = /batch-demand-synthetic\.xlsx.*09月排产包材原料需求表.*第\s*4\s*行/u;
+  const column = /数量.*第\s*13\s*列/u;
+  await step(role, 'expand the generated batch 2 source', 'The application focuses batch 2; Playwright focuses its disclosure and sends Enter; NVDA+Tab reports the disclosure', async record => {
+    await page.waitForFunction(() => document.activeElement?.matches('li[tabindex="-1"]') &&
+      document.activeElement.textContent?.includes('回查第 2 批原表'));
+    await trigger.focus();
+    await reportFocus(record, /回查第\s*2\s*批原表/u);
+    await trigger.press('Enter');
+    await group.getByRole('link', { name: sourceRow }).waitFor();
+    await group.getByText(fixture.rawDate, { exact: true }).waitFor();
+    await group.getByText(fixture.rawQty, { exact: true }).waitFor();
+    await group.getByText(column).waitFor();
+    assert.equal(await group.getByText(/第\s*1\s*组/u).count(), 0);
+  });
+  await step(role, 'read the frozen factory demand row and raw quantity in batch 2', 'NVDA uses heading-level quick navigation (4) and Down Arrow in the expanded source; Playwright does not reposition the NVDA reading cursor', async record => {
+    await nvda.perform(nvda.keyboardCommands.exitFocusMode, { capture: false });
+    await nvda.clearSpokenPhraseLog();
+    const sectionHeading = /工厂需求表\s*·?\s*本批生成来源/u;
+    for (let count = 0; count < 6; count++) {
+      await nvda.perform(nvda.keyboardCommands.moveToNextHeadingLevel4);
+      record.spoken = [...await nvda.spokenPhraseLog()];
+      if (sectionHeading.test(record.spoken.at(-1) ?? '')) break;
+    }
+    record.heading = record.spoken.at(-1);
+    assert.match(record.heading ?? '', sectionHeading);
+    await nvda.clearSpokenPhraseLog();
+    const rawQty = /(?<!\d)0\s*1\s*0\s*0\s*(?:[.点]|dot|point)\s*0\s*0(?!\d)/iu;
+    const normalizedRawDate = /2026\s*(?:\/|slash|斜杠)\s*11\s*(?:\/|slash|斜杠)\s*27/u;
+    const observed = text => sourceRow.test(text) && column.test(text) && rawQty.test(text);
+    for (let count = 0; count < 20; count++) {
+      await nvda.next();
+      record.spoken = [...await nvda.spokenPhraseLog()];
+      if (observed(spokenText(record.spoken))) break;
+    }
+    const speech = spokenText(record.spoken);
+    assert.match(speech, sourceRow);
+    assert.match(speech, column);
+    assert.match(speech, rawQty);
+    record.rawDateAnnounced = normalizedRawDate.test(speech);
+  });
 }

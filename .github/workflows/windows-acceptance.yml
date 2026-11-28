@@ -7,6 +7,10 @@ on:
         description: Exact application commit SHA to verify with NVDA
         type: string
         required: true
+      generatedDemand:
+        description: Also read batch 2 generated from a real synthetic factory workbook
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +23,7 @@ jobs:
       TESTED_SHA: ${{ inputs.sha }}
       ACCEPT_BROWSER: msedge
       READER_HARNESS_SHA: ${{ github.sha }}
+      VERIFY_GENERATED_DEMAND: ${{ inputs.generatedDemand }}
     defaults:
       run:
         shell: pwsh
