@@ -4,19 +4,9 @@ import type { FactoryReportKind } from '@sw/domain';
 import type { FactoryDiagnosticPageQuery, UnmatchedFactoryRowView } from '../../../../application/src/ports/factory-link-views.js';
 import type { ListResult } from '../../../../application/src/shared/page.js';
 import type { AppDatabase } from '../../client.js';
-import { customerSuppliedReceiptRows, factoryInTransitRows, factoryMaterialDemandRows, factoryPackagingComboRows, factoryScheduleCells, factoryShipmentRows, factoryStockRows } from '../../schema/factory.js';
 import { actionableFactoryReport } from '../factory-report-actionable.js';
+import { factoryReportTables } from './report-tables.js';
 import { activeFactoryBatchIds } from './snapshot-scope.js';
-
-const REPORT_TABLES = {
-  shipment: factoryShipmentRows,
-  in_transit: factoryInTransitRows,
-  stock: factoryStockRows,
-  schedule: factoryScheduleCells,
-  packaging_combo: factoryPackagingComboRows,
-  customer_supplied: customerSuppliedReceiptRows,
-  demand: factoryMaterialDemandRows,
-} satisfies Record<FactoryReportKind, unknown>;
 
 type Scope = { readonly kind: 'all' } | { readonly kind: FactoryDiagnosticPageQuery['scope']; readonly activeIds: string[] };
 
@@ -60,7 +50,7 @@ function unmatchedReports(db: AppDatabase, scope: Scope) {
 }
 
 function unmatchedInTable(db: AppDatabase, { kind, scope }: { readonly kind: FactoryReportKind; readonly scope: Scope }) {
-  const table = REPORT_TABLES[kind];
+  const table = factoryReportTables[kind];
   return db.select({
     rowId: table.id,
     kind: sql<FactoryReportKind>`${kind}::text`.as('kind'),
@@ -78,7 +68,7 @@ function unmatchedInTable(db: AppDatabase, { kind, scope }: { readonly kind: Fac
 
 function scopeWhere(kind: FactoryReportKind, scope: Scope): SQL | undefined {
   if (scope.kind === 'all') return undefined;
-  const table = REPORT_TABLES[kind];
+  const table = factoryReportTables[kind];
   if (scope.kind === 'historical') return notInArray(table.importBatchId, scope.activeIds);
   return and(inArray(table.importBatchId, scope.activeIds), not(actionableFactoryReport(kind, table.linkStatus)));
 }

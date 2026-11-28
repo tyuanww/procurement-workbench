@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useInRouterContext, useLocation } from 'react-router';
+import { ProcurementStoreSchema } from '@sw/contracts';
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday, deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
@@ -11,16 +12,25 @@ import { readImportBatchOriginState } from '../../imports/import-source.js';
 type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode };
 
 export function LineDetailLink(props: LineDetailLinkProps) {
-  const scope = importFollowUpScope(new URLSearchParams(props.search));
-  const href = scope === null ? props.href : importDetailAddress(props.href, scope);
+  const params = new URLSearchParams(props.search);
+  const scope = importFollowUpScope(params);
+  const href = scope === null ? props.href : importDetailAddress({ href: props.href, scope, params });
   return useInRouterContext() ? <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} /> : <a href={href}>{props.children}</a>;
 }
 
-function importDetailAddress(href: string, scope: NonNullable<ReturnType<typeof importFollowUpScope>>): string {
+function importDetailAddress({ href, scope, params }: {
+  readonly href: string; readonly scope: NonNullable<ReturnType<typeof importFollowUpScope>>; readonly params: URLSearchParams;
+}): string {
   const detail = new URL(href, 'https://workbench.invalid');
   detail.searchParams.set('importBatchId', scope.id);
   detail.searchParams.set(IMPORT_RETURN_PARAM, scope.to);
+  copyImportStore(params, detail.searchParams);
   return followUpAddress(detail.pathname, detail.searchParams);
+}
+
+function copyImportStore(from: URLSearchParams, to: URLSearchParams) {
+  const store = ProcurementStoreSchema.safeParse(from.get('store')).data;
+  if (store !== undefined) to.set('store', store);
 }
 
 function RoutedLineDetailLink({ href, search, children, isScoped }: LineDetailLinkProps & { readonly isScoped: boolean }) {
@@ -153,7 +163,10 @@ function arrivalDeskScope(params: URLSearchParams, state: unknown): URLSearchPar
   const desk = lineDeskParams(state);
   if (desk !== null && importFollowUpScope(desk) !== null) return desk;
   const scope = importFollowUpScope(params);
-  return scope === null ? null : new URLSearchParams({ lane: 'all', importBatchId: scope.id, [IMPORT_RETURN_PARAM]: scope.to });
+  if (scope === null) return null;
+  const next = new URLSearchParams({ lane: 'all', importBatchId: scope.id, [IMPORT_RETURN_PARAM]: scope.to });
+  copyImportStore(params, next);
+  return next;
 }
 
 export function useLineDetailSearchParams() {

@@ -12,6 +12,7 @@ import { checkFactoryLinkBoard } from './factory-link-acceptance.ts';
 import { checkFollowUpDelivery } from './follow-up-delivery-acceptance.ts';
 import { checkFollowUpOrderQuery } from './follow-up-order-query-acceptance.ts';
 import { checkCrossPageFulfillment } from './cross-page-fulfillment-acceptance.ts';
+import { checkFactoryImportScope } from './factory-import-scope-acceptance.ts';
 import { checkFrontendCloseout } from './frontend-closeout-acceptance.ts';
 import { checkAccountLogout, checkEmptyProductArchive, checkImportFactoryDetail, checkImportReviewNavigation } from './import-review-navigation-acceptance.ts';
 import { checkPersonalWorkspace } from './personal-workspace-acceptance.ts';
@@ -170,6 +171,7 @@ async function procurementAcceptance(): Promise<void> {
   result.checks.followUpOrderQuery = await checkFollowUpOrderQuery({ page: buyer, origin, out, po: componentPo, warehouse });
   result.checks.followUpDelivery = await checkFollowUpDelivery({ page: manager, buyer, origin, out, warehouse });
   result.checks.importArrivalEvidence = await checkImportedArrivalEvidence(buyer, importPath);
+  result.checks.factoryImportScope = await checkFactoryImportScope({ buyer, manager, origin });
   result.checks.accountLogout = await checkAccountLogout(buyer, origin, (path) => {
     expectedFailures.push({ role: 'buyer', path, status: 503 });
   });
