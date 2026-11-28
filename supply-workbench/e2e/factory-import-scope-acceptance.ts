@@ -40,11 +40,71 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await checkSharedProcurementReturn({ page: manager, origin, store: currentStore });
   await checkPendingPreviewReturn(buyer, origin);
   await checkDelayedDetailReturnFocus(buyer, shared);
+  await checkRelatedOrderFocusHistory(buyer, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
     relatedOrdersKeepTrueScope: true, relatedOrderReturnFocus: true, detachedDetailChecksMembership: true, sharedFilteredReturn: true,
-    pendingPreviewReturn: true, delayedDetailReturnFocus: true, delayedReturnKeepsSearchFocus: true };
+    pendingPreviewReturn: true, delayedDetailReturnFocus: true, delayedReturnKeepsSearchFocus: true, relatedOrderFocusFollowsHistory: true };
+}
+
+async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
+  seedDemoFixture(new URL('../fixtures/demo/factory-import-focus.sql', import.meta.url));
+  const preview = new URL(shared);
+  preview.searchParams.set('q', 'FS-MANUAL');
+  preview.searchParams.set('drawer', 'preview');
+  preview.searchParams.set('lineId', 'scope-line-manual');
+  await page.goto(preview.href);
+  const drawer = page.getByRole('dialog', { name: 'FS-MANUAL 预览', exact: true });
+  await drawer.getByRole('link', { name: '查看第 1 批', exact: true }).and(page.locator('a[href]')).press('Enter');
+  await page.getByRole('region', { name: '批次', exact: true }).locator('li:focus').waitFor();
+  const original = page.url();
+  assert.equal(new URL(original).searchParams.get('focusBatch'), 'scope-manual-batch-focus');
+  const related = page.getByRole('region', { name: '关联采购事项', exact: true });
+  const outside = related.getByRole('link', { name: /FS-COMPONENT$/u }).and(page.locator('a[href]'));
+  const inside = related.getByRole('link', { name: /FS-COMPONENT-C$/u }).and(page.locator('a[href]'));
+  await outside.press('Enter');
+  await page.getByRole('link', { name: '返回原订单', exact: true }).press('Enter');
+  await page.waitForURL(original);
+  await outside.and(page.locator(':focus')).waitFor();
+  await outside.press('Enter');
+  await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
+  await page.goBack();
+  await page.waitForURL(original);
+  await outside.and(page.locator(':focus')).waitFor();
+  await inside.press('Enter');
+  await page.getByRole('heading', { name: 'FS-COMPONENT-C', exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('importBatchId'), scopeId);
+  await page.goBack();
+  await page.waitForURL(original);
+  await inside.and(page.locator(':focus')).waitFor();
+  await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+  await page.waitForURL((url) => url.pathname === '/lines');
+  await page.goBack();
+  await page.waitForURL(original);
+  await inside.waitFor();
+  await afterFocusEffects(page);
+  assert.equal(await related.locator('a:focus').count(), 0);
+
+  async function throughMember() {
+    await inside.press('Enter');
+    const source = page.getByRole('region', { name: '采购事项来源', exact: true });
+    await source.getByRole('link', { name: /FS-MANUAL$/u }).and(page.locator('a[href]')).press('Enter');
+    await outside.waitFor();
+  }
+  await throughMember();
+  const ordinary = page.url();
+  await outside.press('Enter');
+  await page.getByRole('link', { name: '返回原订单', exact: true }).press('Enter');
+  await outside.and(page.locator(':focus')).waitFor();
+  await throughMember();
+  await page.waitForURL(ordinary);
+  await afterFocusEffects(page);
+  assert.equal(await related.locator('a:focus').count(), 0);
+}
+
+function afterFocusEffects(page: Page) {
+  return page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
 }
 
 function factoryRelatedComponent(page: Page) {
@@ -278,7 +338,7 @@ async function checkDelayedDetailReturnFocus(page: Page, shared: URL) {
       await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
       await page.waitForURL(address.href);
       await row.and(page.locator('[aria-busy="true"]')).waitFor();
-      await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
+      await afterFocusEffects(page);
       assert.equal(await results.and(page.locator(':focus')).count(), 0);
       if (isTyping) {
         const focused = search.and(page.locator(':focus'));

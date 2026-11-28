@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react';
 import { createPath, matchPath, type Location } from 'react-router';
 import { z } from 'zod';
 import { read } from '../../../shared/api/reads.js';
-import type { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
+import { withoutDetailReturnFocus, type detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 
 const NO_IMPORT_MEMBERS: ReadonlySet<string> = new Set();
 const MAX_MEMBERS = 100;
 const MAX_QUERY_LENGTH = 3800;
+export const relatedFocusPrefix = 'related-order:';
 const relatedOrderOriginSchema = z.object({
   to: z.string().refine(isLocalOrderAddress),
   state: z.unknown(),
@@ -59,7 +60,7 @@ function readRelatedOrderOrigin(state: unknown) {
 }
 
 export function relatedOrderState(location: Location<unknown>, returnFocus: ReturnType<typeof detailReturnState>) {
-  const { state } = location;
+  const state = withoutRelatedOrderFocus(location.state);
   const origin = readRelatedOrderOrigin(state);
   if (origin !== undefined) return { relatedOrderOrigin: origin };
   if (returnFocus === undefined) return undefined;
@@ -67,6 +68,14 @@ export function relatedOrderState(location: Location<unknown>, returnFocus: Retu
     to: createPath(location),
     state: { ...(typeof state === 'object' && state !== null ? state : {}), ...returnFocus },
   } };
+}
+
+export function relatedOrderFocusLink(lineId: string): string {
+  return relatedFocusPrefix + lineId;
+}
+
+export function withoutRelatedOrderFocus(state: unknown): unknown {
+  return withoutDetailReturnFocus(state, relatedFocusPrefix);
 }
 
 export function relatedOrderBack(state: unknown) {

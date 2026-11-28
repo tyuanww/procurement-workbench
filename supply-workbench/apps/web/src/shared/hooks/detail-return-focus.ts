@@ -1,5 +1,5 @@
-import { useEffect, useRef, type MouseEvent, type RefObject } from 'react';
-import { useLocation, useNavigationType } from 'react-router';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import { createPath, useLocation, useNavigationType } from 'react-router';
 import { z } from 'zod';
 
 const detailOriginSchema = z.union([
@@ -53,6 +53,47 @@ export function preserveDetailReturnState({ key, state }: { readonly key: string
   const origin = linkOrigin(state) ?? historyOrigin(key);
   if (origin === undefined) return state;
   return { ...(typeof state === 'object' && state !== null ? state : {}), detailOrigin: origin };
+}
+
+export function withoutDetailReturnFocus(state: unknown, sourceLinkPrefix: string): unknown {
+  if (state === null || typeof state !== 'object' || !('detailOrigin' in state)) return state;
+  if (readOrigin(state.detailOrigin)?.sourceLink?.startsWith(sourceLinkPrefix) !== true) return state;
+  const rest = { ...state };
+  Reflect.deleteProperty(rest, 'detailOrigin');
+  return rest;
+}
+
+export type DetailReturnFocus = {
+  readonly hasOrigin: boolean;
+  readonly restore: (fallback: HTMLElement | null) => void;
+};
+
+export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailReturnFocus {
+  const location = useLocation();
+  const { key, state } = location;
+  const navigation = useNavigationType();
+  const candidate = navigation === 'POP' ? historyOrigin(key) : linkOrigin(state);
+  const matching = candidate?.detailPath === createPath(location) && candidate.sourceLink?.startsWith(sourceLinkPrefix) === true
+    ? candidate : undefined;
+  const [visit, setVisit] = useState({ key, origin: matching });
+  const restored = useRef<string | null>(null);
+  if (visit.key !== key) setVisit({ key, origin: matching });
+  const origin = visit.key === key ? visit.origin : matching;
+
+  useLayoutEffect(() => {
+    if (navigation !== 'POP' || origin === undefined || historyOrigin(key)?.sourceLink !== origin.sourceLink) return;
+    const historyState = { ...window.history.state };
+    Reflect.deleteProperty(historyState, historyMarker);
+    window.history.replaceState(historyState, '');
+  }, [key, navigation, origin]);
+
+  const restore = useCallback((fallback: HTMLElement | null) => {
+    if (origin === undefined || restored.current === key) return;
+    restored.current = key;
+    const target = findReturnTarget(origin, undefined) ?? fallback;
+    if (target !== null && canRestoreFocus(target, false)) target.focus();
+  }, [key, origin]);
+  return { hasOrigin: origin !== undefined, restore };
 }
 
 type ReturnFocusFallback = {
