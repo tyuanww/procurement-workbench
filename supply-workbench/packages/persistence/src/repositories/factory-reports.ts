@@ -35,9 +35,9 @@ export function factoryReportRepository(db: AppDatabase): FactoryReportRepositor
         factoryPartyId: factoryInTransitRows.factoryPartyId, importBatchId: factoryInTransitRows.importBatchId,
       }).from(factoryInTransitRows).where(eq(factoryInTransitRows.id, rowId));
       if (transit === undefined) return false;
-      const wasActive = await isActiveFactoryBatch(db, transit.importBatchId);
+      const isActiveBeforeLock = await isActiveFactoryBatch(db, transit.importBatchId);
       await lockFactorySnapshotSource(db, { factoryPartyId: transit.factoryPartyId, kind: 'report' });
-      if (wasActive && !await isActiveFactoryBatch(db, transit.importBatchId)) return false;
+      if (isActiveBeforeLock && !await isActiveFactoryBatch(db, transit.importBatchId)) return false;
       await lockFactoryOwnershipChange(db, [lineId]);
       const updated = await db.update(factoryInTransitRows)
         .set({ linkedOrderLineId: lineId, linkStatus: 'manual', linkReason: null })
