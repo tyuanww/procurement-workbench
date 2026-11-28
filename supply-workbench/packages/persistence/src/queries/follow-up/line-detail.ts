@@ -182,6 +182,7 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
       inArray(factoryMaterialDemandRows.id, missing),
       or(eq(factoryMaterialDemandRows.linkedOrderLineId, lineId), and(
         isNull(factoryMaterialDemandRows.linkedOrderLineId), eq(factoryMaterialDemandRows.linkStatus, 'unlinked'),
+        isNull(factoryMaterialDemandRows.linkReason),
       )),
     ));
     for (const row of rows) byId.set(row.id, demandOf(row));

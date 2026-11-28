@@ -167,6 +167,12 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
     expect(relinkedDetail.factoryReports.demand).toEqual(after.factoryReports.demand);
     expect(relinkedDetail.batchDemandSources).toEqual({});
     expect(relinkedDetail.sourceFiles).toEqual({ 'factory-replacement': '需求换表.xlsx' });
+
+    await handle.exec("update factory_material_demand_rows set linked_order_line_id = null, link_status = 'unlinked', link_reason = 'LINE_LINK_IS_MANUAL' where id = 'origin-row'");
+    const detached = await client.detail(line.id);
+    expect(detached.batches).toEqual(after.batches);
+    expect(detached.batchDemandSources).toEqual({});
+    expect(detached.sourceFiles).toEqual({ 'factory-replacement': '需求换表.xlsx' });
   } finally {
     await close();
   }
