@@ -9,7 +9,7 @@ type Read = { readonly request: Selection; readonly selectedOa: string | null; r
 
 export function useProcurementPreviewLoad(selection: Selection, hasRowSource: boolean) {
   const [read, setRead] = useState<Read>(() => pending(selection));
-  const current = selectRead(read, { ...selection, hasRowSource });
+  const current = selectRead(read, { selection, hasRowSource });
   if (current !== read) setRead(current);
   const { request, load } = current;
 
@@ -34,10 +34,11 @@ function pending(selection: Selection): Read {
   return { request: { ...selection }, selectedOa: selection.oa, load: null };
 }
 
-function selectRead(read: Read, selection: Selection & { readonly hasRowSource: boolean }): Read {
+function selectRead(read: Read, { selection, hasRowSource }: { readonly selection: Selection; readonly hasRowSource: boolean }): Read {
   if (read.request.id === selection.id && read.request.status === selection.status) {
     if (read.selectedOa === selection.oa) return read;
-    if (selection.hasRowSource && read.selectedOa === null && read.load?.kind === 'ready' && read.load.preview.oa === selection.oa) {
+    if (hasRowSource && read.selectedOa === null && read.load?.kind === 'ready' && read.load.preview.oa === selection.oa) {
+      // 打开来源行会把已读的默认 OA 写入地址。保留 request 避免重复读取，用 selectedOa 记录地址变化。
       return { ...read, selectedOa: selection.oa };
     }
   }

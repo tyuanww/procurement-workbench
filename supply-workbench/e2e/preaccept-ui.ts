@@ -809,24 +809,35 @@ async function checkDefaultProcurementSource({ page, rowSource, sourceDrawer, im
 async function checkProcurementGroupReturn(page: Page, { importPath, previousOa }: { readonly importPath: string; readonly previousOa: string | null }) {
   assert.equal(new URL(page.url()).searchParams.get('previewOa'), previousOa);
   const finished = page.getByRole('table', { name: '总表成品明细' });
+  const reads: (string | null)[] = [];
+  const path = `/api/v1${importPath}/procurement`;
+  const record = (request: { url: () => string; method: () => string }) => {
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname === path) reads.push(url.searchParams.get('oa'));
+  };
   const readGroup = (oa: string | null) => page.waitForResponse((response) => {
     const address = new URL(response.url());
-    return response.request().method() === 'GET' && address.pathname === `/api/v1${importPath}/procurement`
-      && address.searchParams.get('oa') === oa;
+    return response.request().method() === 'GET' && address.pathname === path && address.searchParams.get('oa') === oa;
   });
-  await page.getByRole('combobox', { name: 'OA 需求编号' }).click();
-  const [switched] = await Promise.all([
-    readGroup('XPKA(CN)9902'),
-    page.getByText(/^XPKA\(CN\)9902（\d+ 条）$/u).click(),
-  ]);
-  assert.ok(switched.ok());
-  await finished.getByText('采购订单总表 第 6 行', { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get('previewOa'), 'XPKA(CN)9902');
-  const [returned] = await Promise.all([readGroup(previousOa), page.goBack()]);
-  assert.ok(returned.ok());
-  await finished.getByText('采购订单总表 第 2 行', { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get('previewOa'), previousOa);
-  return { switchedQuery: new URL(switched.url()).search, returnedQuery: new URL(returned.url()).search, previewOa: previousOa };
+  page.on('request', record);
+  try {
+    await page.getByRole('combobox', { name: 'OA 需求编号' }).click();
+    const [switched] = await Promise.all([
+      readGroup('XPKA(CN)9902'),
+      page.getByText(/^XPKA\(CN\)9902（\d+ 条）$/u).click(),
+    ]);
+    assert.ok(switched.ok());
+    await finished.getByText('采购订单总表 第 6 行', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('previewOa'), 'XPKA(CN)9902');
+    const [returned] = await Promise.all([readGroup(previousOa), page.goBack()]);
+    assert.ok(returned.ok());
+    await finished.getByText('采购订单总表 第 2 行', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('previewOa'), previousOa);
+    assert.deepEqual(reads, ['XPKA(CN)9902', previousOa]);
+    return { reads, returnedQuery: new URL(returned.url()).search, previewOa: previousOa };
+  } finally {
+    page.off('request', record);
+  }
 }
 
 async function checkImportSourceRetry({ page, drawer, order, sourceUrl, match, reopen }: {
@@ -846,11 +857,26 @@ async function checkImportSourceRetry({ page, drawer, order, sourceUrl, match, r
   assert.equal(page.url(), sourceUrl);
   const retry = drawer.getByRole('button', { name: '重试', exact: true });
   await retry.click({ trial: true });
-  const [recovered] = await Promise.all([waitRead(), retry.press('Enter')]);
+  const retryRegion = drawer.getByRole('region', { name: '关联记录', exact: true }).and(page.locator(':focus'));
+  let continueRead = () => {};
+  const loadingObserved = new Promise<void>((resolve) => { continueRead = resolve; });
+  await page.route(matchesRead, async (route) => {
+    await loadingObserved;
+    await route.continue();
+  }, { times: 1 });
+  const [recovered] = await Promise.all([waitRead(), (async () => {
+    try {
+      await retry.press('Enter');
+      await drawer.getByRole('status', { name: '正在核对关联记录', exact: true }).waitFor();
+      await retryRegion.waitFor();
+    } finally {
+      continueRead();
+    }
+  })()]);
   assert.ok(recovered.ok());
   await order.waitFor();
   await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
-  await drawer.getByRole('region', { name: '关联记录', exact: true }).and(page.locator(':focus')).waitFor();
+  await retryRegion.waitFor();
   await page.keyboard.press('Tab');
   await order.and(page.locator(':focus')).waitFor();
   assert.equal(page.url(), sourceUrl);
