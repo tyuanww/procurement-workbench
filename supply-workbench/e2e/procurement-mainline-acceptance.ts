@@ -8,6 +8,7 @@ import { sidebarLink } from './sidebar.ts';
 const finishedPo = 'PO20261117009001';
 const finishedName = '测试成品水';
 const developmentMaterialPo = 'PO20261117009103';
+const developmentMaterialId = 'procurement-component:PO20261117009103:99010003';
 const store = 'dafuyan';
 const storeName = '达肤妍';
 const otherStoreName = '译龄';
@@ -314,6 +315,7 @@ export async function checkProductDevelopment({ buyer, reviewer, buyerId, review
   await linkDevelopmentOrder(reviewer, reviewDetail);
   const oa = reviewDetail.getByRole('link', { name: 'OA XPKA(CN)9901', exact: true });
   await oa.waitFor();
+  assert.equal(await reviewDetail.getByRole('link', { name: materialAction, exact: true }).count(), 0);
   await reviewer.reload();
   await oa.waitFor();
   await reviewDetail.getByText(evidence, { exact: true }).waitFor();
@@ -363,7 +365,7 @@ async function checkDevelopmentProcurement({ buyer, reviewer, buyerId, reviewerI
   await linkDevelopmentOrder(reviewer, packageDetail, developmentMaterialPo);
   await packageDetail.getByRole('link', { name: materialAction, exact: true }).waitFor();
 
-  const desktop = await visitDevelopmentNodes({ page: buyer, source, out, useTouch: false });
+  const desktop = await visitDevelopmentNodes({ page: buyer, source, packageId, out, useTouch: false });
   const browser = buyer.context().browser();
   assert.ok(browser);
   const mobile = await browser.newContext({
@@ -372,15 +374,22 @@ async function checkDevelopmentProcurement({ buyer, reviewer, buyerId, reviewerI
   try {
     const page = await mobile.newPage();
     page.setDefaultTimeout(15_000);
-    const phone = await visitDevelopmentNodes({ page, source, out, useTouch: true });
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('response', (response) => {
+      const path = new URL(response.url()).pathname;
+      if (path.startsWith('/api/v1/') && response.status() >= 400) errors.push(`${response.status()} ${path}`);
+    });
+    const phone = await visitDevelopmentNodes({ page, source, packageId, out, useTouch: true });
+    assert.deepEqual(errors, [], '手机节点往返应无额外的 API 错误或页面异常');
     return { materialPo: developmentMaterialPo, desktop, phone };
   } finally {
     await mobile.close();
   }
 }
 
-async function visitDevelopmentNodes({ page, source, out, useTouch }: {
-  readonly page: Page; readonly source: URL; readonly out: string; readonly useTouch: boolean;
+async function visitDevelopmentNodes({ page, source, packageId, out, useTouch }: {
+  readonly page: Page; readonly source: URL; readonly packageId: string; readonly out: string; readonly useTouch: boolean;
 }) {
   const requests: string[] = [];
   const watch = (request: Request) => {
@@ -413,49 +422,94 @@ async function visitDevelopmentNodes({ page, source, out, useTouch }: {
     const order = packaging.getByRole('link', { name: materialAction, exact: true });
     await order.waitFor();
     assert.match(await order.ariaSnapshot(), new RegExp(materialAction, 'u'));
-    const bounds = await order.boundingBox();
-    assert.ok(bounds && bounds.y + bounds.height <= (page.viewportSize()?.height ?? 0), '节点打开时应能看到采购单入口');
+    const bounds = await developmentLinkBounds(page, order);
+    await page.screenshot({ path: join(out, `development-packaging-${useTouch ? 320 : 1440}.png`), animations: 'disabled' });
     if (useTouch) {
       assert.ok(bounds.width >= 44 && bounds.height >= 44);
       assert.equal(Math.round((await packaging.boundingBox())?.width ?? 0), 320);
     }
-    assert.deepEqual(developmentDetailReads(requests.slice(beforePackage)), [], '打开有关联的节点时不读取订单详情');
-    const beforeLookup = requests.length;
     const sourceDrawer = page.url();
-    await page.screenshot({ path: join(out, `development-packaging-${useTouch ? 320 : 1440}.png`), animations: 'disabled' });
+    assertDevelopmentDrawer(sourceDrawer, source, packageId);
+    await packaging.getByRole('link', { name: 'OA XPKA(CN)9901', exact: true }).waitFor();
+    const parentOrder = new URL(await packaging.getByRole('link', { name: 'OA XPKA(CN)9901', exact: true }).getAttribute('href') ?? '', source);
+    assert.match(parentOrder.pathname, /^\/lines\/[^/]+$/u);
+    assert.notEqual(decodeURIComponent(parentOrder.pathname), '/lines/' + developmentMaterialId);
+    assert.equal(parentOrder.searchParams.get('store'), store);
     if (!useTouch) {
       for (let count = 0; count < 6 && await order.and(page.locator(':focus')).count() === 0; count += 1) await page.keyboard.press('Tab');
       await order.and(page.locator(':focus')).waitFor();
     }
+    assert.deepEqual(developmentDetailReads(requests.slice(beforePackage)), [], '主动点击前，打开节点和聚焦入口均不读取订单详情');
+    const beforeLookup = requests.length;
     await activate(order);
     const heading = page.getByRole('heading', { name: developmentMaterialPo, level: 1, exact: true });
     await heading.waitFor();
-    const materialPath = new URL(page.url()).pathname;
-    assert.match(materialPath, /^\/lines\/[^/]+$/u);
-    assert.deepEqual([...new Set(developmentDetailReads(requests.slice(beforeLookup)))], [materialPath.slice('/lines/'.length)]);
+    assertDevelopmentTarget(page, requests.slice(beforeLookup));
     const requested = requests.length;
     await activate(page.getByRole('link', { name: '返回新品开发', exact: true }));
     await page.waitForURL(sourceDrawer);
+    assertDevelopmentDrawer(page.url(), source, packageId);
     await order.and(page.locator(':focus')).waitFor();
     assert.deepEqual(developmentDetailReads(requests.slice(requested)), [], '返回原节点时不重新读取订单详情');
     const returned = requests.length - requested;
     if (!useTouch) {
+      const beforeBrowserLookup = requests.length;
       await page.keyboard.press('Enter');
       await heading.waitFor();
+      assertDevelopmentTarget(page, requests.slice(beforeBrowserLookup));
+      const beforeBrowserReturn = requests.length;
       await page.goBack();
       await page.waitForURL(sourceDrawer);
       await order.and(page.locator(':focus')).waitFor();
+      assertDevelopmentDrawer(page.url(), source, packageId);
+      assert.deepEqual(developmentDetailReads(requests.slice(beforeBrowserReturn)), [], '浏览器后退时不重新读取订单详情');
     }
+    const beforeClose = requests.length;
     await close(packaging);
     await packaging.waitFor({ state: 'hidden' });
     await node(packagingNode).and(page.locator(':focus')).waitFor();
-    return { project: source.searchParams.get('developmentProject'), period: source.searchParams.get('developmentMonth'),
+    assert.deepEqual(developmentDetailReads(requests.slice(beforeClose)), []);
+    const restored = new URL(page.url()).searchParams;
+    return { project: restored.get('developmentProject'), period: restored.get('developmentMonth'),
       design: designNode, packaging: packagingNode, browserBack: !useTouch, viewport: page.viewportSize(),
       apiRequests: { projectAndDesign: beforePackage, packaging: beforeLookup - beforePackage, order: requested - beforeLookup, returnToNode: returned },
       unrelatedOrderDetails: 0 };
   } finally {
     page.off('request', watch);
   }
+}
+
+async function developmentLinkBounds(page: Page, link: Locator) {
+  const target = await link.elementHandle();
+  assert.ok(target);
+  try {
+    await page.waitForFunction((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0 && bounds.left >= 0 && bounds.top >= 0
+        && bounds.right <= window.innerWidth && bounds.bottom <= window.innerHeight;
+    }, target);
+  } finally {
+    await target.dispose();
+  }
+  const bounds = await link.boundingBox();
+  assert.ok(bounds);
+  return bounds;
+}
+
+function assertDevelopmentDrawer(location: string, source: URL, packageId: string): void {
+  const address = new URL(location);
+  assert.equal(address.pathname, source.pathname);
+  for (const key of ['store', 'developmentProject', 'developmentPeriod', 'developmentMonth']) {
+    assert.equal(address.searchParams.get(key), source.searchParams.get(key), key);
+  }
+  assert.equal(address.searchParams.get('developmentNode'), packageId);
+}
+
+function assertDevelopmentTarget(page: Page, requests: readonly string[]): void {
+  const target = new URL(page.url());
+  assert.equal(decodeURIComponent(target.pathname), '/lines/' + developmentMaterialId);
+  assert.equal(target.searchParams.get('store'), store);
+  assert.deepEqual([...new Set(developmentDetailReads(requests).map(decodeURIComponent))], [developmentMaterialId]);
 }
 
 function developmentDetailReads(paths: readonly string[]) {
