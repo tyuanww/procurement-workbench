@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { systemIds } from '../../apps/server/src/system/ids.js';
 import { makeBulkCreateItems, makeResolveMultiName } from '../../packages/application/src/master-data/index.js';
 import { entityId, type EntityId, type ItemCode } from '../../packages/domain/src/index.js';
 import {
@@ -91,7 +92,7 @@ function reviewWrites(db: AppDatabase, { nextId, afterAudit }: { readonly nextId
       audit: { ...audit, async record(entry: Parameters<typeof audit.record>[0]) { await audit.record(entry); await afterAudit?.(); } },
     };
   });
-  return { uow, clock, ids: { next: () => nextId } };
+  return { uow, clock, ids: { ...systemIds(), next: () => nextId } };
 }
 
 function reviewCode({ id, codeRaw, itemId, codeType = 'pack_30' }: Pick<ItemCode, 'id' | 'codeRaw' | 'itemId'> & Partial<Pick<ItemCode, 'codeType'>>): ItemCode {
