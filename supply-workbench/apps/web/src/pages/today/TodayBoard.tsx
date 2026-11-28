@@ -275,7 +275,7 @@ function PageDrawers(props: TodayScreenProps & { readonly receipt: ReceiptWork |
   const id = props.drawerId;
   const taskId = taskIdOf(id);
   return <>
-    <TodayDrawer {...actionContext(props, id)} receipt={props.receipt}
+    <TodayDrawer {...actionContext(props, id)} drawerId={id} receipt={props.receipt}
       onQuick={(kind) => { if (id !== null) props.onQuick({ id, kind }); }}
       isOpen={id !== null && taskId === null}
       draft={props.draft}

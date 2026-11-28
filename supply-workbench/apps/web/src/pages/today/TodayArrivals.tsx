@@ -31,7 +31,7 @@ export function ArrivalsPane({ view, memos, search, drawerId, onOpen, onClose }:
         : <ArrivalMemos memos={rows} today={{ focusBatch: receipt === undefined ? view.focusBatch : null,
           title: view.timing === undefined ? '待收批次' : title, onOpen: (batchId) => onOpen('batch:' + batchId) }} />}
     </Card>
-    <TodayDrawer row={null} receipt={receipt} isOpen={receipt !== undefined} keyboard
+    <TodayDrawer row={null} drawerId={drawerId} receipt={receipt} isOpen={receipt !== undefined} keyboard
       returnFocusId={receipt === undefined ? undefined : arrivalMemoButtonId(receipt.batchId)}
       draft={null} hadDate={false} lane="finished" isSaving={false} saveError=""
       onClose={onClose} onQuick={noop} onDraft={noop} onSubmit={noop} />

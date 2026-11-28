@@ -322,6 +322,7 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
   const dialog = page.getByRole('dialog').filter({ hasText: 'HZ09-0501' });
   const record = dialog.getByRole('link', { name: '核对本批记录', exact: true });
   const close = dialog.getByRole('button', { name: '关闭', exact: true });
+  const copied = page.locator('.ant-message').getByRole('status').filter({ hasText: '已复制 1 条催单' });
   const widths = [1440, 320];
   for (const width of widths) {
     await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
@@ -332,8 +333,18 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
     await dialog.getByText(/收货方 ·/u).waitFor();
     await dialog.getByRole('group', { name: '批次交付数量', exact: true }).getByText('25,000 件', { exact: true }).waitFor();
     if (width === 320) await page.screenshot({ path: join(out, 'today-batch-record-mobile.png'), animations: 'disabled' });
+    if (width === 1440) {
+      await dialog.getByRole('button', { name: '登记收货', exact: true }).click();
+      await page.waitForURL((url) => url.searchParams.get('drawer') === 'batch:' + batch && url.searchParams.get('draft') === 'receipt');
+      assert.equal(Number(await dialog.getByRole('spinbutton', { name: '数量', exact: true }).inputValue()), 25_000);
+      await page.keyboard.press('Escape');
+      await page.waitForURL(drawerUrl);
+      await record.waitFor();
+    }
+    await copied.waitFor({ state: 'hidden' });
+    await page.evaluate(() => globalThis.navigator.clipboard.writeText('批次抽屉验收待写入'));
     await dialog.getByRole('button', { name: '复制本批催单', exact: true }).click();
-    await page.getByRole('status').filter({ hasText: '已复制 1 条催单' }).waitFor();
+    await copied.waitFor();
     assert.deepEqual(purchaseOrders(await clipboardText(page)), ['HZ09-0501']);
     assert.equal(page.url(), drawerUrl);
     if (width === 320) {
@@ -349,7 +360,14 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
 
     await trigger.press('Enter');
     await page.waitForURL(drawerUrl);
-    await record.press('Enter');
+    if (width === 1440) await record.press('Enter');
+    else {
+      await record.scrollIntoViewIfNeeded();
+      const box = await record.boundingBox();
+      assert.ok(box && box.width >= 44 && box.height >= 44 && box.x >= 0 && box.y >= 0
+        && box.x + box.width <= 320 && box.y + box.height <= 667);
+      await record.click();
+    }
     await page.waitForURL((url) => url.pathname === '/lines/hz09-line-501' && url.searchParams.get('focusBatch') === batch);
     await page.getByText(/待收 25,000 件/u).first().waitFor();
     if (width === 1440) await page.goBack();
@@ -359,8 +377,9 @@ async function checkInlineReceiptDrawer(page: Page, row: Locator, out: string) {
     await close.click();
     await page.waitForURL(source);
     await dialog.waitFor({ state: 'hidden' });
-    await page.locator('[id="today-row-batch:' + batch + '"]').and(page.locator(':focus-within')).waitFor();
+    await trigger.and(page.locator(':focus')).waitFor();
   }
+  await copied.waitFor({ state: 'hidden' });
   await page.setViewportSize({ width: 320, height: 800 });
   return { widths, batch, stayedOnToday: true, copiedOnlySelectedBatch: true, browserBackAndPageReturn: true, focusRestored: true };
 }

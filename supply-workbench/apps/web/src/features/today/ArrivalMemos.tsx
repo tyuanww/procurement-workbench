@@ -45,7 +45,7 @@ function ArrivalMemoRow({ memo, today }: { readonly memo: Memo; readonly today: 
     <div className="today-arrival-row" data-current={isFocused || undefined}><SectionRow action={today === undefined
       ? <Link to={href} aria-label={`查看批次 ${identity}`}>查看批次</Link>
       : <span className="today-touch"><Button type="link" ref={button} id={arrivalMemoButtonId(memo.batchId)} aria-label={`查看批次 ${identity}`}
-        onClick={() => today.onOpen(memo.batchId)}>查看批次</Button></span>}>
+        onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); today.onOpen(memo.batchId); }}>查看批次</Button></span>}>
       <div>{identity} · {memo.warehouse ?? '收货方未命名'}</div>
       <div style={{ color: memo.status === 'overdue' ? statusColor.danger.text : text.secondary }}>
         {arrivalStatusLabel[memo.status]} · 待收 {quantity(memo.inTransitQty, memo.unit)} · 实收 {quantity(memo.receivedQty, memo.unit)} · {memo.confirmedDate ?? '确认日未定'}

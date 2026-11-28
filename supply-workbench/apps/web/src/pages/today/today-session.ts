@@ -112,9 +112,21 @@ export function useTodaySession(input: {
     // 路由在过渡中更新。一起提交关闭状态，避免同步逻辑重复写入浏览器历史。
     startTransition(() => {
       applySession({ session, state: input.state });
-      setParams((current) => new URLSearchParams(writeTodaySession({ search: (selection ?? current).toString(), session })));
+      const shouldClearFocus = selection === undefined && (keepDrawerId ?? drawerId)?.startsWith('batch:') === true;
+      setParams((current) => sessionSearch({ current: selection ?? current, session, shouldClearFocus }));
     });
   };
+}
+
+function sessionSearch({ current, session, shouldClearFocus }: {
+  readonly current: URLSearchParams; readonly session: TodaySession; readonly shouldClearFocus: boolean;
+}): URLSearchParams {
+  const next = new URLSearchParams(current);
+  if (shouldClearFocus) {
+    next.delete('focusId');
+    next.delete('focusBatch');
+  }
+  return new URLSearchParams(writeTodaySession({ search: next.toString(), session }));
 }
 
 function restore(input: {

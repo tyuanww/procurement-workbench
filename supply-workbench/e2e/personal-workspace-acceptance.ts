@@ -125,10 +125,13 @@ async function checkScheduledReceipt({ buyer, origin, expectReceiptFailure }: {
   await buyer.getByRole('link', { name: '返回个人工作台', exact: true }).click();
   await buyer.waitForURL(drawerUrl);
   await checkReceipt.and(buyer.locator(':focus')).waitFor();
+  const quantities = detail.getByRole('group', { name: '批次交付数量', exact: true });
+  await quantities.getByText('2,250 件', { exact: true }).waitFor();
+  await quantities.getByText('1,750 件', { exact: true }).waitFor();
   await buyer.keyboard.press('Escape');
   await buyer.waitForURL(today.href);
   await detail.waitFor({ state: 'hidden' });
-  await buyer.locator('[id="today-row-batch:' + batchId + '"]').and(buyer.locator(':focus-within')).waitFor();
+  await receipt.and(buyer.locator(':focus')).waitFor();
   await buyer.getByRole('button', { name: /切换工作范围$/u }).click();
   await buyer.getByRole('menuitem', { name: /^已约跟进/ }).click();
   await card.getByText('下次跟进 · 2099-01-12 10:00', { exact: true }).waitFor();

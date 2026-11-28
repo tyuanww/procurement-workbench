@@ -13,7 +13,7 @@ it('同批未发且到时核收只显示一次，先打开本页核收抽屉并�
   installMatchMedia();
   installFetch();
   const tree = element(ActorRoles, { roles: ['buyer'], children: element(LocationAndToday) });
-  const root = mount(memoryRouter(antdApp(tree), '/today?view=board'));
+  const root = mount(memoryRouter(antdApp(tree), '/today?view=board&focusId=batch%3Abatch-1'));
   const mixed = batchTodo(2);
   if (mixed.batch === null || mixed.line === null) throw new Error('缺少样例批次');
   const due = localDate('2026-11-20');
@@ -34,7 +34,10 @@ it('同批未发且到时核收只显示一次，先打开本页核收抽屉并�
   try {
     await act(() => {
       fulfill({ urlPart: '/api/v1/me', status: 200, body: { id: 'buyer-1', name: '采购甲', roles: ['buyer'], devLogin: true } });
-      fulfill({ urlPart: 'inbox=today', status: 200, body: { ...pageBody(2), items: [batchTodo(1), batch], arrivalMemos } });
+      const snapshot = pageBody(2);
+      fulfill({ urlPart: 'inbox=today', status: 200, body: {
+        ...snapshot, items: [batchTodo(1), batch], arrivalMemos, paging: { ...snapshot.paging, chaseItemIds: [batch.id] },
+      } });
     });
     expect(document.querySelectorAll('.today-row')).toHaveLength(2);
     expect(document.querySelectorAll('[aria-label="核对收货"] .today-row')).toHaveLength(1);
@@ -62,6 +65,14 @@ it('同批未发且到时核收只显示一次，先打开本页核收抽屉并�
     expect(address.pathname).toBe('/lines/line');
     expect(address.searchParams.get('focusBatch')).toBe('batch-2');
     expect(new URLSearchParams(address.searchParams.get('backToToday') ?? '').get('drawer')).toBe(batch.id);
+    expect(new URLSearchParams(textOf('output')).has('focusId')).toBe(false);
+    const copyQuery = 'itemId=batch%3Abatch-2';
+    click(button('复制本批催单'));
+    await act(() => { fulfill({ urlPart: copyQuery, status: 200, body: [] }); });
+    expect(textOf('[role="dialog"] [role="status"]')).toContain('当前条件没有可复制的催单。');
+    click(button('复制本批催单'));
+    await act(() => { fulfill({ urlPart: copyQuery, status: 500, body: {} }); });
+    expect(textOf('[role="dialog"] [role="status"]')).toContain('复制催单失败，请重试。');
     const ship = button('登记发货');
     expect(ship.classList.contains('ant-btn-variant-text')).toBe(true);
     click(ship);

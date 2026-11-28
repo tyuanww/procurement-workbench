@@ -216,7 +216,7 @@ function screenProps(input: ScreenInput): TodayScreenProps {
     isReady: state.isReady,
     loadError: state.loadError,
     onGroup: (group) => setParams(new URLSearchParams(withGroup({ search, group }))),
-    onOpen: (id) => { state.setDrawerId(id); state.setFocus(id); state.setDraft(null); state.setSaveError(''); },
+    onOpen: (id) => closeSession(id),
     onQuick: ({ id, kind }) => openQuick({ id, kind, targets: state.targets, noteRefs: state.noteRefs, setFocus: state.setFocus, setDraft: state.setDraft, setDrawerId: state.setDrawerId, setSaveError: state.setSaveError }),
     onCopy: (text) => { void copyNudge(text, state.setNotice); },
     onCloseDrawer: () => closeSession(null),

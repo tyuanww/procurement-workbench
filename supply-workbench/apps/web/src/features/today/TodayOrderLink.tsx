@@ -12,9 +12,10 @@ export function TodayReceiptButton({ memo, onOpen, focusRef }: {
   readonly onOpen: () => void;
   readonly focusRef: React.Ref<HTMLButtonElement>;
 }) {
-  const label = [memo.line.poRaw, memo.line.nameRaw, memo.batchSeq == null ? null : '第 ' + memo.batchSeq + ' 批'].filter(Boolean).join(' · ');
-  return <Button ref={focusRef} className="today-action-primary" color="default" variant="outlined"
-    onClick={onOpen} aria-label={label === '' ? undefined : `核对收货 ${label}`}>核对收货</Button>;
+  const label = [memo.line.poRaw, memo.line.nameRaw, memo.batchSeq === null ? null : '第 ' + memo.batchSeq + ' 批'].filter(Boolean).join(' · ');
+  return <Button ref={focusRef} className="today-action-primary" color="default" variant="outlined" data-today-receipt
+    onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onOpen(); }}
+    aria-label={label === '' ? undefined : `核对收货 ${label}`}>核对收货</Button>;
 }
 
 export const TODAY_BATCH_RETURN_PARAM = 'backToToday';

@@ -384,6 +384,7 @@ async function checkFilteredArrivalReturn(page: Page): Promise<void> {
   const drawerUrl = page.url();
   await record.click();
   await page.waitForURL((url) => url.pathname === '/lines/ui-demo-line-arrival' && url.searchParams.get('focusBatch') === 'ui-demo-batch-arrival');
+  await page.getByRole('region', { name: '批次', exact: true }).locator('li:focus').getByText(/待收 800 件/u).waitFor();
   await page.getByRole('link', { name: '返回在途待收', exact: true }).click();
   await page.waitForURL(drawerUrl);
   await record.and(page.locator(':focus')).waitFor();
