@@ -17,7 +17,7 @@ import { ProcurementBatchDates, ProcurementDateEvidence } from '../../../feature
 import { ScheduleReports } from './schedule-reports.js';
 import { DetailTimeline } from './DetailTimeline.js';
 import { BatchSources } from './batch-sources.js';
-import { lineDetailBack, orderScheduleAddress, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
+import { orderScheduleAddress, readLineDetailBack, useLineDetailSearchParams, type DetailBack } from './desk-navigation.js';
 
 const MISSING_PO = '无单号';
 
@@ -31,8 +31,8 @@ export function LineDetailPage() {
   const [params] = useSearchParams();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
-  const todayBatch = params.get('backToToday') === 'arrivals' ? params.get('focusBatch') : null;
-  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={lineDetailBack({ progress: params.get('backToProgress'), delivery: params.get('backToDelivery'), schedule: params.get('backToSchedule'), state, lineId: id, todayBatch })} />;
+  const back = readLineDetailBack({ lineId: id, params, state });
+  return <LineDetailContent key={JSON.stringify([id, store])} lineId={id} store={store} back={back} />;
 }
 
 function LineDetailContent({ lineId, store, back }: { readonly lineId: string; readonly store: ProcurementStore | undefined; readonly back: DetailBack | null }) {

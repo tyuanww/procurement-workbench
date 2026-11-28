@@ -1,12 +1,13 @@
 import { Button, Card, Empty, Flex, Result, Skeleton, Table, Tag, Typography, type TableColumnsType } from 'antd';
 import type { OrderLineRow } from '@sw/contracts';
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { dailyDeliveryParams, DELIVERY_RISK_REASONS, deliveryRiskReasons, type homeDeliveryRiskOf } from '../../features/follow-up/index.js';
 import { useShellViewport } from '../../features/shell/index.js';
 import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
-import { useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
+import { detailReturnState, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 import { space, topBar } from '../../theme/tokens.js';
+import { HOME_RISK_GROUP_FOCUS, HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../director-home/home-location.js';
 import { DeliveryDetailLink } from './delivery-detail-link.js';
 import { storeLabels } from './store-query.js';
 
@@ -16,9 +17,16 @@ const READ_LIMIT = 100;
 
 export function DeliveryRiskOrders({ risk }: { readonly risk: Risk | { kind: 'invalid' } }) {
   const [params, setParams] = useSearchParams();
-  const close = <Button onClick={() => setParams(dailyDeliveryParams(params))}>查看日常店铺交付</Button>;
+  const { state } = useLocation();
+  const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
+  const close = <Button onClick={() => {
+    const daily = dailyDeliveryParams(params);
+    daily.delete(HOME_RISK_RETURN_PARAM);
+    setParams(daily);
+  }}>查看日常店铺交付</Button>;
   if (risk.kind === 'invalid') return <Empty description="这组订单的店铺、日期或范围不完整。">{close}</Empty>;
   return <>
+    {home === null ? null : <Link to={home} state={detailReturnState(state, { detailPath: home, sourceLink: HOME_RISK_GROUP_FOCUS })}>返回首页</Link>}
     <Card size="small" style={{ marginBottom: space[3] }}>
       <Flex align="center" justify="space-between" wrap gap={space[2]}>
         <Typography.Text strong>{storeLabels[risk.store]} · 首页交期风险 · {risk.date}</Typography.Text>

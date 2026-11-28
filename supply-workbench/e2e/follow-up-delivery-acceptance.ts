@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import { checkHomeRiskFollowUp } from './home-risk-follow-up-acceptance.ts';
 
 const store = 'dafuyan';
 const materialPo = 'PO20261117009103';
@@ -72,7 +73,7 @@ export async function checkFollowUpDelivery({ page, buyer, origin, out, warehous
   const late = items.find((line) => line.lane === 'finished' && line.nextDue === null
     && line.storeProgress?.materials.some(({ id }) => id === material.id));
   assert.ok(late);
-  await seedBatch(buyer, origin, { lineId: late.id, warehouse, dateBuyerConfirmed: tomorrow, dateFactoryRequired: today });
+  const lateBatch = await seedBatch(buyer, origin, { lineId: late.id, warehouse, dateBuyerConfirmed: tomorrow, dateFactoryRequired: today });
   await seedBatch(buyer, origin, { lineId: material.id, warehouse, dateBuyerConfirmed: overdue });
   const daily = new URL('/lines?lens=delivery&store=dafuyan', origin);
   const before = await chronologicalCount(page, daily);
@@ -98,9 +99,11 @@ export async function checkFollowUpDelivery({ page, buyer, origin, out, warehous
   await page.goto(invalid.href);
   await page.getByText('这组订单的店铺、日期或范围不完整。').waitFor();
   assert.equal(await page.getByRole('region', { name: '按店铺交付结果' }).count(), 0);
+  const homeRisk = await checkHomeRiskFollowUp({ page, origin, out, material: { id: material.id, po: materialPo },
+    finished: { id: late.id, batch: lateBatch, arrivalDate: tomorrow } });
   return { source: finished.id, material: material.id, relatedFinished: 3, views: [1440, 320],
     wideAndNarrowReturnFocus: true, explicitlySelectedDetailIds: [...visitedDetails],
-    originalRiskRows: [material.id, late.id], chronologicalOpenOverdueRowsBefore: before, chronologicalOpenOverdueRowsAfter: after };
+    originalRiskRows: [material.id, late.id], chronologicalOpenOverdueRowsBefore: before, chronologicalOpenOverdueRowsAfter: after, homeRisk };
 }
 
 function rowDetails(requests: readonly URL[]): string[] {
@@ -121,6 +124,10 @@ async function seedBatch(page: Page, origin: URL, { lineId, warehouse, dateBuyer
     data: { receiverPartyId: warehouse, plannedQty: 50, dateBuyerConfirmed, dateFactoryRequired },
   });
   assert.ok(response.ok(), await response.text());
+  const batch: unknown = await response.json();
+  assert.ok(typeof batch === 'object' && batch !== null && 'id' in batch && typeof batch.id === 'string'
+    && 'seq' in batch && typeof batch.seq === 'number');
+  return { id: batch.id, seq: batch.seq };
 }
 
 async function chronologicalCount(page: Page, daily: URL) {

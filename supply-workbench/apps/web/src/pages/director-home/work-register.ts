@@ -24,6 +24,10 @@ export type WorkRow = {
   readonly ownerId: string;
 };
 
+export function productName(row: WorkRow) {
+  return row.line.nameRaw ?? row.line.itemCodeRaw ?? '品名待补';
+}
+
 export async function loadWorkLines(store: ProcurementStore, signal: AbortSignal) {
   const page = (number: number) => fetchLines(new URLSearchParams({
     stages: ACTIVE_STAGES, store, page: String(number), pageSize: String(PAGE_SIZE),

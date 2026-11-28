@@ -468,11 +468,17 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   const position = await risk.boundingBox();
   assert.ok(position && position.y < 500, '总监在首屏看到交期风险');
   await risk.click();
+  const riskDrawer = page.getByRole('dialog', { name: '交期风险', exact: true });
+  await riskDrawer.waitFor();
+  await page.keyboard.press('Escape');
+  await riskDrawer.waitFor({ state: 'hidden' });
   const table = page.getByRole('region', { name: '事项跟踪明细' });
+  const scope = table.getByRole('combobox', { name: '事项范围' });
+  await select(scope, page, '交期风险');
+  await table.getByTitle('交期风险', { exact: true }).waitFor();
   const originalCount = await table.getByRole('status').innerText();
   const search = table.getByRole('textbox', { name: '搜索事项' });
   assert.equal(await search.count(), 0);
-  const scope = table.getByRole('combobox', { name: '事项范围' });
   const before = await scope.boundingBox();
   await table.getByRole('button', { name: '展开事项搜索' }).click();
   await search.and(page.locator(':focus')).waitFor();
@@ -496,7 +502,6 @@ async function checkDirectorRegister({ page, materialPo }: { readonly page: Page
   await table.getByRole('status').and(page.getByText(originalCount, { exact: true })).waitFor();
   await table.getByRole('columnheader', { name: /下一到货日/ }).click();
   await table.locator('th[aria-sort="ascending"]').waitFor();
-  await risk.click();
 }
 
 async function checkDirectorProjects(page: Page) {

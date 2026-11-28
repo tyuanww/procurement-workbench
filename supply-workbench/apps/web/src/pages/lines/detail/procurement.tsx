@@ -8,6 +8,7 @@ import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js'
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
+import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../../director-home/home-location.js';
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
@@ -28,9 +29,17 @@ export function ProcurementSection({ detail }: { readonly detail: OrderLineDetai
   );
 }
 
+function procurementReturnState(params: URLSearchParams, state: unknown) {
+  const home = homeRiskBackAddress(params.get(HOME_RISK_RETURN_PARAM));
+  if (home !== null) return detailReturnState(state, home);
+  const delivery = params.get('backToDelivery');
+  if (delivery !== null) return detailReturnState(state, deliveryBackAddress(delivery));
+  return params.has('backToSchedule') ? state : undefined;
+}
+
 function procurementDetailQuery(params: URLSearchParams): string {
   const related = new URLSearchParams();
-  for (const key of ['store', 'backToProgress', 'backToSchedule', 'backToDelivery']) {
+  for (const key of ['store', 'backToProgress', 'backToSchedule', 'backToDelivery', HOME_RISK_RETURN_PARAM]) {
     const value = params.get(key);
     if (value !== null) related.set(key, value);
   }
@@ -49,10 +58,7 @@ function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLi
   const [params] = useSearchParams();
   const { state } = useLocation();
   const query = procurementDetailQuery(params);
-  const delivery = params.get('backToDelivery');
-  const returnState = delivery === null
-    ? (params.has('backToSchedule') ? state : undefined)
-    : detailReturnState(state, deliveryBackAddress(delivery));
+  const returnState = procurementReturnState(params, state);
   return (
     <ul>{lines.map((line) => (
       <li key={line.id}>
