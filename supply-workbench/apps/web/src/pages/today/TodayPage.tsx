@@ -109,9 +109,9 @@ function useScreenSession({ state, today, route, board, actionBoard, plan, isInt
   const actionPage = useTodayActionPage({ query, search, setParams, today, isSettled });
   useRowFocus({ id: query.focusId, state, visible,
     isSettled: rowsSettled({ isReady: isSettled || isPlanMode, isSchedule: isPlanMode, plan: plan.load.kind }) });
-  const closeSession = useScreenDrawer({ state, route, plan, actionBoard, isReady: isSettled || (isPlanMode && query.focusId === null),
+  const { close: closeSession, isOpening } = useScreenDrawer({ state, route, plan, actionBoard, isReady: isSettled || (isPlanMode && query.focusId === null),
     areArrivalsReady: today.isLoadedForQuery });
-  useTodayKeys({ state, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, canRecord });
+  useTodayKeys({ state, isSettled, isPlanMode, isArrivalsView: arrivalsView !== undefined, closeSession, isOpening, canRecord });
   return { actionPage, closeSession, canRecord };
 }
 
@@ -191,7 +191,7 @@ type ScreenInput = {
   readonly actionBoard: TodayBoard;
   readonly plan: ReturnType<typeof useTodayPlan>;
   readonly route: WorkspaceRoute;
-  readonly closeSession: ReturnType<typeof useTodaySession>;
+  readonly closeSession: ReturnType<typeof useTodaySession>['close'];
 };
 
 function screenProps(input: ScreenInput): TodayScreenProps {

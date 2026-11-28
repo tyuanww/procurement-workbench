@@ -733,6 +733,7 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
     await dialog.waitFor({ state: 'hidden' });
     await page.waitForURL(listUrl.href);
   }
+  await checkEscapeBeforeDrawerPaint(page, detail, dialog, listUrl);
 
   await page.reload();
   await page.getByRole('status').filter({ hasText: /匹配\s*501\s*批未发.*第\s*11\s*页/ }).waitFor();
@@ -753,5 +754,18 @@ export async function checkTodayDrawer(page: Page, origin: URL) {
   await close.click();
   await page.waitForURL(listUrl.href);
   await dialog.waitFor({ state: 'hidden' });
-  return { settledEscape: true, browserHistoryRestored: true, quickEscapes: 3, filterOnReload: 'unshipped', pageOnReload: 11, draftLinkRestored: true, draftEscape: true, mouseClose: true };
+  return { settledEscape: true, browserHistoryRestored: true, quickEscapes: 3, escapeBeforePaint: true, filterOnReload: 'unshipped', pageOnReload: 11, draftLinkRestored: true, draftEscape: true, mouseClose: true };
+}
+
+async function checkEscapeBeforeDrawerPaint(page: Page, trigger: Locator, dialog: Locator, list: URL) {
+  const handled = await trigger.evaluate((element) => {
+    if (!('click' in element)) return false;
+    element.click();
+    const escape = new globalThis.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    element.dispatchEvent(escape);
+    return escape.defaultPrevented;
+  });
+  assert.ok(handled, '抽屉打开请求尚未渲染时也应受理 Esc');
+  await page.waitForURL(list.href);
+  await dialog.waitFor({ state: 'hidden' });
 }

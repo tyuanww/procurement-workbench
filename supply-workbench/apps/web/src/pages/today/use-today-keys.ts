@@ -17,6 +17,7 @@ type KeyboardScope = {
   readonly isPlanMode: boolean;
   readonly isArrivalsView: boolean;
   readonly closeSession: (drawerId: string | null) => void;
+  readonly isOpening: () => boolean;
   readonly canRecord: boolean;
 };
 
@@ -29,7 +30,7 @@ export function useTodayKeys(scope: KeyboardScope): void {
       rows: isSettled || isPlanMode ? workspaceKeyboardRows() : [],
       focus: targetRow,
       hasDraft: state.draft !== null,
-      hasDrawer: state.drawerId !== null,
+      hasDrawer: state.drawerId !== null || scope.isOpening(),
       isHelpOpen: state.isHelpOpen,
       isPlanMode,
       actions: keyboardActions(scope, targetRow),

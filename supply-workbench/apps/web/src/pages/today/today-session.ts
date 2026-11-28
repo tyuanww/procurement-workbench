@@ -86,14 +86,16 @@ export function useTodaySession(input: {
   readonly rows: readonly { readonly id: string }[];
   readonly isReady: boolean;
   readonly setUnavailableArrivalSearch?: ((search: string | null) => void) | undefined;
-}): (keepDrawerId: string | null, selection?: URLSearchParams) => void {
+}) {
   const [params, setParams] = useSearchParams();
   const search = params.toString();
   const syncedSearch = useRef<string | null>(null);
+  const openingDrawer = useRef<string | null>(null);
   const draftKind = input.state.draft?.kind ?? null;
   const drawerId = input.state.drawerId;
   const hasMissingArrival = missingArrivalDrawer({ search, rows: input.rows, isArrivals: input.setUnavailableArrivalSearch !== undefined });
   useEffect(() => {
+    if (readTodaySession(search).drawerId === openingDrawer.current) openingDrawer.current = null;
     if (!input.isReady) return;
     const wanted = writeTodaySession({ search, session: { drawerId, draftKind } });
     if (!hasMissingArrival && wanted === search) {
@@ -106,21 +108,33 @@ export function useTodaySession(input: {
       return;
     }
     const session = validTodaySession({ session: readTodaySession(search), rows: input.rows });
-    syncedSearch.current = writeTodaySession({ search, session });
+    syncedSearch.current = restore({ session, search, state: input.state, setParams });
     if (hasMissingArrival) input.setUnavailableArrivalSearch?.(syncedSearch.current);
-    restore({ session, search, state: input.state, setParams });
   }, [search, input.isReady, drawerId, draftKind, hasMissingArrival]);
 
-  return (keepDrawerId, selection) => {
-    const session: TodaySession = { drawerId: keepDrawerId, draftKind: null };
-    // 路由在过渡中更新。一起提交关闭状态，避免同步逻辑重复写入浏览器历史。
-    startTransition(() => {
-      input.setUnavailableArrivalSearch?.(null);
-      applySession({ session, state: input.state });
-      const shouldClearFocus = selection === undefined && (keepDrawerId ?? drawerId)?.startsWith('batch:') === true;
-      setParams((current) => sessionSearch({ current: selection ?? current, session, shouldClearFocus }));
-    });
+  return {
+    isOpening: () => openingDrawer.current !== null,
+    close(keepDrawerId: string | null, selection?: URLSearchParams) {
+      const previousDrawer = drawerId ?? openingDrawer.current;
+      openingDrawer.current = keepDrawerId;
+      changeSession({ keepDrawerId, previousDrawer, selection, setParams, state: input.state,
+        clearUnavailable: input.setUnavailableArrivalSearch });
+    },
   };
+}
+
+function changeSession({ keepDrawerId, previousDrawer, selection, setParams, state, clearUnavailable }: {
+  readonly keepDrawerId: string | null; readonly previousDrawer: string | null; readonly selection: URLSearchParams | undefined;
+  readonly setParams: SearchSetter; readonly state: TodaySessionState; readonly clearUnavailable: ((search: null) => void) | undefined;
+}) {
+  const session: TodaySession = { drawerId: keepDrawerId, draftKind: null };
+  // 路由在过渡中更新。一起提交关闭状态，避免同步逻辑重复写入浏览器历史。
+  startTransition(() => {
+    clearUnavailable?.(null);
+    applySession({ session, state });
+    const shouldClearFocus = selection === undefined && (keepDrawerId ?? previousDrawer)?.startsWith('batch:') === true;
+    setParams((current) => sessionSearch({ current: selection ?? current, session, shouldClearFocus }));
+  });
 }
 
 function missingArrivalDrawer({ search, rows, isArrivals }: {
@@ -147,10 +161,11 @@ function restore(input: {
   readonly search: string;
   readonly state: TodaySessionState;
   readonly setParams: SearchSetter;
-}): void {
+}): string {
   applySession({ session: input.session, state: input.state });
   const cleaned = writeTodaySession({ search: input.search, session: input.session });
   if (cleaned !== input.search) input.setParams(new URLSearchParams(cleaned), { replace: true });
+  return cleaned;
 }
 
 function applySession(input: { readonly session: TodaySession; readonly state: TodaySessionState }): void {
