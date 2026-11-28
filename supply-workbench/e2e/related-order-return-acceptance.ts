@@ -122,6 +122,29 @@ async function checkRelatedOrderFocusHistory(page: Page, shared: URL) {
   await outside.press('Enter');
   await component.waitFor();
   await saveNoteWhileReturning(page, batchAddress);
+  await openBatchWithModifier(page, batchAddress);
+}
+
+async function openBatchWithModifier(page: Page, address: string) {
+  const isDetail = (url: URL) => url.pathname === '/api/v1/lines/scope-line-manual';
+  let release: () => void = () => undefined;
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  await page.route(isDetail, async route => {
+    await paused;
+    await route.continue().catch(() => undefined);
+  });
+  const batch = page.getByRole('region', { name: '批次', exact: true }).locator('li:focus');
+  try {
+    await Promise.all([page.waitForRequest(request => isDetail(new URL(request.url()))), page.goto(address)]);
+    assert.equal(await batch.count(), 0);
+    // Reading the window title with NVDA can send a lone Control to the document.
+    await page.keyboard.press('Control');
+    release();
+    await batch.getByRole('button', { name: '回查第 1 批原表', exact: true }).waitFor();
+  } finally {
+    release();
+    await page.unroute(isDetail);
+  }
 }
 
 async function saveNoteWhileReturning(page: Page, source: string) {
@@ -148,11 +171,20 @@ async function saveNoteWhileReturning(page: Page, source: string) {
     ]);
     assert.ok(saved.ok());
     await note.getByText(text, { exact: true }).waitFor();
+    await related.and(page.locator('[aria-busy="true"]')).waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+    const loaded = page.waitForResponse(response => isMembership(new URL(response.url())) && response.request().method() === 'GET');
+    release();
+    assert.ok((await loaded).ok());
   } finally {
     release();
     await page.unroute(isMembership);
   }
   await related.and(page.locator('a[href]')).waitFor();
+  const member = page.getByRole('region', { name: '关联采购事项', exact: true }).getByRole('link', { name: /FS-COMPONENT-C$/u }).and(page.locator('a[href]'));
+  await member.waitFor();
+  const href = await member.getAttribute('href');
+  assert.equal(new URL(href ?? '', source).searchParams.get('importBatchId'), batch);
   await afterFocusEffects(page);
   assert.equal(await related.and(page.locator(':focus')).count(), 0);
 }
@@ -164,7 +196,7 @@ async function returnWhileSessionIsLoading(page: Page, source: string) {
   await page.route(isSession, async (route) => {
     await paused;
     await route.continue().catch(() => undefined);
-  }, { times: 1 });
+  });
   try {
     await Promise.all([
       page.waitForRequest((request) => isSession(new URL(request.url()))),
@@ -172,6 +204,7 @@ async function returnWhileSessionIsLoading(page: Page, source: string) {
     ]);
     await page.goBack({ waitUntil: 'commit' });
     await page.waitForURL(source);
+    assert.equal(await page.getByRole('button', { name: '搜索单号、品名、供应商', exact: true }).count(), 0);
   } finally {
     release();
     await page.unroute(isSession);
@@ -196,15 +229,38 @@ async function checkGlobalSearchReturn(page: Page, origin: URL) {
   await page.goBack();
   await related.and(page.locator(':focus')).waitFor();
 
-  await page.getByRole('button', { name: '搜索单号、品名、供应商', exact: true }).press('Enter');
+  const trigger = page.getByRole('button', { name: '搜索单号、品名、供应商', exact: true });
   const search = page.getByRole('dialog', { name: '搜索', exact: true });
-  await search.getByPlaceholder('单号 / 品名 / 编码').fill('FS-COMPONENT');
-  await search.locator('a[href="/lines/scope-line-component"]').press('Enter');
+  const input = search.getByPlaceholder('单号 / 品名 / 编码');
+  async function chooseOrder() {
+    await trigger.press('Enter');
+    await input.fill('FS-COMPONENT');
+    await search.locator('a[href="/lines/scope-line-component"]').press('Enter');
+    await page.waitForURL(destination);
+  }
+
+  await chooseOrder();
   await component.waitFor();
   await page.getByPlaceholder('单号 / 品名 / 编码').waitFor({ state: 'detached' });
   assert.equal(page.url(), destination);
-  await page.getByRole('button', { name: '搜索单号、品名、供应商', exact: true }).and(page.locator(':focus')).waitFor();
+  await trigger.and(page.locator(':focus')).waitFor();
   await page.goBack();
   await page.waitForURL(original.href);
   await owner.and(page.locator(':focus')).waitFor();
+  await chooseOrder();
+  await page.goBack();
+  await page.waitForURL(original.href);
+  await owner.and(page.locator(':focus')).waitFor();
+
+  await chooseOrder();
+  await trigger.and(page.locator(':focus')).waitFor();
+  await trigger.press('Enter');
+  await input.fill('继续搜索');
+  await page.goBack();
+  await page.waitForURL(original.href);
+  await page.locator('[aria-label="订单负责人"]').waitFor({ state: 'attached' });
+  await afterFocusEffects(page);
+  assert.equal(await input.and(page.locator(':focus')).count(), 1);
+  await input.press('Escape');
+  await trigger.and(page.locator(':focus')).waitFor();
 }

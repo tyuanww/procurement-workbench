@@ -103,13 +103,13 @@ function matchesReturnRoute(origin: DetailOrigin | undefined, { address, sourceL
 export function useOneTimeDetailReturnFocus(sourceLinkPrefix: string): DetailReturnFocus {
   const { key, origin } = useArrivalOrigin(sourceLinkPrefix);
   const canRestore = useCanRestoreEntryFocus();
-  const restored = useRef<string | null>(null);
+  const restored = useRef<{ key: string; canRestore: typeof canRestore } | null>(null);
   const restore = useCallback((fallback: HTMLElement | null) => {
-    if (origin === undefined || restored.current === key) return;
+    if (origin === undefined || (restored.current?.key === key && restored.current.canRestore === canRestore)) return;
     const target = findReturnTarget(origin, undefined) ?? fallback;
     if (target === null) return;
     // Limit focus changes to this visit. A later Back can reuse the same history entry.
-    restored.current = key;
+    restored.current = { key, canRestore };
     if (canRestore()) target.focus();
   }, [key, origin, canRestore]);
   return { hasOrigin: origin !== undefined, restore };
