@@ -19,7 +19,7 @@ import { procurementDetail } from './procurement.js';
 import { batchViews } from './batch-view.js';
 import { activeFactoryBatchIds } from '../factory-links/snapshot-scope.js';
 import { toRow, loadRelations, type ListWorld } from './line-row.js';
-import { comboOf, demandOf, isAssociated, scheduleOf, shipmentOf, stockOf, transitOf } from './payloads.js';
+import { comboOf, demandSourceOf, isAssociated, scheduleOf, shipmentSourceOf, stockOf, transitOf } from './payloads.js';
 
 const FOLLOW_UP_LIMIT = 50;
 const PURCHASE_SOURCE_FIELDS = ['po', 'nameRaw', 'barcodeRaw', 'qtyOrdered', 'firstDeliveryOn', 'shippedQtyReported', 'statusReported'];
@@ -135,10 +135,10 @@ async function reportsOf(db: AppDatabase, { lineId, activeIds }: { readonly line
   ]);
   return {
     inTransit: transit.filter((row) => isAssociated(row.linkStatus)).map(transitOf),
-    shipments: shipment.filter((row) => isAssociated(row.linkStatus)).map(shipmentOf),
+    shipments: shipment.filter((row) => isAssociated(row.linkStatus)).map(shipmentSourceOf),
     stock: stock.filter((row) => isAssociated(row.linkStatus)).map(stockOf),
     schedule: schedule.filter((row) => isAssociated(row.linkStatus)).flatMap((row) => { const view = scheduleOf(row); return view === undefined ? [] : [view]; }),
-    demand: demand.filter((row) => isAssociated(row.linkStatus)).map(demandOf),
+    demand: demand.filter((row) => isAssociated(row.linkStatus)).map(demandSourceOf),
     packagingCombo: combo.filter((row) => isAssociated(row.linkStatus)).map(comboOf),
   };
 }
@@ -185,17 +185,17 @@ async function batchDemandSourcesOf(db: AppDatabase, { lineId, batches, current 
         isNull(factoryMaterialDemandRows.linkReason),
       )),
     ));
-    for (const row of rows) byId.set(row.id, demandOf(row));
+    for (const row of rows) byId.set(row.id, demandSourceOf(row));
   }
   return Object.fromEntries(origins.flatMap(({ batchId, rowId, slotIndex }) => {
     const row = byId.get(rowId);
     if (row?.payload.role !== 'material') return [];
     const slot = row.payload.slots.find(({ index }) => index === slotIndex);
-    if (slot === undefined || !slot.dateRaw?.trim() || !slot.qtyRaw?.trim()) return [];
+    if (slot === undefined || !Object.values(slot.originalCells ?? {}).some((raw) => raw?.trim())) return [];
     const { importBatchId, sheetName, rowNo } = row;
-    const { index, dateRaw, qtyRaw, sourceColumns } = slot;
+    const { index, dateRaw, qtyRaw, sourceColumns, originalCells } = slot;
     return [[batchId, { importBatchId, sheetName, rowNo, slot: {
-      index, dateRaw, qtyRaw, ...(sourceColumns === undefined ? {} : { sourceColumns }),
+      index, dateRaw, qtyRaw, ...(sourceColumns === undefined ? {} : { sourceColumns }), ...(originalCells === undefined ? {} : { originalCells }),
     } }] as const];
   }));
 }
@@ -215,7 +215,7 @@ async function archivedShipments(db: AppDatabase, { lineId, batches, current }: 
   const rows = await db.select().from(factoryShipmentRows).where(and(
     eq(factoryShipmentRows.linkedOrderLineId, lineId), inArray(factoryShipmentRows.id, [...ids]),
   ));
-  return rows.filter((row) => isAssociated(row.linkStatus)).map(shipmentOf);
+  return rows.filter((row) => isAssociated(row.linkStatus)).map(shipmentSourceOf);
 }
 
 function batchWithVisibleShipmentSources(batch: OrderLineDetail['batches'][number], visibleIds: ReadonlySet<string>) {

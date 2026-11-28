@@ -40,7 +40,11 @@ it('原表回查保留采购行、工厂需求原列与已采纳出货的历史�
     } }]);
     expect(read.factoryReports.shipments.map(({ id }) => id)).toEqual(['current-shipment']);
     expect(read.factoryReports.shipments[0]?.payload.shipOrArriveOn).toEqual({ raw: '预计9/10', value: null });
-    expect(read.archivedShipmentSources).toMatchObject([{ id: 'historical-shipment', rowNo: 8, payload: { lotRaw: { raw: 'LOT-HISTORY' } } }]);
+    expect(read.factoryReports.shipments[0]?.originalCells).toEqual({ itemCodeRaw: null, qty: '020.00', shipOrArriveOn: '预计9/10' });
+    expect(read.archivedShipmentSources).toMatchObject([{ id: 'historical-shipment', rowNo: 8, payload: {
+      lotRaw: { value: 'LOT-HISTORY' }, qty: { value: 10 }, shipOrArriveOn: { value: '2026-11-24' },
+    } }]);
+    expect(read.archivedShipmentSources?.[0]?.originalCells).toEqual({});
     expect(must(read.batches.find(({ id }) => id === first.id)).shipments).toEqual([]);
     expect(must(read.batches.find(({ id }) => id === second.id)).shipments).toMatchObject([{ factoryShipmentRowId: 'historical-shipment' }]);
 
@@ -143,7 +147,7 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
     expect(after.factoryReports.demand).toMatchObject([{ id: 'replacement-row', payload: { slots: [replacement] } }]);
     const expected = Object.fromEntries([first, second].map(({ id, seq }) => {
       const { index, dateRaw, qtyRaw, sourceColumns } = must(slots[seq - 1]);
-      return [id, { importBatchId: 'factory-original', sheetName: demandSheet, rowNo: 4, slot: { index, dateRaw, qtyRaw, sourceColumns } }];
+      return [id, { importBatchId: 'factory-original', sheetName: demandSheet, rowNo: 4, slot: { index, dateRaw, qtyRaw, sourceColumns, originalCells: { dateRaw, qtyRaw } } }];
     }));
     expect(before.batchDemandSources).toEqual(expected);
     expect(after.batchDemandSources).toEqual(expected);
@@ -178,26 +182,47 @@ it('生成的两批各自回查原需求，换表时保留，挂接其他订单�
   }
 });
 
-it('只存有规范日期和数量的旧工厂需求仍生成批次，原表单元格留待核对', async () => {
+it('旧工厂需求保留批次数量与日期，逐格区分缺原值和已采集空值', async () => {
   const { app, handle, close } = await openProcurementImport({ isLocal: true });
   try {
     const client = await procurementImportClient(app, handle);
     await insertFactoryImports(handle.db, [{ batch: 'factory-legacy', name: '旧需求原表.xlsx' }]);
+    const legacySlots = [
+      { index: 0, date: '2026-11-24', qty: 50 },
+      { index: 1, date: '2026-11-27', dateRaw: null, qty: 100, qtyRaw: '0100.00' },
+      { index: 2, date: null, dateRaw: null, qty: 5, qtyRaw: '5' },
+    ];
     await handle.db.insert(schema.factoryMaterialDemandRows).values({
       ...stamp, id: 'legacy-origin', importBatchId: 'factory-legacy', factoryPartyId: factory, sheetName: demandSheet,
       rowNo: 4, fingerprint: 'legacy-demand', linkStatus: 'unlinked', role: 'material',
       blockMaterialPoRaw: 'PO20261117009105', itemCodeRaw: '99010005', nameRaw: '合成旧需求包材',
-      slots: { slots: [{ index: 0, date: '2026-11-24', qty: 50 }] }, raw: {},
+      slots: { slots: legacySlots.map(({ index, date, qty }) => ({ index, date, qty })) }, raw: { slots: legacySlots },
     });
     const generated = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand-rows/generate-batches',
       headers: { cookie: client.cookie }, payload: { rowIds: ['legacy-origin'] } });
     expect(generated.statusCode, generated.body).toBe(200);
-    expect(generated.json()).toEqual({ createdLines: 1, createdBatches: 1, skipped: [] });
+    expect(generated.json()).toEqual({ createdLines: 1, createdBatches: 2, skipped: [] });
     const line = must((await handle.db.select().from(schema.orderLines)).find(({ itemCodeRaw }) => itemCodeRaw === '99010005'));
     const detail = await client.detail(line.id);
-    expect(detail.batches).toMatchObject([{ plannedQty: 50, dateFactoryRequired: '2026-11-24', originRef: { rowId: 'legacy-origin', slotIndex: 0 } }]);
-    expect(detail.batchDemandSources).toEqual({});
-    expect(detail.sourceFiles).toEqual({});
+    expect(detail.batches).toMatchObject([
+      { plannedQty: 50, dateFactoryRequired: '2026-11-24', originRef: { rowId: 'legacy-origin', slotIndex: 0 } },
+      { plannedQty: 100, dateFactoryRequired: '2026-11-27', originRef: { rowId: 'legacy-origin', slotIndex: 1 } },
+    ]);
+    const partial = must(detail.batches[1]);
+    expect(detail.batchDemandSources).toEqual({ [partial.id]: {
+      importBatchId: 'factory-legacy', sheetName: demandSheet, rowNo: 4,
+      slot: { index: 1, dateRaw: null, qtyRaw: '0100.00', originalCells: { qtyRaw: '0100.00' } },
+    } });
+    expect(detail.sourceFiles).toEqual({ 'factory-legacy': '旧需求原表.xlsx' });
+
+    const reviewer = await loginAs(app, 'reviewer');
+    const linked = await app.inject({ method: 'POST', url: '/api/v1/factory-reports/demand/legacy-origin/link',
+      headers: { cookie: reviewer }, payload: { orderLineId: line.id } });
+    expect(linked.statusCode, linked.body).toBe(200);
+    const referenced = await client.detail(line.id);
+    expect(referenced.factoryReports.demand[0]?.payload.slots.map(({ originalCells }) => originalCells)).toEqual([
+      {}, { qtyRaw: '0100.00' }, { dateRaw: null, qtyRaw: '5' },
+    ]);
   } finally {
     await close();
   }
@@ -236,7 +261,8 @@ async function insertSources(db: AppDatabase, lineId: string) {
   await db.insert(schema.factoryShipmentRows).values([
     { ...ref, id: 'historical-shipment', importBatchId: 'factory-history', sheetName: '成品出货明细', rowNo: 8, fingerprint: 'historical', raw: {}, lotRaw: 'LOT-HISTORY', qty: '10', shipOrArriveOn: '2026-11-24' },
     { ...ref, id: 'current-shipment', importBatchId: 'factory-active', sheetName: '成品出货明细', rowNo: 2, fingerprint: 'current',
-      raw: { shipOrArriveOn: { raw: '预计9/10', value: null } }, lotRaw: 'LOT-CURRENT', qty: '20', shipOrArriveOn: null },
+      raw: { itemCodeRaw: { raw: null, value: null }, qty: { raw: '020.00', value: 20 }, shipOrArriveOn: { raw: '预计9/10', value: null } },
+      lotRaw: 'LOT-CURRENT', qty: '20', shipOrArriveOn: null },
   ]);
   await db.insert(schema.factoryMaterialDemandRows).values({
     ...ref, id: 'material-demand', importBatchId: 'factory-active', sheetName: demandSheet, rowNo: 4, fingerprint: 'demand',
