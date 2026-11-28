@@ -43,7 +43,8 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
-    relatedOrdersKeepTrueScope: true, detachedDetailChecksMembership: true, sharedFilteredReturn: true, pendingPreviewReturn: true, delayedDetailReturnFocus: true };
+    relatedOrdersKeepTrueScope: true, relatedOrderReturnFocus: true, detachedDetailChecksMembership: true, sharedFilteredReturn: true,
+    pendingPreviewReturn: true, delayedDetailReturnFocus: true, delayedReturnKeepsSearchFocus: true };
 }
 
 function factoryRelatedComponent(page: Page) {
@@ -108,8 +109,14 @@ async function checkRelatedOutsideFactoryBatch(page: Page, origin: URL) {
   await related.press('Enter');
   await page.getByRole('heading', { name: 'FS-COMPONENT', exact: true }).waitFor();
   assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
+  await page.goBack();
+  await page.waitForURL(from);
+  await related.and(page.locator(':focus')).waitFor();
+
+  await related.press('Enter');
   await page.getByRole('link', { name: '返回原订单', exact: true }).press('Enter');
   await page.waitForURL(from);
+  await related.and(page.locator(':focus')).waitFor();
   await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
   await scopedRow.and(page.locator(':focus')).waitFor();
 }
@@ -247,7 +254,12 @@ async function checkDelayedDetailReturnFocus(page: Page, shared: URL) {
   const results = page.getByRole('region', { name: '订单查询结果', exact: true });
   const row = results.getByRole('link', { name: 'FS-MANUAL', exact: true });
   const order = row.and(page.locator('a[href]'));
-  for (const isExpectedSuccess of [true, false]) {
+  const search = page.getByLabel('搜索单号、品名或编码', { exact: true });
+  for (const { isExpectedSuccess, isTyping } of [
+    { isExpectedSuccess: true, isTyping: false },
+    { isExpectedSuccess: false, isTyping: false },
+    { isExpectedSuccess: true, isTyping: true },
+  ]) {
     await page.goto(address.href);
     const [summary] = await Promise.all([
       page.waitForResponse((response) => isTemplate(new URL(response.url()))),
@@ -268,8 +280,23 @@ async function checkDelayedDetailReturnFocus(page: Page, shared: URL) {
       await row.and(page.locator('[aria-busy="true"]')).waitFor();
       await page.evaluate(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))));
       assert.equal(await results.and(page.locator(':focus')).count(), 0);
+      if (isTyping) {
+        const focused = search.and(page.locator(':focus'));
+        for (let tab = 0; tab < 45 && await focused.count() === 0; tab++) await page.keyboard.press('Tab');
+        assert.equal(await focused.count(), 1);
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.keyboard.type('probe-first');
+        assert.equal(await search.inputValue(), 'probe-first');
+      }
       finish();
-      await order.and(page.locator(':focus')).waitFor();
+      if (isTyping) {
+        await order.waitFor();
+        await page.keyboard.type('-second');
+        assert.equal(await search.and(page.locator(':focus')).count(), 1);
+        assert.equal(await search.inputValue(), 'probe-first-second');
+      } else {
+        await order.and(page.locator(':focus')).waitFor();
+      }
       assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), Number(isExpectedSuccess));
     } finally {
       finish();

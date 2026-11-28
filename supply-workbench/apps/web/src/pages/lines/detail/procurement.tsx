@@ -1,11 +1,11 @@
 import { useContext, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, createPath, useLocation } from 'react-router';
 import { Alert, Button, Collapse, Descriptions, Form, Input, Typography } from 'antd';
 import { BatchViewSchema, EntityIdSchema, FollowUpViewSchema, type OrderLineDetail } from '@sw/contracts';
 import { isNotProvided } from '@sw/domain';
 import { deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { IMPORT_RETURN_PARAM, importFollowUpCandidate } from '../../../features/imports/index.js';
-import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
+import { detailReturnState, useDetailFocusLinks, useDetailReturnFocus } from '../../../shared/hooks/detail-return-focus.js';
 import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
@@ -66,19 +66,24 @@ function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLi
   const { isImportMember, isCheckingImportMembership } = useContext(LineImportMembership);
   const batch = isImportMember ? EntityIdSchema.safeParse(params.get('importBatchId')).data : undefined;
   const members = useRelatedImportMembers({ batch, store: params.get('store'), lines });
-  if (isCheckingImportMembership || members === undefined) {
+  const source = createPath(location);
+  const detailFocusLink = useDetailFocusLinks();
+  const isReady = !isCheckingImportMembership && members !== undefined;
+  useDetailReturnFocus(isReady, { sourcePath: source });
+  if (!isReady) {
     return <ul>{lines.map((line) => <li key={line.id}><PendingLineDetailLink>{relatedLineLabel(line)}</PendingLineDetailLink></li>)}</ul>;
   }
   const query = procurementDetailQuery(params);
   const scoped = procurementImportQuery({ query, params, batch });
   const returnState = procurementReturnState({ params, state: location.state, isImportMember });
-  const ordinaryState = relatedOrderState(location, batch !== undefined) ?? returnState;
   return (
     <ul>{lines.map((line) => {
       const isMember = members.has(line.id);
       const href = followUpAddress(`/lines/${encodeURIComponent(line.id)}`, isMember ? scoped : query);
+      const { state: focus, ...link } = detailFocusLink(source, `related-order:${line.id}`);
+      const originState = isMember ? undefined : relatedOrderState(location, batch === undefined ? undefined : focus);
       return <li key={line.id}>
-        <Link to={href} state={isMember ? returnState : ordinaryState}>{relatedLineLabel(line)}</Link>
+        <Link to={href} state={originState ?? returnState} {...(originState === undefined ? {} : link)}>{relatedLineLabel(line)}</Link>
       </li>;
     })}</ul>
   );

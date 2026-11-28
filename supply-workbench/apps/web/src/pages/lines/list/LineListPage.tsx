@@ -114,9 +114,10 @@ function useDetailReturnFocus({ results, lineId, key, isSettled }: { readonly re
   useEffect(() => {
     const region = results.current;
     if (!isSettled || lineId === null || region === null || restored.current === key) return;
+    restored.current = key;
+    if (document.activeElement !== document.body) return;
     const row = [...region.querySelectorAll('tr[data-row-key]')].find((candidate) => candidate.getAttribute('data-row-key') === lineId);
     (row?.querySelector<HTMLElement>('th[scope="row"] a') ?? region).focus();
-    restored.current = key;
   }, [isSettled, key, lineId, results]);
 }
 
