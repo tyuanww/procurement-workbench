@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, fork, spawnSync, type ExecFileSyncOptions } from 'node:child_process';
+import { execFileSync, fork, type ChildProcess, type ExecFileSyncOptions } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
@@ -9,6 +9,7 @@ import { createServer } from 'node:net';
 import { release, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { acceptanceSummary, failureMessage, type AcceptanceSummary } from './acceptance-diagnostics.ts';
+import { runAcceptanceProcess } from './acceptance-process.ts';
 
 const [sha, output] = process.argv.slice(2);
 assert.ok(sha && /^[0-9a-f]{40}$/.test(sha), 'Provide the full Git SHA');
@@ -25,7 +26,7 @@ await mkdir(evidenceDir);
 type SuiteOutcome = {
   suite: string;
   status: number | null;
-  signal: ReturnType<typeof spawnSync>['signal'];
+  signal: ChildProcess['signalCode'];
   error: string | undefined;
 };
 
@@ -76,6 +77,7 @@ const browserAcceptanceStage = '执行采购浏览器验收';
 const cleanupStage = '清理隔离服务与数据库';
 let stage = '准备合成样本与浏览器';
 let failure: { readonly stage: string; readonly error: unknown } | undefined;
+let browserCleanupErrors: readonly unknown[] = [];
 try {
   const webDir = resolve('apps/web/dist/app');
   evidence.fixtures = [await verifyProcurementFixture()];
@@ -138,10 +140,9 @@ try {
   assert.equal(health.ok, true);
 
   stage = browserAcceptanceStage;
-  const result = spawnSync(process.execPath, ['--experimental-strip-types', 'e2e/preaccept-ui.ts'], {
-    env: { ...env, PGBIN: process.env.PGBIN }, stdio: 'inherit', timeout: 360_000, killSignal: 'SIGKILL', windowsHide: true,
-  });
+  const result = await runAcceptanceProcess({ ...env, PGBIN: process.env.PGBIN });
   evidence.suites.push({ suite: 'procurement', status: result.status, signal: result.signal, error: result.error?.message });
+  browserCleanupErrors = result.cleanupErrors ?? [];
   if (result.error) throw result.error;
   const outcome = result.signal ?? `exit status ${result.status}`;
   assert.equal(result.status, 0, `Procurement browser acceptance failed (${outcome})`);
@@ -158,6 +159,7 @@ function recordCleanup(error: unknown): void {
   console.error('Unable to clean up isolated acceptance:', message);
   failure ??= { stage: cleanupStage, error };
 }
+for (const error of browserCleanupErrors) recordCleanup(error);
 if (app !== undefined) {
   try {
     await stopApplication(app, 'SIGTERM', 15_000);
