@@ -33,7 +33,10 @@ const evidence = {
 await mkdir(output, { recursive: true });
 const save = () => writeFile(join(output, 'result.json'), JSON.stringify(evidence, null, 2) + '\n');
 const sanitize = (error) => String(error?.stack ?? error).replaceAll(accessCode, '[redacted]');
-const spokenText = (phrases) => phrases.join(' ').replace(/[\u200b-\u200d\ufeff]/gu, '').replace(/\s+dot\s+/giu, '.');
+const spokenText = (phrases) => phrases.join(' ')
+  .replace(/[\u200b-\u200d\ufeff]/gu, '')
+  .replace(/\s+(?:dot|点)\s+/giu, '.')
+  .replace(/\b(purchase|factory) synthetic(?=\.xlsx\b)/giu, '$1-synthetic');
 const spokenPo = po.replace(/^PO/u, 'PO\\s*');
 await save();
 
