@@ -4,7 +4,7 @@ import { Alert, Button, Card, Collapse, Empty, Flex, Input, Result, Select, Skel
 import { BatchViewSchema, ProcurementStoreSchema, ShipmentViewSchema, type OrderLineDetail, type ProcurementStore, type TimelineEvent } from '@sw/contracts';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { failureText, read, readFailureOf } from '../../../shared/api/reads.js';
-import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits } from '../../../features/follow-up/index.js';
+import { adoptShipmentPrefill, batchLineText, canAddBatch, dateChangeNeedsReason, missingDeliveredText, openBatchActions, showsRecordEdits, useFollowUpSearch } from '../../../features/follow-up/index.js';
 import { useCan, useCanWrite } from '../../../shared/actor.js';
 import { PageHeader } from '../../../shared/ui/page.js';
 import { space } from '../../../theme/tokens.js';
@@ -28,7 +28,7 @@ export function lineTitle(poRaw: string | null): string {
 
 export function LineDetailPage() {
   const { id = '' } = useParams();
-  const [params] = useSearchParams();
+  const [params] = useFollowUpSearch();
   const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
   const { state } = useLocation();
   const back = readLineDetailBack({ lineId: id, params, state });

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { NAV_ROUTES, PAGE_MANIFEST, type PageManifestEntry } from './page-manifest.js';
 import type { SessionUser } from '@sw/contracts';
@@ -5,6 +6,7 @@ import { ActorRoles } from '../shared/actor.js';
 import { ForbiddenPage, MissingPage, ReviewQueueProvider, routeAccess, shellView, useShellLoad, type ShellView } from '../features/shell/index.js';
 import { Shell } from './Shell.js';
 import { LoginPage } from '../pages/login/LoginPage.js';
+import { followUpLoginResume } from '../features/follow-up/index.js';
 
 
 export function AppRoutes({ user }: { readonly user: SessionUser | undefined }) {
@@ -27,6 +29,8 @@ function SignInRequired() {
 }
 
 function SignedInRoutes({ user }: { readonly user: SessionUser }) {
+  const resume = followUpLoginResume(useLocation());
+  if (resume !== null) return <FollowUpLoginReturn {...resume} />;
   return (
     <ActorRoles roles={user.roles} userId={user.id}>
       <Routes>
@@ -40,6 +44,13 @@ function SignedInRoutes({ user }: { readonly user: SessionUser }) {
       </Routes>
     </ActorRoles>
   );
+}
+
+function FollowUpLoginReturn({ storageKey, to }: { readonly storageKey: string; readonly to: string }) {
+  useEffect(() => {
+    try { window.sessionStorage.removeItem(storageKey); } catch { /* Storage can be disabled. */ }
+  }, [storageKey]);
+  return <Navigate to={to} replace />;
 }
 
 function pageRoute(entry: PageManifestEntry, roles: SessionUser['roles']) {

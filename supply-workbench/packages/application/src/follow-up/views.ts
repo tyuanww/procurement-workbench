@@ -143,6 +143,11 @@ export type DateChangeView = {
   readonly changedAt: string;
 };
 
+type DemandSlot = FactoryReportOf<'demand'>['payload']['slots'][number];
+type BatchDemandSource = Pick<FactoryReportOf<'demand'>, 'importBatchId' | 'sheetName' | 'rowNo'> & {
+  readonly slot: Pick<DemandSlot, 'index' | 'dateRaw' | 'qtyRaw' | 'sourceColumns'>;
+};
+
 export type OrderLineDetail = {
   readonly ownerUndo?: { readonly expectedAssignmentId: EntityId; readonly previousBuyer: UserRef | null };
   readonly pendingBuyerName?: string;
@@ -159,6 +164,7 @@ export type OrderLineDetail = {
   readonly batches: readonly BatchView[];
   readonly sourceFiles?: Readonly<Record<string, string>>;
   readonly archivedShipmentSources?: readonly FactoryReportOf<'shipment'>[];
+  readonly batchDemandSources?: Readonly<Record<string, BatchDemandSource>>;
   readonly factoryReports: {
     readonly inTransit: readonly FactoryReportOf<'in_transit'>[];
     readonly shipments: readonly FactoryReportOf<'shipment'>[];

@@ -5,7 +5,6 @@ import { isRecord, textOrNull } from './guards.js';
 
 const EMPTY_TEXT: ParsedCell<string> = { raw: null, value: null };
 const EMPTY_NUMBER: ParsedCell<number> = { raw: null, value: null };
-const EMPTY_DATE: ParsedCell<LocalDate> = { raw: null, value: null };
 const EMPTY_PO: ParsedCell<ParsedPo> = { raw: null, value: null };
 
 type Envelope = {
@@ -165,7 +164,7 @@ function dateCell(value: unknown, fallback: string | null): ParsedCell<LocalDate
   const fromCell = parsed === undefined ? undefined : dateOrNull(parsed.value);
   if (fromCell !== undefined) return { raw: parsed?.raw ?? null, value: fromCell };
   const fromColumn = dateOrNull(fallback);
-  return fromColumn === undefined ? EMPTY_DATE : { raw: fallback, value: fromColumn };
+  return { raw: parsed?.raw ?? (fromColumn === undefined ? null : fallback), value: fromColumn ?? null };
 }
 
 function poCell(value: unknown, fallback: string | null): ParsedCell<ParsedPo> {
