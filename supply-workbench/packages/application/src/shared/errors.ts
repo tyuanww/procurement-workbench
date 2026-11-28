@@ -35,8 +35,13 @@ export class OrderLineLockBusy extends Error {
 
   constructor(lineId: string) {
     super('订单行正在被另一事务更新');
+    this.name = 'OrderLineLockBusy';
     this.lineId = lineId;
   }
+}
+
+export function isOrderLineLockBusy(error: unknown): error is OrderLineLockBusy {
+  return error instanceof Error && error.name === 'OrderLineLockBusy' && 'lineId' in error && typeof error.lineId === 'string';
 }
 
 export class StateConflictError extends AppError {

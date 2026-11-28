@@ -1,7 +1,7 @@
 import type { GenerateBatchesFromDemand, GenerateBatchesFromDemandDeps } from '../boundary.js';
 import type { UnitOfWorkStores } from '../../ports/unit-of-work.js';
 import { authorize } from '../../shared/authorize.js';
-import { OrderLineLockBusy, StateConflictError } from '../../shared/errors.js';
+import { isOrderLineLockBusy, StateConflictError } from '../../shared/errors.js';
 import { lockOrderLines } from '../../shared/locked-order-lines.js';
 import { DemandMaterialChanged, freezeGenerationEvidence, generateDemandRows, type GenerateInput, type RowOutcome, type SlotSkip } from './demand-batches.js';
 
@@ -22,7 +22,7 @@ export const makeGenerateBatchesFromDemand =
       try {
         return await deps.uow.run((tx) => generateOnce({ ...context, tx }, input.rowIds));
       } catch (error) {
-        if (error instanceof OrderLineLockBusy) {
+        if (isOrderLineLockBusy(error)) {
           await deps.uow.run((tx) => lockOrderLines(tx.orderLines, [error.lineId]));
           continue;
         }
