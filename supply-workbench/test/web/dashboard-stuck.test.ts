@@ -82,8 +82,13 @@ it('同单同品同日的要货批次按序号区分，抽屉链接定位所选�
   expect(textOf(dialog)).toContain('在途 1,234.5678 件');
   expect(textOf(dialog)).toContain('实收 0 件');
   const detail = document.querySelector(`${dialog} a`);
-  expect(detail?.textContent).toBe('打开订单行');
-  expect(detail?.getAttribute('href')).toBe('/lines/line-01?focusBatch=batch-2');
+  expect(detail?.textContent).toBe('核对本批记录');
+  const target = new URL(detail?.getAttribute('href') ?? '', 'https://workbench.test');
+  expect(target.pathname).toBe('/lines/line-01');
+  expect(target.searchParams.get('focusBatch')).toBe('batch-2');
+  expect(Object.fromEntries(new URLSearchParams(target.searchParams.get('backToStuck') ?? ''))).toMatchObject({
+    lane: 'finished', stuckBatch: 'batch-2',
+  });
   click(button('Close'));
   await waitFor(() => document.querySelector('.ant-drawer-open') === null);
   click(button('查看卡点明细 PO-01 第 1 批'));
