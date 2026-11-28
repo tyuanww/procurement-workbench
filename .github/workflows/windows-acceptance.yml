@@ -1,43 +1,33 @@
 name: Procurement workbench native Windows acceptance
 
 on:
-  pull_request:
-    paths:
-      - .github/workflows/windows-acceptance.yml
-      - supply-workbench/e2e/**
-      - supply-workbench/fixtures/synthetic/po-master-procurement.xlsx
   workflow_dispatch:
     inputs:
       sha:
-        description: Exact 40-character commit SHA to verify on native Windows
+        description: Exact application commit SHA to verify with NVDA
         type: string
         required: true
 
 permissions:
   contents: read
 
-concurrency:
-  group: native-windows-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  acceptance:
+  follow-up-nvda-diagnostic:
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 25
     env:
-      TESTED_SHA: ${{ inputs.sha || github.event.pull_request.head.sha }}
+      TESTED_SHA: ${{ inputs.sha }}
       ACCEPT_BROWSER: msedge
+      READER_HARNESS_SHA: ${{ github.sha }}
     defaults:
       run:
         shell: pwsh
-        working-directory: supply-workbench
+        working-directory: app/supply-workbench
     steps:
-      - name: Validate requested SHA
+      - name: Validate application SHA
         working-directory: .
         run: |
-          if ($env:TESTED_SHA -cnotmatch '^[0-9a-f]{40}$') {
-            throw 'Expected a full lowercase commit SHA.'
-          }
+          if ($env:TESTED_SHA -cnotmatch '^[0-9a-f]{40}$') { throw 'Expected a full lowercase commit SHA.' }
       - uses: actions/checkout@v4
         env:
           GIT_CONFIG_COUNT: '2'
@@ -47,7 +37,13 @@ jobs:
           GIT_CONFIG_VALUE_1: 'true'
         with:
           ref: ${{ env.TESTED_SHA }}
+          path: app
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: diagnostics
+          persist-credentials: false
+          sparse-checkout: qa/reader
       - uses: pnpm/action-setup@v4
         with:
           version: 11.28.2
@@ -55,26 +51,37 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: supply-workbench/pnpm-lock.yaml
-      - name: Build the locked checkout with production settings
+          cache-dependency-path: app/supply-workbench/pnpm-lock.yaml
+      - name: Build the locked application checkout
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           if ((git rev-parse HEAD) -cne $env:TESTED_SHA) { throw 'Checkout SHA does not match.' }
           pnpm install --frozen-lockfile
           pnpm build
           pnpm --filter '@sw/web' build
-      - name: Run procurement browser acceptance against isolated PostgreSQL
+      - name: Prepare isolated Windows desktop and install NVDA
+        working-directory: .
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $tools = Join-Path $env:RUNNER_TEMP 'reader-tools'
+          New-Item -Type Directory $tools | Out-Null
+          npx -y --min-release-age=0 --ignore-scripts=false @guidepup/setup@0.29.3 setup --ci
+          npm install --prefix $tools --no-audit --no-fund --no-progress --save-exact @guidepup/guidepup@0.40.0
+          npx -y --min-release-age=0 --ignore-scripts=false @guidepup/setup@0.29.3 install
+          "READER_TOOLS=$tools" >> $env:GITHUB_ENV
+      - name: Verify both role paths using NVDA and headed Edge
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           if ($env:RUNNER_OS -ne 'Windows' -or -not $env:PGBIN) { throw 'Native Windows and PostgreSQL PGBIN are required.' }
-          $evidence = Join-Path $env:RUNNER_TEMP 'windows-acceptance'
-          "Tested SHA ``$env:TESTED_SHA``" >> $env:GITHUB_STEP_SUMMARY
-          pnpm exec node --experimental-strip-types e2e/native-acceptance.ts $env:TESTED_SHA $evidence
-      - name: Upload browser and runner evidence
+          $harness = Join-Path $env:GITHUB_WORKSPACE 'diagnostics/qa/reader/prepare.ps1'
+          & $harness
+          $evidence = Join-Path $env:RUNNER_TEMP 'reader-proof'
+          pnpm exec node --experimental-strip-types e2e/reader-native.ts $env:TESTED_SHA $evidence
+      - name: Upload NVDA speech, action log and browser provenance
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/windows-acceptance
+          name: follow-up-nvda-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/reader-proof
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
