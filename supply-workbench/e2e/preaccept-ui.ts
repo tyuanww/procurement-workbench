@@ -759,6 +759,13 @@ async function checkLocalImportSources({ page, importPath, drawer }: {
   await page.keyboard.press('Escape');
   await drawer.waitFor({ state: 'hidden' });
   await candidate.and(page.locator(':focus')).waitFor();
+  const recovered = page.url();
+  stale.searchParams.set('previewOa', '合成失效 OA');
+  await page.goto(stale.href);
+  await page.getByText('找不到链接中的来源记录。', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '清除来源定位', exact: true }).click();
+  await page.waitForURL((url) => !url.searchParams.has('source') && !url.searchParams.has('drawer'));
+  await page.goto(recovered);
 }
 
 async function checkImportOrderScope(page: Page, importPath: string) {
@@ -825,19 +832,29 @@ async function checkScopedImportNavigation({ page, importPath, importBatchId }: 
   const historyLink = page.getByRole('link', { name: workbookName, exact: true }).and(page.locator(`a[href^="${importPath}?"]`));
   await historyLink.press('Enter');
   const sourceTrigger = page.getByRole('button', { name: '核对本次导入来源', exact: true });
-  await sourceTrigger.press('Enter');
   const source = page.getByRole('dialog', { name: '核对本次导入来源', exact: true });
   const sourceLink = source.getByRole('link', { name: '查看本次实际关联的订单', exact: true });
+  await sourceTrigger.press('Enter');
+  await sourceLink.waitFor();
+  await page.keyboard.press('Escape');
+  await sourceTrigger.and(page.locator(':focus')).waitFor();
+  await page.goBack();
+  await page.waitForURL(historyUrl);
+  await historyLink.and(page.locator(':focus')).waitFor();
+  await historyLink.press('Enter');
+  await sourceTrigger.press('Enter');
   await sourceLink.waitFor();
   const sourceUrl = page.url();
   await sourceLink.press('Enter');
   await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === importBatchId);
   const scoped = new URL(page.url());
   const row = page.getByRole('link', { name: componentPo, exact: true });
+  await checkCopiedImportLine({ page, row, sourceUrl });
   await row.press('Enter');
   await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
   await page.waitForURL(scoped.href);
   await row.and(page.locator(':focus')).waitFor();
+  await checkArrivalDrawerKeepsScope(page, scoped.href);
 
   const search = page.getByLabel('搜索单号、品名或编码', { exact: true });
   await search.fill(componentPo);
@@ -865,7 +882,54 @@ async function checkScopedImportNavigation({ page, importPath, importBatchId }: 
   await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
   await page.waitForURL(historyUrl);
   await historyLink.and(page.locator(':focus')).waitFor();
-  return { savedViewKeepsScope: true, filterKeepsFocus: true, sourceAndHistoryFocus: true };
+  await checkTrailingSlashImportScope({ page, importPath, importBatchId });
+  return { savedViewKeepsScope: true, filterKeepsFocus: true, sourceAndHistoryFocus: true,
+    receiptDrawerKeepsOrigin: true, copiedDetailReturnsToBatch: true, trailingSlashKeepsScope: true, escapeThenBrowserBack: true };
+}
+
+async function checkArrivalDrawerKeepsScope(page: Page, scoped: string) {
+  await page.getByRole('button', { name: '到仓待归单', exact: true }).press('Enter');
+  const drawer = page.getByRole('dialog', { name: '到仓待归单', exact: true });
+  await drawer.getByRole('button', { name: '登记到仓', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await page.waitForURL(scoped);
+}
+
+async function checkCopiedImportLine({ page, row, sourceUrl }: { readonly page: Page; readonly row: Locator; readonly sourceUrl: string }) {
+  const href = await row.getAttribute('href');
+  assert.ok(href);
+  const detached = await page.context().newPage();
+  try {
+    await detached.goto(new URL(href, origin).href);
+    await detached.getByRole('heading', { name: componentPo, exact: true }).waitFor();
+    await detached.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
+    await detached.waitForURL(sourceUrl);
+    await detached.getByRole('dialog', { name: '核对本次导入来源' })
+      .getByRole('link', { name: '查看本次实际关联的订单', exact: true }).and(detached.locator(':focus')).waitFor();
+  } finally {
+    await detached.close();
+  }
+}
+
+async function checkTrailingSlashImportScope({ page, importPath, importBatchId }: {
+  readonly page: Page; readonly importPath: string; readonly importBatchId: string;
+}) {
+  const address = new URL(`${importPath}/?template=po-master-v1&status=committed`, origin);
+  await page.goto(address.href);
+  await page.getByRole('button', { name: '核对本次导入来源', exact: true }).press('Enter');
+  const source = page.getByRole('dialog', { name: '核对本次导入来源', exact: true });
+  const sourceLink = source.getByRole('link', { name: '查看本次实际关联的订单', exact: true });
+  await sourceLink.waitFor();
+  const sourceUrl = page.url();
+  assert.equal(new URL(sourceUrl).pathname, address.pathname);
+  await sourceLink.press('Enter');
+  await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === importBatchId);
+  await page.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
+  await page.waitForURL(sourceUrl);
+  await sourceLink.and(page.locator(':focus')).waitFor();
+  await page.keyboard.press('Escape');
+  await source.waitFor({ state: 'hidden' });
 }
 
 async function saveOtherBatchView(page: Page): Promise<string> {

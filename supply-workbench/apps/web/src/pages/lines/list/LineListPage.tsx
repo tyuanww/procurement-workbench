@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
-import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, type OrderLens } from '../../../features/follow-up/index.js';
+import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, useFollowUpSearch, type OrderLens } from '../../../features/follow-up/index.js';
 import { importFollowUpScope } from '../../../features/imports/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
@@ -27,12 +27,12 @@ import { closePartyPreview, openPartyPreview, readPartyPreview } from './party-p
 
 export { LineTable, type LineTableProps } from './line-table.js';
 
-type SearchSetter = ReturnType<typeof useSearchParams>[1];
+type SearchSetter = ReturnType<typeof useFollowUpSearch>[1];
 type Desk = ReturnType<typeof readDesk>;
 type ResultsRef = RefObject<HTMLDivElement | null>;
 
 export function LineListPage() {
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useFollowUpSearch();
   const { state } = useLocation();
   const canReadImports = useCan('imports.read');
   const lens = orderLensOf(params);
@@ -49,7 +49,7 @@ export function LineListPage() {
 }
 
 function OrderQuery() {
-  const [params, updateParams] = useSearchParams();
+  const [params, updateParams] = useFollowUpSearch();
   const location = useLocation();
   const importOrigin = importFollowUpScope(params) === null ? undefined : readImportBatchOriginState(location.state);
   const setParams: SearchSetter = (next, options) => updateParams(next, importOrigin === undefined ? options : { ...options, state: importOrigin });
@@ -74,7 +74,7 @@ function OrderQuery() {
   return (
     <>
       <LineTop search={search} desk={desk} setParams={setParams} views={viewChoices(userId)} userId={userId} setMessage={setMessage} picked={load.kind === 'ready' ? picked : []} users={users} isOwnerVisible={isOwnerVisible} buyerId={buyerId} setBuyerId={setBuyerId} onReload={refresh} setSkips={setSkips} density={density} hiddenKeys={hiddenKeys}
-        arrivalAction={<ArrivalDesk userId={userId} onMutated={refresh} />}
+        arrivalAction={<ArrivalDesk search={search} setParams={setParams} userId={userId} onMutated={refresh} />}
         onResults={() => results.current?.focus()}
       />
       <LineAlerts skips={skips} setSkips={setSkips} message={message} />

@@ -232,5 +232,28 @@ async function checkArrivalPagination(page: Page, origin: URL) {
   await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2');
   await preview.getByRole('cell', { name: '分页合成 21', exact: true }).waitFor();
   assert.equal(await pagination.evaluate((nav) => nav.contains(document.activeElement)), true, '翻页后焦点应留在确认到货日分页');
-  return { rows: rows.length, nextPageFocus: true };
+  await checkArrivalSourcePage(page, preview);
+  return { rows: rows.length, nextPageFocus: true, staleSourcePageRecovered: true, unavailableSourceCanClear: true };
+}
+
+async function checkArrivalSourcePage(page: Page, preview: ReturnType<Page['locator']>) {
+  const trigger = preview.getByRole('row').filter({ hasText: '分页合成 21' }).getByRole('button', { name: /^查看来源/u });
+  await trigger.press('Enter');
+  const drawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
+  await drawer.getByText(`${sheetName} 第 22 行`, { exact: true }).waitFor();
+  const correct = new URL(page.url());
+  const stale = new URL(correct);
+  stale.searchParams.delete('arrivalPage');
+  await page.goto(stale.href);
+  await drawer.getByText(`${sheetName} 第 22 行`, { exact: true }).waitFor();
+  await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2' && url.searchParams.get('source') === correct.searchParams.get('source'));
+  await page.keyboard.press('Escape');
+  await trigger.and(page.locator(':focus')).waitFor();
+
+  stale.searchParams.set('source', JSON.stringify(['arrival', sheetName, 999]));
+  await page.goto(stale.href);
+  await page.getByText('找不到链接中的来源记录。', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '清除来源定位', exact: true }).click();
+  await page.waitForURL((url) => !url.searchParams.has('source') && !url.searchParams.has('drawer'));
+  await preview.getByRole('cell', { name: '分页合成 20', exact: true }).waitFor();
 }

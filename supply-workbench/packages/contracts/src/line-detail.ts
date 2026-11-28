@@ -6,7 +6,7 @@ import {
   FollowUpViewSchema,
   OrderLineRowSchema,
 } from './follow-up-views.js';
-import { comboPayload, demandPayload, inTransitPayload, schedulePayload, shipmentPayload, stockPayload } from './factory-payloads.js';
+import { comboPayload, demandPayload, demandSlot, inTransitPayload, schedulePayload, shipmentPayload, stockPayload } from './factory-payloads.js';
 import { LinkStatusSchema, PoFormatSchema } from './enums.js';
 import { ItemCodeViewSchema } from './master-views.js';
 import { ProcurementScheduleViewSchema } from './procurement-schedule.js';
@@ -55,6 +55,12 @@ export const OrderLineDetailSchema: z.ZodType<OrderLineDetail> = strictObject({
   batches: z.array(BatchViewSchema),
   sourceFiles: optional(z.record(z.string(), z.string())),
   archivedShipmentSources: optional(z.array(report('shipment', shipmentPayload))),
+  batchDemandSources: optional(z.record(z.string(), strictObject({
+    importBatchId: z.string(),
+    sheetName: z.string(),
+    rowNo: z.number(),
+    slot: demandSlot.pick({ index: true, dateRaw: true, qtyRaw: true, sourceColumns: true }),
+  }))),
   factoryReports: strictObject({
     inTransit: z.array(report('in_transit', inTransitPayload)),
     shipments: z.array(report('shipment', shipmentPayload)),

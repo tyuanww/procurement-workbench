@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import type { Locator, Page } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 import { checkHomeRiskFollowUp } from './home-risk-follow-up-acceptance.ts';
+import { checkLargeHomeRiskGroup } from './home-risk-large-group-acceptance.ts';
 
 const store = 'dafuyan';
 const materialPo = 'PO20261117009103';
@@ -79,11 +80,14 @@ export async function checkFollowUpDelivery({ page, buyer, origin, out, warehous
   const before = await chronologicalCount(page, daily);
   const due = items.find((line) => line.lane === 'finished' && line.id !== late.id && line.nextDue === null);
   assert.ok(due);
+  const dueBatches: string[] = [];
   for (const offset of [-2, -1]) {
-    await seedBatch(buyer, origin, { lineId: due.id, warehouse, dateBuyerConfirmed: businessDate(offset) });
+    const batch = await seedBatch(buyer, origin, { lineId: due.id, warehouse, dateBuyerConfirmed: businessDate(offset) });
+    dueBatches.push(batch.id);
   }
   const after = await chronologicalCount(page, daily);
   assert.equal(after - before, 1);
+  await checkRiskPageReturn({ page, daily, today, lineId: late.id, batchId: lateBatch.id });
   const address = new URL(daily);
   address.searchParams.set('riskDate', today);
   for (const id of [material.id, late.id]) address.searchParams.append('riskLine', id);
@@ -101,9 +105,104 @@ export async function checkFollowUpDelivery({ page, buyer, origin, out, warehous
   assert.equal(await page.getByRole('region', { name: '按店铺交付结果' }).count(), 0);
   const homeRisk = await checkHomeRiskFollowUp({ page, origin, out, material: { id: material.id, po: materialPo },
     finished: { id: late.id, batch: lateBatch, arrivalDate: tomorrow } });
+  await checkDailyReturn({ page: buyer, daily, lineId: due.id, batches: dueBatches, newDate: tomorrow });
+  const largeRiskGroup = await checkLargeHomeRiskGroup({ page, origin });
   return { source: finished.id, material: material.id, relatedFinished: 3, views: [1440, 320],
-    wideAndNarrowReturnFocus: true, explicitlySelectedDetailIds: [...visitedDetails],
-    originalRiskRows: [material.id, late.id], chronologicalOpenOverdueRowsBefore: before, chronologicalOpenOverdueRowsAfter: after, homeRisk };
+    wideAndNarrowReturnFocus: true, secondRiskPageReturnFocus: true, dailyReturnFocusAndFallback: true, explicitlySelectedDetailIds: [...visitedDetails],
+    originalRiskRows: [material.id, late.id], chronologicalOpenOverdueRowsBefore: before, chronologicalOpenOverdueRowsAfter: after, homeRisk, largeRiskGroup };
+}
+
+async function checkRiskPageReturn({ page, daily, today, lineId, batchId }: {
+  readonly page: Page; readonly daily: URL; readonly today: string; readonly lineId: string; readonly batchId: string;
+}) {
+  const address = new URL(daily);
+  address.searchParams.set('riskDate', today);
+  const ids = Array.from({ length: 50 }, (_, index) => `synthetic-risk-${index + 1}`);
+  for (const id of [...ids, lineId]) address.searchParams.append('riskLine', id);
+  const riskListing = (url: URL) => url.pathname === '/api/v1/lines' && url.searchParams.getAll('lineIds').includes(ids[0] ?? '');
+  let isSourceVisible = true;
+  const addSyntheticRows = async (route: Route) => {
+    const response = await route.fetch();
+    assert.ok(response.ok(), await response.text());
+    const { items, page: pagination }: { items: readonly ScopedLine[]; page: { page: number; pageSize: number; total: number } } = await response.json();
+    const real = items.find((line) => line.id === lineId);
+    assert.ok(real, '第 2 页需使用可打开真实详情的隔离库订单');
+    const synthetic = ids.map((id) => ({ ...real, id, po: { ...real.po, poRaw: id } }));
+    const displayed = isSourceVisible ? [...synthetic, real] : synthetic;
+    await route.fulfill({ response, json: { items: displayed, page: { ...pagination, total: displayed.length } } });
+  };
+  await page.route(riskListing, addSyntheticRows);
+  try {
+    for (const width of [1440, 320]) {
+      await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
+      await page.goto(address.href);
+      const results = page.getByRole('region', { name: '首页交期风险结果' });
+      await results.getByText('51 条订单行', { exact: true }).waitFor();
+      const target = results.locator(`tr[data-row-key="${lineId}"]`).getByRole('link');
+      assert.equal(await target.count(), 0);
+      await results.getByText('2', { exact: true }).click();
+      await target.waitFor();
+      for (const fromButton of [true, false]) {
+        await target.press('Enter');
+        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
+        if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
+        else await page.goBack();
+        await results.getByText('51 条订单行', { exact: true }).waitFor();
+        assert.equal(new URL(page.url()).searchParams.get('page'), '2', '从订单详情返回应保留交期风险第 2 页');
+        await target.and(page.locator(':focus')).waitFor();
+      }
+      if (width === 320) {
+        await target.press('Enter');
+        isSourceVisible = false;
+        await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
+        await results.getByText('当前页找不到原记录入口，已保留查询。', { exact: true }).waitFor();
+        await results.and(page.locator(':focus')).waitFor();
+        assert.equal(new URL(page.url()).searchParams.get('page'), '2');
+      }
+    }
+  } finally {
+    await page.unroute(riskListing, addSyntheticRows);
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+}
+
+async function checkDailyReturn({ page, daily, lineId, batches, newDate }: {
+  readonly page: Page; readonly daily: URL; readonly lineId: string; readonly batches: readonly string[]; readonly newDate: string;
+}) {
+  const address = new URL(daily);
+  address.searchParams.set('drill', 'overdue');
+  const results = page.getByRole('region', { name: '按店铺交付结果' });
+  const row = results.locator(`tr[data-row-key="${lineId}"]`);
+  const order = row.getByRole('link').first();
+  const overdue = row.getByRole('link', { name: /^查看逾期批次/u });
+  const note = row.getByRole('link', { name: '查看订单行详情', exact: true });
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height: width === 320 ? 667 : 900 });
+    await page.goto(address.href);
+    const sources = [{ link: order, batchId: null }, { link: overdue, batchId: batches[0] }];
+    if (width === 1440) sources.push({ link: note, batchId: null });
+    for (const { link, batchId } of sources) {
+      for (const fromButton of [true, false]) {
+        await link.press('Enter');
+        await page.waitForURL((url) => decodeURIComponent(url.pathname) === `/lines/${lineId}` && url.searchParams.get('focusBatch') === batchId);
+        if (fromButton) await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
+        else await page.goBack();
+        await page.waitForURL(address.href);
+        await link.and(page.locator(':focus')).waitFor();
+      }
+    }
+  }
+  await overdue.press('Enter');
+  for (const id of batches) {
+    const saved = await page.request.patch(new URL(`/api/v1/batches/${encodeURIComponent(id)}`, daily).href,
+      { data: { dateBuyerConfirmed: newDate, reason: '隔离验收更新确认到货日' } });
+    assert.ok(saved.ok(), await saved.text());
+  }
+  await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
+  await page.waitForURL(address.href);
+  await results.getByText('当前页找不到原记录入口，已保留筛选。', { exact: true }).waitFor();
+  await results.and(page.locator(':focus')).waitFor();
+  assert.equal(await row.count(), 0);
 }
 
 function rowDetails(requests: readonly URL[]): string[] {

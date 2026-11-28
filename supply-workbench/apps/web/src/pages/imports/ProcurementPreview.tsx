@@ -4,9 +4,9 @@ import { Alert, Button, Card, Collapse, Flex, Select, Table, Tag, Typography } f
 import type { TableProps } from 'antd';
 import { ProcurementPreviewSelectionSchema, UNLINKED_PROCUREMENT, type ImportBatchSummary, type ProcurementPreviewSelection, type ProcurementReviewReason } from '@sw/contracts';
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
-import { ImportSourceButton, ImportSourceDrawer, sourceText, type ImportSourceRecord } from './ImportSourceDrawer.js';
-import { importSourceKey, importSourceQuery, previewPage, useImportSource, type ImportSourceState } from './import-source.js';
-import { sourceKey, sourcePagePatch, sourcePageSizes, visibleProcurement, type ComponentRow, type FinishedSummary, type SourceTable } from './procurement-preview-model.js';
+import { ImportSourceButton, ImportSourceDrawer, sourceText, UnavailableImportSource, type ImportSourceRecord } from './ImportSourceDrawer.js';
+import { importSourceKey, importSourceQuery, useImportSource, type ImportSourceState } from './import-source.js';
+import { rowSourceInOa, sourceKey, sourcePagePatch, sourcePageSizes, sourcePagination, switchPreviewOa, visibleProcurement, type ComponentRow, type FinishedSummary, type SourceTable } from './procurement-preview-model.js';
 
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 const label = { active: '项目表', completed: '已完结表', direct: '编号关联', shared: '共用子件', group: '同 OA 分组', candidate: '仅商品码候选' } as const;
@@ -79,16 +79,14 @@ function ProcurementSelection({ summary, preview, source }: {
             aria-label="OA 需求编号"
             showSearch={{ optionFilterProp: 'label' }}
             value={preview.oa}
-            onChange={(oa) => source.update({
-              [importSourceQuery.oa]: oa === '' ? '~' : oa, [importSourceQuery.finished]: null,
-              [importSourceQuery.component]: null, [importSourceQuery.candidate]: null, candidates: null,
-            })}
+            onChange={(oa) => switchPreviewOa(source, oa)}
             options={options}
             style={{ width: 245, maxWidth: '100%' }}
           />
           <Typography.Text>成品 {current.rows.length} 条 · 总表 PO {current.poCount} 个</Typography.Text>
         </Flex>
-        <SelectionTables isUnlinked={preview.oa === UNLINKED_PROCUREMENT} current={current} hasSubmission={preview.submission !== undefined} source={source} />
+        <SelectionTables isUnlinked={preview.oa === UNLINKED_PROCUREMENT} current={current} hasSubmission={preview.submission !== undefined} source={rowSourceInOa(source, preview.oa)} />
+        {selected === null && hasRowSource(source.sourceKey) ? <UnavailableImportSource onClear={source.close} /> : null}
         <ImportSourceDrawer source={source} record={patch === null ? selected?.record ?? null : null} fileName={summary.file.originalName} />
     </Flex>
   );
@@ -203,12 +201,8 @@ function SourceCell({ source, kind, location, primary, note, po }: {
   </Flex>;
 }
 
-function sourcePagination({ source, table }: { readonly source: ImportSourceState; readonly table: SourceTable }) {
-  const key = importSourceQuery[table];
-  return {
-    pageSize: sourcePageSizes[table], current: previewPage(source.params, key), hideOnSinglePage: true,
-    onChange: (page: number) => source.update({ [key]: page === 1 ? null : String(page) }, true),
-  };
+function hasRowSource(key: string | null) {
+  return key !== null && key !== 'batch';
 }
 
 function selectedRecord({ current, key, summary, isCommitted }: {
@@ -240,6 +234,7 @@ function finishedRecord({ key, row, importId, isCommitted }: {
   readonly importId: string;
   readonly isCommitted: boolean;
 }): ImportSourceRecord {
+  const localText = isCommitted ? '这行没有已确认的关联订单。' : '这条记录仅供当前导入核对。';
   return {
     key, location: row.source,
     items: [
@@ -249,7 +244,7 @@ function finishedRecord({ key, row, importId, isCommitted }: {
     ],
     result: isCommitted && row.orderLineId !== undefined
       ? { kind: 'order', importId, lineId: row.orderLineId }
-      : { kind: 'local', text: isCommitted ? '这行没有已确认的关联订单。' : '这条记录仅供当前导入核对。' },
+      : { kind: 'local', text: localText },
   };
 }
 

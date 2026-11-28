@@ -9,14 +9,24 @@ export function importFollowUpScope(params: URLSearchParams): ReturnType<typeof 
 }
 
 export function importFollowUpBackAddress(value: string | null): { readonly id: string; readonly to: string; readonly recordKey: string } | null {
-  if (value === null || !value.startsWith('/imports/')) return null;
+  if (value === null) return null;
   const separator = value.indexOf('?');
   if (separator === -1 || value.includes('#')) return null;
-  const pathname = value.slice(0, separator);
-  if (!/^\/imports\/[a-z\d_-]+$/iu.test(pathname)) return null;
-  const id = EntityIdSchema.safeParse(pathname.slice('/imports/'.length)).data;
+  const id = importRouteId(value.slice(0, separator));
   const query = new URLSearchParams(value.slice(separator));
   const recordKey = query.get('source');
   if (id === undefined || query.get('drawer') !== IMPORT_SOURCE_DRAWER || recordKey === null || recordKey === '') return null;
   return { id, to: value, recordKey };
+}
+
+function importRouteId(pathname: string): string | undefined {
+  const encoded = /^\/imports\/([^/\\\s]+)\/?$/u.exec(pathname)?.[1];
+  if (encoded === undefined) return undefined;
+  try {
+    const id = decodeURIComponent(encoded);
+    if (id.trim() === '' || id === '.' || id === '..' || /[/\\\p{Cc}]|%2f/iu.test(id)) return undefined;
+    return EntityIdSchema.safeParse(id).data;
+  } catch {
+    return undefined;
+  }
 }

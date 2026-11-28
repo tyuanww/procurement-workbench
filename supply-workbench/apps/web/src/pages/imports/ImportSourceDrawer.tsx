@@ -30,6 +30,11 @@ export function ImportSourceButton({ source, recordKey, label }: {
   </Button>;
 }
 
+export function UnavailableImportSource({ onClear }: { readonly onClear: () => void }) {
+  return <Alert type="info" title="找不到链接中的来源记录。"
+    action={<Button onClick={onClear}>清除来源定位</Button>} />;
+}
+
 export function ImportSourceDrawer({ source, record, fileName }: {
   readonly source: ImportSourceState;
   readonly record: ImportSourceRecord | null;

@@ -152,12 +152,43 @@ async function sourceEvidence(db: AppDatabase, { lineId, batches, snapshot, repo
   readonly snapshot: OrderLineDetail['snapshot'];
   readonly reports: OrderLineDetail['factoryReports'];
 }) {
-  const archivedShipmentSources = await archivedShipments(db, { lineId, batches, current: reports.shipments });
+  const [archivedShipmentSources, batchDemandSources] = await Promise.all([
+    archivedShipments(db, { lineId, batches, current: reports.shipments }),
+    batchDemandSourcesOf(db, { batches, current: reports.demand }),
+  ]);
   const sourceFiles = await sourceFileNames(db, [
     snapshot?.importBatchId,
     ...[...reports.demand, ...reports.inTransit, ...reports.shipments, ...archivedShipmentSources].map((row) => row.importBatchId),
+    ...Object.values(batchDemandSources).map((source) => source.importBatchId),
   ]);
-  return { sourceFiles, archivedShipmentSources };
+  return { sourceFiles, archivedShipmentSources, batchDemandSources };
+}
+
+async function batchDemandSourcesOf(db: AppDatabase, { batches, current }: {
+  readonly batches: OrderLineDetail['batches'];
+  readonly current: OrderLineDetail['factoryReports']['demand'];
+}): Promise<NonNullable<OrderLineDetail['batchDemandSources']>> {
+  const origins = batches.flatMap(({ id, origin, originRef }) =>
+    origin === 'from_factory_demand' && originRef !== null ? [{ batchId: id, ...originRef }] : [],
+  );
+  if (origins.length === 0) return {};
+  const byId = new Map(current.map((row) => [row.id, row]));
+  const missing = [...new Set(origins.map(({ rowId }) => rowId).filter((id) => !byId.has(id)))];
+  if (missing.length > 0) {
+    const rows = await db.select().from(factoryMaterialDemandRows).where(inArray(factoryMaterialDemandRows.id, missing));
+    for (const row of rows) byId.set(row.id, demandOf(row));
+  }
+  return Object.fromEntries(origins.flatMap(({ batchId, rowId, slotIndex }) => {
+    const row = byId.get(rowId);
+    if (row?.payload.role !== 'material') return [];
+    const slot = row.payload.slots.find(({ index }) => index === slotIndex);
+    if (slot === undefined) return [];
+    const { importBatchId, sheetName, rowNo } = row;
+    const { index, dateRaw, qtyRaw, sourceColumns } = slot;
+    return [[batchId, { importBatchId, sheetName, rowNo, slot: {
+      index, dateRaw, qtyRaw, ...(sourceColumns === undefined ? {} : { sourceColumns }),
+    } }] as const];
+  }));
 }
 
 async function archivedShipments(db: AppDatabase, { lineId, batches, current }: {

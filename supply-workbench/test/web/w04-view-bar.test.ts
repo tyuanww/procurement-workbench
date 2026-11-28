@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { presetViews, readDesk } from '../../apps/web/src/features/follow-up/index.js';
+import { importFollowUpScope } from '../../apps/web/src/features/imports/index.js';
 import { LineTable } from '../../apps/web/src/pages/lines/list/LineListPage.js';
 import { LineViewBar, clearFiltersAddress, exportAddress, filterSignature, isViewModified, readDensity, readHiddenColumns, saveAddress, toggleColumn, viewAddress, visibleColumns } from '../../apps/web/src/pages/lines/list/view-bar.js';
 
@@ -114,6 +115,19 @@ describe('已修改状态', () => {
     expect(new URLSearchParams(requestQuery).get('importBatchId')).toBe(activeId);
     expect(new URLSearchParams(requestQuery).get('stages')).toBe('no_batch');
     expect(new URL(exportAddress({ query: requestQuery, columns: COLUMNS }), 'http://localhost').searchParams.get('importBatchId')).toBe(activeId);
+  });
+
+  it('接受导入批次尾斜杠与编码标识，拒绝错批次和非批次路径', () => {
+    const query = '?drawer=import-source&source=batch';
+    const scope = (route: string, id = 'batch+a=b') =>
+      importFollowUpScope(new URLSearchParams({ importBatchId: id, backToImport: route + query }));
+    for (const route of ['/imports/batch%2Ba%3Db', '/imports/batch%2Ba%3Db/', '/imports/batch+a=b/']) {
+      expect(scope(route)).toEqual({ id: 'batch+a=b', to: route + query, recordKey: 'batch' });
+    }
+    expect(scope('/imports/batch%2Ba%3Db/', 'different')).toBeNull();
+    for (const route of ['/imports/%2Fetc', '/imports/%2E%2E', '/imports/%5Cwrong', '/imports/%ZZ', '//host/imports/batch+a=b']) {
+      expect(scope(route)).toBeNull();
+    }
   });
 
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {

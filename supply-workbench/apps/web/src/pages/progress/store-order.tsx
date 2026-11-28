@@ -47,16 +47,15 @@ export function ProgressOaFilter(props: {
 
 export type ProgressOrderOrigin = 'progress' | 'delivery';
 
-export function scopedLineLink(id: string, { search, store, focusLine, focusBatch, origin = 'progress' }: {
+export function scopedLineLink(id: string, { search, store, focusLine, focusBatch }: {
   readonly search: string;
   readonly store: ProcurementStore | undefined;
   readonly focusLine?: string;
   readonly focusBatch?: string;
-  readonly origin?: ProgressOrderOrigin;
 }): string {
   const fromProgress = new URLSearchParams(search);
   if (focusLine !== undefined) fromProgress.set('focusLine', focusLine);
-  const params = new URLSearchParams({ [origin === 'delivery' ? 'backToDelivery' : 'backToProgress']: fromProgress.toString() });
+  const params = new URLSearchParams({ backToProgress: fromProgress.toString() });
   if (store !== undefined) params.set('store', store);
   if (focusBatch !== undefined) params.set('focusBatch', focusBatch);
   return `/lines/${encodeURIComponent(id)}?${params.toString()}`;

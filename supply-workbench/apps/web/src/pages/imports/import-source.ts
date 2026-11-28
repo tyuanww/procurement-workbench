@@ -25,7 +25,7 @@ export function useImportSource() {
   return {
     params, to: pathname + search,
     sourceKey: params.get('drawer') === IMPORT_SOURCE_DRAWER ? params.get('source') : null,
-    open: (key: string) => update({ drawer: IMPORT_SOURCE_DRAWER, source: key }),
+    open: (key: string, patch?: Record<string, string | null>) => update({ ...patch, drawer: IMPORT_SOURCE_DRAWER, source: key }, true),
     close: () => update({ drawer: null, source: null }, true),
     update,
   };
@@ -56,9 +56,11 @@ export function importFollowUpReturn({ params, state, scoped = false }: {
   const back = scoped ? importFollowUpScope(params) : importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
   if (back === null) return null;
   const focus = detailReturnState(state, { detailPath: back.to, sourceLink: importSourceTriggerId(back.recordKey) });
+  const origin = importBatchOrigin(state);
+  const productOrigin = typeof origin === 'object' && origin !== null && 'productOrigin' in origin ? { productOrigin: origin.productOrigin } : undefined;
   return {
     to: back.to,
     label: '返回导入批次',
-    state: { ...focus, importBatchOrigin: importBatchOrigin(state) },
+    state: { ...focus, importBatchOrigin: origin, ...productOrigin },
   };
 }

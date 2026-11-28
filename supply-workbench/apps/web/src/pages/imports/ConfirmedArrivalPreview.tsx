@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Skeleton, Table, Typography, type TableProps } from 'antd';
 import { ConfirmedArrivalPayloadSchema, ImportRowViewSchema, listResponseSchema, type ImportBatchSummary, type ImportRowView } from '@sw/contracts';
 import { importActionLabel } from '@sw/domain';
+import { z } from 'zod';
 import { apiGetWithSignal } from '../../shared/api/client.js';
 import { space } from '../../theme/tokens.js';
 import { ImportPagination } from './ImportPagination.js';
-import { ImportSourceButton, ImportSourceDrawer, sourceText, type ImportSourceRecord } from './ImportSourceDrawer.js';
+import { ImportSourceButton, ImportSourceDrawer, sourceText, UnavailableImportSource, type ImportSourceRecord } from './ImportSourceDrawer.js';
 import { importSourceKey, importSourceQuery, previewPage, useImportSource, type ImportSourceState } from './import-source.js';
 
 const PAGE_SIZE = 20;
 const rowsSchema = listResponseSchema(ImportRowViewSchema);
+const arrivalSourceKeySchema = z.tuple([z.literal('arrival'), z.string(), z.number().int().positive()]);
 type Row = ReturnType<typeof readRow>;
 type ArrivalDate = ReturnType<typeof ConfirmedArrivalPayloadSchema.parse>['date'];
 type Load =
@@ -70,23 +72,44 @@ function BatchCheck({ row }: { readonly row: Row }) {
 export function ConfirmedArrivalPreview({ summary }: { readonly summary: ImportBatchSummary }) {
   const source = useImportSource();
   const page = previewPage(source.params, importSourceQuery.arrival);
-  const { load, total, retry } = useArrivalRows({ id: summary.id, revision: summary.revision, page });
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const visiblePage = Math.min(page, lastPage);
-  const isOutside = load?.kind === 'ready' && page !== visiblePage;
+  const readPage = arrivalSourcePage(source.sourceKey) ?? page;
+  const { load, total, retry } = useArrivalRows({ id: summary.id, revision: summary.revision, page: readPage });
+  const { selected, visiblePage, isOutside, isUnavailable, canShowPage } = arrivalSelection({ load, total, page, readPage, sourceKey: source.sourceKey });
   useEffect(() => {
     if (isOutside) changeArrivalPage(source, visiblePage);
   }, [isOutside, source, visiblePage]);
-  const current = isOutside ? null : load;
-  const selected = current?.kind === 'ready' ? current.rows.find((row) => importSourceKey('arrival', row) === source.sourceKey) : undefined;
   return (
     <Card title="确认到货日预览">
-      <ArrivalResults load={current} source={source} onRetry={retry} />
-      <ImportPagination label="确认到货日明细分页" page={visiblePage} pageSize={PAGE_SIZE} total={total}
-        onChange={(value) => changeArrivalPage(source, value)} />
+      {isUnavailable ? <UnavailableImportSource onClear={source.close} /> : null}
+      {canShowPage ? <>
+        <ArrivalResults load={isOutside ? null : load} source={source} onRetry={retry} />
+        <ImportPagination label="确认到货日明细分页" page={visiblePage} pageSize={PAGE_SIZE} total={total}
+          onChange={(value) => changeArrivalPage(source, value)} />
+      </> : null}
       <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
     </Card>
   );
+}
+
+function arrivalSourcePage(sourceKey: string | null): number | undefined {
+  if (sourceKey === null) return undefined;
+  try {
+    const key = arrivalSourceKeySchema.safeParse(JSON.parse(sourceKey)).data;
+    // The confirmed-arrival template stores the original rows from line two onward, including blank rows.
+    return key === undefined ? undefined : Math.max(1, Math.floor((key[2] - 2) / PAGE_SIZE) + 1);
+  } catch {
+    return undefined;
+  }
+}
+
+function arrivalSelection({ load, total, page, readPage, sourceKey }: {
+  readonly load: Load | null; readonly total: number; readonly page: number; readonly readPage: number; readonly sourceKey: string | null;
+}) {
+  const isReady = load?.kind === 'ready';
+  const selected = isReady ? load.rows.find((row) => importSourceKey('arrival', row) === sourceKey) : undefined;
+  const visiblePage = Math.min(selected === undefined ? page : readPage, Math.max(1, Math.ceil(total / PAGE_SIZE)));
+  const isUnavailable = isReady && sourceKey !== null && selected === undefined;
+  return { selected, visiblePage, isOutside: isReady && page !== visiblePage, isUnavailable, canShowPage: !isUnavailable || readPage === page };
 }
 
 function useArrivalRows({ id, revision, page }: Pick<ImportBatchSummary, 'id' | 'revision'> & { readonly page: number }) {
