@@ -3,17 +3,27 @@ import { Link, useInRouterContext, useLocation, useSearchParams } from 'react-ro
 import { currentProgressPath, planningLabels, planningScope, planningSectionOf, schedulePath, scheduleWorkspaceBack } from '../../../features/progress/index.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday, deliveryBackAddress } from '../../../features/follow-up/index.js';
+import { importFollowUpScope } from '../../../features/imports/index.js';
 import { legacyPersonalPath, todayArrivalsPath } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
+import { readImportBatchOriginState } from '../../imports/import-source.js';
 
-export function LineDetailLink(props: { readonly href: string; readonly search: string; readonly children: ReactNode }) {
-  const isRouted = useInRouterContext();
-  if (!isRouted) return <a href={props.href}>{props.children}</a>;
-  return <Link to={props.href} state={{ lineDeskSearch: props.search }}>{props.children}</Link>;
+type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode };
+
+export function LineDetailLink(props: LineDetailLinkProps) {
+  return useInRouterContext() ? <RoutedLineDetailLink {...props} /> : <a href={props.href}>{props.children}</a>;
+}
+
+function RoutedLineDetailLink({ href, search, children }: LineDetailLinkProps) {
+  const { state } = useLocation();
+  const origin = readImportBatchOriginState(state);
+  const scope = origin === undefined ? null : importFollowUpScope(new URLSearchParams(search));
+  return <Link to={href} state={{ lineDeskSearch: search, ...(scope === null ? undefined : origin) }}>{children}</Link>;
 }
 
 type PlanningReturnState = NonNullable<ReturnType<typeof detailReturnState>> & { readonly scheduleTaskOrigin?: unknown };
-export type DetailBack = { readonly to: string; readonly label: string; readonly state?: { readonly lineDeskFocus: string }
+type LineDeskReturnState = { readonly lineDeskFocus: string; readonly importBatchOrigin?: unknown };
+export type DetailBack = { readonly to: string; readonly label: string; readonly state?: LineDeskReturnState
   | { readonly todayPendingId: string } | { readonly todayArrivalId: string } | PlanningReturnState };
 
 type BackSource = {
@@ -41,7 +51,7 @@ export function lineDetailBack(input: BackSource): DetailBack | null {
   if (today !== null) return today;
   if (input.todayBatch) return { to: `${todayArrivalsPath}&focusBatch=${encodeURIComponent(input.todayBatch)}`, label: '返回在途待收' };
   const to = lineDeskAddress(input.state);
-  if (to !== null) return { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId } };
+  if (to !== null) return { to, label: '返回跟进中心', state: { lineDeskFocus: input.lineId, ...readImportBatchOriginState(input.state) } };
   return typeof input.schedule === 'string' ? scheduleBack(new URLSearchParams(input.schedule), input.state) : null;
 }
 

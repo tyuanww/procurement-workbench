@@ -1,5 +1,5 @@
 import { useLocation, useSearchParams } from 'react-router';
-import { IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, importFollowUpBackAddress } from '../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, IMPORT_SOURCE_DRAWER, importFollowUpBackAddress, importFollowUpScope } from '../../features/imports/index.js';
 import { detailReturnState } from '../../shared/hooks/detail-return-focus.js';
 import { writeUrlState } from '../../shared/hooks/url-state.js';
 
@@ -39,7 +39,13 @@ export function previewPage(params: URLSearchParams, key: string): number {
 }
 
 export function importBatchOrigin(state: unknown): unknown {
-  return typeof state === 'object' && state !== null && 'importBatchOrigin' in state ? state.importBatchOrigin : state;
+  const origin = readImportBatchOriginState(state);
+  return origin === undefined ? state : origin.importBatchOrigin;
+}
+
+export function readImportBatchOriginState(state: unknown): { readonly importBatchOrigin: unknown } | undefined {
+  if (typeof state !== 'object' || state === null || !('importBatchOrigin' in state)) return undefined;
+  return { importBatchOrigin: state.importBatchOrigin };
 }
 
 export function importFollowUpReturn({ params, state, scoped = false }: {
@@ -47,8 +53,8 @@ export function importFollowUpReturn({ params, state, scoped = false }: {
   readonly state: unknown;
   readonly scoped?: boolean;
 }) {
-  const back = importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
-  if (back === null || (scoped && params.get('importBatchId') !== back.id)) return null;
+  const back = scoped ? importFollowUpScope(params) : importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
+  if (back === null) return null;
   const focus = detailReturnState(state, { detailPath: back.to, sourceLink: importSourceTriggerId(back.recordKey) });
   return {
     to: back.to,

@@ -1,5 +1,5 @@
 import { DELIVERY_QUERY_PARAM } from '../../../features/follow-up/index.js';
-import { IMPORT_RETURN_PARAM } from '../../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpScope } from '../../../features/imports/index.js';
 import { Button, Checkbox, Popover, Tag } from 'antd';
 import type { CSSProperties, ReactNode } from 'react';
 import { LINE_DESK_PINNED_KEY } from '@sw/domain';
@@ -98,7 +98,9 @@ export function viewAddress(input: { readonly search: string; readonly view: Sav
   const current = new URLSearchParams(input.search);
   if (input.view.preserveLane === true) copyParam({ from: current, to: next, key: 'lane' });
   else if (!next.has('lane')) next.set('lane', 'all');
-  if (!next.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
+  const scope = importFollowUpScope(current);
+  if (scope !== null) next.set('importBatchId', scope.id);
+  else if (!next.has('importBatchId')) copyParam({ from: current, to: next, key: 'importBatchId' });
   copyParam({ from: current, to: next, key: IMPORT_RETURN_PARAM });
   copyParam({ from: current, to: next, key: DENSITY_PARAM });
   copyParam({ from: current, to: next, key: HIDDEN_PARAM });

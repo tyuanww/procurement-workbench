@@ -150,7 +150,9 @@ async function procurementAcceptance(): Promise<void> {
   const { page: admin } = await open('admin', '/', '/settings');
   result.checks.importReviewNavigation = await checkImportReviewNavigation({ admin, buyer, lead, manager, reviewer, origin });
   result.checks.poMasterTemplate = await checkPoMasterTemplate({ page: buyer, origin, out, xlsx });
-  result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse });
+  result.checks.confirmedArrivalDownload = await checkConfirmedArrivalDownload({ page: buyer, devtools: buyerDevtools, browser, headless, origin, out, warehouse,
+    expectSourceFailure: (path, status) => { expectedFailures.push({ role: 'buyer', path, status }); },
+  });
   result.checks.factoryLinkBoard = await checkFactoryLinkBoard({ reviewer, openAdmin: async () => (await open('admin', '/master?tab=factory-link')).page, origin, out });
   seedDemoFixture(new URL('../fixtures/demo/frontend-closeout.sql', import.meta.url));
   result.checks.importFactoryDetail = await checkImportFactoryDetail(admin, origin);
@@ -722,7 +724,7 @@ async function checkProcurementImport(page: Page): Promise<string> {
   await page.waitForURL(`**${importPath}?template=po-master-v1&status=committed`);
   result.checks.procurementImport = { workbookName, importPath, componentPath, componentCode, componentPo, linkedFinished: 3, followUp: memo,
     sourceUrl, previewStaysLocal: true, drawerEscapeFocus: true, browserBackFocus: true, explicitBackFocus: true,
-    widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedAndHistoricalStayLocal: true };
+    widths: [1440, 320], sourceRequests: requestedLines, sourceRetry: true, unmatchedAndHistoricalStayLocal: true, candidateDeepLinkFocus: true };
   return importPath;
 }
 
@@ -745,6 +747,18 @@ async function checkLocalImportSources({ page, importPath, drawer }: {
     await page.keyboard.press('Escape');
     await trigger.and(page.locator(':focus')).waitFor();
   }
+  const candidate = page.getByRole('button', { name: /查看来源.*99010007/u });
+  await candidate.press('Enter');
+  await drawer.getByText('缺少已确认的成品关联', { exact: false }).waitFor();
+  const stale = new URL(page.url());
+  stale.searchParams.delete('candidates');
+  stale.searchParams.set('candidatePage', '2');
+  await page.goto(stale.href);
+  await page.waitForURL((url) => url.searchParams.has('candidates') && !url.searchParams.has('candidatePage'));
+  await drawer.getByText('缺少已确认的成品关联', { exact: false }).waitFor();
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  await candidate.and(page.locator(':focus')).waitFor();
 }
 
 async function checkImportOrderScope(page: Page, importPath: string) {
@@ -798,7 +812,73 @@ async function checkImportOrderScope(page: Page, importPath: string) {
   await orderLink.click();
   await page.waitForURL((url) => url.pathname === '/lines' && matchesScope(url));
   await checkImportedNoBatchView(page, matchesScope);
-  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true };
+  const scopedNavigation = await checkScopedImportNavigation({ page, importPath, importBatchId });
+  return { importBatchId, total, batchCountBefore, batchCountAfter, exported: rows.length, noBatchViewKeepsScope: true, scopedNavigation };
+}
+
+async function checkScopedImportNavigation({ page, importPath, importBatchId }: {
+  readonly page: Page; readonly importPath: string; readonly importBatchId: string;
+}) {
+  const savedView = await saveOtherBatchView(page);
+  const historyUrl = new URL('/imports?template=po-master-v1&status=committed', origin).href;
+  await page.goto(historyUrl);
+  const historyLink = page.getByRole('link', { name: workbookName, exact: true }).and(page.locator(`a[href^="${importPath}?"]`));
+  await historyLink.press('Enter');
+  const sourceTrigger = page.getByRole('button', { name: '核对本次导入来源', exact: true });
+  await sourceTrigger.press('Enter');
+  const source = page.getByRole('dialog', { name: '核对本次导入来源', exact: true });
+  const sourceLink = source.getByRole('link', { name: '查看本次实际关联的订单', exact: true });
+  await sourceLink.waitFor();
+  const sourceUrl = page.url();
+  await sourceLink.press('Enter');
+  await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === importBatchId);
+  const scoped = new URL(page.url());
+  const row = page.getByRole('link', { name: componentPo, exact: true });
+  await row.press('Enter');
+  await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+  await page.waitForURL(scoped.href);
+  await row.and(page.locator(':focus')).waitFor();
+
+  const search = page.getByLabel('搜索单号、品名或编码', { exact: true });
+  await search.fill(componentPo);
+  await search.press('Enter');
+  await page.waitForURL((url) => url.searchParams.get('q') === componentPo);
+  await row.waitFor();
+  assert.equal(await search.evaluate((input) => input === document.activeElement), true, '筛选完成后焦点应留在搜索框');
+  const [list] = await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/v1/lines' && url.searchParams.get('stages') === 'no_batch';
+    }),
+    page.getByRole('radiogroup', { name: '常用视图' }).getByText(savedView, { exact: true }).click(),
+  ]);
+  await page.waitForURL((url) => url.searchParams.get('view') === savedView);
+  assert.ok(list.ok());
+  assert.equal(new URL(list.url()).searchParams.get('importBatchId'), importBatchId);
+  const exportHref = await page.getByRole('link', { name: '导出 Excel', exact: true }).getAttribute('href');
+  assert.equal(new URL(exportHref ?? '', origin).searchParams.get('importBatchId'), importBatchId);
+  await page.getByRole('link', { name: '返回导入批次', exact: true }).press('Enter');
+  await page.waitForURL(sourceUrl);
+  await sourceLink.and(page.locator(':focus')).waitFor();
+  await page.keyboard.press('Escape');
+  await sourceTrigger.and(page.locator(':focus')).waitFor();
+  await page.getByRole('link', { name: '返回导入中心', exact: true }).press('Enter');
+  await page.waitForURL(historyUrl);
+  await historyLink.and(page.locator(':focus')).waitFor();
+  return { savedViewKeepsScope: true, filterKeepsFocus: true, sourceAndHistoryFocus: true };
+}
+
+async function saveOtherBatchView(page: Page): Promise<string> {
+  const otherBatchId = '0199f0a0-0000-7000-8000-000000000019';
+  const viewName = '另一导入批次的未建要货';
+  await page.goto(new URL(`/lines?lane=all&stage=no_batch&importBatchId=${otherBatchId}`, origin).href);
+  await page.getByRole('button', { name: '保存当前视图', exact: true }).click();
+  const save = page.getByRole('dialog', { name: '保存当前视图', exact: true });
+  await save.getByRole('textbox', { name: '视图名称', exact: true }).fill(viewName);
+  await save.getByRole('button', { name: '保存', exact: true }).click();
+  await save.waitFor({ state: 'hidden' });
+  await page.waitForURL((url) => url.searchParams.get('view') === viewName && url.searchParams.get('importBatchId') === otherBatchId);
+  return viewName;
 }
 
 async function openOrderSummary(page: Page) {

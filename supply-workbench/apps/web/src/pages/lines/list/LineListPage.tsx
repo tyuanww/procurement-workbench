@@ -2,13 +2,14 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type R
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { Button, Result, Skeleton } from 'antd';
 import { loadViews, orderLensOf, presetViews, readDesk, switchOrderLens, type OrderLens } from '../../../features/follow-up/index.js';
+import { importFollowUpScope } from '../../../features/imports/index.js';
 import { useShellViewport } from '../../../features/shell/index.js';
 import { WorkbenchPage } from '../../../shared/ui/page.js';
 import { ViewSwitch } from '../../../shared/ui/view-switch.js';
 import { DeliveryOrders } from '../../progress/DeliveryOrders.js';
 import { space, topBar } from '../../../theme/tokens.js';
 import { useCan } from '../../../shared/actor.js';
-import { importFollowUpReturn } from '../../imports/import-source.js';
+import { importFollowUpReturn, readImportBatchOriginState } from '../../imports/import-source.js';
 import { readReturningLine } from '../detail/desk-navigation.js';
 import { LineAlerts, LineBulkBar } from './actions.js';
 import { loadDeskOwners } from './owners.js';
@@ -50,8 +51,8 @@ export function LineListPage() {
 function OrderQuery() {
   const [params, updateParams] = useSearchParams();
   const location = useLocation();
-  const isImportScope = importFollowUpReturn({ params, state: location.state, scoped: true }) !== null;
-  const setParams: SearchSetter = (next, options) => updateParams(next, isImportScope ? { ...options, state: location.state } : options);
+  const importOrigin = importFollowUpScope(params) === null ? undefined : readImportBatchOriginState(location.state);
+  const setParams: SearchSetter = (next, options) => updateParams(next, importOrigin === undefined ? options : { ...options, state: importOrigin });
   const results = useRef<HTMLDivElement>(null);
   const [users, setUsers] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
   const [isOwnerVisible, setOwnerVisible] = useState(false);

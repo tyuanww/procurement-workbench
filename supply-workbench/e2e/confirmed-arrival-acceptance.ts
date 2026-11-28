@@ -17,7 +17,9 @@ const po = 'HZ09-0003';
 const lineId = 'hz09-line-3';
 const firstBatchId = 'hz09-batch-3';
 
-export async function checkConfirmedArrivalDownload({ page, devtools, browser, headless, origin, out, warehouse }: {
+type ExpectedSourceFailure = (path: string, status: number) => void;
+
+export async function checkConfirmedArrivalDownload({ page, devtools, browser, headless, origin, out, warehouse, expectSourceFailure }: {
   readonly page: Page;
   readonly devtools: CDPSession;
   readonly browser: Browser;
@@ -25,6 +27,7 @@ export async function checkConfirmedArrivalDownload({ page, devtools, browser, h
   readonly origin: URL;
   readonly out: string;
   readonly warehouse: string;
+  readonly expectSourceFailure: ExpectedSourceFailure;
 }) {
   const secondBatchId = await splitSyntheticOrder(page, origin, warehouse);
   const directory = join(out, 'confirmed-arrival-download');
@@ -50,8 +53,9 @@ export async function checkConfirmedArrivalDownload({ page, devtools, browser, h
       [firstBatchId, po, '合成待催 3', '1', '我方仓库', '2025-01-01', '', '', warehouse, lineId],
       [secondBatchId, po, '合成待催 3', '2', '我方仓库', '未确认', '', '', warehouse, lineId],
     ]);
-    const roundTrip = await importOneConfirmedDate({ page, origin, book, secondBatchId });
-    return { ...evidence, roundTrip };
+    const roundTrip = await importOneConfirmedDate({ page, origin, book, secondBatchId, expectSourceFailure });
+    const pagination = await checkArrivalPagination(page, origin);
+    return { ...evidence, roundTrip, pagination };
   } finally {
     await browserDevtools.detach();
   }
@@ -124,11 +128,12 @@ async function downloadFromOrderLines({ page, origin, directory, headless }: {
   }
 }
 
-async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
+async function importOneConfirmedDate({ page, origin, book, secondBatchId, expectSourceFailure }: {
   readonly page: Page;
   readonly origin: URL;
   readonly book: ReturnType<typeof xlsx.read>;
   readonly secondBatchId: string;
+  readonly expectSourceFailure: ExpectedSourceFailure;
 }) {
   const date = '2099-01-12';
   const sheet = book.Sheets[sheetName];
@@ -144,6 +149,7 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   assert.equal((await detected.json()).candidates[0]?.template, 'batch-confirmed-arrival-v1');
   await page.getByRole('button', { name: '开始解析', exact: true }).click();
   await page.waitForURL(/\/imports\/[^/]+$/);
+  const importUrl = new URL(page.url());
   const preview = page.getByRole('region', { name: '确认到货日明细' });
   const batchRow = (id: string) => preview.getByRole('row').filter({ hasText: id });
   await batchRow(secondBatchId).getByRole('cell', { name: date, exact: true }).waitFor();
@@ -171,6 +177,13 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   await page.keyboard.press('Escape');
   await drawer.waitFor({ state: 'hidden' });
   await secondSource.and(page.locator(':focus')).waitFor();
+  await checkUnavailableArrivalSource({ page, secondSource, expectSourceFailure });
+
+  const outside = new URL(importUrl);
+  outside.searchParams.set('arrivalPage', '9');
+  await page.goto(outside.href);
+  await page.waitForURL(importUrl.href);
+  await batchRow(secondBatchId).getByRole('cell', { name: date, exact: true }).waitFor();
 
   const response = await page.request.get(new URL(`/api/v1/lines/${lineId}`, origin).href);
   assert.ok(response.ok());
@@ -178,6 +191,46 @@ async function importOneConfirmedDate({ page, origin, book, secondBatchId }: {
   assert.equal(batches.length, 2);
   const actual = batches.map((batch: { id: string; dateBuyerConfirmed: string | null }) => [batch.id, batch.dateBuyerConfirmed]);
   assert.deepEqual(actual, [[firstBatchId, '2025-01-01'], [secondBatchId, date]]);
-  return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual,
-    followUp: { focusBatch: secondBatchId, skippedStaysLocal: true, explicitBackFocus: true, drawerEscapeFocus: true } };
+  return { submitted: { updated: 1, skipped: 1 }, confirmedDates: actual, outOfRangePageRecovered: true,
+    followUp: { focusBatch: secondBatchId, skippedStaysLocal: true, explicitBackFocus: true, drawerEscapeFocus: true, unavailableWithoutRetry: [404, 403] } };
+}
+
+async function checkUnavailableArrivalSource({ page, secondSource, expectSourceFailure }: {
+  readonly page: Page;
+  readonly secondSource: ReturnType<Page['locator']>;
+  readonly expectSourceFailure: ExpectedSourceFailure;
+}) {
+  const path = `/api/v1/lines/${lineId}`;
+  const drawer = page.getByRole('dialog', { name: '核对导入记录来源', exact: true });
+  for (const { status, code } of [{ status: 404, code: 'NOT_FOUND' }, { status: 403, code: 'FORBIDDEN' }]) {
+    expectSourceFailure(path, status);
+    await page.route((url) => url.pathname === path,
+      (route) => route.fulfill({ status, json: { error: { code, message: '合成验收不可用记录', details: {} } } }), { times: 1 });
+    await secondSource.press('Enter');
+    await drawer.getByText('当前范围没有可查看的关联记录。', { exact: true }).waitFor();
+    assert.equal(await drawer.getByRole('button', { name: '重试', exact: true }).count(), 0);
+    assert.equal(await drawer.getByRole('link').count(), 0);
+    await page.keyboard.press('Escape');
+    await drawer.waitFor({ state: 'hidden' });
+    await secondSource.and(page.locator(':focus')).waitFor();
+  }
+}
+
+async function checkArrivalPagination(page: Page, origin: URL) {
+  const book = xlsx.utils.book_new();
+  const rows = Array.from({ length: 21 }, (_, index) => [`hz09-fixture-batch-${index + 1}`, po, `分页合成 ${index + 1}`, 1, '我方仓库', '未确认', '', '', '', lineId]);
+  xlsx.utils.book_append_sheet(book, xlsx.utils.aoa_to_sheet([headers, ...rows]), sheetName);
+  const buffer: Buffer = xlsx.write(book, { type: 'buffer', bookType: 'xlsx' });
+  await page.goto(new URL('/imports', origin).href);
+  await page.locator('input[type="file"]').setInputFiles({ name: '合成确认日分页.xlsx', mimeType: mime, buffer });
+  await page.getByRole('button', { name: '开始解析', exact: true }).click();
+  await page.waitForURL(/\/imports\/[^/]+$/);
+  const preview = page.getByRole('region', { name: '确认到货日明细', exact: true });
+  await preview.getByRole('cell', { name: '分页合成 20', exact: true }).waitFor();
+  const pagination = page.getByRole('navigation', { name: /^确认到货日明细分页/u });
+  await pagination.getByTitle('下一页', { exact: true }).press('Enter');
+  await page.waitForURL((url) => url.searchParams.get('arrivalPage') === '2');
+  await preview.getByRole('cell', { name: '分页合成 21', exact: true }).waitFor();
+  assert.equal(await pagination.evaluate((nav) => nav.contains(document.activeElement)), true, '翻页后焦点应留在确认到货日分页');
+  return { rows: rows.length, nextPageFocus: true };
 }

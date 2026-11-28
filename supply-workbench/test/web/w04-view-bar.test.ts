@@ -102,6 +102,20 @@ describe('已修改状态', () => {
     expect(new URLSearchParams(readDesk(address.toString()).requestQuery).get('importBatchId')).toBe('batch-b');
   });
 
+  it('在导入来源下钻范围内应用保存视图时保留本批次和返回地址', () => {
+    const activeId = '0199f0a0-0000-7000-8000-000000000018';
+    const savedId = '0199f0a0-0000-7000-8000-000000000019';
+    const backToImport = `/imports/${activeId}?drawer=import-source&source=batch`;
+    const search = new URLSearchParams({ lane: 'all', importBatchId: activeId, backToImport }).toString();
+    const view = { id: 'saved-b', label: 'B 批订单', query: `lane=all&stage=no_batch&importBatchId=${savedId}` };
+    const address = viewAddress({ search, view });
+    const { requestQuery } = readDesk(address.toString());
+    expect(address.get('backToImport')).toBe(backToImport);
+    expect(new URLSearchParams(requestQuery).get('importBatchId')).toBe(activeId);
+    expect(new URLSearchParams(requestQuery).get('stages')).toBe('no_batch');
+    expect(new URL(exportAddress({ query: requestQuery, columns: COLUMNS }), 'http://localhost').searchParams.get('importBatchId')).toBe(activeId);
+  });
+
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {
     const view = presetViews().find((item) => item.id === 'yinong');
     if (view === undefined) throw new Error('缺少宜侬在途');

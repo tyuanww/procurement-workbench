@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Table, Typography, type TableProps } from 'antd';
+import { Alert, Button, Card, Skeleton, Table, Typography, type TableProps } from 'antd';
 import { ConfirmedArrivalPayloadSchema, ImportRowViewSchema, listResponseSchema, type ImportBatchSummary, type ImportRowView } from '@sw/contracts';
 import { importActionLabel } from '@sw/domain';
 import { apiGetWithSignal } from '../../shared/api/client.js';
@@ -14,7 +14,7 @@ type Row = ReturnType<typeof readRow>;
 type ArrivalDate = ReturnType<typeof ConfirmedArrivalPayloadSchema.parse>['date'];
 type Load =
   | { readonly kind: 'failed' }
-  | { readonly kind: 'ready'; readonly rows: readonly Row[]; readonly total: number };
+  | { readonly kind: 'ready'; readonly rows: readonly Row[] };
 
 const compactOnly = 'confirmed-arrival-compact';
 const wideOnly = 'confirmed-arrival-wide';
@@ -68,53 +68,72 @@ function BatchCheck({ row }: { readonly row: Row }) {
 }
 
 export function ConfirmedArrivalPreview({ summary }: { readonly summary: ImportBatchSummary }) {
-  const { id, revision } = summary;
   const source = useImportSource();
   const page = previewPage(source.params, importSourceQuery.arrival);
+  const { load, total, retry } = useArrivalRows({ id: summary.id, revision: summary.revision, page });
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const visiblePage = Math.min(page, lastPage);
+  const isOutside = load?.kind === 'ready' && page !== visiblePage;
+  useEffect(() => {
+    if (isOutside) changeArrivalPage(source, visiblePage);
+  }, [isOutside, source, visiblePage]);
+  const current = isOutside ? null : load;
+  const selected = current?.kind === 'ready' ? current.rows.find((row) => importSourceKey('arrival', row) === source.sourceKey) : undefined;
+  return (
+    <Card title="确认到货日预览">
+      <ArrivalResults load={current} source={source} onRetry={retry} />
+      <ImportPagination label="确认到货日明细分页" page={visiblePage} pageSize={PAGE_SIZE} total={total}
+        onChange={(value) => changeArrivalPage(source, value)} />
+      <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
+    </Card>
+  );
+}
+
+function useArrivalRows({ id, revision, page }: Pick<ImportBatchSummary, 'id' | 'revision'> & { readonly page: number }) {
   const [attempt, setAttempt] = useState(0);
   const requestKey = JSON.stringify([revision, page, attempt]);
-  const [response, setResponse] = useState<{ readonly key: string; readonly load: Load }>();
-  const load = response?.key === requestKey ? response.load : null;
+  const [response, setResponse] = useState<{ readonly key: string; readonly load: Load; readonly total: number }>();
   useEffect(() => {
     const controller = new AbortController();
     const query = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     void apiGetWithSignal({ path: `/api/v1/imports/${encodeURIComponent(id)}/rows?${query}`, schema: rowsSchema, signal: controller.signal })
       .then(({ items, page: result }) => {
-        if (!controller.signal.aborted) setResponse({ key: requestKey, load: { kind: 'ready', rows: items.map(readRow), total: result.total } });
+        if (!controller.signal.aborted) setResponse({ key: requestKey, load: { kind: 'ready', rows: items.map(readRow) }, total: result.total });
       })
-      .catch(() => { if (!controller.signal.aborted) setResponse({ key: requestKey, load: { kind: 'failed' } }); });
+      .catch(() => {
+        if (!controller.signal.aborted) setResponse((previous) => ({ key: requestKey, load: { kind: 'failed' }, total: previous?.total ?? 0 }));
+      });
     return () => controller.abort();
   }, [id, page, requestKey]);
-  if (load === null) return <Card title="确认到货日预览" loading />;
-  if (load.kind === 'failed') return <Card title="确认到货日预览">
-    <Alert type="error" title="确认到货日预览没有读出来。"
-      action={<Button onClick={() => setAttempt((value) => value + 1)}>重试</Button>} />
-  </Card>;
-  return <ArrivalResults load={load} summary={summary} source={source} page={page} />;
+  return {
+    load: response?.key === requestKey ? response.load : null,
+    total: response?.total ?? 0,
+    retry: () => setAttempt((value) => value + 1),
+  };
 }
 
-function ArrivalResults({ load, summary, source, page }: {
-  readonly load: Extract<Load, { readonly kind: 'ready' }>;
-  readonly summary: ImportBatchSummary;
+function changeArrivalPage(source: ImportSourceState, page: number) {
+  source.update({ [importSourceQuery.arrival]: page === 1 ? null : String(page) }, true);
+}
+
+function ArrivalResults({ load, source, onRetry }: {
+  readonly load: Load | null;
   readonly source: ImportSourceState;
-  readonly page: number;
+  readonly onRetry: () => void;
 }) {
-  const selected = load.rows.find((row) => importSourceKey('arrival', row) === source.sourceKey);
+  if (load === null) return <div role="status" aria-label="正在读取确认到货日明细"><Skeleton active /></div>;
+  if (load.kind === 'failed') return <Alert type="error" title="确认到货日预览没有读出来。"
+    action={<Button onClick={onRetry}>重试</Button>} />;
   return (
-    <Card title="确认到货日预览">
-        <div className="confirmed-arrival-preview">
-          <style>{previewCss}</style>
-          <Typography.Paragraph type="secondary" id="arrival-preview-scroll" style={{ marginBottom: space[2] }}>
-            横向滚动可查看完整明细。
-          </Typography.Paragraph>
-          <div role="region" aria-label="确认到货日明细" aria-describedby="arrival-preview-scroll" tabIndex={0} style={{ overflowX: 'auto' }}>
-            <Table<Row> dataSource={load.rows} columns={columns(source)} rowKey="id" size="small" pagination={false} />
-          </div>
-          <ImportPagination label="确认到货日明细分页" page={page} pageSize={PAGE_SIZE} total={load.total}
-            onChange={(value) => source.update({ [importSourceQuery.arrival]: value === 1 ? null : String(value) }, true)} />
-        </div>
-      <ImportSourceDrawer source={source} fileName={summary.file.originalName} record={selected === undefined ? null : arrivalSource(selected, summary.status)} />
-    </Card>
+    <div className="confirmed-arrival-preview">
+      <style>{previewCss}</style>
+      <Typography.Paragraph type="secondary" id="arrival-preview-scroll" style={{ marginBottom: space[2] }}>
+        横向滚动可查看完整明细。
+      </Typography.Paragraph>
+      <div role="region" aria-label="确认到货日明细" aria-describedby="arrival-preview-scroll" tabIndex={0} style={{ overflowX: 'auto' }}>
+        <Table<Row> dataSource={load.rows} columns={columns(source)} rowKey="id" size="small" pagination={false} />
+      </div>
+    </div>
   );
 }
 

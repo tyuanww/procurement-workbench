@@ -1,5 +1,23 @@
 import { recognizedPoNumbers } from '@sw/domain';
 import { UNLINKED_PROCUREMENT, type ProcurementPreviewSelection } from '@sw/contracts';
+import { importSourceQuery, previewPage } from './import-source.js';
+
+export const sourcePageSizes = { finished: 12, component: 16, candidate: 16 } as const;
+export type SourceTable = keyof typeof sourcePageSizes;
+
+export function sourcePagePatch({ params, selected, isUnlinked }: {
+  readonly params: URLSearchParams; readonly selected: { readonly table: SourceTable; readonly page: number } | null; readonly isUnlinked: boolean;
+}) {
+  if (selected === null) return null;
+  const key = importSourceQuery[selected.table];
+  const isWrongPage = previewPage(params, key) !== selected.page;
+  const isCollapsed = selected.table === 'candidate' && !isUnlinked && !params.has('candidates');
+  if (!isWrongPage && !isCollapsed) return null;
+  return {
+    ...(isWrongPage ? { [key]: selected.page === 1 ? null : String(selected.page) } : {}),
+    ...(isCollapsed ? { candidates: '1' } : {}),
+  };
+}
 
 type FinishedRow = ProcurementPreviewSelection['finishedRows'][number];
 type ComponentFact = ProcurementPreviewSelection['componentFacts'][number];

@@ -61,11 +61,17 @@ export function ImportSourceDrawer({ source, record, fileName }: {
         ...(record.location === undefined ? [] : [{ key: 'location', label: '原表位置', children: sourceText(record.location) }]),
         ...record.items,
       ]} />
-      {record.result.kind === 'local' ? <Typography.Text>{record.result.text}</Typography.Text>
-        : !canRead ? <Alert type="info" title="当前账号无法查看关联订单。" />
-        : <ImportTarget key={JSON.stringify(record.result)} target={record.result} source={source} sourceKey={record.key} isShown={isShown} />}
+      <ImportSourceResult record={record} canRead={canRead} source={source} isShown={isShown} />
     </Flex>}
   </Drawer>;
+}
+
+function ImportSourceResult({ record, canRead, source, isShown }: {
+  readonly record: ImportSourceRecord; readonly canRead: boolean; readonly source: ImportSourceState; readonly isShown: boolean;
+}) {
+  if (record.result.kind === 'local') return <Typography.Text>{record.result.text}</Typography.Text>;
+  if (!canRead) return <Alert type="info" title="当前账号无法查看关联订单。" />;
+  return <ImportTarget key={JSON.stringify(record.result)} target={record.result} source={source} sourceKey={record.key} isShown={isShown} />;
 }
 
 export function sourceText(location: SourceLocation) {
@@ -97,8 +103,14 @@ function ImportTarget({ target, source, sourceKey, isShown }: {
     void result.then((destination) => {
       if (!signal.aborted) setLoad(destination === null ? { kind: 'missing' } : { kind: 'ready', destination });
     }).catch((error: unknown) => {
+      if (signal.aborted) return;
       const failure = readFailureOf(error);
-      if (!signal.aborted && failure !== null) setLoad({ kind: 'failed', message: failureText(failure) });
+      if (failure === null) return;
+      if (failure.kind === 'api' && (failure.code === 'NOT_FOUND' || failure.code === 'FORBIDDEN')) {
+        setLoad({ kind: 'missing' });
+        return;
+      }
+      setLoad({ kind: 'failed', message: failureText(failure) });
     });
     return () => controller.abort();
   }, [attempt, request]);

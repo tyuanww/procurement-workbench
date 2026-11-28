@@ -6,11 +6,12 @@ import { ProcurementPreviewSelectionSchema, UNLINKED_PROCUREMENT, type ImportBat
 import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
 import { ImportSourceButton, ImportSourceDrawer, sourceText, type ImportSourceRecord } from './ImportSourceDrawer.js';
 import { importSourceKey, importSourceQuery, previewPage, useImportSource, type ImportSourceState } from './import-source.js';
-import { sourceKey, visibleProcurement, type ComponentRow, type FinishedSummary } from './procurement-preview-model.js';
+import { sourceKey, sourcePagePatch, sourcePageSizes, visibleProcurement, type ComponentRow, type FinishedSummary, type SourceTable } from './procurement-preview-model.js';
 
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 const label = { active: '项目表', completed: '已完结表', direct: '编号关联', shared: '共用子件', group: '同 OA 分组', candidate: '仅商品码候选' } as const;
 type Fact = ComponentRow['fact'];
+type SelectedSource = { readonly record: ImportSourceRecord; readonly table: SourceTable; readonly page: number };
 
 const reviewText: Record<ProcurementReviewReason, string> = {
   quantity_unit_conflict: '采购单位冲突，待核对',
@@ -64,6 +65,10 @@ function ProcurementSelection({ summary, preview, source }: {
   const current = useMemo(() => visibleProcurement(preview), [preview]);
   const isCommitted = summary.status === 'committed' && preview.submission?.originalBatchId === id;
   const selected = selectedRecord({ current, key: source.sourceKey, summary, isCommitted });
+  const patch = sourcePagePatch({ params: source.params, selected, isUnlinked: preview.oa === UNLINKED_PROCUREMENT });
+  useEffect(() => {
+    if (patch !== null) source.update(patch, true);
+  }, [patch, source]);
   return (
     <Flex vertical gap="middle">
         {preview.submission !== undefined && preview.submission.originalBatchId !== id
@@ -84,7 +89,7 @@ function ProcurementSelection({ summary, preview, source }: {
           <Typography.Text>成品 {current.rows.length} 条 · 总表 PO {current.poCount} 个</Typography.Text>
         </Flex>
         <SelectionTables isUnlinked={preview.oa === UNLINKED_PROCUREMENT} current={current} hasSubmission={preview.submission !== undefined} source={source} />
-        <ImportSourceDrawer source={source} record={selected} fileName={summary.file.originalName} />
+        <ImportSourceDrawer source={source} record={patch === null ? selected?.record ?? null : null} fileName={summary.file.originalName} />
     </Flex>
   );
 }
@@ -103,7 +108,7 @@ function SelectionTables({ isUnlinked, current, hasSubmission, source }: {
           dataSource={current.rows}
           columns={finishedColumns(source)}
           rowKey={(row) => sourceKey(row.source)}
-          pagination={sourcePagination({ source, key: importSourceQuery.finished, pageSize: 12 })}
+          pagination={sourcePagination({ source, table: 'finished' })}
           scroll={{ x: 820 }}
           size="small"
         />
@@ -134,7 +139,7 @@ function Components({ rows, hasSubmission, source, kind }: {
       dataSource={rows}
       columns={hasSubmission ? columns : columns.filter((column) => column.key !== 'submission')}
       rowKey={(row) => sourceKey(row.fact.source)}
-      pagination={sourcePagination({ source, key: importSourceQuery[kind], pageSize: 16 })}
+      pagination={sourcePagination({ source, table: kind })}
       locale={{ emptyText: '没有表内关联子件' }}
       scroll={{ x: 1150 }}
       size="small"
@@ -198,9 +203,10 @@ function SourceCell({ source, kind, location, primary, note, po }: {
   </Flex>;
 }
 
-function sourcePagination({ source, key, pageSize }: { readonly source: ImportSourceState; readonly key: string; readonly pageSize: number }) {
+function sourcePagination({ source, table }: { readonly source: ImportSourceState; readonly table: SourceTable }) {
+  const key = importSourceQuery[table];
   return {
-    pageSize, current: previewPage(source.params, key), hideOnSinglePage: true,
+    pageSize: sourcePageSizes[table], current: previewPage(source.params, key), hideOnSinglePage: true,
     onChange: (page: number) => source.update({ [key]: page === 1 ? null : String(page) }, true),
   };
 }
@@ -210,14 +216,22 @@ function selectedRecord({ current, key, summary, isCommitted }: {
   readonly key: string | null;
   readonly summary: ImportBatchSummary;
   readonly isCommitted: boolean;
-}): ImportSourceRecord | null {
+}): SelectedSource | null {
   if (key === null) return null;
-  const finished = current.rows.find((row) => importSourceKey('finished', row.source) === key);
-  if (finished !== undefined) return finishedRecord({ key, row: finished, importId: summary.id, isCommitted });
-  const related = current.related.find((row) => importSourceKey('component', row.fact.source) === key);
-  if (related !== undefined) return componentRecord({ key, row: related, importId: summary.id, canFollow: isCommitted });
-  const candidate = current.candidates.find((row) => importSourceKey('candidate', row.fact.source) === key);
-  return candidate === undefined ? null : componentRecord({ key, row: candidate, importId: summary.id, canFollow: false });
+  const finishedIndex = current.rows.findIndex((row) => importSourceKey('finished', row.source) === key);
+  const finished = current.rows[finishedIndex];
+  if (finished !== undefined) return onSourcePage({ table: 'finished', index: finishedIndex, record: finishedRecord({ key, row: finished, importId: summary.id, isCommitted }) });
+  const relatedIndex = current.related.findIndex((row) => importSourceKey('component', row.fact.source) === key);
+  const related = current.related[relatedIndex];
+  if (related !== undefined) return onSourcePage({ table: 'component', index: relatedIndex, record: componentRecord({ key, row: related, importId: summary.id, canFollow: isCommitted }) });
+  const candidateIndex = current.candidates.findIndex((row) => importSourceKey('candidate', row.fact.source) === key);
+  const candidate = current.candidates[candidateIndex];
+  if (candidate === undefined) return null;
+  return onSourcePage({ table: 'candidate', index: candidateIndex, record: componentRecord({ key, row: candidate, importId: summary.id, canFollow: false }) });
+}
+
+function onSourcePage({ table, index, record }: Omit<SelectedSource, 'page'> & { readonly index: number }): SelectedSource {
+  return { record, table, page: Math.floor(index / sourcePageSizes[table]) + 1 };
 }
 
 function finishedRecord({ key, row, importId, isCommitted }: {
