@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import type { Locator, Page, Request } from '../node_modules/.pnpm/node_modules/playwright/index.js';
+import type { Locator, Page, Request, Route } from '../node_modules/.pnpm/node_modules/playwright/index.js';
 
 export async function checkHomeRiskFollowUp({ page, origin, out, material, finished }: {
   readonly page: Page;
@@ -101,28 +101,38 @@ export async function checkHomeRiskFollowUp({ page, origin, out, material, finis
     if (width === 1440) {
       await order.press('Enter');
       await page.waitForURL((url) => decodeURIComponent(url.pathname) === '/lines/' + material.id);
-      await hideRiskOnReturn(page, material.id);
-      await back.press('Enter');
-      const heading = drawer.getByRole('heading', { name: '交期风险', exact: true });
-      await checkOrigin({ page, homeUrl, shop, search, sort, link: heading });
-      await drawer.getByText('原记录已不在当前交期风险范围内，已保留首页筛选。', { exact: true }).waitFor();
-      assert.equal(await order.count(), 0);
+      await withRiskHiddenOnReturn(page, material.id, async () => {
+        await back.press('Enter');
+        const heading = drawer.getByRole('heading', { name: '交期风险', exact: true });
+        await checkOrigin({ page, homeUrl, shop, search, sort, link: heading });
+        await drawer.getByText('原记录已不在当前交期风险范围内，已保留首页筛选。', { exact: true }).waitFor();
+        assert.equal(await order.count(), 0);
+      });
     }
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   return { widths, originalIds, openOnHome: true, escapeReturnsToTrigger: true, orderBatchAndGroupReturn: true, missingRiskFocusFallback: true };
 }
 
-async function hideRiskOnReturn(page: Page, lineId: string) {
-  await page.route((url) => url.pathname === '/api/v1/lines' && url.searchParams.has('stages'), async (route) => {
+async function withRiskHiddenOnReturn(page: Page, lineId: string, verify: () => Promise<void>) {
+  const homeOrders = (url: URL) => url.pathname === '/api/v1/lines' && url.searchParams.has('stages') && url.searchParams.get('store') === 'all';
+  let removed = 0;
+  const hideRisk = async (route: Route) => {
     const response = await route.fetch();
     assert.ok(response.ok(), await response.text());
     const current: unknown = await response.json();
-    assert.ok(isRecord(current) && Array.isArray(current.items) && isRecord(current.page) && typeof current.page.total === 'number');
+    assert.ok(isRecord(current) && Array.isArray(current.items));
     const items = current.items.filter((line: unknown) => !isRecord(line) || line.id !== lineId);
-    assert.equal(current.items.length - items.length, 1);
-    await route.fulfill({ response, json: { ...current, items, page: { ...current.page, total: current.page.total - 1 } } });
-  }, { times: 1 });
+    removed += current.items.length - items.length;
+    await route.fulfill({ response, json: { ...current, items } });
+  };
+  await page.route(homeOrders, hideRisk);
+  try {
+    await verify();
+    assert.equal(removed, 1, '应在首页分页结果中屏蔽所选风险订单一次');
+  } finally {
+    await page.unroute(homeOrders, hideRisk);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
