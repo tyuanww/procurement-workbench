@@ -24,6 +24,7 @@ type KeyboardScope = {
 export function useTodayKeys(scope: KeyboardScope): void {
   const routeKey = useEffectEvent((event: KeyboardEvent) => {
     const { state, isSettled, isPlanMode } = scope;
+    if (scope.isArrivalsView && (event.key !== 'Escape' || state.drawerId !== null || !scope.isOpening())) return;
     const targetRow = workspaceRowOf(event.target) ?? state.focus;
     handleKey({
       event,
@@ -43,15 +44,17 @@ export function useTodayKeys(scope: KeyboardScope): void {
   });
   const followClick = useEffectEvent(({ target }: MouseEvent) => selectClickedRow(scope, target));
   useEffect(() => {
-    if (scope.isArrivalsView) return;
     const onKey = (event: KeyboardEvent) => routeKey(event);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => {
+    if (scope.isArrivalsView) return;
     const onFocus = (event: FocusEvent) => followFocus(event);
     const onClick = (event: MouseEvent) => followClick(event);
-    window.addEventListener('keydown', onKey);
     document.addEventListener('focusin', onFocus);
     document.addEventListener('click', onClick);
     return () => {
-      window.removeEventListener('keydown', onKey);
       document.removeEventListener('focusin', onFocus);
       document.removeEventListener('click', onClick);
     };

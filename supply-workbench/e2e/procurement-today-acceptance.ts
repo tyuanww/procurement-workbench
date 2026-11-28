@@ -461,6 +461,8 @@ async function checkTodayTabHistory({ page, sourceSearch, memo }: { readonly pag
   await page.waitForURL(scheduleUrl);
   await schedule.and(page.locator('[aria-selected="true"]')).waitFor();
   await page.getByRole('heading', { name: '今日排期', level: 1, exact: true }).waitFor();
+  await page.goto(arrivalUrl);
+  await checkEscapeBeforeDrawerPaint(page, memo, page.getByRole('dialog'), new URL(arrivalUrl));
   await action.click();
   await page.waitForURL(actionAt);
 }
