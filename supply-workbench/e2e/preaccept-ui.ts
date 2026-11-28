@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,8 +96,15 @@ try {
 }
 console.log(JSON.stringify({ platform: result.platform, checks: Object.keys(result.checks), result: result.result, failure: result.failure, failureAt: result.failureAt }));
 
-function saveResult() {
-  return writeFile(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+async function saveResult(): Promise<void> {
+  const pending = join(out, 'result.json.tmp');
+  try {
+    await writeFile(pending, JSON.stringify(result, null, 2) + '\n');
+    await rename(pending, join(out, 'result.json'));
+  } catch (error) {
+    await rm(pending, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function recordFailure(error: unknown): void {
