@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Alert, Button, Descriptions, Drawer, Flex, Skeleton, Typography, type DescriptionsProps } from 'antd';
-import { OrderLineDetailSchema, OrderLineRowSchema, listResponseSchema } from '@sw/contracts';
 import { IMPORT_RETURN_PARAM } from '../../features/imports/index.js';
 import { useCan } from '../../shared/actor.js';
-import { apiErrorMessage, apiGetWithSignal } from '../../shared/api/client.js';
+import { failureText, read, readFailureOf } from '../../shared/api/reads.js';
 import { useDetailFocusLink, useDetailReturnFocus } from '../../shared/hooks/detail-return-focus.js';
 import { drawerWidth, space } from '../../theme/tokens.js';
 import { importBatchOrigin, importSourceTriggerId, type ImportSourceState, type SourceLocation } from './import-source.js';
@@ -73,7 +72,6 @@ export function sourceText(location: SourceLocation) {
   return `${location.sheetName} 第 ${location.rowNo} 行`;
 }
 
-const orderListSchema = listResponseSchema(OrderLineRowSchema);
 type Destination = { readonly href: string; readonly label: string; readonly text: string };
 type TargetLoad =
   | { readonly kind: 'loading' }
@@ -99,7 +97,8 @@ function ImportTarget({ target, source, sourceKey, isShown }: {
     void result.then((destination) => {
       if (!signal.aborted) setLoad(destination === null ? { kind: 'missing' } : { kind: 'ready', destination });
     }).catch((error: unknown) => {
-      if (!signal.aborted) setLoad({ kind: 'failed', message: apiErrorMessage(error) ?? '关联订单没有读出来。' });
+      const failure = readFailureOf(error);
+      if (!signal.aborted && failure !== null) setLoad({ kind: 'failed', message: failureText(failure) });
     });
     return () => controller.abort();
   }, [attempt, request]);
@@ -122,7 +121,7 @@ async function readImportDestination({ importId, lineId, signal }: {
   const scope = new URLSearchParams({ lane: 'all', importBatchId: importId });
   const query = new URLSearchParams({ importBatchId: importId, pageSize: '1' });
   if (lineId !== undefined) query.set('lineIds', lineId);
-  const { items, page } = await apiGetWithSignal({ path: `/api/v1/lines?${query}`, schema: orderListSchema, signal });
+  const { items, page } = await read({ name: 'lines', query: query.toString(), signal });
   if (lineId === undefined) {
     return page.total === 0 ? null : {
       href: `/lines?${scope}`, label: '查看本次实际关联的订单', text: `本次导入关联 ${page.total} 条可查看的订单行。`,
@@ -139,7 +138,7 @@ async function readBatchDestination({ lineId, batchId, signal }: {
   readonly signal: AbortSignal;
 }): Promise<Destination | null> {
   const href = `/lines/${encodeURIComponent(lineId)}`;
-  const detail = await apiGetWithSignal({ path: `/api/v1${href}`, schema: OrderLineDetailSchema, signal });
+  const detail = await read({ name: 'line', id: lineId, signal });
   const batch = detail.batches.find((item) => item.id === batchId);
   if (batch === undefined) return null;
   return {
