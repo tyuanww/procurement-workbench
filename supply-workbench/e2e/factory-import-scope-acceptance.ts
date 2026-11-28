@@ -24,6 +24,7 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await assertFactoryScopeApi({ page: buyer, origin, id: 'scope-import-other-factory', expected: ['FS-OTHER-FACTORY'] });
   await assertFactoryScopeApi({ page: buyer, origin, id: scopeId, expected: ['FS-YILING'], store: 'yiling' });
   const shared = await checkFactorySourceRoundTrip(buyer, origin);
+  await checkCopiedSourceFromAnotherStore(buyer, shared);
   await checkEmptyFactorySource(buyer, origin);
   const denied = await manager.request.get(new URL(`/api/v1/imports/${scopeId}`, origin).href);
   assert.equal(denied.status(), 403);
@@ -32,7 +33,34 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   assert.equal(await manager.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
   await checkSharedOrderView(manager, shared);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
-    emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true, sharedPresetKeepsStore: true };
+    emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
+    sharedPresetKeepsStore: true, copiedSourceKeepsStore: true };
+}
+
+async function checkCopiedSourceFromAnotherStore(page: Page, shared: URL) {
+  await page.goto(shared.href);
+  await assertFactoryScopeRows(page);
+  const order = page.getByRole('region', { name: '订单查询结果', exact: true })
+    .getByRole('link', { name: 'FS-MANUAL', exact: true });
+  const detail = new URL(await order.getAttribute('href') ?? '', shared);
+  assert.equal(detail.searchParams.get('store'), currentStore);
+  const source = new URL(detail.searchParams.get('backToImport') ?? '', shared);
+  assert.equal(source.pathname, `/imports/${scopeId}`);
+  assert.equal(source.searchParams.get('store'), currentStore);
+  await page.goto(detail.href);
+  const back = page.getByRole('link', { name: '返回导入批次', exact: true });
+  await back.waitFor();
+
+  source.searchParams.set('store', 'yiling');
+  detail.searchParams.set('backToImport', source.pathname + source.search);
+  await page.goto(detail.href);
+  await page.getByRole('heading', { name: 'FS-MANUAL', exact: true }).waitFor();
+  assert.deepEqual(await back.evaluateAll((links) => links.map((link) => link.getAttribute('href'))), [],
+    '达肤妍订单不能返回同批次的译龄抽屉');
+  await page.getByRole('link', { name: '返回本批订单', exact: true }).press('Enter');
+  await page.waitForURL((url) => url.pathname === '/lines' && url.searchParams.get('importBatchId') === scopeId
+    && url.searchParams.get('store') === currentStore && !url.searchParams.has('backToImport'));
+  await assertFactoryScopeRows(page);
 }
 
 async function checkSharedOrderView(page: Page, shared: URL) {

@@ -164,6 +164,16 @@ describe('已修改状态', () => {
     }
   });
 
+  it('带店铺的导入详情只接受同批次和同店铺的来源地址', () => {
+    const source = '/imports/batch-a?drawer=import-source&source=batch';
+    const scope = (route: string) => importFollowUpScope(new URLSearchParams({
+      importBatchId: 'batch-a', store: 'dafuyan', backToImport: route,
+    }));
+    expect(scope(source + '&store=dafuyan')?.to).toBe(source + '&store=dafuyan');
+    expect(scope(source + '&store=yiling')).toBeNull();
+    expect(scope(source)).toBeNull();
+  });
+
   it('宜侬在途沿用当前线别，可以叠加搜索并保存筛选', () => {
     const view = presetViews().find((item) => item.id === 'yinong');
     if (view === undefined) throw new Error('缺少宜侬在途');

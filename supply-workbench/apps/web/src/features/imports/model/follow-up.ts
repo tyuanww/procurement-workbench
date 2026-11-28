@@ -1,4 +1,4 @@
-import { EntityIdSchema } from '@sw/contracts';
+import { EntityIdSchema, ProcurementStoreSchema } from '@sw/contracts';
 import { matchPath } from 'react-router';
 
 export const IMPORT_RETURN_PARAM = 'backToImport';
@@ -6,7 +6,11 @@ export const IMPORT_SOURCE_DRAWER = 'import-source';
 
 export function importFollowUpScope(params: URLSearchParams): ReturnType<typeof importFollowUpBackAddress> {
   const back = importFollowUpBackAddress(params.get(IMPORT_RETURN_PARAM));
-  return back !== null && params.get('importBatchId') === back.id ? back : null;
+  if (back === null || params.get('importBatchId') !== back.id) return null;
+  const store = ProcurementStoreSchema.safeParse(params.get('store')).data;
+  if (store === undefined) return back;
+  const sourceQuery = new URLSearchParams(back.to.slice(back.to.indexOf('?')));
+  return sourceQuery.get('store') === store ? back : null;
 }
 
 export function importFollowUpBackAddress(value: string | null): { readonly id: string; readonly to: string; readonly recordKey: string } | null {
