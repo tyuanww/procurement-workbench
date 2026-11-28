@@ -10,6 +10,7 @@ import { useCan } from '../../../shared/actor.js';
 import { apiErrorMessage, apiSend } from '../../../shared/api/client.js';
 import { fetchLatestNotes } from '../../../shared/api/catalog.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress } from '../../director-home/home-location.js';
+import { PendingLineDetailLink } from './desk-navigation.js';
 import { LineImportMembership } from './import-detail-verification.js';
 import { relatedOrderState, useRelatedImportMembers } from './related-procurement-navigation.js';
 
@@ -62,22 +63,29 @@ type RelatedLine = NonNullable<OrderLineDetail['procurement']>['relatedLines'][n
 function RelatedProcurementLines({ lines }: { readonly lines: readonly RelatedLine[] }) {
   const [params] = useFollowUpSearch();
   const location = useLocation();
-  const { isImportMember } = useContext(LineImportMembership);
+  const { isImportMember, isCheckingImportMembership } = useContext(LineImportMembership);
   const batch = isImportMember ? EntityIdSchema.safeParse(params.get('importBatchId')).data : undefined;
   const members = useRelatedImportMembers({ batch, store: params.get('store'), lines });
+  if (isCheckingImportMembership || members === undefined) {
+    return <ul>{lines.map((line) => <li key={line.id}><PendingLineDetailLink>{relatedLineLabel(line)}</PendingLineDetailLink></li>)}</ul>;
+  }
   const query = procurementDetailQuery(params);
   const scoped = procurementImportQuery({ query, params, batch });
   const returnState = procurementReturnState({ params, state: location.state, isImportMember });
   const ordinaryState = relatedOrderState(location, batch !== undefined) ?? returnState;
   return (
     <ul>{lines.map((line) => {
-      const isMember = members?.has(line.id) === true;
+      const isMember = members.has(line.id);
       const href = followUpAddress(`/lines/${encodeURIComponent(line.id)}`, isMember ? scoped : query);
       return <li key={line.id}>
-        <Link to={href} state={isMember ? returnState : ordinaryState}>{[line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行'}</Link>
+        <Link to={href} state={isMember ? returnState : ordinaryState}>{relatedLineLabel(line)}</Link>
       </li>;
     })}</ul>
   );
+}
+
+function relatedLineLabel(line: RelatedLine): string {
+  return [line.nameRaw, line.codeRaw, line.poRaw].filter(Boolean).join(' · ') || '打开订单行';
 }
 
 function procurementImportQuery({ query, params, batch }: {

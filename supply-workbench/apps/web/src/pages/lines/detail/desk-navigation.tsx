@@ -6,26 +6,47 @@ import { currentProgressPath, planningLabels, planningScope, planningSectionOf, 
 import { useCan } from '../../../shared/actor.js';
 import { detailReturnState } from '../../../shared/hooks/detail-return-focus.js';
 import { businessToday, deliveryBackAddress, followUpAddress, useFollowUpSearch } from '../../../features/follow-up/index.js';
-import { IMPORT_RETURN_PARAM, importFollowUpCandidate, importFollowUpScope, useVerifiedProcurementImportReturnContext } from '../../../features/imports/index.js';
+import { IMPORT_RETURN_PARAM, importFollowUpCandidate, importFollowUpScope, useImportReturnTemplateContext } from '../../../features/imports/index.js';
 import { legacyPersonalPath, TODAY_BATCH_RETURN_PARAM, todayArrivalsPath, todayBatchRecordFocus } from '../../../features/today/index.js';
 import { HOME_RISK_RETURN_PARAM, homeRiskBackAddress, homeRiskLineFocus } from '../../director-home/home-location.js';
 import { importFollowUpReturn, readImportBatchOriginState } from '../../imports/import-source.js';
 import { useDetailImportProof } from './import-detail-verification.js';
 import { relatedOrderBack } from './related-procurement-navigation.js';
 
-type LineDetailLinkProps = { readonly href: string; readonly search: string; readonly children: ReactNode; readonly isVerifiedImport?: boolean | undefined };
+type LineDetailLinkProps = {
+  readonly href: string; readonly search: string; readonly children: ReactNode;
+  readonly isVerifiedImport?: boolean | undefined; readonly isCheckingImportMembership?: boolean | undefined;
+};
 
 export function LineDetailLink(props: LineDetailLinkProps) {
   const search = new URLSearchParams(props.search);
   const isRouted = useInRouterContext();
-  const isVerifiedProcurement = useVerifiedProcurementImportReturnContext();
-  const scope = importFollowUpScope(search, isVerifiedProcurement);
-  const batch = EntityIdSchema.safeParse(search.get('importBatchId')).data;
-  const isUnverified = batch !== undefined && props.isVerifiedImport === false;
-  const href = batch === undefined ? props.href : importDetailAddress({ href: props.href, search,
-    batch: isUnverified ? undefined : batch, back: isUnverified || scope === null ? undefined : importFollowUpCandidate(search)?.to });
+  const template = useImportReturnTemplateContext();
+  const candidate = importFollowUpCandidate(search);
+  if (props.isCheckingImportMembership === true || (template === undefined && candidate !== null)) {
+    return <PendingLineDetailLink>{props.children}</PendingLineDetailLink>;
+  }
+  const { href, isScoped, isUnverified } = lineDetailDestination({ href: props.href, search, template, isVerifiedImport: props.isVerifiedImport });
   if (!isRouted) return <a href={href}>{props.children}</a>;
-  return isUnverified ? <Link to={href}>{props.children}</Link> : <RoutedLineDetailLink {...props} href={href} isScoped={scope !== null} />;
+  return isUnverified ? <Link to={href}>{props.children}</Link>
+    : <RoutedLineDetailLink href={href} search={search.toString()} isScoped={isScoped}>{props.children}</RoutedLineDetailLink>;
+}
+
+function lineDetailDestination({ href, search, template, isVerifiedImport }: {
+  readonly href: string; readonly search: URLSearchParams;
+  readonly template: ReturnType<typeof useImportReturnTemplateContext>; readonly isVerifiedImport: boolean | undefined;
+}) {
+  const batch = EntityIdSchema.safeParse(search.get('importBatchId')).data;
+  const isUnverified = batch !== undefined && isVerifiedImport === false;
+  const back = isUnverified ? undefined : importFollowUpScope(search, { template })?.to;
+  if (back === undefined) search.delete(IMPORT_RETURN_PARAM);
+  const to = batch === undefined ? href : importDetailAddress({ href, search, batch: isUnverified ? undefined : batch, back });
+  return { href: to, isScoped: back !== undefined, isUnverified };
+}
+
+export function PendingLineDetailLink({ children }: { readonly children: ReactNode }) {
+  const status = '正在核对导入范围';
+  return <span role="link" aria-disabled="true" aria-busy="true" aria-description={status} title={status} style={{ cursor: 'progress' }}>{children}</span>;
 }
 
 function importDetailAddress({ href, batch, back, search }: {
@@ -33,7 +54,8 @@ function importDetailAddress({ href, batch, back, search }: {
 }): string {
   const detail = new URL(href, 'https://workbench.invalid');
   if (batch !== undefined) detail.searchParams.set('importBatchId', batch);
-  if (back !== undefined) detail.searchParams.set(IMPORT_RETURN_PARAM, back);
+  if (back === undefined) detail.searchParams.delete(IMPORT_RETURN_PARAM);
+  else detail.searchParams.set(IMPORT_RETURN_PARAM, back);
   copyImportStore(search, detail.searchParams);
   return followUpAddress(detail.pathname, detail.searchParams);
 }
@@ -70,7 +92,7 @@ export function useLineDetailNavigation({ lineId, params }: { readonly lineId: s
   return { back: readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports, proof }), membership: proof };
 }
 
-type ImportProof = Pick<ReturnType<typeof useDetailImportProof>, 'isImportMember' | 'isVerifiedProcurement' | 'confirmedArrival'>;
+type ImportProof = Pick<ReturnType<typeof useDetailImportProof>, 'isImportMember' | 'importReturnTemplate' | 'isProcurementSourceRow' | 'confirmedArrival'>;
 
 export function readLineDetailBack({ lineId, params, state, canReadDashboard, canReadImports, proof }: {
   readonly lineId: string; readonly params: URLSearchParams; readonly state: unknown;
@@ -95,7 +117,7 @@ function importDetailBack({ params, state, desk, canReadImports, proof }: {
   if (proof === undefined) return null;
   const importState = desk === null && lineDeskParams(state) !== null ? undefined : state;
   const source = canReadImports && (proof.isImportMember || proof.confirmedArrival)
-    ? importFollowUpReturn({ params, state: importState, isVerifiedProcurement: proof.isVerifiedProcurement, confirmedArrival: proof.confirmedArrival }) : null;
+    ? importFollowUpReturn({ params, state: importState, template: proof.importReturnTemplate, isProcurementSourceRow: proof.isProcurementSourceRow, confirmedArrival: proof.confirmedArrival }) : null;
   return source ?? (proof.isImportMember ? importOrdersBack(params) : null);
 }
 

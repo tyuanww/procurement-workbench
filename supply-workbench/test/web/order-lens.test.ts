@@ -56,7 +56,7 @@ describe('跟进中心订单查法', () => {
   it('详情和到仓凭据从当前范围重建地址，不保留其他批次、店铺或来源的历史状态', () => {
     const source = '/imports/batch-a?store=dafuyan&drawer=import-source&source=batch';
     const params = new URLSearchParams({ importBatchId: 'batch-a', store: 'dafuyan', backToImport: source });
-    const proof = { isImportMember: true, isVerifiedProcurement: false, confirmedArrival: false };
+    const proof = { isImportMember: true, importReturnTemplate: 'factory-progress-v1' as const, isProcurementSourceRow: false, confirmedArrival: false };
     const stale = [
       new URLSearchParams({ importBatchId: 'batch-b', store: 'dafuyan' }),
       new URLSearchParams({ importBatchId: 'batch-a', store: 'yiling' }),

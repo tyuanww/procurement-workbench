@@ -36,14 +36,17 @@ export async function checkFactoryImportScope({ buyer, manager, origin }: {
   await assertFactoryScopeRows(manager);
   assert.equal(await manager.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
   await checkSharedOrderView(manager, shared);
+  await checkSharedProcurementReturn({ page: manager, origin });
+  await checkSharedProcurementReturn({ page: manager, origin, store: currentStore });
+  await checkPendingPreviewReturn(buyer, origin);
   return { associatedOrders: currentFactoryOrderPos, scopedOrders: storeOrderPos, exportMatches: true,
     emptyHasNoLink: true, returnFocus: true, managerImportStatus: denied.status(), sharedOrdersMatch: true,
     sharedPresetKeepsStore: true, copiedSourceKeepsStore: true, unfilteredSourceKeepsStore: true, actualTemplateKeepsScope: true,
-    relatedOrdersKeepTrueScope: true, detachedDetailChecksMembership: true };
+    relatedOrdersKeepTrueScope: true, detachedDetailChecksMembership: true, sharedFilteredReturn: true, pendingPreviewReturn: true };
 }
 
 function factoryRelatedComponent(page: Page) {
-  return page.getByRole('region', { name: '关联采购事项', exact: true }).getByRole('link', { name: /FS-COMPONENT/ });
+  return page.getByRole('region', { name: '关联采购事项', exact: true }).getByRole('link', { name: /FS-COMPONENT/ }).and(page.locator('a[href]'));
 }
 
 async function checkRelatedBatchMember(page: Page, origin: URL) {
@@ -66,7 +69,7 @@ async function checkDetachedFactoryDetail(page: Page, shared: URL) {
   preview.searchParams.set('lineId', 'scope-line-component');
   await page.goto(preview.href);
   const drawer = page.getByRole('dialog', { name: 'FS-COMPONENT 预览', exact: true });
-  const detail = drawer.getByRole('link', { name: '打开订单行详情', exact: true });
+  const detail = drawer.getByRole('link', { name: '打开订单行详情', exact: true }).and(page.locator('a[href]'));
   const ordinary = new URL(await detail.getAttribute('href') ?? '', shared);
   assert.equal(ordinary.search, `?store=${currentStore}`);
   ordinary.search = shared.search;
@@ -114,7 +117,7 @@ async function checkCopiedSourceFromAnotherStore(page: Page, shared: URL) {
   await page.goto(shared.href);
   await assertFactoryScopeRows(page);
   const order = page.getByRole('region', { name: '订单查询结果', exact: true })
-    .getByRole('link', { name: 'FS-MANUAL', exact: true });
+    .getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator('a[href]'));
   const detail = new URL(await order.getAttribute('href') ?? '', shared);
   assert.equal(detail.searchParams.get('store'), currentStore);
   const source = new URL(detail.searchParams.get('backToImport') ?? '', shared);
@@ -148,7 +151,7 @@ async function checkCopiedSourceWithNoStore(page: Page, shared: URL) {
     const rows = page.getByRole('region', { name: '订单查询结果', exact: true });
     await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
     assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
-    const order = rows.getByRole('link', { name: 'FS-MANUAL', exact: true });
+    const order = rows.getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator('a[href]'));
     const detail = new URL(await order.getAttribute('href') ?? '', shared);
     assert.equal(detail.searchParams.has('backToImport'), false);
     detail.search = list.search;
@@ -182,6 +185,57 @@ async function checkFactorySourceCannotBecomeProcurement(page: Page, shared: URL
     await rows.getByRole('link', { name: 'FS-YILING', exact: true }).waitFor();
     assert.equal(await page.getByRole('link', { name: '返回导入批次', exact: true }).count(), 0);
     assert.deepEqual((await rows.locator('th[scope="row"] a').allTextContents()).sort(), currentFactoryOrderPos);
+  }
+}
+
+async function checkSharedProcurementReturn({ page, origin, store }: {
+  readonly page: Page; readonly origin: URL; readonly store?: string;
+}) {
+  const batchId = 'scope-import-store-evidence';
+  const filters = new URLSearchParams({ importBatchId: batchId, lane: 'finished', q: 'FS-MANUAL', buyer: 'unassigned', pageSize: '5' });
+  if (store !== undefined) filters.set('store', store);
+  const list = new URL(`/lines?${filters}`, origin);
+  list.searchParams.set('backToImport', `/imports/${batchId}?drawer=import-source&source=procurement-batch`);
+  assert.equal((await page.request.get(new URL(`/api/v1/imports/${batchId}`, origin).href)).status(), 403);
+  await page.goto(list.href);
+  const row = page.getByRole('link', { name: 'FS-MANUAL', exact: true });
+  await row.press('Enter');
+  await page.getByRole('heading', { name: 'FS-MANUAL', exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.has('backToImport'), false);
+  await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+  await row.and(page.locator(':focus')).waitFor();
+  assert.equal(new URL(page.url()).searchParams.toString(), filters.toString());
+}
+
+async function checkPendingPreviewReturn(page: Page, origin: URL) {
+  const batchId = 'scope-import-store-evidence';
+  const isMembership = (url: URL) => url.pathname === '/api/v1/lines' && url.searchParams.get('lineIds') === 'scope-line-manual';
+  let finish: () => void = () => undefined;
+  const paused = new Promise<void>((resolve) => { finish = () => { resolve(); }; });
+  await page.route(isMembership, async (route) => {
+    await paused;
+    await route.continue().catch(() => undefined);
+  });
+  const filters = new URLSearchParams({ importBatchId: batchId, store: currentStore, q: 'FS-MANUAL' });
+  const list = new URL(`/lines?${filters}`, origin);
+  list.searchParams.set('drawer', 'preview');
+  list.searchParams.set('lineId', 'scope-line-manual');
+  try {
+    await page.goto(list.href);
+    const preview = page.getByRole('dialog', { name: 'FS-MANUAL 预览', exact: true });
+    const link = preview.getByRole('link', { name: '打开订单行详情', exact: true });
+    assert.equal(await link.getAttribute('aria-disabled'), 'true');
+    assert.equal(await link.getAttribute('href'), null);
+    await link.dispatchEvent('click');
+    assert.equal(page.url(), list.href);
+    finish();
+    await link.and(page.locator('a[href]')).press('Enter');
+    await page.getByRole('link', { name: '返回跟进中心', exact: true }).press('Enter');
+    await page.getByRole('link', { name: 'FS-MANUAL', exact: true }).and(page.locator(':focus')).waitFor();
+    assert.equal(new URL(page.url()).searchParams.toString(), filters.toString());
+  } finally {
+    finish();
+    await page.unroute(isMembership);
   }
 }
 
