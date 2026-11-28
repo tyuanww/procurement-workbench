@@ -17,7 +17,7 @@ type SourceRecord = {
   readonly fileName: string | undefined | null;
   readonly fields: readonly SourceField[];
 };
-type SourceField = readonly [label: string, raw: string | null];
+type SourceField = readonly [label: string, raw: string | null | undefined];
 
 const PURCHASE_FIELDS = [
   ['采购订单号', 'po'],
@@ -107,12 +107,12 @@ function orderFactorySources(detail: OrderLineDetail, { assignedIds, origin }: {
   const demandRows = demand.filter((row) => row.payload.role === 'material').map((row) => ({
     ...rowLocation(row, files),
     fields: [
-      ['采购单号（需求分组）', row.payload.blockMaterialPoRaw],
-      ['订单号（需求分组）', row.payload.blockPoRaw ?? row.payload.blockLabelRaw],
-      ['材料品号', row.payload.itemCodeRaw.raw],
-      ['材料品名', row.payload.nameRaw.raw],
-      ['材料库存单位', row.payload.unitRaw.raw],
-      ['物料需求量', row.payload.qtyNet.raw],
+      ['采购单号（需求分组）', row.originalCells?.blockMaterialPoRaw],
+      ['订单号（需求分组）', row.originalCells?.blockOrderRaw],
+      ['材料品号', row.originalCells?.itemCodeRaw],
+      ['材料品名', row.originalCells?.nameRaw],
+      ['材料库存单位', row.originalCells?.unitRaw],
+      ['物料需求量', row.originalCells?.qtyNet],
       ...row.payload.slots.filter(({ index }) => row.id !== origin?.rowId || index !== origin.slotIndex).flatMap(slotFields),
     ] satisfies SourceField[],
   }));
@@ -126,11 +126,11 @@ function orderFactorySources(detail: OrderLineDetail, { assignedIds, origin }: {
   return [...demandRows, ...transitRows, ...shipments.filter((row) => !assignedIds.has(row.id)).map((row) => shipmentRecord(row, files))];
 }
 
-function slotFields(slot: DemandSource['slot']): readonly SourceField[] {
-  const key = `需求到位日期&数量 · 第 ${slot.index + 1} 组`;
+function slotFields({ index, sourceColumns, originalCells }: DemandSource['slot']): readonly SourceField[] {
+  const key = `需求到位日期&数量 · 第 ${index + 1} 组`;
   return [
-    [`${key} · 到货时间${columnLabel(slot.sourceColumns?.date)}`, slot.dateRaw],
-    [`${key} · 数量${columnLabel(slot.sourceColumns?.quantity)}`, slot.qtyRaw],
+    [`${key} · 到货时间${columnLabel(sourceColumns?.date)}`, originalCells?.dateRaw],
+    [`${key} · 数量${columnLabel(sourceColumns?.quantity)}`, originalCells?.qtyRaw],
   ];
 }
 
@@ -139,11 +139,12 @@ function columnLabel(column: number | undefined) {
 }
 
 function shipmentRecord(row: ShipmentSource, files: OrderLineDetail['sourceFiles']): SourceRecord {
+  const raw = row.originalCells;
   return {
     ...rowLocation(row, files),
     fields: [
-      ['订单号', row.payload.po.raw], ['品号', row.payload.itemCodeRaw.raw], ['批号', row.payload.lotRaw.raw],
-      ['数量', row.payload.qty.raw], ['出货时间（到货时间）', row.payload.shipOrArriveOn.raw],
+      ['订单号', raw?.po], ['品号', raw?.itemCodeRaw], ['批号', raw?.lotRaw],
+      ['数量', raw?.qty], ['出货时间（到货时间）', raw?.shipOrArriveOn],
     ],
   };
 }
@@ -166,11 +167,16 @@ function EvidenceGroup({ title, rows, canReadImport, empty, notice }: {
       <Descriptions key={JSON.stringify([row.importBatchId, row.sheetName, row.rowNo])} size="small" column={1}
         layout={isCompact ? 'vertical' : 'horizontal'} styles={{ title: { whiteSpace: 'normal' } }}
         title={<SourceLocation row={row} canReadImport={canReadImport} />}
-        items={row.fields.map(([label, raw]) => ({ key: label, label, children: raw === null || raw.trim() === '' ? '原表未填' : raw }))}
+        items={row.fields.map(([label, raw]) => ({ key: label, label, children: originalCellText(raw) }))}
       />
     ))}
     {notice === undefined ? null : <Typography.Text type="secondary" role="status">{notice}</Typography.Text>}
   </section>;
+}
+
+function originalCellText(raw: SourceField[1]) {
+  if (raw === undefined) return '原值待核对';
+  return raw === null || raw.trim() === '' ? '原表未填' : raw;
 }
 
 function SourceLocation({ row, canReadImport }: { readonly row: SourceRecord; readonly canReadImport: boolean }) {
