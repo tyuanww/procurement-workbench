@@ -90,7 +90,7 @@ async function signInFromCopiedAddress(page: Page, address: URL) {
   });
   await page.goto(address.href);
   await page.getByRole('button', { name: '使用飞书登录', exact: true }).press('Enter');
-  await page.waitForURL(address.href);
+  await page.waitForURL((url) => url.href === address.href);
 }
 
 async function checkCopiedRiskDetail(page: Page, results: Locator) {
@@ -107,15 +107,15 @@ async function checkCopiedRiskDetail(page: Page, results: Locator) {
   const po = await entry.innerText();
   assert.ok(destination.search.length < 2000 && destination.hash.length > 16_384);
   await entry.press('Enter');
-  await page.waitForURL(destination.href);
+  await page.waitForURL((url) => url.href === destination.href);
   await page.getByRole('heading', { name: po, exact: true }).waitFor();
   await page.goBack();
-  await page.waitForURL(source.href);
+  await page.waitForURL((url) => url.href === source.href);
   await assertRiskEntryFocus(page, { entry, route: '浏览器后退' });
   assert.equal((await page.goto(destination.href))?.status(), 200);
   await page.getByRole('heading', { name: po, exact: true }).waitFor();
   await page.getByRole('link', { name: '返回按店铺交付', exact: true }).press('Enter');
-  await page.waitForURL(source.href);
+  await page.waitForURL((url) => url.href === source.href);
   await assertRiskEntryFocus(page, { entry, route: '复制详情后显式返回' });
 }
 
