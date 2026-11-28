@@ -30,6 +30,7 @@ export async function checkLargeHomeRiskGroup({ page, origin }: { readonly page:
   await page.waitForURL(homeAddress);
   await group.and(page.locator(':focus')).waitFor();
   await checkCopiedRiskAddress({ page, address, members });
+  seedDemoFixture(new URL('../fixtures/demo/follow-up-large-risk-group-cleanup.sql', import.meta.url));
   return { orders: members.length, syntheticOrders: 300, originalStore: 'dafuyan', copiedAddress: true,
     feishuCallback: 'simulated', groupAndDetailReturn: true };
 }
